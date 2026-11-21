@@ -123,8 +123,9 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
   skyLight = sunlit;
   const floorMat = causticFloor(time, sunlit);
   flat(g, octagon(inside), floor, floorMat);
-  const pools = [waterMaterial(time, 0x3d6f78), waterMaterial(time, 0x3d6f78), waterMaterial(time, 0x3d6f78)];
-  flat(g, octagon(inside), water, pools[0]);
+  // (one look for the three pools, drawn as one: `asOne` below)
+  const pools = [waterMaterial(time, 0x3d6f78)];
+  const surfaces = [flat(g, octagon(inside), water, pools[0])];
   // the pedestal, its four spouts
   lathe(g, [[0.55, floor], [0.42, 0.22], [0.26, 0.34], [0.22, 0.9], [0.3, 1.0], [0.24, 1.08], [0.2, BOWL.foot]], M.stone, 32);
   for (let k = 0; k < 4; k++) {
@@ -137,23 +138,33 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
   // the middle bowl, scalloped round its rim, and its water
   scallop(lathe(g, [[0.2, BOWL.foot], [0.5, BOWL.foot + 0.06], [BOWL.r - 0.05, BOWL.water - 0.02], [BOWL.r, BOWL.water + 0.06],
     [BOWL.r - 0.07, BOWL.water + 0.06], [BOWL.r - 0.1, BOWL.water - 0.04], [0, BOWL.water - 0.04]], M.coping, 64), 0.35);
-  flat(g, circle(BOWL.r - 0.1), BOWL.water, pools[1]);
+  surfaces.push(flat(g, circle(BOWL.r - 0.1), BOWL.water, pools[0]));
   // the top bowl on its stem, its water, the finial over it
   lathe(g, [[0.14, BOWL.water - 0.04], [0.1, BOWL.water + 0.2], [0.09, TOP.foot - 0.1], [0.16, TOP.foot]], M.stone, 16);
   scallop(lathe(g, [[0.16, TOP.foot], [0.3, TOP.foot + 0.05], [TOP.r - 0.03, TOP.water - 0.01], [TOP.r, TOP.water + 0.04],
     [TOP.r - 0.05, TOP.water + 0.04], [TOP.r - 0.07, TOP.water - 0.03], [0, TOP.water - 0.03]], M.coping, 48), 0.2);
-  flat(g, circle(TOP.r - 0.07), TOP.water, pools[2]);
+  surfaces.push(flat(g, circle(TOP.r - 0.07), TOP.water, pools[0]));
   lathe(g, [[0.09, TOP.water - 0.03], [0.07, TOP.water + 0.08], [0.12, TOP.water + 0.18], [0.13, TOP.water + 0.26],
     [0.08, TOP.tip - 0.08], [0.04, TOP.tip - 0.02], [0, TOP.tip]], M.coping, 16);
   // the falling water: curtains over each bowl's rim, the jet from the finial's tip, the spouts' arcs
   const streaks = streakTexture();
   const curtain = fallingWater(streaks, 8, 0.6), jetMat = fallingWater(streaks, 1, 0.5);
-  shell(g, BOWL.r + 0.04, BOWL.r + 0.38, water, BOWL.water + 0.06, curtain);
-  shell(g, TOP.r + 0.03, TOP.r + 0.2, BOWL.water, TOP.water + 0.04, curtain);
+  const curtains = [
+    shell(g, BOWL.r + 0.04, BOWL.r + 0.38, water, BOWL.water + 0.06, curtain),
+    shell(g, TOP.r + 0.03, TOP.r + 0.2, BOWL.water, TOP.water + 0.04, curtain),
+  ];
   const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.03, 0.4, 8, 1, true), jetMat);
   jet.position.y = TOP.tip + 0.2;
   g.add(jet);
-  for (let k = 0; k < 4; k++) g.add(arc(k * Math.PI / 2, jetMat));
+  // (the arcs first: merged, the jet and they are sorted where the first stood, `asOne`, and the arcs cross the
+  // curtain and the foam where the jet stands clear over the top bowl)
+  const streams: THREE.Mesh[] = [];
+  for (let k = 0; k < 4; k++) {
+    const stream = arc(k * Math.PI / 2, jetMat);
+    g.add(stream);
+    streams.push(stream);
+  }
+  streams.push(jet);
   // the foam where the curtain strikes the basin, and where each arc lands, turning slowly
   const foamMat = new THREE.MeshStandardMaterial({
     color: 0xeef6f8, emissive: FALLING_GLOW, roughness: 0.3, alphaMap: foamTexture(), transparent: true, opacity: 0.6,
@@ -182,6 +193,9 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
   // (its stone drawn as one a material: the basin's wall, the tiers' coping and their stone)
   const wall = asOne(g, walls as THREE.Mesh[]);
   const tiersAsOne = [M.coping, M.stone].map((m) => asOne(g, tiers.filter((o) => o.material === m)));
+  // (and what blends and stands still, each in the order three drew it, from the lowest up: the pools, the curtains,
+  // the jet and the arcs, 10 draws to 3; the foam and the splashes turn, each its own way, and stay apart)
+  for (const still of [surfaces, curtains, streams]) asOne(g, still, true);
   obstacles.push({ x: 0, z: 0, r: r + 0.1, h: high, sight: { r: BOWL.r + 0.4, h: TOP.tip }, drawn: [wall] });
   // (the tiers stand taller than the basin stops a body: from play, "fountain should be a valid obstacle for arrows")
   obstacles.push({ x: 0, z: 0, r: BOWL.r + TIERS_PAST, h: TOP.tip, drawn: tiersAsOne });
@@ -208,16 +222,16 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
   };
 }
 
-/** the attributes every piece of the fountain's stone has, all that a merge of them keeps */
+/** the attributes every piece of the fountain has, all that a merge of them keeps */
 const STONE_ATTRIBUTES = ['position', 'normal', 'uv'];
 
 /**
  * Pieces of `g` of one material drawn as one, in `g`'s space: a draw each, the fountain was 42 of the 220 draws of an
  * S25 Edge's frame by it at night, and three's work for each draw (its program, its uniforms) most of the render's CPU,
- * 10 of the frame's 33 ms (from play, "ok but I want 60 fps"). Only its stone: what falls and the foam blend, and three
- * sorts what blends by its object.
+ * 10 of the frame's 33 ms (from play, "ok but I want 60 fps"). `sorted`: they blend, and three sorts what blends by its
+ * bounds' middle, so the merge is sorted as its first piece was (`sortedAs`) and drawn in the order of `meshes`.
  */
-function asOne(g: THREE.Group, meshes: THREE.Mesh[]): THREE.Mesh {
+function asOne(g: THREE.Group, meshes: THREE.Mesh[], sorted = false): THREE.Mesh {
   const parts = meshes.map((mesh) => {
     mesh.updateMatrix();
     const part = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
@@ -225,8 +239,9 @@ function asOne(g: THREE.Group, meshes: THREE.Mesh[]): THREE.Mesh {
     return part.applyMatrix4(mesh.matrix);
   });
   const merged = mergeGeometries(parts);
+  if (!merged) throw new Error('fountain: its parts wouldn\'t merge');
+  if (sorted) sortedAs(merged, parts[0]);
   for (const part of parts) part.dispose();
-  if (!merged) throw new Error('fountain: its stone wouldn\'t merge');
   const one = new THREE.Mesh(merged, meshes[0].material);
   one.castShadow = meshes[0].castShadow;
   one.receiveShadow = meshes[0].receiveShadow;
@@ -236,6 +251,21 @@ function asOne(g: THREE.Group, meshes: THREE.Mesh[]): THREE.Mesh {
     mesh.geometry.dispose();
   }
   return one;
+}
+
+/**
+ * `merged`'s bounds made a sphere round `first`'s middle, wide enough to hold all of it: three sorts what blends by its
+ * bounds' middle, and a merge's own middle lay among all its pieces (the pools' rose to the bowls', and the basin's
+ * water was drawn over the curtain falling into it, which vanished at its foot). Culling still meets all of it.
+ */
+function sortedAs(merged: THREE.BufferGeometry, first: THREE.BufferGeometry): void {
+  first.computeBoundingSphere();
+  const middle = first.boundingSphere!.center.clone();
+  const position = merged.attributes.position;
+  const point = new THREE.Vector3();
+  let reach = 0;
+  for (let k = 0; k < position.count; k++) reach = Math.max(reach, point.fromBufferAttribute(position, k).distanceTo(middle));
+  merged.boundingSphere = new THREE.Sphere(middle, reach);
 }
 
 /** A solid turned about y from its profile's points (radius, height), from `start` round. */
@@ -285,7 +315,7 @@ function circle(radius: number): THREE.Shape {
 }
 
 /** A flat surface of `shape` at height `y` (water, or the floor under it). */
-function flat(g: THREE.Object3D, shape: THREE.Shape, y: number, m: THREE.Material): void {
+function flat(g: THREE.Object3D, shape: THREE.Shape, y: number, m: THREE.Material): THREE.Mesh {
   const geometry = new THREE.ShapeGeometry(shape, 24).rotateX(-Math.PI / 2);
   const uv = geometry.attributes.uv, p = geometry.attributes.position;
   for (let k = 0; k < uv.count; k++) uv.setXY(k, p.getX(k), p.getZ(k));
@@ -294,13 +324,15 @@ function flat(g: THREE.Object3D, shape: THREE.Shape, y: number, m: THREE.Materia
   mesh.receiveShadow = true;
   mesh.userData.water = true;
   g.add(mesh);
+  return mesh;
 }
 
 /** A curtain of falling water: an open shell from `top` (its radius `r0`) down to `bottom` (`r1`). */
-function shell(g: THREE.Object3D, r0: number, r1: number, bottom: number, top: number, m: THREE.Material): void {
+function shell(g: THREE.Object3D, r0: number, r1: number, bottom: number, top: number, m: THREE.Material): THREE.Mesh {
   const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, top - bottom, 48, 1, true), m);
   mesh.position.y = (top + bottom) / 2;
   g.add(mesh);
+  return mesh;
 }
 
 /** A spout's arc of water (the spout facing `a` rad round), out and down into the basin, its streaks along it. */
