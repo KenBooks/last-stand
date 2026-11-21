@@ -197,6 +197,32 @@ async function hallFromAbove(lab: Lab, bridge: Bridge): Promise<Checked> {
   return passed(`in the hall from above ${thinning} of the engine's ${held} kinds of see-through thin over him`);
 }
 
+/**
+ * In the hall from above: what's see-through and thinned by nothing is drawn solid, with what's opaque (the
+ * village's walls were drawn blended, after everything, the farthest first: 2.6 ms of the square's 19 ms frame at
+ * High as a phone), and the heroes' pieces cast their shadows from fewer triangles. The canary: with the switch
+ * off none is drawn solid.
+ */
+async function solidAndCoarse(lab: Lab, bridge: Bridge): Promise<Checked> {
+  await lab.step(2);
+  const { solid } = bridge.stats;
+  let casters = bridge.stats.casters;
+  // (the shadow's fewer triangles are made a slice a frame: waited for)
+  for (let frame = 0; frame < 600 && !casters; frame++) {
+    await lab.step(1);
+    casters = bridge.stats.casters;
+  }
+  RUST.tune.solidSee = 0;
+  await lab.step(2);
+  const blended = bridge.stats.solid;
+  RUST.tune.solidSee = 1;
+  await lab.step(2);
+  if (!solid) return failed('nothing see-through is drawn solid: the village\'s walls blended, after everything');
+  if (blended) return failed(`with the switch off ${blended} see-through records are still drawn solid`);
+  if (!casters) return failed('no piece of a hero\'s casts from fewer triangles: every triangle in the shadow');
+  return passed(`${solid} see-through records drawn solid, ${casters} of the heroes' pieces cast from fewer triangles`);
+}
+
 /** A house walked into, out of and into again: no frame held, three drawing no scene of its own, and inside it
  *  lit by its own lights (its candles, hearth and chandelier: from play, "loads this (broken)", a room in the
  *  dark). */
@@ -332,6 +358,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(viewOffsetKept());
       checks.push(await lampShadows(lab, bridge));
       checks.push(await hallFromAbove(lab, bridge));
+      checks.push(await solidAndCoarse(lab, bridge));
       checks.push(await house(lab, bridge, command.room as RoomId));
       checks.push(await blankCanvas(lab, bridge));
       await standIn(lab, { biome: command.biome, view: 'third', facing: 0, fresh: true });

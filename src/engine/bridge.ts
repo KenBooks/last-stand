@@ -12,6 +12,7 @@ import type { Engine, InitOutput } from './pkg/bulwark';
 import { perfClock } from '../core/perfClock';
 import { shownPointLights } from '../core/webgpu';
 import { Core, MAX_MAP, RECORD } from './core';
+import { casterGeometry } from '../entities/models/farDetail';
 import { lookOf } from './custom';
 import { Geometries } from './geometry';
 import { LampShadows } from './lampShadows';
@@ -27,7 +28,9 @@ export { TUNE, type Grade } from './globals';
 export type { FrameStats } from './core';
 
 /** a record's flags (plan.rs) */
-const CASTS_SHADOW = 1, NEVER_CULLED = 2, SHADOW_ONLY = 4, ARMS = 8;
+/** how a record casts: as its mesh says, not at all (another record casts for it), or in the shadow alone */
+type Cast = 'own' | 'none' | 'only';
+const CASTS_SHADOW = 1, NEVER_CULLED = 2, SHADOW_ONLY = 4, ARMS = 8, SOLID = 16;
 /** where a record says how many instances its mesh draws by itself (`RAW_INSTANCES` in plan.rs) */
 const RAW_INSTANCES = 7;
 /** how far under the scene a hidden object is a place left as it stands (the biomes' roots, the village's) */
@@ -108,7 +111,7 @@ export class Bridge {
   }
 
   private record(mesh: THREE.Mesh, geometryId: number, material: AnyMaterial, first: number, count: number, set: number,
-    bones: number, raw = 0): void {
+    bones: number, raw = 0, cast: Cast = 'own'): void {
     const core = this.core;
     const materialId = this.materials.materialId(material);
     if (!materialId) { core.skip(material.type); return; }
@@ -117,9 +120,12 @@ export class Bridge {
     const r = core.records, at = core.count * RECORD;
     r[at] = geometryId; r[at + 1] = materialId; r[at + 2] = first; r[at + 3] = count; r[at + 4] = set; r[at + 5] = bones;
     // (a material that writes no colour is in the frame for its shadow or its depth alone: the game's merged casters)
-    const casts = mesh.castShadow || (TUNE.castAll && mesh.receiveShadow);
+    const casts = cast !== 'none' && (mesh.castShadow || (TUNE.castAll && mesh.receiveShadow));
     r[at + 6] = (casts ? CASTS_SHADOW : 0) | (mesh.frustumCulled ? 0 : NEVER_CULLED)
-      | (material.colorWrite === false ? SHADOW_ONLY : 0);
+      | (material.colorWrite === false || cast === 'only' ? SHADOW_ONLY : 0)
+      | (this.materials.solidNow(material) ? SOLID : 0);
+    if (r[at + 6] & SOLID) core.stats.solid++;
+    if (cast === 'only') core.stats.casters++;
     // (his arms through his eyes: by their own view, never culled by the world's, casting nothing)
     if (this.armsNow) {
       r[at + 6] = ARMS | NEVER_CULLED;
@@ -170,7 +176,13 @@ export class Bridge {
     }
     const material = mesh.material as AnyMaterial;
     if (!material.visible) return;
-    this.record(mesh, geometryId, material, from, to === Infinity ? 0 : range.count, set, bones, raw);
+    // (a hero's piece casts from fewer triangles, a record of its own for the shadow alone: `casterGeometry`)
+    const whole = to === Infinity && from === 0 && !raw && !set && !this.armsNow && mesh.castShadow;
+    const caster = whole ? casterGeometry(mesh) : null;
+    const casterId = caster ? this.geometries.geometryId(caster, look?.position) : 0;
+    this.record(mesh, geometryId, material, from, to === Infinity ? 0 : range.count, set, bones, raw,
+      casterId ? 'none' : 'own');
+    if (casterId) this.record(mesh, casterId, material, 0, 0, set, bones, 0, 'only');
   }
 
   /**
@@ -350,7 +362,7 @@ export class Bridge {
     // (a lamp's shadow drawn ahead of the frame, whose own records are written over its casters')
     this.lampShadows.step((mesh) => this.addMesh(mesh));
     core.skipped.clear();
-    stats.newMeshes = stats.movedMeshes = stats.newTextures = stats.newMaterials = stats.arms = 0;
+    stats.newMeshes = stats.movedMeshes = stats.newTextures = stats.newMaterials = stats.arms = stats.solid = stats.casters = 0;
     if (scene.matrixWorldAutoUpdate) {
       if (TUNE.still) this.placeShown(scene, false, 0);
       else scene.updateMatrixWorld();
@@ -373,9 +385,10 @@ export class Bridge {
       clear);
     core.engine.render(core.count, core.boneFloats, clear[0], clear[1], clear[2]);
     const drawn = perfClock.now();
-    const [draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy] = core.engine.stats();
+    const [draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy, shadowTriangles]
+      = core.engine.stats();
     Object.assign(stats, {
-      records: core.count, draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy,
+      records: core.count, draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy, shadowTriangles,
       placeMs: placed - began, walkMs: walked - placed, engineMs: drawn - walked,
     });
   }

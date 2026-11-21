@@ -48,10 +48,15 @@ export class SeeKinds {
     }
   }
 
+  /** Whether `see`'s kind thins nothing this frame (no hole, no share of the whole, no door open): what it's on
+   *  is as solid as if it weren't see-through. */
+  solid(see: SeeThrough | undefined): boolean {
+    return !!see && !(see.k.value.z > 0 || see.whole.value > 0 || (see.doorOn?.value ?? 0) !== 0);
+  }
+
   /** A harness's: how many kinds of see-through the engine holds, and how many of them thin anything this frame (a
    *  hole, a share of the whole, a door open). */
   now(): { held: number; thinning: number } {
-    const thins = (see: SeeThrough): boolean => see.k.value.z > 0 || see.whole.value > 0 || (see.doorOn?.value ?? 0) !== 0;
-    return { held: this.kinds.length, thinning: this.kinds.filter(thins).length };
+    return { held: this.kinds.length, thinning: this.kinds.filter((see) => !this.solid(see)).length };
   }
 }

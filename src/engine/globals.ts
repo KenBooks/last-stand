@@ -30,14 +30,16 @@ export const TUNE = tunable('rust', {
   points: 1,
   lampShadows: 1,
   bloom: 1,
+  /** what's see-through drawn solid, with what's opaque, while its kind thins nothing (`Materials.solidNow`) */
+  solidSee: 1,
   /** what's opaque drawn nearest first, what the camera stands inside last (the engine's plan.rs) */
   nearFirst: 1,
-  /** the point lights' shine at the lower levels: 1 kept, 0 left out as the level says (`Grade.lite`) */
-  shineAlways: 0,
+  /** the point lights' shine: 0 leaves it out at every level (a profile's), as the lite levels do (`Grade.lite`) */
+  shine: 1,
   /** how far along its normal a surface is moved before the shadow map is read, world units */
   shadowBias: 0.06,
   /** a look to debug by: 1 how much of the sun reaches each pixel, 2 the normals, 3 a plain colour in place of
-   *  the lit shading (a profile's: what the lighting costs) */
+   *  the lit shading (a profile's: what the lighting costs), 4 no normal, roughness or glow map read (a profile's) */
   debug: 0,
   /** every opaque mesh casts the sun's shadow, not only those three is told to draw into its own map (the
    *  village's still things are in maps three keeps, which the engine doesn't have) */
@@ -157,7 +159,7 @@ export function writeGlobals(g: Float32Array, scene: THREE.Scene, camera: THREE.
     scratchMatrix.multiplyMatrices(projectionOf(grade.arms, projection), grade.arms.matrixWorldInverse)
       .toArray(g, GLOBALS.armsView);
   }
-  g[GLOBALS.shelter + 6] = grade.lite && !TUNE.shineAlways ? 1 : 0;
+  g[GLOBALS.shelter + 6] = grade.lite || !TUNE.shine ? 1 : 0;
   g[GLOBALS.shelter + 7] = TUNE.nearFirst;
   g[GLOBALS.grade] = grade.small; g[GLOBALS.grade + 1] = grade.large; g[GLOBALS.grade + 2] = grade.cap;
   g[GLOBALS.grade + 3] = grade.vignette; g[GLOBALS.grade + 4] = grade.hurt; g[GLOBALS.grade + 5] = grade.low;

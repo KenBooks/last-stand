@@ -136,7 +136,7 @@ function pixelsPart(): ScenePart {
 }
 
 /** the engine's tuned numbers a profile switches */
-type EngineSwitch = 'points' | 'lampShadows' | 'bloom' | 'shadows' | 'see' | 'debug' | 'nearFirst';
+type EngineSwitch = 'points' | 'lampShadows' | 'bloom' | 'shadows' | 'see' | 'debug' | 'nearFirst' | 'shine' | 'solidSee';
 
 /** A part of the Rust engine's frame, switched by one of its tuned numbers (`TUNE` in engine/globals.ts). */
 function tunedPart(name: string, key: EngineSwitch, off: number,
@@ -158,6 +158,9 @@ function engineParts(): ScenePart[] {
     tunedPart('what hides the hero seen through', 'see', 0),
     tunedPart('the bloom\'s passes', 'bloom', 0),
     tunedPart('what\'s opaque drawn nearest first', 'nearFirst', 0),
+    tunedPart('the point lights\' shine (their diffuse light kept)', 'shine', 0),
+    tunedPart('what\'s see-through drawn solid while nothing thins it', 'solidSee', 0),
+    tunedPart('the normal, roughness and glow maps read', 'debug', 4, 0),
   ];
 }
 
@@ -192,6 +195,9 @@ function shownParts(): ScenePart[] {
     // (a particle pool: WebGL's points, WebGPU's quads, `fx/particles.ts`)
     shownPart('the particles', shownWhere((object) => (object as THREE.Points).isPoints || object.userData.particles)),
     shownPart('the hero', [G.player.obj]),
+    // (the ground's blades and the trees, a million triangles and more of the village's frame at High)
+    shownPart('the meadow\'s grass', shownWhere((object) => object.name === 'meadow')),
+    shownPart('the trees: bark and leaves', shownWhere((object) => /trees' (bark|leaves)/.test(object.name))),
     shownPart('what\'s cut out: leaves, grass', shownWhere(cutOut)),
     shownPart('what\'s blended: smoke, glows, effects', shownWhere(blended)),
     shownPart('the fires\' flames', shownWhere((object) => Boolean(object.userData.fireFlames))),

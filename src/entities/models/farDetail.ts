@@ -6,8 +6,9 @@
 // `FAR.back`. A swap of geometry: no program, no material. WebGL's alone (on WebGPU he's merged as he's built,
 // `drawAsOne.ts`). `?farDetail=0` draws every triangle at any distance, for A/B.
 import * as THREE from 'three';
-import { detailSettled, farIndex, shadowDetailVersion, shadowsWhole, tickDetail } from './shadowDetail';
+import { coarseIndex, detailSettled, farIndex, shadowDetailVersion, shadowsWhole, tickDetail } from './shadowDetail';
 import { WEBGPU } from '../../core/webgpu';
+import { RUNNING } from '../../core/rendererChoice';
 
 /** how far from the camera he goes coarse, and how near he comes back whole (m): apart, so he never flips on a line.
  *  The close views stand 3 to 5 m off him; the view from above 18 and more. */
@@ -24,6 +25,35 @@ export interface FarDetail {
   readonly meshes: number;
   update(distance: number): void;
   dispose(): void;
+}
+
+/** each mesh of a hero's that goes coarse, with its own geometry, whichever it draws now */
+const wholeOf = new WeakMap<THREE.Mesh, THREE.BufferGeometry>();
+/** each geometry's caster of fewer triangles (`coarseIndex`), made once */
+const casterOf = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
+
+/**
+ * The geometry a hero's `mesh` casts its shadow from under the Rust engine: its own vertices under the shadow's
+ * fewer triangles (`coarseIndex`), or null where it casts as it's drawn (not a hero's, a card cut by its picture,
+ * its fewer triangles not made yet). three casts a hero as one such mesh from inside its own shadow pass
+ * (`castAsOne.ts`), which the engine never runs: there each piece cast every triangle of his, about 140k a hero
+ * at High, into the sun's map each frame.
+ */
+export function casterGeometry(mesh: THREE.Mesh): THREE.BufferGeometry | null {
+  const whole = wholeOf.get(mesh);
+  if (!whole || shadowsWhole() || (mesh.material as THREE.Material).alphaTest > 0) return null;
+  const known = casterOf.get(whole);
+  if (known) return known;
+  const index = coarseIndex(whole);
+  if (!index) return null;
+  const caster = new THREE.BufferGeometry();
+  for (const name of Object.keys(whole.attributes)) caster.setAttribute(name, whole.attributes[name]);
+  caster.setIndex(new THREE.BufferAttribute(index, 1));
+  caster.boundingSphere = whole.boundingSphere;
+  caster.boundingBox = whole.boundingBox;
+  caster.userData.shared = true;
+  casterOf.set(whole, caster);
+  return caster;
 }
 
 /** each geometry's coarse one, made once: a shared geometry (a head's) is every hero's */
@@ -123,6 +153,7 @@ export function farDetail(root: THREE.Object3D): FarDetail {
     root.traverse((object) => {
       const mesh = object as THREE.Mesh;
       if (!goesCoarse(mesh)) return;
+      wholeOf.set(mesh, mesh.geometry);
       const cards = (mesh.material as THREE.Material).alphaTest > 0;
       if (!cards && !detailSettled(mesh.geometry, 'far')) settled = false;
       const fewer = coarseGeometry(mesh.geometry, cards);
@@ -134,7 +165,8 @@ export function farDetail(root: THREE.Object3D): FarDetail {
     get far() { return far; },
     get meshes() { return pairs.length; },
     update(distance) {
-      if (WEBGPU) return;
+      // (the Rust engine draws each part on its own, as WebGL does: fewer triangles from afar there too)
+      if (WEBGPU && !RUNNING.rust) return;
       // (a frame's turn at the geometries still to be simplified, his and his shadow's)
       tickDetail();
       if (found !== shadowDetailVersion() && (!settled || wasWhole !== shadowsWhole())) find();

@@ -14,6 +14,12 @@ export interface FrameStats {
   records: number;
   draws: number;
   shadowDraws: number;
+  /** the triangles the sun's shadow drew */
+  shadowTriangles: number;
+  /** the records of what's see-through drawn solid, with what's opaque (`Materials.solidNow`) */
+  solid: number;
+  /** the heroes' pieces that cast from the shadow's fewer triangles (`casterGeometry`) */
+  casters: number;
   objects: number;
   culled: number;
   triangles: number;
@@ -39,7 +45,7 @@ export interface FrameStats {
 
 export class Core {
   readonly stats: FrameStats = {
-    records: 0, draws: 0, shadowDraws: 0, objects: 0, culled: 0, triangles: 0, gpuMs: 0, gpuReads: 0, gpuBusy: 0, arms: 0, placeMs: 0, walkMs: 0,
+    records: 0, draws: 0, shadowDraws: 0, shadowTriangles: 0, solid: 0, casters: 0, objects: 0, culled: 0, triangles: 0, gpuMs: 0, gpuReads: 0, gpuBusy: 0, arms: 0, placeMs: 0, walkMs: 0,
     engineMs: 0, newMeshes: 0, movedMeshes: 0, newTextures: 0, newMaterials: 0,
   };
   /** what wasn't handed over, by its kind, on the last frame */
