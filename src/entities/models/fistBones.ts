@@ -1,24 +1,21 @@
 // The bones under a fighter's shut fist. His hand is one skin bent into its fist by its joints, and skin bent so folds
 // in round curls: the knuckle row a soft ridge, each finger a hose rolled up (from play, of the fist from its sides:
-// "this is not proper bend", and from behind: "this is not proper knuckles"). A real fist's skin is drawn taut over
-// the ends of its bones: the four heads of the metacarpals standing in a row with a valley between each two, and the
-// fingers' middle joints square corners under them. So the shut fist's skin is laid on those bone ends: where it lies
-// near one, it's moved onto it. The skin's points are kept as the open hand is bound, so a point moved in the fist is
-// taken back through its own bones' blend: the shut fist has points and normals of its own (`hands.ts` `shadeShut`),
-// swapped in as it shuts, with the same bones, weights and program.
+// "this is not proper bend", and from behind: "this is not proper knuckles"; then: "finger/fist's ligaments anatomy,
+// study it, then fix"). What a fist's anatomy shows through its skin, and what is made of it here:
+// - its knuckles are the heads of the metacarpals, the skin drawn taut over them, each with its finger's extensor
+//   tendon held over its top (by the sagittal bands) and running back up the hand to the wrist, and a valley between
+//   each two heads: a smooth relief added to the skin (`relief`), a head, a tendon and a valley a finger;
+// - the index's and the middle finger's metacarpals are fixed to the wrist and the ring's and the little finger's
+//   are not: as a fist tightens those two drop towards the palm, so the knuckle row is an arch, not a line. The two
+//   fingers' roots drop in `hands.ts` (`fistRoot`), and the palm's skin with them here (`descended`);
+// - a finger bends at its joints alone, its bones straight between them, and on the outside of a bent middle joint
+//   the head of the bone before it stands as a corner: a smaller rise there;
+// - the back of the hand runs straight from the forearm to the knuckles (`straightBack`).
+// The skin's points are kept as the open hand is bound, so a point moved in the fist is taken back through its own
+// bones' blend: the shut fist has points and normals of its own (`hands.ts` `shadeShut`), swapped in as it shuts,
+// with the same bones, weights and program.
 import * as THREE from 'three';
 import { tunable } from '../../core/tuning';
-
-/**
- * The bone ends a shut fist's skin is laid on: each finger's knuckle's head as a share of the finger's radius, index
- * first (`heads`: the index's and the middle finger's stand proudest, the row falls to the little finger's), its
- * middle joint's (`mids`), how far out of the back of the hand a head stands off its joint (`proud`, a share of its
- * radius), how near the skin must lie to an end to be laid on it (`band`, m), how much of the way it's moved (`pull`)
- * and how softly two ends run into each other (`blend`, m).
- */
-const FIST_BONES = tunable('fistBones', {
-  heads: [1.34, 1.4, 1.3, 1.18], mids: [1.14, 1.16, 1.12, 1.08], proud: 0.3, band: 0.009, pull: 0.85, blend: 0.004,
-});
 
 /** a skin as its bones pose it, in a frame of its own: each point, its normal, and the turn and move that took it */
 export interface PosedSkin {
@@ -26,17 +23,6 @@ export interface PosedSkin {
   out: Float32Array;
   turns: Float32Array;
   moves: Float32Array;
-}
-
-/** a bone end under the skin: a ball, the bones whose skin it shapes, the way it faces out of the hand (`face`), how
- *  far round from that way it still shapes the skin (`round`, the least cosine), and whether it only lifts the skin */
-interface BoneEnd {
-  at: THREE.Vector3;
-  r: number;
-  bones: readonly number[];
-  face: THREE.Vector3;
-  round: number;
-  lifts: boolean;
 }
 
 const _turn = new THREE.Quaternion(), _pivot = new THREE.Quaternion(), _move = new THREE.Vector3();
@@ -95,37 +81,113 @@ export function posedSkin(mesh: THREE.SkinnedMesh, geometry: THREE.BufferGeometr
 }
 
 /** a finger of a shut fist for its bone ends: its joints' places in the hand's frame (its knuckle first), its radius,
- *  and its bones' numbers in the skin's skeleton (its knuckle's first) */
+ *  its bones' numbers in the skin's skeleton (its knuckle's first), and how far its root has dropped towards the
+ *  palm about the wrist's end of its metacarpal (`drop`, rad) */
 export interface FistFinger {
   joints: readonly THREE.Vector3[];
   r: number;
   bones: readonly number[];
+  drop: number;
 }
 
-/** the bone ends under a shut fist's `fingers` (index first), `palm` the palm's bone's number */
-function boneEnds(fingers: readonly FistFinger[], palm: number): BoneEnd[] {
-  const ends: BoneEnd[] = [];
-  fingers.forEach((finger, i) => {
-    const head = finger.r * FIST_BONES.heads[i];
-    // (a metacarpal's head stands past its joint down the hand and out of its back, the hand's frame: the corner of
-    // the fist)
-    // (and shapes the skin of the back and the striking face alone: round on the palm's side it drew the skin between
-    // the fingers' roots in, and its inside showed from the fingertips' side)
-    const out = new THREE.Vector3(0, -0.7, 0.7).normalize();
-    ends.push({
-      at: finger.joints[0].clone().addScaledVector(out, FIST_BONES.proud * head), r: head,
-      bones: [palm, finger.bones[0]], face: out, round: 0, lifts: false,
-    });
-    // (a middle joint's end lifts the skin on the outside of its bend alone, the fold's corner: laid on all round, it
-    // drew the fingers' sides in and they stood 1 mm further apart, `lab hands`' shaft gaps)
+/** where the outer metacarpals turn from as they drop: how far down the hand from its joint (y, m) and out of its
+ *  middle (z, m), and how far below it the palm's skin has all of the drop (m) */
+export interface FistDrop {
+  y: number;
+  z: number;
+  eased: number;
+}
+
+/**
+ * The palm's skin dropped with its outer knuckles, `at` its points as posed, changed in place: each point turned
+ * about the metacarpals' wrist end by its place across the hand (none at the middle finger's knuckle and beyond it,
+ * each outer finger's own at its knuckle) and by the palm's share of it (a point the finger's bone moves in part has
+ * that part of the drop already).
+ */
+function descended(at: Float32Array, palmShare: (i: number) => number, fingers: readonly FistFinger[],
+  drop: FistDrop): void {
+  const across = fingers.map((finger) => ({ x: finger.joints[0].x, drop: finger.drop })).sort((a, b) => a.x - b.x);
+  const dropAt = (x: number): number => {
+    if (x <= across[0].x) return across[0].drop;
+    for (let n = 1; n < across.length; n++) {
+      if (x > across[n].x) continue;
+      const share = (x - across[n - 1].x) / (across[n].x - across[n - 1].x);
+      return across[n - 1].drop + (across[n].drop - across[n - 1].drop) * share;
+    }
+    return across[across.length - 1].drop;
+  };
+  for (let i = 0; i < at.length / 3; i++) {
+    const palm = palmShare(i), below = (drop.y - at[i * 3 + 1]) / drop.eased;
+    if (palm <= 0 || below <= 0) continue;
+    const eased = below >= 1 ? 1 : below * below * (3 - 2 * below);
+    const turn = dropAt(at[i * 3]) * palm * eased;
+    if (turn === 0) continue;
+    const dy = at[i * 3 + 1] - drop.y, dz = at[i * 3 + 2] - drop.z, c = Math.cos(turn), s = Math.sin(turn);
+    at[i * 3 + 1] = drop.y + c * dy - s * dz;
+    at[i * 3 + 2] = drop.z + s * dy + c * dz;
+  }
+}
+
+/**
+ * A shut fist's relief (m): each knuckle's head's height, index first (`heads`: the index's and the middle finger's
+ * stand proudest) and how wide it spreads (`head`); how deep the valley between two heads is and how wide
+ * (`valley`, `between`); each extensor tendon's height at its knuckle and at the wrist, its half-width, and how far
+ * in towards the hand's middle it has run by the wrist (`tendon`, `cord`, `gathers`, a share of its knuckle's place
+ * across); the rise on the outside of a bent middle joint and its spread (`mid`, `corner`); and the way out of the
+ * fist's corner a head faces, the hand's frame (`out`).
+ */
+const FIST_RELIEF = tunable('fistRelief', {
+  heads: [0.0022, 0.0026, 0.0019, 0.0015], head: 0.0075, valley: 0.0016, between: 0.0045,
+  tendon: [0.0011, 0.0004], cord: 0.0028, gathers: 0.45, mid: 0.0005, corner: 0.0055, out: [0, -0.35, 0.94],
+});
+
+/** how far (x, y) lies from the line from (ax, ay) to (bx, by), and how far along it (0 to 1) */
+function offLine(x: number, y: number, ax: number, ay: number, bx: number, by: number): [number, number] {
+  const dx = bx - ax, dy = by - ay;
+  const along = Math.min(1, Math.max(0, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)));
+  return [Math.hypot(x - ax - dx * along, y - ay - dy * along), along];
+}
+
+/**
+ * A shut fist's relief added to its skin, `at` its points as posed and `out` their normals, `at` changed in place:
+ * each point moved along its normal by the heads, the valleys, the tendons and the middle joints' corners near it
+ * (`FIST_RELIEF`), each a smooth rise that fades with distance. `shapes(i, finger)`: whether point `i` is skin a
+ * finger's knuckle shapes (the palm's, or that finger's first segment's), `bends(i, finger)` its middle joint
+ * (its first or second segment's); `wristY` where the tendons end up the hand.
+ */
+function relief(at: Float32Array, out: Float32Array, fingers: readonly FistFinger[], wristY: number,
+  shapes: (i: number, finger: number) => boolean, bends: (i: number, finger: number) => boolean): void {
+  const { heads, head, valley, between, tendon, cord, gathers, mid, corner } = FIST_RELIEF;
+  const way = new THREE.Vector3(...FIST_RELIEF.out).normalize();
+  const tops = fingers.map((finger) => finger.joints[0].clone().addScaledVector(way, finger.r));
+  const corners = fingers.map((finger) => {
     const [knuckle, middle, last] = finger.joints;
     const outer = middle.clone().sub(knuckle).normalize().add(middle.clone().sub(last).normalize()).normalize();
-    ends.push({
-      at: middle.clone(), r: finger.r * FIST_BONES.mids[i], bones: [finger.bones[0], finger.bones[1]],
-      face: outer, round: 0.35, lifts: true,
-    });
+    return middle.clone().addScaledVector(outer, finger.r * 0.9);
   });
-  return ends;
+  const fade = (distance: number, spread: number): number => Math.exp(-((distance / spread) ** 2));
+  for (let i = 0; i < at.length / 3; i++) {
+    _p.fromArray(at, i * 3);
+    _n.fromArray(out, i * 3);
+    // (the back's and the striking face's skin alone: what faces the palm is under the fingers)
+    const faces = Math.min(1, Math.max(0, (_n.dot(way) + 0.2) / 0.5));
+    let lift = 0;
+    fingers.forEach((finger, f) => {
+      if (shapes(i, f) && faces > 0) {
+        lift += heads[f] * fade(_p.distanceTo(tops[f]), head) * faces;
+        if (f + 1 < fingers.length) {
+          lift -= valley * fade(_p.distanceTo(_move.copy(tops[f]).add(tops[f + 1]).multiplyScalar(0.5)), between) * faces;
+        }
+        // (its tendon, up the back from its knuckle towards the wrist's middle)
+        if (_n.z > 0.3 && _p.y > tops[f].y) {
+          const [off, along] = offLine(_p.x, _p.y, tops[f].x, tops[f].y, tops[f].x * gathers, wristY);
+          lift += (tendon[0] + (tendon[1] - tendon[0]) * along) * fade(off, cord) * Math.min(1, (_n.z - 0.3) / 0.3);
+        }
+      }
+      if (bends(i, f)) lift += mid * fade(_p.distanceTo(corners[f]), corner);
+    });
+    if (lift !== 0) at.set([_p.x + _n.x * lift, _p.y + _n.y * lift, _p.z + _n.z * lift], i * 3);
+  }
 }
 
 /**
@@ -198,40 +260,33 @@ function mainBone(index: THREE.BufferAttribute | THREE.InterleavedBufferAttribut
 }
 
 /**
- * `mesh`'s points and normals for its shut fist, as it's bound: `posed` (its skin in the fist, `posedSkin`) laid on
- * the bone ends under `fingers`, and taken back through each point's own blend.
+ * `mesh`'s points and normals for its shut fist, as it's bound: `posed` (its skin in the fist, `posedSkin`) with the
+ * palm dropped with its outer knuckles (`drop`), its back laid straight, smoothed where those moved it, and the
+ * fist's relief added; each point then taken back through its own blend.
  */
 export function onBones(mesh: THREE.SkinnedMesh, posed: PosedSkin, fingers: readonly FistFinger[], palm: number,
-): { position: THREE.BufferAttribute; normal: THREE.BufferAttribute } {
+  drop: FistDrop): { position: THREE.BufferAttribute; normal: THREE.BufferAttribute } {
   const geometry = mesh.geometry, count = geometry.attributes.position.count;
   const index = geometry.attributes.skinIndex, share = geometry.attributes.skinWeight;
-  const ends = boneEnds(fingers, palm), { band, pull, blend } = FIST_BONES;
   const at = posed.at.slice();
   const knuckleY = Math.max(...fingers.slice(0, 2).map((finger) => finger.joints[0].y));
   const knuckles = new Set(fingers.map((finger) => finger.bones[0]));
   const main = Array.from({ length: count }, (_, i) => mainBone(index, share, i));
+  const palmShare = (i: number): number => {
+    let palms = 0;
+    for (let k = 0; k < 4; k++) if (index.getComponent(i, k) === palm) palms += share.getComponent(i, k);
+    return palms;
+  };
+  descended(at, palmShare, fingers, drop);
+  let wristY = -Infinity;
+  for (let i = 0; i < count; i++) if (main[i] === palm) wristY = Math.max(wristY, at[i * 3 + 1]);
   straightBack(at, posed, (i) => main[i] === palm, (i) => main[i] === palm || knuckles.has(main[i]), knuckleY);
-  for (let i = 0; i < count; i++) {
-    const bone = mainBone(index, share, i);
-    _p.fromArray(at, i * 3);
-    // the nearest two ends that shape this point's skin: how far outside each it lies (m, under 0 inside)
-    let near = Infinity, next = Infinity, nearest: BoneEnd | null = null;
-    for (const end of ends) {
-      if (!end.bones.includes(bone)) continue;
-      const off = _p.distanceTo(end.at) - end.r;
-      if (end.lifts && off > 0) continue;
-      if (_n.copy(_p).sub(end.at).normalize().dot(end.face) < end.round) continue;
-      if (off < near) { next = near; near = off; nearest = end; } else if (off < next) next = off;
-    }
-    if (!nearest || Math.abs(near) >= band) continue;
-    // (between two ends the skin runs from one to the other in a valley, not a crease)
-    const valley = Math.max(0, blend - (next - near)) ** 2 / (4 * blend);
-    const off = near - valley, weight = pull * (1 - (Math.abs(near) / band) ** 2);
-    _n.copy(_p).sub(nearest.at).normalize();
-    _p.addScaledVector(_n, -off * weight);
-    at.set([_p.x, _p.y, _p.z], i * 3);
-  }
   smoothed(at, posed.at, geometry.index);
+  relief(
+    at, normalsOf(at, geometry.index, posed.out), fingers, wristY,
+    (i, f) => main[i] === palm || main[i] === fingers[f].bones[0],
+    (i, f) => main[i] === fingers[f].bones[0] || main[i] === fingers[f].bones[1],
+  );
   const out = normalsOf(at, geometry.index, posed.out);
   // back through each point's own blend, to where it's bound
   const position = new Float32Array(count * 3), normal = new Float32Array(count * 3);
@@ -251,9 +306,9 @@ const FIST_SMOOTH = tunable('fistSmooth', { moved: 0.0003, passes: 4, share: 0.5
 
 /**
  * The skin smoothed where it was moved: each point `was` moved from, and each one joined to such a point, drawn
- * towards the middle of the points it's joined to, `passes` times. Laid on its bones and its back raised, each by
- * a rule of its own, the skin over the knuckles was left in small lumps where the two met the sculpt's own knuckles
- * (from play, of the straightened fist: "just need to clean up the geometry a little").
+ * towards the middle of the points it's joined to, `passes` times. Its back raised, the skin over the knuckles was
+ * left in small lumps where the raise met the sculpt's own knuckles (from play, of the straightened fist: "just need
+ * to clean up the geometry a little"). The relief goes on after it: smooth of itself, and smoothed, it was lost.
  */
 function smoothed(at: Float32Array, was: Float32Array, index: THREE.BufferAttribute | null): void {
   if (!index) return;

@@ -386,7 +386,11 @@ export function drawnSkin(h: Hand): THREE.SkinnedMesh {
 /** A fighter's bare hand shown shut in its fist (`on`), or open: its sculpt shut in place of its open one. A gloved
  *  hand, or one with no sculpt shut, keeps its own. */
 export function shut(h: Hand, on: boolean): void {
-  if (!on) fistCore(h, null);
+  if (!on) {
+    fistCore(h, null);
+    // (its fingers' roots back where a fist's drop took them from, `fistRoot`)
+    for (const digit of h.f) if (digit.j[0].userData.rest) digit.j[0].position.copy(digit.j[0].userData.rest as THREE.Vector3);
+  }
   const closed = h.shut;
   if (!closed || !h.bareSkin) return;
   const want = on && !h.glove.visible;
@@ -520,6 +524,33 @@ const PAD_DEPTH = 0.58;
 // The rest joints and lengths are the same for every hand of a side and build. Solve once, outside the animation
 // loop.
 const CLOSED_FISTS = new Map<string, THREE.Quaternion[][]>();
+
+/**
+ * How a bare fist's outer knuckles drop (`fistRoot`): where their metacarpals turn from, down the hand from its
+ * joint (`pivot`, y, m); each finger's turn there, index first (degrees: the index's and the middle finger's
+ * metacarpals are fixed to the wrist, the ring's and the little finger's are not, and drop towards the palm as a
+ * fist tightens, so the knuckle row is an arch); and how far below the pivot the palm's skin has all of it (`eased`).
+ */
+const FIST_DROP = tunable('fistDrop', { pivot: -0.032, turns: [0, 0, 5, 11], eased: 0.02 });
+
+/** whether `h`'s fist is its bare skin's: the one whose skin drops with its knuckles (`fistBones.ts`; a glove's
+ *  doesn't, so a gloved fist's knuckles stay in their row) */
+const fistDrops = (h: Hand): boolean => !!h.build.fist && !!h.bareSkin && !h.glove.visible;
+
+/** finger `i`'s root in `h`'s fist, `pose` its closed pose: its place and its three joints' turns, its metacarpal
+ *  dropped (`drops`) or not. */
+function fistRoot(h: Hand, i: number, pose: THREE.Quaternion[][], drops: boolean): { at: THREE.Vector3; turns: THREE.Quaternion[] } {
+  const root = h.f[i].j[0];
+  const rest = (root.userData.rest ??= root.position.clone()) as THREE.Vector3;
+  const turn = drops ? THREE.MathUtils.degToRad(FIST_DROP.turns[i]) : 0;
+  if (turn === 0) return { at: rest.clone(), turns: pose[i] };
+  const dy = rest.y - FIST_DROP.pivot, c = Math.cos(turn), s = Math.sin(turn);
+  const down = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), turn);
+  return {
+    at: new THREE.Vector3(rest.x, FIST_DROP.pivot + c * dy, rest.z + s * dy),
+    turns: [down.multiply(pose[i][0]), pose[i][1], pose[i][2]],
+  };
+}
 
 /** Solve two bent links from their lengths and the distance to their endpoint. */
 function linkBend(a: number, b: number, distance: number): number {
@@ -704,11 +735,20 @@ function thumbOver(h: Hand, fingers: THREE.Quaternion[][]): THREE.Quaternion[] {
  *  its own turn on the wrist kept: at rest, and closed in a fist (`closeFist`'s fingers). The last leaves it at rest. */
 export function wrapPoses(h: Hand): (() => void)[] {
   const rest = () => {
+    // (and its fingers' roots back from a fist's drop, `shut`)
+    shut(h, false);
     for (const d of [...h.f, h.thumb]) for (const j of d.j) j.rotation.set(0, 0, 0);
   };
   const clenched = () => {
     const turn = h.vis.quaternion.clone(), at = h.vis.position.clone();
+    // (as its bare fist is shut, whatever it wears as it's built: a wrap is worn on a bare hand, and a bare fist's
+    // outer knuckles drop and its back is laid straight, `fistBones.ts`. Laid over the fist a gloved hand makes, the
+    // wrap stood off the bare one's little finger's side, 0.12% of the hand seen through there; and the bare fist's
+    // skin, first made at his first punch, held that frame 89 ms)
+    const gloved = h.glove.visible;
+    h.glove.visible = false;
     closeFist(h, new THREE.Vector3(1, 0, 0));
+    h.glove.visible = gloved;
     h.vis.quaternion.copy(turn);
     h.vis.position.copy(at);
   };
@@ -734,7 +774,7 @@ function shadeShut(h: Hand, on: boolean): void {
   const mesh = h.bareSkin ?? h.skin;
   // (a hand still being built is posed to be sculpted before it has a skin)
   if (!mesh) return;
-  const geometry = mesh.geometry, kept = geometry.userData as { open?: THREE.BufferAttribute; shut?: ShutSkin; shape?: OpenShape };
+  const geometry = mesh.geometry, kept = geometry.userData as { open?: THREE.BufferAttribute; shut?: ShutSkin; shape?: OpenShape; key?: string };
   kept.open ??= geometry.attributes.color as THREE.BufferAttribute;
   if (!kept.open) return;
   kept.shape ??= { position: geometry.attributes.position, normal: geometry.attributes.normal };
@@ -744,14 +784,16 @@ function shadeShut(h: Hand, on: boolean): void {
   // (and once a side, build and detail, whichever hero's hand is shut first: kept on the geometry alone, every hero
   // built after the first shaded his own again at his first punch, the wrap's lay, which shuts the fist as he's
   // built, being made once too)
-  if (on && !kept.shut) {
-    const key = `${handKey(h.s, h.build)} ${kept.open.count}`;
+  // (and by whether its knuckles drop, a bare fist's: a glove put on or taken off shuts it another way, `fistRoot`)
+  const key = `${handKey(h.s, h.build)} ${kept.open.count} ${fistDrops(h)}`;
+  if (on && kept.key !== key) {
     let shut = SHUT_COLOURS.get(key);
     if (!shut) {
       shut = shutSkin(h, mesh, kept.open);
       SHUT_COLOURS.set(key, shut);
     }
     kept.shut = shut;
+    kept.key = key;
   }
   const want = on && kept.shut ? kept.shut.colour : kept.open;
   if (geometry.attributes.color !== want) geometry.setAttribute('color', want);
@@ -778,13 +820,17 @@ function shutSkin(h: Hand, mesh: THREE.SkinnedMesh, open: THREE.BufferAttribute)
     return place;
   });
   const posed = posedSkin(mesh, mesh.geometry, placed);
-  if (mesh !== h.bareSkin) return { colour: shutColours(posed.at, posed.out, open) };
+  // (a gloved fist's bare skin isn't drawn: its colours alone)
+  if (mesh !== h.bareSkin || !fistDrops(h)) return { colour: shutColours(posed.at, posed.out, open) };
   const bones = mesh.skeleton.bones as unknown[];
-  const fingers: FistFinger[] = h.f.map((digit) => ({
+  const fingers: FistFinger[] = h.f.map((digit, n) => ({
     joints: digit.j.map((j) => new THREE.Vector3().setFromMatrixPosition(placeIn(j, h.vis)!)),
     r: digit.r, bones: digit.j.map((j) => bones.indexOf(j)),
+    drop: fistDrops(h) ? THREE.MathUtils.degToRad(FIST_DROP.turns[n]) : 0,
   }));
-  const shape = onBones(mesh, posed, fingers, bones.indexOf(h.vis));
+  const rootZ = (h.f[0].j[0].userData.rest as THREE.Vector3 | undefined)?.z ?? h.f[0].j[0].position.z;
+  const drop = { y: FIST_DROP.pivot, z: rootZ, eased: FIST_DROP.eased };
+  const shape = onBones(mesh, posed, fingers, bones.indexOf(h.vis), drop);
   // (shaded as it lies on them)
   const shaped = ownShell(mesh.geometry);
   shaped.setAttribute('position', shape.position);
@@ -897,8 +943,11 @@ function fleshOf(placed: THREE.Matrix4, shade: (out: number) => number): THREE.B
  * the bar inside the curls nor the fingers' fan closed: fanned nearer, they sink into each other first. One geometry
  * in the hand's frame, made once a side and build and never disposed: a draw a fist.
  */
-function fistWebs(h: Hand, pose: THREE.Quaternion[][]): THREE.BufferGeometry {
-  const chains = h.f.map((digit, i) => chainOf(digit.j[0].position, digit.len, pose[i]));
+function fistWebs(h: Hand, pose: THREE.Quaternion[][], drops: boolean): THREE.BufferGeometry {
+  const chains = h.f.map((digit, i) => {
+    const root = fistRoot(h, i, pose, drops);
+    return chainOf(root.at, digit.len, root.turns);
+  });
   const webs: THREE.BufferGeometry[] = [];
   const placed = new THREE.Matrix4();
   for (let i = 0; i + 1 < h.f.length; i++) {
@@ -955,19 +1004,20 @@ function fistCore(h: Hand, pose: THREE.Quaternion[][] | null): void {
     if (fills) fills.visible = false;
     return;
   }
-  const key = handKey(h.s, h.build);
+  const drops = fistDrops(h), key = `${handKey(h.s, h.build)} ${drops}`;
   let made = CORES.get(key);
   if (!made) {
     // (each finger's curl's middle: the mean of its four joints)
     const middle = (i: number): THREE.Vector3 => {
-      const points = chainOf(h.f[i].j[0].position, h.f[i].len, pose[i]).points;
+      const root = fistRoot(h, i, pose, drops);
+      const points = chainOf(root.at, h.f[i].len, root.turns).points;
       return points[0].clone().add(points[1]).add(points[2]).add(points[3]).multiplyScalar(0.25);
     };
     const from = middle(0), to = middle(3), along = to.clone().sub(from);
     made = {
       at: from.clone().add(to).multiplyScalar(0.5), half: along.length() / 2,
       turn: new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), along.normalize()),
-      webs: fistWebs(h, pose),
+      webs: fistWebs(h, pose, drops),
     };
     CORES.set(key, made);
   }
@@ -1023,6 +1073,13 @@ export function closeFist(h: Hand, line: THREE.Vector3): void {
     const digit = i < h.f.length ? h.f[i] : h.thumb;
     for (let n = 0; n < digit.j.length; n++) digit.j[n].quaternion.copy(pose[i][n]);
   }
+  // (the outer knuckles dropped towards the palm, a bare fist's: `fistRoot`)
+  const drops = fistDrops(h);
+  h.f.forEach((digit, i) => {
+    const root = fistRoot(h, i, pose!, drops);
+    digit.j[0].position.copy(root.at);
+    digit.j[0].quaternion.copy(root.turns[0]);
+  });
   if (h.build.fist) shadeShut(h, true);
 }
 
