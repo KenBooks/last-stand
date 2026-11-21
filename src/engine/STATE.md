@@ -41,6 +41,8 @@ The engine outlives this game: "this game might fly, or it might not fly... but 
 4. **The pass at a share of the scene's pixels** (`gpu/low.rs`, a record's `LOW_RES`, a mesh's `userData.lowRes`) takes the fires' flames. The owner's rule is the screen's own pixels: he was told it draws soft volumes alone at a quarter of them, blended back over a scene at full size, and that it's one switch (`TUNE.lowRes`). Smoke and glows could ask for it; nothing with an edge should.
 5. Not looked at: the scene's two samples a pixel at High and Medium are drawn as one (WebGPU has 1 or 4), so the engine's frame has no antialiasing there.
 
+6. **The scene's depth drawn first** (Bulwark `set_depth_first`, `TUNE.depthFirst`, off): what's opaque shaded once a pixel. The hall at night at High, the lent 4080 as the phone: the lit shading 10.6 ms to 7.9, but the frame without shading 8.2 to 10.7 (every vertex twice, the grass's hooks too); the frame's total didn't move (18.2, 18.5). Next: its depth pass of the large occluders alone (walls, floors, roofs: a flag a game sets), not of everything.
+
 ## Left from before
 
 - The looks left are small: the kit's hair tint, item glow, hood shade and shine cap; the water's share of the sky and capped glints; the paving's unrepeated maps; membranes and flames fading as their prop dissolves.

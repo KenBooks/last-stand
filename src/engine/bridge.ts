@@ -79,6 +79,8 @@ export class Bridge {
     this.stats = core.stats;
     this.skipped = core.skipped;
     this.held = core.held;
+    // (ahead of the warm-ups: a material readied then is given the pipelines of the frame's two passes)
+    engine.set_depth_first(TUNE.depthFirst > 0);
   }
 
   /** What's kept of what was handed over forgotten: the next frame hands everything over again. */
@@ -387,6 +389,7 @@ export class Bridge {
     if ((TUNE.bloom > 0) !== this.bloom) core.engine.set_bloom(this.bloom = TUNE.bloom > 0);
     this.shadowHeld = !!grade.shadowHeld;
     core.engine.hold_shadow(this.shadowHeld && TUNE.shadowTurns > 0);
+    core.engine.set_depth_first(TUNE.depthFirst > 0);
     const share = grade.bloomShare ?? 1;
     if (share !== this.bloomShare) core.engine.set_bloom_share(this.bloomShare = share);
     this.particles.send();
