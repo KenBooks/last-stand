@@ -71,14 +71,16 @@ async function frames(lab: Lab, count: number): Promise<{ longest: number; three
   return { longest, three };
 }
 
-/** The page is the one a player gets: the engine on the plain address, the pause menu offering it alone. */
+/** The page is the one a player gets: the engine on the plain address, the pause menu with no renderer to
+ *  choose (from the owner: "since we only have 1 renderer, we dont need to display an option for it"). */
 function playersPage(): Checked {
   const asked = new URLSearchParams(location.search).get('renderer');
   if (asked) return failed(`the page was booted at ?renderer=${asked}, not the plain address players get`);
   if (!RUNNING.rust || !RUST.bridge) return failed(`the engine isn't drawing: ${RUST.failed || 'not booted'}`);
   const offered = [...document.querySelectorAll('#opt-renderer button')].map((button) => button.textContent);
-  if (offered.length !== 1) return failed(`the pause menu offers ${offered.join(', ')}: the engine alone is supported`);
-  return passed('the plain address draws by the engine, the pause menu offers it alone');
+  if (offered.length) return failed(`the pause menu offers ${offered.join(', ')}: there's one renderer, none to choose`);
+  if (!document.querySelector('.ld-powered, .logo-powered')) return failed('no logo says Powered by Bulwark');
+  return passed('the plain address draws by the engine, the pause menu has no renderer to choose');
 }
 
 /** Every shown object stands where its own position, turn and scale put it under its parent. */
@@ -164,6 +166,8 @@ async function armsThroughTheEyes(lab: Lab, bridge: Bridge, biome: BiomeId): Pro
   lab.drawing = true;
   await lab.step(10);
   const arms = bridge.stats.arms;
+  // (a hero with no lens of his arms' own, the mage, has them drawn among the world's: nothing to hold here)
+  if (!G.player.model.armsFov) return passed('through his eyes his arms are drawn among the world, with no lens of their own');
   if (!arms) return failed('through his eyes none of his arms or what they hold is drawn by the engine');
   return passed(`through his eyes ${arms} meshes of his arms and what they hold drawn by their own view`);
 }

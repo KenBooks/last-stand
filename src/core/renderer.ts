@@ -1168,9 +1168,12 @@ function fitSceneTarget(): void {
   sceneRT.setSize(_size.x, _size.y);
 }
 
+/** whether the level in use is a lite one (Low and Very low: `flameLite`), for the Rust engine's lighting */
+let liteLevel = false;
 /** Apply the render-cost settings of a quality preset, live, the scene rendering `budget` pixels at most (Auto's).
  *  None of them change shader variants. */
 export function setRenderQuality(p: QualityPreset, budget = Infinity): void {
+  liteLevel = p.flameLite;
   pixelCap = p.pixels;
   pixelBudget = budget;
   // (the canvas keeps the screen's pixels: the scene alone renders fewer)
@@ -1790,6 +1793,7 @@ export function render(): void {
       small: u.uSmall.value, large: u.uLarge.value, cap: u.uCap.value, vignette: u.uVignette.value as number,
       hurt: u.uHurt.value as number, low: u.uLow.value as number, samples: sceneSamples(),
       arms: armsFov === null ? null : (placeArmsCamera(), armsCam),
+      lite: liteLevel,
     };
     if (drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded)) {
       // (three's canvas over the engine's: clear, but for the world's overlays)

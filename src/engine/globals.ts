@@ -30,6 +30,10 @@ export const TUNE = tunable('rust', {
   points: 1,
   lampShadows: 1,
   bloom: 1,
+  /** what's opaque drawn nearest first, what the camera stands inside last (the engine's plan.rs) */
+  nearFirst: 1,
+  /** the point lights' shine at the lower levels: 1 kept, 0 left out as the level says (`Grade.lite`) */
+  shineAlways: 0,
   /** how far along its normal a surface is moved before the shadow map is read, world units */
   shadowBias: 0.06,
   /** a look to debug by: 1 how much of the sun reaches each pixel, 2 the normals, 3 a plain colour in place of
@@ -85,6 +89,8 @@ export interface Grade {
   /** the camera the hero's arms are drawn through while he's seen through his eyes (core/renderer.ts
    *  `drawArms`: narrower than the world's), none while the world's draws them */
   arms?: THREE.PerspectiveCamera | null;
+  /** a level that lights by the point lights' diffuse alone (Low and Very low, as their flames are lite) */
+  lite?: boolean;
 }
 export const PLAIN_GRADE: Grade = { small: 1e4, large: 1e4, cap: 1, vignette: 1.05, hurt: 0, low: 0 };
 
@@ -151,6 +157,8 @@ export function writeGlobals(g: Float32Array, scene: THREE.Scene, camera: THREE.
     scratchMatrix.multiplyMatrices(projectionOf(grade.arms, projection), grade.arms.matrixWorldInverse)
       .toArray(g, GLOBALS.armsView);
   }
+  g[GLOBALS.shelter + 6] = grade.lite && !TUNE.shineAlways ? 1 : 0;
+  g[GLOBALS.shelter + 7] = TUNE.nearFirst;
   g[GLOBALS.grade] = grade.small; g[GLOBALS.grade + 1] = grade.large; g[GLOBALS.grade + 2] = grade.cap;
   g[GLOBALS.grade + 3] = grade.vignette; g[GLOBALS.grade + 4] = grade.hurt; g[GLOBALS.grade + 5] = grade.low;
   g[GLOBALS.grade + 6] = time % 1000; g[GLOBALS.grade + 7] = TUNE.exposure;

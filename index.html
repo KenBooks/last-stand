@@ -45,7 +45,7 @@
     #loading .ld-back { position: absolute; inset: 0; overflow: hidden; pointer-events: none;
       background: radial-gradient(ellipse 80% 60% at 50% 46%, #2a0a06 0%, #120504 45%, #050303 100%); }
     /* exit: ui/logoWind.ts blows the logo away as particles (.blowing), then the backdrop fades to the lobby (.done); with reduced motion it all just fades */
-    #loading.blowing > :is(.ld-rule, .ld-bar, .ld-sub, .ld-tip) { opacity: 0; transition: opacity .4s; }
+    #loading.blowing > :is(.ld-powered, .ld-rule, .ld-bar, .ld-sub, .ld-tip) { opacity: 0; transition: opacity .4s; }
     #loading.done { pointer-events: none; }
     #loading.done > .ld-back, #loading.done.plain { opacity: 0; transition: opacity .9s; }
     /* smoke: a turbulence texture drawn once into a small canvas (its mask in it), drifted by the compositor: as SVG
@@ -73,6 +73,9 @@
       background: linear-gradient(90deg, #5a0e06, #c2300e 55%, #ff8a3a 92%, #ffe0a0); box-shadow: 0 0 calc(12 * var(--u)) rgba(255,90,30,.8); transition: transform .35s ease-out; }
     #loading .ld-bar::after { content: ''; position: absolute; top: 0; bottom: 0; width: 30%; left: 0;
       background: linear-gradient(90deg, transparent, rgba(255,220,180,.35), transparent); animation: ld-sweep 1.6s linear infinite; }
+    /* the engine that draws the game (Bulwark, our own, in Rust), under the logo */
+    #loading .ld-powered { position: relative; margin-top: calc(-6 * var(--u)); font-family: 'Cinzel', Georgia, serif;
+      font-size: calc(11 * var(--u)); font-weight: 700; letter-spacing: .32em; text-transform: uppercase; color: #8f7f70; }
     #loading .ld-sub { position: relative; min-height: 1.4em; font-family: 'Cinzel', Georgia, serif; font-size: calc(14 * var(--u)); font-weight: 700;
       letter-spacing: .24em; text-transform: uppercase; text-align: center; color: #c9b8a6; text-shadow: 0 0 calc(10 * var(--u)) rgba(220,60,30,.45); }
     #loading .ld-tip { position: absolute; left: 50%; bottom: max(calc(24 * var(--u)), 6vh); translate: -50% 0; width: min(calc(560 * var(--u)), calc(100vw - calc(32 * var(--u))));
@@ -272,6 +275,7 @@
       <svg class="logo-glow" viewBox="0 0 700 330" aria-hidden="true"><use href="#logo-words" fill="#e0280c" filter="url(#logo-glow-blur)"/></svg>
       <svg viewBox="0 0 700 330" aria-hidden="true"><use href="#logo-words" fill="url(#logo-steel)" filter="url(#logo-metal)"/></svg>
     </div>
+    <div class="ld-powered">Powered by Bulwark</div>
     <div class="ld-rule"><i></i></div>
     <div class="ld-bar"><div class="ld-fill"></div></div>
     <div class="ld-sub">Loading…</div>
