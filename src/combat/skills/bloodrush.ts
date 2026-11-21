@@ -120,6 +120,8 @@ const skill: InstantSkill = {
     const hit = new Set<Enemy>(), struck = new Set<Prop>();
     let built = 0, launched = false, dust = 0, stopped = false;
     sfx.bullRush(BRACE, run);
+    // (he faces the way he goes, a punch held charged or not: `pounce.ts`)
+    player.facing = Math.atan2(dir.x, dir.z);
     // (open, and its speed behind Wrath cast as it ends, `RUSH_SPEED` of a full leap's: from play, "should be possible
     // to do wrath at the end of bloodrush too")
     carrySpeed(player, RUSH_SPEED, G.time + dur + HOLD + POUNCE.carry);

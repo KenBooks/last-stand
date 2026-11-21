@@ -268,7 +268,10 @@ export const PUNCH_WIDE = 0.07;
  *  held, by 30% (similar to raised shield)", "when player idle in 3rd person he should raise hands if enemies are
  *  attacking him"): up for `after` s after he last struck or was hurt, and while a foe is within `near` m of him;
  *  while it's up and he isn't striking, a blow from his front (`BLOCK.arc`) does `less` less. */
-export const FIST_GUARD = { less: 0.3, after: 4, near: 4 };
+// (`less` 0.5, where 0.3 at first, and `charging` while he holds a punch charged, one fist left in its guard: from
+// play, "increase damage block to 50% when fists are in guard mode.... from 30% and make it 25% when charging a
+// punch")
+export const FIST_GUARD = { less: 0.5, charging: 0.25, after: 4, near: 4 };
 
 export const FRENZY = {
   cap: 10, unchained: 15, haste: 5, leech: 1, frail: 2, wait: 2, every: 0.5,

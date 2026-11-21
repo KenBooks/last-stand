@@ -146,6 +146,9 @@ const skill: InstantSkill = {
     sfx.bullLaunch(); sfx.grunt(player.frenzy / FRENZY.cap);
     const lift = Math.min(POUNCE.top, go * POUNCE.rise);
     springOff(p.clone(), dir);
+    // (he faces the way he leaps: cast over a punch held charged, the cast kept his body on the way it faced, and he
+    // landed with the foe off to his side, his punch let go past it)
+    player.facing = Math.atan2(dir.x, dir.z);
     carrySpeed(player, Math.min(1, go / def.range), G.time + dur + POUNCE.carry);
     // (open: his other skills are cast in the air, Wrath above all)
     player.startDash(dir, go / dur, dur, {

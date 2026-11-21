@@ -58,7 +58,9 @@ const warrior: ClassDef = {
     {
       key: '1', impl: 'pounce', name: 'Pounce',
       desc: 'Leap onto the foe you aim at, up to 8 metres off, striking it with both fists from two sides as you land and staggering it for a moment. Elites and bosses are too strong to stagger. Builds a stack of Frenzy, and you are free to strike again the moment you land.',
-      tags: ['physical'], cost: 20, cooldown: 3, castTime: 0,
+      // (cast over a punch held charged, which stays charged through the leap and is let go after it: from play, "it
+      // should be possible to charge a punch, then pounce then release it", "or bloodrush then release it")
+      tags: ['physical'], cost: 20, cooldown: 3, castTime: 0, overCast: true,
       // (one blow; its four were 35 each, 140 together, and 200 is the owner's: "make it 200 base damage")
       damage: 200, range: 8, frenzy: 1,
       needs: 'bare',
@@ -76,7 +78,7 @@ const warrior: ClassDef = {
     {
       key: '2', impl: 'bloodrush', name: 'Bloodrush',
       desc: 'Dash recklessly along your aim through a line of foes, striking each you pass. It carries none of them. Each foe struck builds a stack of Frenzy, up to 5.',
-      tags: ['physical'], cost: 22, cooldown: 6, castTime: 0,
+      tags: ['physical'], cost: 22, cooldown: 6, castTime: 0, overCast: true,
       damage: 80, range: 7, speed: 26, frenzy: 1, frenzyMost: 5,
       needs: 'bare',
       color: 0xff5a2a,

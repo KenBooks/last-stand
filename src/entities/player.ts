@@ -1599,11 +1599,18 @@ export class Player {
     return false;
   }
 
+  /** Whether he holds a punch charged with both hands empty: one fist chambered, the other left in its guard. */
+  get chargingPunch(): boolean {
+    const c = this.casting;
+    return this.style === 'bare' && !!c?.drawT && !c.fired && c.skill.impl.anim === 'punch' && !this.staggered;
+  }
+
   takeDamage(amount: number, _type: DamageType, from: THREE.Vector3 | null): HitResult | null {
     if (!this.alive || G.time < this.guardUntil) return null;
     // (his fists' guard takes a share off a blow from his front)
     const front = !from || angleOff(Math.atan2(from.x - this.pos.x, from.z - this.pos.z), this.facing) < BLOCK.arc;
     if (front && this.guarding) amount *= 1 - FIST_GUARD.less;
+    else if (front && this.chargingPunch) amount *= 1 - FIST_GUARD.charging;
     this.hurtT = G.time;
     // (each stack of Frenzy, more of every blow: combat/frenzy.ts)
     const r = this.resolveHit(amount * (1 + this.frenzy * FRENZY.frail / 100), from);
