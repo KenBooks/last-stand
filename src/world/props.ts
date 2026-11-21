@@ -1,5 +1,6 @@
 // Building blocks shared by the biome arenas: the biome contract, UV-scaled boxes, instancing
 // and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
+import { RUNNING } from '../core/rendererChoice';
 import * as THREE from 'three';
 import { VILLAGE } from '../core/beta';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -234,6 +235,10 @@ function hideBodies(parent: THREE.Object3D, shown: THREE.Object3D, hidden: THREE
  */
 export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera,
   shown: THREE.Group, kept: THREE.LightShadow, drawn: StillDrawn = ALL_STILL): void {
+  // (under the Rust engine none of three's shadow maps is read: the engine casts the sun's own. Drawn all the same,
+  // three built its shaders for every still thing in view at each change of place, 4 s on a warm page and 20 s on
+  // a cold one, the game stopped meanwhile. From play: "it cannot freeze 20sec")
+  if (RUNNING.rust) return;
   const lights = drawn.lights === true
     ? [...stillShadows].filter((light) => shown.getObjectById(light.id)).concat([...lampShadows])
     : drawn.lights || [];

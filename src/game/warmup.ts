@@ -9,6 +9,7 @@
 // everything that brings its own materials, compiles their shaders and clears it all again: with core/shaders.ts
 // pinning programs, nothing compiles mid-fight. Compiling a program took ANGLE a third of a second on a first visit,
 // and a third of the boot's are the fight's alone (`lab programs`).
+import { RUNNING } from '../core/rendererChoice';
 import { painted } from '../world/arena';
 import { isLazyFoe, loadFoe } from '../entities/bosses';
 import { lampsLetGo } from './village';
@@ -887,7 +888,10 @@ export function warmTheRest(left: Promise<void>): { fight: Promise<void>; all: P
   };
   const heroes = warmNeed('heroes', heroParts(), heroesBehind);
   // (the houses' rooms behind the heroes': walked into after; with no village there are none)
-  const rooms = VILLAGE ? warmNeed('rooms', roomParts(), async () => {
+  // (under the Rust engine a room has nothing to warm: no program of three's is compiled for it, and the engine is
+  // handed it ahead, src/engine `prepareAhead`. Warmed in its turn behind the fight's and the heroes' builds, a house
+  // walked to straight from the hall waited 15 s under its bar, from play "this still took 15sec or so")
+  const rooms = VILLAGE && !RUNNING.rust ? warmNeed('rooms', roomParts(), async () => {
     const cached = await behind();
     await Promise.race([heroes, wanted('rooms')]);
     return cached;
