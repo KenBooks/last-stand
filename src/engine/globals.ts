@@ -9,6 +9,8 @@ export const GLOBALS = {
   viewProj: 0, camPos: 16, sunDir: 20, sunColor: 24, ambient: 28, hemiSky: 32, hemiGround: 36, fogColor: 40, misc: 44,
   shadowView: 48, points: 64, camRight: 320, camUp: 324, seeFocus: 328, seeHole: 332, grade: 336, shelter: 344,
   seeHall: 352, seeKinds: 360, floats: 1000,
+  // (past what the page clears each frame: the lights' grid, the engine's own, and the arms' view)
+  cells: 1000, armsView: 1004, all: 1020,
 };
 /** the sun's shadow map, a side, where the game has no sun to say (`SHADOW_SIZE` in the engine's gpu.rs) */
 const SHADOW_SIZE = 2048;
@@ -52,27 +54,21 @@ export const TUNE = tunable('rust', {
 const scratchMatrix = new THREE.Matrix4(), viewProj = new THREE.Matrix4(), projection = new THREE.Matrix4();
 const v3 = new THREE.Vector3(), target3 = new THREE.Vector3();
 
-/** A perspective camera's projection with clip depth from 0 to 1, whatever convention three keeps its own in. */
+/**
+ * A camera's projection with clip depth from 0 to 1, whatever convention three keeps its own in: the camera's own
+ * matrix, its depth brought to 0..1 where three has it from -1 to 1. Worked out afresh from its field of view and
+ * aspect, it left out what the game sets on the camera beside them (a view offset: the hero selection screen
+ * draws the hall to one side of its panel), and the engine's heroes stood a hero's width off the outline three
+ * draws round the one in focus (from play: "bug with outline from before, still there").
+ */
 export function projectionOf(camera: THREE.PerspectiveCamera | THREE.OrthographicCamera, out: THREE.Matrix4):
   THREE.Matrix4 {
-  const { near, far } = camera;
-  if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
-    const c = camera as THREE.PerspectiveCamera;
-    const f = 1 / Math.tan(THREE.MathUtils.degToRad(c.fov) / 2) * c.zoom;
-    return out.set(
-      f / c.aspect, 0, 0, 0,
-      0, f, 0, 0,
-      0, 0, far / (near - far), near * far / (near - far),
-      0, 0, -1, 0);
-  }
-  const c = camera as THREE.OrthographicCamera;
-  const w = (c.right - c.left) / c.zoom, h = (c.top - c.bottom) / c.zoom;
-  const cx = (c.right + c.left) / 2, cy = (c.top + c.bottom) / 2;
-  return out.set(
-    2 / w, 0, 0, -2 * cx / w,
-    0, 2 / h, 0, -2 * cy / h,
-    0, 0, 1 / (near - far), near / (near - far),
-    0, 0, 0, 1);
+  out.copy(camera.projectionMatrix);
+  if (camera.coordinateSystem === THREE.WebGPUCoordinateSystem) return out;
+  // (z from -w..w to 0..w: half of z and w's rows added)
+  const e = out.elements;
+  for (let column = 0; column < 4; column++) e[column * 4 + 2] = (e[column * 4 + 2] + e[column * 4 + 3]) / 2;
+  return out;
 }
 
 /** The game's grade as the engine's passes after the scene read it (`fs_grade` in the engine's post.wgsl). */
@@ -86,6 +82,9 @@ export interface Grade {
   hurt: number; low: number;
   /** the scene's MSAA samples the quality level asks for on this screen (core/renderer.ts `sceneSamples`) */
   samples?: number;
+  /** the camera the hero's arms are drawn through while he's seen through his eyes (core/renderer.ts
+   *  `drawArms`: narrower than the world's), none while the world's draws them */
+  arms?: THREE.PerspectiveCamera | null;
 }
 export const PLAIN_GRADE: Grade = { small: 1e4, large: 1e4, cap: 1, vignette: 1.05, hurt: 0, low: 0 };
 
@@ -147,6 +146,10 @@ export function writeGlobals(g: Float32Array, scene: THREE.Scene, camera: THREE.
     g[GLOBALS.hemiGround + 3] = fog.isFogExp2 ? 0 : fog.far;
     fog.color.toArray(g, GLOBALS.fogColor);
     clear ??= fog.color;
+  }
+  if (grade.arms) {
+    scratchMatrix.multiplyMatrices(projectionOf(grade.arms, projection), grade.arms.matrixWorldInverse)
+      .toArray(g, GLOBALS.armsView);
   }
   g[GLOBALS.grade] = grade.small; g[GLOBALS.grade + 1] = grade.large; g[GLOBALS.grade + 2] = grade.cap;
   g[GLOBALS.grade + 3] = grade.vignette; g[GLOBALS.grade + 4] = grade.hurt; g[GLOBALS.grade + 5] = grade.low;

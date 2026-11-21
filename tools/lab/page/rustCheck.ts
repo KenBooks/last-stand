@@ -11,6 +11,7 @@ import { RUST } from '../../../src/engine';
 import type { Bridge } from '../../../src/engine/bridge';
 import { RUNNING } from '../../../src/core/rendererChoice';
 import { sceneSamples, sceneSize } from '../../../src/core/renderer';
+import { projectionOf } from '../../../src/engine/globals';
 import { HALL, TERRACE } from '../../../src/data/village';
 import { enterRoom, leaveRoom, roomHere } from '../../../src/game/rooms';
 import type { RoomId } from '../../../src/data/houses';
@@ -142,6 +143,30 @@ async function lampShadows(lab: Lab, bridge: Bridge): Promise<Checked> {
 }
 /** the fewest lamps of the village with a shadow drawn (it has over twenty) */
 const LAMPS_SHADOWED_LEAST = 12;
+
+/** The engine's view is the camera's own, with what the game sets on it beside its field of view: the hero
+ *  selection screen draws the hall to one side of its panel (a view offset), and worked out from the field of
+ *  view alone the engine's heroes stood a hero's width off the outline drawn round the one in focus. */
+function viewOffsetKept(): Checked {
+  const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 100);
+  camera.setViewOffset(1600, 900, 300, 0, 1600, 900);
+  camera.updateProjectionMatrix();
+  const offset = projectionOf(camera, new THREE.Matrix4()).elements[8];
+  if (Math.abs(offset) < 0.1) return failed('a camera\'s view offset is lost on the engine: its frame stands off three\'s overlays');
+  return passed('the engine\'s view keeps a camera\'s view offset (the hero selection screen\'s)');
+}
+
+/** Seen through his eyes, the hero's arms and what they hold are drawn (the game's pass of their own: from play,
+ *  "no warrior weapon in first person"). */
+async function armsThroughTheEyes(lab: Lab, bridge: Bridge, biome: BiomeId): Promise<Checked> {
+  // (stood through his eyes as the lab stands a hero in a view: the view switched alone, his arms kept the world's)
+  await standIn(lab, { biome, view: 'first', facing: 0, fresh: true });
+  lab.drawing = true;
+  await lab.step(10);
+  const arms = bridge.stats.arms;
+  if (!arms) return failed('through his eyes none of his arms or what they hold is drawn by the engine');
+  return passed(`through his eyes ${arms} meshes of his arms and what they hold drawn by their own view`);
+}
 
 /** The hall's shelter as the engine has it: set in the village with its walls' height, none in a fight. */
 function shelter(bridge: Bridge, where: string, wanted: boolean): Checked {
@@ -300,6 +325,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(placedRight('the village'));
       checks.push(shelter(bridge, 'the village', true));
       checks.push(quality(bridge));
+      checks.push(viewOffsetKept());
       checks.push(await lampShadows(lab, bridge));
       checks.push(await hallFromAbove(lab, bridge));
       checks.push(await house(lab, bridge, command.room as RoomId));
@@ -311,6 +337,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(shelter(bridge, `the ${command.biome}`, false));
       checks.push(await fight(lab, bridge, command.foes));
       checks.push(...await casts(lab, bridge));
+      checks.push(await armsThroughTheEyes(lab, bridge, command.biome));
     }
   } finally {
     console.error = consoleError;

@@ -18,7 +18,7 @@ import {
 } from './webgpu';
 import { G } from '../state';
 import { RUNNING } from './rendererChoice';
-import { bootRust, drawRust, RUST } from '../engine';
+import { bootRust, drawRust, rustSamples, RUST } from '../engine';
 import { perfClock } from './perfClock';
 import { sunShadowStill } from '../world/props';
 import { moonShadowKept } from '../world/moonShadow';
@@ -1061,6 +1061,7 @@ function fitSamples(): void {
     sceneRT.dispose();
   }
   if (WEBGPU) setSceneSamples(samples);
+  if (RUNNING.rust) rustSamples(samples);
 }
 /** The MSAA samples the scene renders with now. */
 export const sceneSamples = (): number => sceneRT.samples;
@@ -1788,6 +1789,7 @@ export function render(): void {
     const graded = {
       small: u.uSmall.value, large: u.uLarge.value, cap: u.uCap.value, vignette: u.uVignette.value as number,
       hurt: u.uHurt.value as number, low: u.uLow.value as number, samples: sceneSamples(),
+      arms: armsFov === null ? null : (placeArmsCamera(), armsCam),
     };
     if (drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded)) {
       // (three's canvas over the engine's: clear, but for the world's overlays)

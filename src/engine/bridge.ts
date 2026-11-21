@@ -27,7 +27,7 @@ export { TUNE, type Grade } from './globals';
 export type { FrameStats } from './core';
 
 /** a record's flags (plan.rs) */
-const CASTS_SHADOW = 1, NEVER_CULLED = 2, SHADOW_ONLY = 4;
+const CASTS_SHADOW = 1, NEVER_CULLED = 2, SHADOW_ONLY = 4, ARMS = 8;
 /** where a record says how many instances its mesh draws by itself (`RAW_INSTANCES` in plan.rs) */
 const RAW_INSTANCES = 7;
 /** how far under the scene a hidden object is a place left as it stands (the biomes' roots, the village's) */
@@ -120,6 +120,11 @@ export class Bridge {
     const casts = mesh.castShadow || (TUNE.castAll && mesh.receiveShadow);
     r[at + 6] = (casts ? CASTS_SHADOW : 0) | (mesh.frustumCulled ? 0 : NEVER_CULLED)
       | (material.colorWrite === false ? SHADOW_ONLY : 0);
+    // (his arms through his eyes: by their own view, never culled by the world's, casting nothing)
+    if (this.armsNow) {
+      r[at + 6] = ARMS | NEVER_CULLED;
+      core.stats.arms++;
+    }
     r[at + RAW_INSTANCES] = raw;
     if (bones >= 0) {
       const skinned = mesh as THREE.SkinnedMesh;
@@ -235,7 +240,11 @@ export class Bridge {
     this.core.engine.set_quality(samples, shadowSize);
     this.core.freshViews();
   }
+  /** The samples the scene is drawn with, told ahead of the frame that would say so (`rustSamples`). */
+  samplesAhead(samples: number): void { this.quality(samples, this.shadowSize); }
   private samples = 4;
+  /** the mesh being recorded is the hero's arms through his eyes */
+  private armsNow = false;
   private bloom = true;
   private shadowSize = 2048;
   /** The GPU's clock asked, with no frame drawn: how many frames' times have come back, whether one is on its
@@ -298,6 +307,7 @@ export class Bridge {
   lights(): string { return this.lit.report(); }
 
   private walk(scene: THREE.Scene, camera: THREE.Camera): void {
+    const arms = this.grade.arms ?? null;
     const stack = this.stack;
     stack.length = 0;
     stack.push(scene);
@@ -306,6 +316,14 @@ export class Bridge {
       if (!object.visible) continue;
       if ((object as THREE.Mesh).isMesh) {
         if (object.layers.test(camera.layers)) this.addMesh(object as THREE.Mesh);
+        else if (arms && object.layers.test(arms.layers)) {
+          // (on the arms' layer alone, seen through his eyes: the game draws them in a pass of their own, with
+          // a camera of their own, which the engine's frame has in it. Left out, he held nothing: from play,
+          // "no warrior weapon in first person")
+          this.armsNow = true;
+          this.addMesh(object as THREE.Mesh);
+          this.armsNow = false;
+        }
       } else if ((object as THREE.Light).isLight) {
         // (the rig's copies of the shown place's lights are three's: the place's own are added after the walk)
         if (!object.userData.rigged) this.lit.add(object as THREE.Light);
@@ -332,7 +350,7 @@ export class Bridge {
     // (a lamp's shadow drawn ahead of the frame, whose own records are written over its casters')
     this.lampShadows.step((mesh) => this.addMesh(mesh));
     core.skipped.clear();
-    stats.newMeshes = stats.movedMeshes = stats.newTextures = stats.newMaterials = 0;
+    stats.newMeshes = stats.movedMeshes = stats.newTextures = stats.newMaterials = stats.arms = 0;
     if (scene.matrixWorldAutoUpdate) {
       if (TUNE.still) this.placeShown(scene, false, 0);
       else scene.updateMatrixWorld();

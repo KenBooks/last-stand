@@ -48,6 +48,20 @@ function watermark(): void {
 }
 let resize: ((width: number, height: number) => void) | null = null;
 
+/**
+ * The scene's MSAA samples told to the engine as the game sets them (core/renderer.ts `fitSamples`), ahead of its
+ * first frame: told by that frame, the engine had made every pipeline the loading bars asked for at its own 4
+ * samples, and made them all again at the level's as the lobby showed, each compiled aside with nothing waiting
+ * for it and its draws left out meanwhile: on a phone the village's ground was missing as it loaded, the pale
+ * sky's colour in its place (from play: "when village loads, the ground is white").
+ */
+export function rustSamples(samples: number): void {
+  samplesWanted = samples;
+  RUST.bridge?.samplesAhead(samples);
+}
+/** the samples the game last asked for, for an engine not made yet */
+let samplesWanted: number | null = null;
+
 /** The engine made on a canvas of its own over `under`, three's. A failure leaves three drawing. */
 export async function bootRust(under: HTMLCanvasElement): Promise<void> {
   try {
@@ -67,6 +81,7 @@ export async function bootRust(under: HTMLCanvasElement): Promise<void> {
     const engine = await pipelinesAside(() => Engine.create(made));
     const bridge = new Bridge(engine, wasm);
     RUST.bridge = bridge;
+    if (samplesWanted !== null) bridge.samplesAhead(samplesWanted);
     AHEAD.prepare = (objects) => bridge.prepare(objects);
     AHEAD.bakeLamps = (casters, lamps) => bridge.bakeLamps(casters, lamps);
     watermark();

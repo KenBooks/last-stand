@@ -19,7 +19,7 @@ import { groundHeight } from '../world/ground';
 import { anchorLabel, promptArt, textArt } from '../ui/floaters';
 import { ORDER, type Label } from '../ui/overlay/layer';
 import { OUTLINE } from '../ui/overlay/paint';
-import { approach } from './warm';
+import { approach, want } from './warm';
 import { stands, walkLength } from '../world/walkPath';
 import { completeStep } from './training';
 import { HALL, TERRACE, inHall } from '../data/village';
@@ -391,7 +391,13 @@ export function updateVillage(dt = 0): void {
   if (viewMode() !== 'top') pointed = null;
   // (the other heroes readied as he nears their hall, where the warm-up behind the lobby hasn't yet: behind the
   // lobby still, given up at a held frame, `approach`)
-  if (Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_NEAR) approach('heroes');
+  if (Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_NEAR) {
+    approach('heroes');
+    // (under the Rust engine nothing of three's is compiled for them, and its own pipelines compile aside: asked for
+    // outright. On WebGPU the warm-up behind the lobby is left out, and waited for something to ask: on a return
+    // visit nothing did, and the hall's plinths stood empty, from play "forgot to render other heroes in hall")
+    if (RUNNING.rust) want('heroes');
+  }
   syncLabels();
 }
 
