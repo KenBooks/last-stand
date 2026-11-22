@@ -7,7 +7,10 @@ import type * as THREE from 'three';
 import { Bridge, TUNE, type Grade } from './bridge';
 import { perfClock } from '../core/perfClock';
 import { AHEAD, PIPELINES, pipelinesAside } from './pipelinesAside';
-import { keepWhatsSaid } from './said';
+import { fault, keepWhatsSaid, watchFrame } from './said';
+
+/** the frames drawn since the loading screen left */
+let loadedFrames = 0;
 
 /** How the trial went, for the lab and the console (`window.__rust`). */
 export const RUST = {
@@ -82,6 +85,7 @@ export async function bootRust(under: HTMLCanvasElement): Promise<void> {
     (window as unknown as { __rust: typeof RUST }).__rust = RUST;
   } catch (error) {
     RUST.failed = String(error);
+    fault('the engine did not start', String(error));
     console.error('The Rust engine did not start; three draws the game.', error);
     canvas?.remove();
     canvas = null;
@@ -113,5 +117,7 @@ export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, ti
   }
   if (RUST.hooks) (scene.onAfterRender as unknown as Hook)(renderer, scene, camera, null);
   if (RUST.frames++ === 0) RUST.boot.firstFrameMs = perfClock.now() - began;
+  // (the frame itself checked for black a few times after the load: `said.ts`)
+  if (RUST.loaded) watchFrame(canvas, ++loadedFrames);
   return true;
 }

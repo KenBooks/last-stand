@@ -190,6 +190,22 @@ export async function askNow(): Promise<void> {
   ask(slow, packed.body.length);
 }
 
+/**
+ * What a renderer's self-check found failed (src/engine/said.ts) sent as a performance report, its lines in it
+ * beside the last minute's frames: sent when the player presses Send under its notice (the press is their
+ * consent), and counted against the day's sends as every report is.
+ */
+export async function sendFault(lines: string[]): Promise<Sent> {
+  if (!canSend()) return { error: 'this browser can\'t send reports' };
+  const k = kept();
+  if (k.sent.length >= MOST_A_DAY) return { error: `${MOST_A_DAY} reports were sent in the last day` };
+  keep({ ...k, sent: [...k.sent, Date.now()] });
+  const slow: Slow = {
+    scene: 'profile', verdict: null, tookMs: 0, at: performance.now(), snapshot: recorder.snapshot(), fault: lines,
+  };
+  return sendTrace(await packTrace(slow));
+}
+
 /** The prompt put away, as Not now does without counting it. */
 export function putAway(): void { letGo(); }
 

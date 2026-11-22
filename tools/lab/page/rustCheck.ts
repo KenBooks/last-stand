@@ -3,6 +3,7 @@
 // game stopped for 5 to 20 s at each change of place, a hero stood a pace off his own outline, the hall of heroes
 // lit as the square at noon, its roof black from above, a dark rectangle on a battleground's floor, a skill's own
 // effects not drawn, and the engine stopped for good by a canvas nothing had drawn on.
+import { plantedFaults } from './rustFaults';
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
@@ -494,6 +495,13 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
   } finally {
     console.error = consoleError;
     lab.drawing = false;
+  }
+  // (last, with the checks' own ear off the console: a plant says a panic there)
+  if (bridge) {
+    lab.drawing = true;
+    const faults = await plantedFaults(lab);
+    lab.drawing = false;
+    checks.push(faults.problems.length ? { line: `  WRONG: ${faults.line}`, problems: faults.problems } : passed(faults.line));
   }
   const problems = checks.flatMap((check) => check.problems);
   for (const line of new Set(said)) problems.push(`said while drawing: ${line.slice(0, 600)}`);

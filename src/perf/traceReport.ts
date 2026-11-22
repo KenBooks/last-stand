@@ -55,6 +55,7 @@ function whyText(r: Record<string, number | string>): string {
   }
   if (r.why === 'readying') return `a loading bar was up ${sec(Number(r.tookMs))}`;
   if (r.why === 'profile') return 'the player profiled the frame where they stood';
+  if (r.why === 'fault') return 'the renderer\'s self-check found a failure on this device';
   return `${r.why || 'not slow (taken by a harness)'}: ${playText(r)}`;
 }
 
@@ -99,6 +100,8 @@ export function traceReport(trace: Trace, code = ''): string[] {
   lines.push(`Sent because: ${r.scene}, ${whyText(r)}`);
   // (each part of the frame taken out in turns on the player's device: perf/profiler.ts)
   if (r.profile) lines.push('Profile:', ...String(r.profile).split('\n').map((line) => `  ${line}`));
+  // (what the renderer's self-check heard fail: src/engine/said.ts)
+  if (r.fault) lines.push('Renderer faults:', ...String(r.fault).split('\n').map((line) => `  ${line}`));
   lines.push(`Boot: shown at ${sec(Number(r.bootMs))} (waiting on its files ${sec(Number(r.bootDownloadMs))}${r.firstVisit ? ', no worker: its files from the network' : ''})${h.game.bootSteps ? ` | ${h.game.bootSteps}` : ''}`);
   if (h.game.bootStalls) lines.push(`Loading stalls (times from navigation): ${h.game.bootStalls}`);
   lines.push(`FPS over play: mean ${fps((play.length * 1000) / playMs)} | 1% low ${fps(1000 / percentile(playIntervals, 0.99))}`);

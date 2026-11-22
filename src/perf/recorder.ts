@@ -55,6 +55,8 @@ export interface Slow {
   snapshot: Snapshot;
   /** a profile's lines, where the player profiled the frame (`profiler.ts`) */
   profile?: string[];
+  /** what a renderer's self-check found failed on this device (src/engine/said.ts) */
+  fault?: string[];
   /** explicitly started and stopped by the player, independent of automatic slow-game detection */
   manual?: boolean;
 }

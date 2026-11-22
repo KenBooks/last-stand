@@ -8,6 +8,7 @@
 // Only the engine's device, and only the pipelines of its scene (their labels): its post chain's and its maps' are
 // made as it boots and drawn with at once.
 import type * as THREE from 'three';
+import { fault, watchDevice } from './said';
 
 /** what the page asks of the engine ahead of a frame, set as the engine boots (`index.ts`): for the game's code
  *  that can't import the engine (core/shaders.ts' warm-ups, a cycle through the renderer) */
@@ -20,12 +21,29 @@ export const AHEAD = {
 };
 
 /** the engine's scene pipelines: how many were asked for, and how many are still compiling */
-export const PIPELINES = { made: 0, compiling: 0 };
+export const PIPELINES = { made: 0, compiling: 0, refused: 0 };
 
 /** the labels of the pipelines stood in for (Bulwark's gpu/pipelines.rs) */
 const ASIDE = new Set(['scene', 'shadow', 'sprites']);
 
-interface Descriptor { label?: string }
+interface Stage { entryPoint?: string; module?: { label?: string }; targets?: ({ format?: string } | null)[] }
+interface Descriptor {
+  label?: string;
+  vertex?: Stage;
+  fragment?: Stage;
+  depthStencil?: { format?: string; depthCompare?: string };
+  multisample?: { count?: number };
+  primitive?: { cullMode?: string };
+}
+
+/** What a pipeline is, for a report of its refusal: its shaders' entries, its targets, its depth, its samples. */
+function described(descriptor: Descriptor): string {
+  const targets = descriptor.fragment?.targets?.map((target) => target?.format ?? 'none').join(',') ?? 'none';
+  return `vertex ${descriptor.vertex?.module?.label ?? ''}.${descriptor.vertex?.entryPoint ?? '?'}, `
+    + `fragment ${descriptor.fragment?.module?.label ?? ''}.${descriptor.fragment?.entryPoint ?? 'none'}, `
+    + `onto ${targets}, depth ${descriptor.depthStencil?.format ?? 'none'} ${descriptor.depthStencil?.depthCompare ?? ''}, `
+    + `${descriptor.multisample?.count ?? 1} samples, cull ${descriptor.primitive?.cullMode ?? 'none'}`;
+}
 interface Device {
   createRenderPipeline(descriptor: Descriptor): object;
   createRenderPipelineAsync(descriptor: Descriptor): Promise<object>;
@@ -41,16 +59,20 @@ interface Pass {
 /** A pipeline being compiled aside: what the engine holds in its place. */
 class StandIn {
   real: object | null = null;
-  constructor(device: Device, descriptor: Descriptor, make: Device['createRenderPipeline']) {
+  constructor(device: Device, descriptor: Descriptor) {
     PIPELINES.made++;
     PIPELINES.compiling++;
     device.createRenderPipelineAsync(descriptor).then((real) => {
       this.real = real;
       PIPELINES.compiling--;
-    }, () => {
-      // (refused: made the plain way, so the engine hears what the GPU says of it)
-      this.real = make.call(device, descriptor);
+    }, (refused: { reason?: string; message?: string }) => {
+      // (refused by this device: its draws stay left out, and the refusal is a fault with what the GPU said of
+      // it. Made the plain way instead, it was an invalid pipeline, and a pass drawing with one made the whole
+      // frame invalid: a phone's village all black)
       PIPELINES.compiling--;
+      PIPELINES.refused++;
+      fault(`the pipeline "${descriptor.label ?? ''}" was refused (${refused?.reason ?? 'no reason'})`,
+        `${refused?.message || 'the GPU said nothing'} | ${described(descriptor)}`);
     });
   }
 }
@@ -82,20 +104,27 @@ function patchPasses(): void {
   };
 }
 
+/** `device`'s scene pipelines compiled aside from here on (the engine's device; a harness's second one). */
+export function asideOn(device: object): void {
+  const made = device as Device;
+  const make = made.createRenderPipeline;
+  made.createRenderPipeline = (descriptor: Descriptor): object =>
+    (ASIDE.has(descriptor.label ?? '') ? new StandIn(made, descriptor) : make.call(made, descriptor));
+}
+
 /**
  * While `boot` runs (the engine made: it asks an adapter for its device), the device it's given is taken, and its
  * scene pipelines are compiled aside from then on.
  */
 export async function pipelinesAside<T>(boot: () => Promise<T>): Promise<T> {
-  type Adapter = { requestDevice(...given: unknown[]): Promise<Device> };
+  type Adapter = { requestDevice(...given: unknown[]): Promise<Device>; info?: object };
   const adapter = (globalThis as unknown as { GPUAdapter?: { prototype: Adapter } }).GPUAdapter?.prototype;
   if (!adapter) return boot();
   const request = adapter.requestDevice;
   adapter.requestDevice = async function (this: Adapter, ...given: unknown[]): Promise<Device> {
     const device = await request.apply(this, given);
-    const make = device.createRenderPipeline;
-    device.createRenderPipeline = (descriptor: Descriptor): object =>
-      (ASIDE.has(descriptor.label ?? '') ? new StandIn(device, descriptor, make) : make.call(device, descriptor));
+    watchDevice(device, this.info);
+    asideOn(device);
     return device;
   };
   try {

@@ -107,7 +107,10 @@ export function traceOf(slow: Slow): Uint8Array {
   // (a slow boot's, the play after it judged beside it: recorder.ts `bootTail`)
   if (slow.manual) reason.why = 'manual';
   else if (slow.scene === 'boot') reason.why = 'boot';
-  else if (slow.profile) {
+  else if (slow.fault) {
+    reason.why = 'fault';
+    reason.fault = slow.fault.join('\n');
+  } else if (slow.profile) {
     reason.why = 'profile';
     reason.profile = slow.profile.join('\n');
   } else if (!slow.verdict) reason.why = 'readying';
