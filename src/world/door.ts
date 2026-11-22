@@ -9,6 +9,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { canvasOf, ctx2d, textureFromCanvas } from '../core/textures';
 import { mulberry } from '../util';
 import { boxWithUV } from './props';
+import { paintBoard, paintedFace } from './signPaint';
 
 /** what a door is made of: its frame's timber, its leaf's planks, its iron */
 export interface DoorMats { frame: THREE.Material; leaf: THREE.Material; iron: THREE.Material }
@@ -127,22 +128,24 @@ export function buildDoor(M: DoorMats, hang: DoorHang, seed = 1): Door {
   return { group, top: inH + (hang.frame ? head : 0) };
 }
 
-/** the sign's board (m), its canvas (px a metre), and how far off the wall it hangs (m: a cottage's timber plate stands
- *  0.06 out, and in one plane with it the board's back fought it) */
-const SIGN = { wide: 1.4, high: 0.3, thick: 0.05, px: 400, off: 0.075 };
+/** the sign's board (m), its canvas (px a metre), how far off the wall it hangs (m: a cottage's timber plate stands
+ *  0.06 out, and in one plane with it the board's back fought it), and its length for a letter of its name (m: its
+ *  heavy capitals are wider than the gilt serif's were) */
+const SIGN = { wide: 1.4, high: 0.3, thick: 0.05, px: 400, off: 0.075, perLetter: 0.11 };
 
-/** The sign hung over a house's door: `name` painted on a board, in the wall's frame its foot's middle at (0, y) on
+/** The sign hung over a house's door: `name` painted on a board as the signposts' arms are (`signPaint.ts`; from
+ *  Viktor: "labels on houses should be high contrast as well": they were dark boards, the name carved in gilt), in the wall's frame its foot's middle at (0, y) on
  *  the wall's face, held off it by iron brackets. In materials of the place's own (`face` gives the material its
  *  picture is painted in: a copy of a mapped one, the same program). */
 export function doorSign(name: string, board: THREE.Material, iron: THREE.Material, face: (map: THREE.Texture) => THREE.Material,
   y: number): THREE.Group {
   const g = new THREE.Group();
-  const w = Math.max(SIGN.wide, 0.16 + name.length * 0.075), h = SIGN.high;
+  const w = Math.max(SIGN.wide, 0.16 + name.length * SIGN.perLetter), h = SIGN.high;
   const canvas = canvasOf(Math.round(w * SIGN.px), Math.round(h * SIGN.px));
-  paintSign(ctx2d(canvas), canvas.width, canvas.height, name);
+  paintBoard(ctx2d(canvas), canvas.width, canvas.height, name);
   const map = textureFromCanvas(canvas);
   map.anisotropy = 4;
-  const painted = face(map);
+  const painted = paintedFace(face(map));
   // (the board itself, its face the picture, its edges the wood)
   const body = new THREE.Mesh(boxWithUV(w, h, SIGN.thick, 0.5, true), board);
   body.position.set(0, y + h / 2, SIGN.off + SIGN.thick / 2);
@@ -158,44 +161,3 @@ export function doorSign(name: string, board: THREE.Material, iron: THREE.Materi
   return g;
 }
 
-/** A sign's face (a house's over its door, a signpost's arm, world/signposts.ts) on `c` from its corner, `w` by `h`:
- *  dark weathered boards, a gilded border, the name carved in gold. */
-export function paintSign(c: CanvasRenderingContext2D, w: number, h: number, name: string): void {
-  const rng = mulberry(name.length * 31 + 7);
-  const grad = c.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, '#3a2414'); grad.addColorStop(1, '#24150b');
-  c.fillStyle = grad;
-  c.fillRect(0, 0, w, h);
-  // (its grain: long streaks along it)
-  for (let k = 0; k < 90; k++) {
-    c.strokeStyle = `rgba(${rng() < 0.5 ? '12,6,2' : '90,60,34'},${0.15 + rng() * 0.25})`;
-    c.lineWidth = 1 + rng() * 2;
-    const y = rng() * h;
-    c.beginPath();
-    c.moveTo(0, y);
-    c.bezierCurveTo(w * 0.3, y + (rng() - 0.5) * 8, w * 0.7, y + (rng() - 0.5) * 8, w, y + (rng() - 0.5) * 6);
-    c.stroke();
-  }
-  // (a seam between its two boards)
-  c.fillStyle = 'rgba(8,4,2,.7)';
-  c.fillRect(0, h / 2 - 1, w, 2);
-  // its border, gilt
-  const inset = h * 0.08;
-  c.strokeStyle = '#c89a48';
-  c.lineWidth = Math.max(2, h * 0.025);
-  c.strokeRect(inset, inset, w - inset * 2, h - inset * 2);
-  // the name, carved and gilded: a dark cut under it, the gold over
-  let size = h * 0.42;
-  const font = (s: number): string => `700 ${s}px 'Cinzel', Georgia, serif`;
-  c.font = font(size);
-  const room = w - inset * 4;
-  while (c.measureText(name).width > room && size > 8) c.font = font(size -= 2);
-  c.textAlign = 'center';
-  c.textBaseline = 'middle';
-  c.fillStyle = 'rgba(0,0,0,.75)';
-  c.fillText(name, w / 2 + 2, h / 2 + 3);
-  const gold = c.createLinearGradient(0, h * 0.3, 0, h * 0.7);
-  gold.addColorStop(0, '#ffe39a'); gold.addColorStop(0.5, '#d8a848'); gold.addColorStop(1, '#a87428');
-  c.fillStyle = gold;
-  c.fillText(name, w / 2, h / 2);
-}
