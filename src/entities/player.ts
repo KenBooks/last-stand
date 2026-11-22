@@ -766,7 +766,8 @@ export class Player {
    *  off, the pointer resting on the skill bar in a fight made 1 to 4 and Q do nothing (from play: "mouse was
    *  hovering over skill, in that case they dont do anything", #816). */
   private heldOffByUI(key: SkillKey): boolean {
-    return input.mouse.overUI && !input.touchMode && (key === 'mouse0' || key === 'mouse2');
+    if (input.touchMode) return false;
+    return (key === 'mouse0' && input.mouse.overUI) || (key === 'mouse2' && input.mouse.overUIRight);
   }
 
   /** An aimed skill's key held: aimed from now on (another being aimed is given up). */

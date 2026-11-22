@@ -48,17 +48,39 @@ async function pressed(lab: Lab, key: SkillKey, overUI: boolean, planted: boolea
   return used;
 }
 
-/** A real press of the mouse on a slot of the skill bar, which only shows a tip: whether the game took it as a
- *  press on the world (its left button down, the pointer not held to be over the UI). */
-async function slotPressed(lab: Lab): Promise<{ taken: boolean; overUI: boolean } | null> {
-  const slot = document.querySelector<HTMLElement>('#hotbar .slot');
-  if (!slot || !slot.getClientRects().length) return null;
-  const at = middleOf(slot);
-  await lab.mouseDown(at);
-  const read = { taken: input.mouse.left, overUI: input.mouse.overUI };
-  await lab.mouseUp(at);
-  return read;
+/** what a real press of each of the mouse's buttons on a part of the page came to: whether the game took it as a
+ *  press on the world (the button down, the pointer not held to be over the UI for it) */
+interface RealPress {
+  left: boolean;
+  right: boolean;
 }
+
+/** Real presses of the mouse's two buttons on the page's part `selector`; null where it isn't shown. */
+async function realPress(lab: Lab, selector: string): Promise<RealPress | null> {
+  const part = document.querySelector<HTMLElement>(selector);
+  if (!part) return null;
+  // (a part the player switches on, the performance panel, is shown for the presses alone)
+  const hidden = part.classList.contains('hidden');
+  part.classList.remove('hidden');
+  await lab.step(1);
+  if (!part.getClientRects().length) return null;
+  const at = middleOf(part);
+  await lab.mouseDown(at);
+  const left = input.mouse.left && !input.mouse.overUI;
+  await lab.mouseUp(at);
+  await lab.mouseDown(at, 'right');
+  const right = input.mouse.right && !input.mouse.overUIRight;
+  await lab.mouseUp(at, 'right');
+  part.classList.toggle('hidden', hidden);
+  return { left, right };
+}
+
+/** the page's parts pressed for real, and which of the mouse's buttons must reach the world through each: a
+ *  slot of the skill bar only shows a tip (both); the performance panel copies on a left click (the right) */
+const PARTS: { name: string; selector: string; left: boolean; right: boolean }[] = [
+  { name: 'a slot of the skill bar', selector: '#hotbar .slot', left: true, right: true },
+  { name: 'the performance panel', selector: '#perf', left: false, right: true },
+];
 
 /** `lab overui`: every skill key over the world and over the UI; with `canary` nothing casts over the UI, which the
  *  keyboard's keys must be found to differ by. */
@@ -85,11 +107,14 @@ export async function keysOverUi(lab: Lab, options: KeysOverUiOptions): Promise<
     }
   }
   // (and a real press on a slot of the skill bar, which has no action of its own: the world's)
-  const slot = await slotPressed(lab);
-  if (!slot) throw new Error('lab: overui: the skill bar shows no slot to press');
-  lines.push(`a press on a slot of the skill bar: ${slot.taken ? 'the world\'s' : 'not taken'}`
-    + `${slot.overUI ? ', the pointer held to be over the UI' : ''}`);
-  if (!slot.taken || slot.overUI) problems.push('a press on a slot of the skill bar never reached the world');
+  const whose = (worlds: boolean): string => (worlds ? 'the world\'s' : 'the UI\'s');
+  for (const part of PARTS) {
+    const press = await realPress(lab, part.selector);
+    if (!press) throw new Error(`lab: overui: ${part.name} isn't shown to press`);
+    lines.push(`a press on ${part.name}: the left button ${whose(press.left)}, the right ${whose(press.right)}`);
+    if (press.left !== part.left) problems.push(`a left press on ${part.name} was ${whose(press.left)}`);
+    if (press.right !== part.right) problems.push(`a right press on ${part.name} was ${whose(press.right)}`);
+  }
   // (the state checked to have happened: a keyboard key that casts at all, or nothing was compared)
   if (!keyboardCast) throw new Error('lab: overui: no keyboard key of the hero\'s cast over the world');
   if (!options.canary) return { text: lines.join('\n'), problems };

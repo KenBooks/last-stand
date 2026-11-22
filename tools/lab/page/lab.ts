@@ -577,7 +577,7 @@ export class Lab {
     const ndc = point.clone().project(G.camera);
     input.mouse.x = (ndc.x + 1) / 2 * innerWidth;
     input.mouse.y = (1 - ndc.y) / 2 * innerHeight;
-    input.mouse.overUI = false;
+    input.mouse.overUI = input.mouse.overUIRight = false;
   }
 
   /**
@@ -624,7 +624,7 @@ export class Lab {
 
   private applyInput(frame: Frame): void {
     this.pointAt(frame.aim ?? this.aim);
-    if (frame.overUI) input.mouse.overUI = true;
+    if (frame.overUI) input.mouse.overUI = input.mouse.overUIRight = true;
     if (frame.look) renderer.lookBy(frame.look[0], frame.look[1]);
     if (frame.sight) lookToward(frame.sight);
     const keys = frame.keys ?? [];

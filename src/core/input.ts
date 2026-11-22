@@ -13,7 +13,8 @@ import type { Enemy } from '../entities/enemy';
 export const input = {
   down: new Set<string>(),
   pressed: new Set<string>(),
-  mouse: { x: 0, y: 0, left: false, right: false, middle: false, overUI: false },
+  // (overUI: the pointer is on a part of the page a left press belongs to; overUIRight: a right press)
+  mouse: { x: 0, y: 0, left: false, right: false, middle: false, overUI: false, overUIRight: false },
   wheel: 0,
   orbit: 0,                      // horizontal middle-drag this frame, px (rotates the camera)
   look: { x: 0, y: 0 },          // mouse movement this frame while the pointer is locked, px
@@ -236,9 +237,19 @@ function aimAlong(far: number, offHero = false): void {
  *  that click should not go through", #816). What does act on a press is left out, and takes it. */
 const TIP_ONLY = '#hotbar .slot';
 
-/** Whether a press on `target` is the world's: the game's view, or a part of the UI that only shows a tip. */
-const worldsPress = (target: EventTarget | null, canvas: HTMLElement): boolean =>
-  target === canvas || (target instanceof Element && target.closest(TIP_ONLY) !== null);
+/** what of the page's UI acts on a left press at most (a button, the performance panel's copy on click): a right
+ *  press there is the world's (from play: "if panel only takes left click, then right click should go through
+ *  and cast skill"). The lobby's panels, where a right click equips or clears a key, and the chat stay out. */
+const LEFT_ONLY = '#hud, #diag';
+
+/** Whether a press of `button` (0 the left, 2 the right) on `target` is the world's: the game's view, a part of
+ *  the UI that only shows a tip, or for the right button a part that acts on the left alone. */
+const worldsPress = (target: EventTarget | null, canvas: HTMLElement, button = 0): boolean => {
+  if (target === canvas) return true;
+  if (!(target instanceof Element)) return false;
+  if (target.closest('input, textarea, select')) return false;
+  return target.closest(button === 2 ? `${TIP_ONLY}, ${LEFT_ONLY}` : TIP_ONLY) !== null;
+};
 
 function keyName(e: KeyboardEvent): string {
   if (e.code.startsWith('Key')) return e.code.slice(3).toLowerCase();
@@ -292,14 +303,15 @@ export function initInput(canvas: HTMLCanvasElement, keyboardTarget: (target: st
   window.addEventListener('blur', releaseInput);
   window.addEventListener('mousemove', (e) => {
     if (input.touchMode) return;
-    if (pointerLocked()) { lookMove(e); input.mouse.overUI = false; return; }
+    if (pointerLocked()) { lookMove(e); input.mouse.overUI = input.mouse.overUIRight = false; return; }
     input.mouse.x = e.clientX; input.mouse.y = e.clientY;
     input.mouse.overUI = !worldsPress(e.target, canvas);
+    input.mouse.overUIRight = !worldsPress(e.target, canvas, 2);
     // the drag keeps rotating over the UI; `buttons` catches a release outside the window
     if (input.mouse.middle) { if (e.buttons & 4) input.orbit += e.movementX; else input.mouse.middle = false; }
   });
   window.addEventListener('mousedown', (e) => {
-    if (input.touchMode || !worldsPress(e.target, canvas)) return;
+    if (input.touchMode || !worldsPress(e.target, canvas, e.button)) return;
     // the click that takes the pointer for mouse look doesn't also attack
     if (lockWanted && !pointerLocked()) { requestLock(); return; }
     if (e.button === 0) { input.mouse.left = true; input.pressed.add('mouse0'); }
@@ -311,7 +323,7 @@ export function initInput(canvas: HTMLCanvasElement, keyboardTarget: (target: st
     if (e.button === 2) input.mouse.right = false;
     if (e.button === 1) input.mouse.middle = false;
   });
-  window.addEventListener('contextmenu', (e) => { if (worldsPress(e.target, canvas)) e.preventDefault(); });
+  window.addEventListener('contextmenu', (e) => { if (worldsPress(e.target, canvas, 2)) e.preventDefault(); });
   canvas.addEventListener('wheel', (e) => { input.wheel += Math.sign(e.deltaY); e.preventDefault(); }, { passive: false });
 }
 
