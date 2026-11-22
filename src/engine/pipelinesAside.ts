@@ -79,6 +79,7 @@ function described(descriptor: Descriptor): string {
 }
 interface Device {
   createRenderPipeline(descriptor: Descriptor): object;
+  createComputePipeline(descriptor: Descriptor): object;
   createRenderPipelineAsync(descriptor: Descriptor): Promise<object>;
 }
 interface Pass {
@@ -158,6 +159,16 @@ export function asideOn(device: object): void {
   const make = made.createRenderPipeline;
   made.createRenderPipeline = (descriptor: Descriptor): object =>
     (ASIDE.has(descriptor.label ?? '') ? new StandIn(made, descriptor) : make.call(made, descriptor));
+  // (a compute pipeline is compiled there and then, the GPU's process busy with it: one made in play is said,
+  // as a scene pipeline first asked for then is)
+  const compute = made.createComputePipeline;
+  made.createComputePipeline = (descriptor: Descriptor): object => {
+    if (PIPELINES.waitLeft === Infinity) {
+      PIPELINES.notes.push([Math.round(performance.now()), `(a compute pipeline made in play: ${descriptor.label ?? 'unnamed'})`]);
+      PIPELINES.late++;
+    }
+    return compute.call(made, descriptor);
+  };
 }
 
 /**

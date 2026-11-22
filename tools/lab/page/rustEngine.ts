@@ -61,6 +61,7 @@ export interface RustCommand {
 /** what's read of each frame, and averaged */
 const TIMED: (keyof FrameStats)[] = [
   'placeMs', 'walkMs', 'engineMs', 'gpuMs', 'records', 'draws', 'shadowDraws', 'shadowTriangles', 'shadowsKept', 'lowDraws', 'lightsLeftOut', 'objects', 'culled', 'triangles',
+  'fieldKept', 'fieldCounted',
 ];
 
 const median = (values: number[]): number => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
@@ -300,6 +301,8 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
     `  ${of('records')} records from the page, ${of('culled')} things out of view, ${of('objects')} objects drawn `
       + `in ${of('draws')} draw calls (+${of('shadowDraws')} for the sun's shadow), ${of('triangles')} triangles (+${of('shadowTriangles')})`,
     `  ${of('lowDraws')} draws at a quarter of the scene's pixels, laid over it`,
+    `  fields placed ahead of their draws: ${of('fieldKept')} instances kept of ${of('fieldCounted')} counted `
+      + '(none: placed at every vertex)',
     `  the sun's shadow drawn in ${shadowFrames(read.get('shadowsKept')!)} frames timed, kept as it was in the rest`,
     `  point lights left out of a ground cell they reach: ${leftOut} (a cell holds 16)`,
     `  held: ${held.meshes} meshes, ${held.textures} maps, ${held.materials} materials, ${held.sets} instance sets; `

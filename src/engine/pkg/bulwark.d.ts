@@ -104,6 +104,10 @@ export class Engine {
      */
     set_fields_first(on: boolean): void;
     /**
+     * A field's instances placed by a pass ahead of its draws, or at every vertex (`Gpu::set_fields_placed`).
+     */
+    set_fields_placed(on: boolean): void;
+    /**
      * A set of instances: each one's matrix (16 floats) and, if `tints` has them, its colour (4 floats). `id` 0
      * makes a set, another replaces that one's instances. Its id.
      */
@@ -154,7 +158,8 @@ export class Engine {
      * the GPU's time for its passes (ms; 0 where the browser doesn't time them), how many frames' times have
      * come back so far, and whether one is on its way (1: a frame drawn now isn't timed); the shadow's
      * triangles, the frames its map was kept, the draws at a share of the pixels, and how many times a point
-     * light was left out of a ground cell it reaches.
+     * light was left out of a ground cell it reaches; the instances its placed fields kept, and how many they
+     * counted (a few frames late).
      */
     stats(): Float32Array;
 }
@@ -195,6 +200,7 @@ export interface InitOutput {
     readonly engine_set_depth_first: (a: number, b: number) => void;
     readonly engine_set_edges_map: (a: number, b: number) => void;
     readonly engine_set_fields_first: (a: number, b: number) => void;
+    readonly engine_set_fields_placed: (a: number, b: number) => void;
     readonly engine_set_instances: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly engine_set_light_of_its_own: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly engine_set_light_strength: (a: number, b: number, c: number, d: number) => void;
@@ -210,12 +216,12 @@ export interface InitOutput {
     readonly engine_set_volume: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1740: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1765: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_615: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_615_48: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_615_49: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_617: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1751: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1776: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_625: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_625_49: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_625_50: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_627: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

@@ -1,5 +1,10 @@
 // The village's meadow under the Rust engine: `world/meadowNodes.ts`'s nodes as WGSL for the engine's hooks, written
 // line for line: the blades placed from their instance's cell (`BLADES`), and the ground's sward under them (`SWARD`).
+// A blade is placed once a frame (`place_hook`: where it roots, whether it's shown, how tall, which way it leans),
+// by a pass of the engine's ahead of the draw, and only those kept are drawn, each vertex shaping the blade from
+// what was placed (`vertex_hook`). Placed at every vertex, a blade of nine was placed nine times in every pass
+// that drew it, one dropped as often as one kept: on a phone over the shoulder at Very low the grass was 8.4 ms
+// of a 16.8 ms frame, 1.7 of it its shading (J0RW-1EP5, SSB2-NWEB).
 import type * as THREE from 'three';
 import type { BladeNumbers, BladeUniforms } from '../../world/meadowNodes';
 import type { RustLook, RustShader } from '../custom';
@@ -77,10 +82,11 @@ fn blade_seed(cell: vec2f) -> vec4f {
   return vec4f(vec4u(a, b)) / 4294967295.0;
 }
 
-fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+/// A blade placed: a (its root on the ground, its height, its width), b (the way it leans, two of its cell's
+/// numbers), c (a third, how far into its ring's band it is, its tuft's number, its patch's).
+fn place_hook(instance: u32, list: u32, p: ptr<function, Placed>) -> bool {
   let origin = m.c[0].xy;
   let focus = m.c[0].zw;
-  let eye = m.c[1].xy;
   // (one grass for every view, world/meadowOne.ts: a ring's cell is as many of the finest as its cells are wider,
   // and its blade that cell's own, as wide as the first ring's)
   let one = m.c[6].y > 0.5;
@@ -90,14 +96,12 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   let band = m.c[2];
   let combed_now = m.c[3].x;
   let side = max(u32(m.c[3].y), 1u);
-  let time = m.c[4].x;
   let span = m.c[4].y;
   let grows_over = m.c[4].w;
-  let shape = (*v).position;
 
   let listed = instance / (side * side);
   // (its tile from the draw's list, eight tiles a row: RustLook.list)
-  let pair = bones[(*v).list + listed / 8u][(listed % 8u) / 2u];
+  let pair = bones[list + listed / 8u][(listed % 8u) / 2u];
   let tile = select(pair.xy, pair.zw, listed % 2u == 1u);
   let within = instance % (side * side);
   let ring_cell = origin + tile + vec2f(f32(within % side), f32(within / side));
@@ -118,10 +122,8 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   } else {
     in_band = smoothstep(band.x, band.y, away) * (1.0 - smoothstep(band.z, band.w, away));
   }
-  // (a blade out of its ring's band is drawn as nothing at its root: left here, ahead of the mask's reads and its
-  // shape, which every vertex of every blade of a listed tile paid for)
-  (*v).color = vec4f(1.0);
-  if (in_band <= 0.0) { (*v).position = vec3f(root.x, 0.0, root.y); return; }
+  // (a blade out of its ring's band is left out here, ahead of the mask's reads)
+  if (in_band <= 0.0) { return false; }
   let grass = meadow_at(root, span);
   let mask_uv = root / (span * 2.0) + 0.5;
   let grows = mask_at(mask_uv);
@@ -147,7 +149,7 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   }
   let shown = smoothstep(h.z * 0.85, h.z * 0.85 + 0.15, chance) * ring_on;
   // (and one the mask or its ring's hand-over drops: the same)
-  if (shown <= 0.0) { (*v).position = vec3f(root.x, 0.0, root.y); return; }
+  if (shown <= 0.0) { return false; }
   let height = shown * mix(1.0, TUFT_TALLER, tufted) * mix(0.2, 0.46, h.w) * mix(0.55, 1.0, grass) * mix(0.75, 1.25, tuft)
     * mix(0.8, 1.15, patchy);
   let width = shown * cell * wider * m.c[4].z * mix(0.8, 1.25, fract(h.z * 7.13)) * mix(1.0, TUFT_CARD, tufted);
@@ -158,6 +160,30 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
     mask_at(mask_uv + vec2f(0.0, aside)) - mask_at(mask_uv - vec2f(0.0, aside)));
   let edge = clamp(length(inward) * 3.0, 0.0, 1.0);
   let lean2 = normalize(mix(vec2f(cos(turn), sin(turn)), normalize(inward + 1e-5), edge * 0.85));
+  (*p).a = vec4f(root, height, width);
+  (*p).b = vec4f(lean2, h.xy);
+  (*p).c = vec4f(h.z, in_band, tuft, patchy);
+  return true;
+}
+
+/// A blade's vertex, from the blade as placed: bent along its lean, turned a little to the camera, in the wind.
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+  let placed = (*v).placed;
+  let root = placed.a.xy;
+  let height = placed.a.z;
+  let width = placed.a.w;
+  let lean2 = placed.b.xy;
+  let h = vec3f(placed.b.zw, placed.c.x);
+  let in_band = placed.c.y;
+  let tuft = placed.c.z;
+  let patchy = placed.c.w;
+  let eye = m.c[1].xy;
+  let wider = select(m.c[1].w, 1.0, m.c[6].y > 0.5);
+  let combed_now = m.c[3].x;
+  let time = m.c[4].x;
+  let tufted = step(1.5, m.c[7].w);
+  let by_strand = m.c[3].z * combed_now * max(step(1.5, wider), tufted);
+  let shape = (*v).position;
   let lean = vec3f(lean2.x, 0.0, lean2.y);
   // seen edge on, a blade turns up to a third of the way to the camera
   let to_cam = normalize(eye - root + 1e-4);

@@ -5,6 +5,7 @@
 // effects not drawn, and the engine stopped for good by a canvas nothing had drawn on.
 import { plantedFaults } from './rustFaults';
 import { blankCanvas, lookTakesItsMapAgain, mapPaintedLate } from './rustMaps';
+import { grassPlacedOnce } from './rustFields';
 import { type Checked, failed, passed } from './rustPixels';
 import { frames, THREE_DRAWS_MOST } from './rustFrames';
 import { hallFromAbove, house, lampShadows, lightCache, shelter, sunShadowInTurns } from './rustVillageChecks';
@@ -300,6 +301,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(lightCache(bridge));
       checks.push(grassBandsEdgeToEdge());
       checks.push(grassDrawnByItsRings());
+      checks.push(await grassPlacedOnce(lab, bridge));
       checks.push(await sunCastsShadows(lab));
       checks.push(await glowGoneInTheFog(lab));
       checks.push(await photoLookDrawn(lab));

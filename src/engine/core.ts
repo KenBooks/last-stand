@@ -22,6 +22,10 @@ export interface FrameStats {
   lowDraws: number;
   /** how many times the frame left a point light out of a ground cell it reaches (a cell holds 16) */
   lightsLeftOut: number;
+  /** the instances the engine's placed fields kept (the meadow's blades shown), and how many they counted, a few
+   *  frames late (Bulwark's gpu/placed.rs; none with fields placed at their vertices) */
+  fieldKept: number;
+  fieldCounted: number;
   /** the records of what's see-through drawn solid, with what's opaque (`Materials.solidNow`) */
   solid: number;
   /** the heroes' pieces that cast from the shadow's fewer triangles (`casterGeometry`) */
@@ -51,7 +55,7 @@ export interface FrameStats {
 
 export class Core {
   readonly stats: FrameStats = {
-    records: 0, draws: 0, shadowDraws: 0, shadowTriangles: 0, shadowsKept: 0, lowDraws: 0, lightsLeftOut: 0, solid: 0, casters: 0, objects: 0, culled: 0, triangles: 0, gpuMs: 0, gpuReads: 0, gpuBusy: 0, arms: 0, placeMs: 0, walkMs: 0,
+    records: 0, draws: 0, shadowDraws: 0, shadowTriangles: 0, shadowsKept: 0, lowDraws: 0, lightsLeftOut: 0, fieldKept: 0, fieldCounted: 0, solid: 0, casters: 0, objects: 0, culled: 0, triangles: 0, gpuMs: 0, gpuReads: 0, gpuBusy: 0, arms: 0, placeMs: 0, walkMs: 0,
     engineMs: 0, newMeshes: 0, movedMeshes: 0, newTextures: 0, newMaterials: 0,
   };
   /** what wasn't handed over, by its kind, on the last frame */

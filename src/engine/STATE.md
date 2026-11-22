@@ -235,3 +235,19 @@ Read, not fixed:
   blades, and the first two rings (to 16 m) are the finest cells whatever share is kept, so a blade dropped by its
   rank still costs its vertices. The lit shading's plain levels already skip their costlier parts by branches: a
   shader compiled for them alone saves little unless the sun's highlight is made plainer too, which changes the look.
+
+## 2026-11-22, late: the grass placed once
+
+- [x] Each blade placed once a frame, only those shown drawn (Bulwark's `place_hook`, gpu/placed.rs; `looks/meadow.ts`
+  split into placing and shaping). The village over the shoulder at Very low: 57,676 blades kept of 154,752 counted,
+  585 thousand triangles to 328; the picture the same (0.02% differs by over 10 in 255 against
+  `--tune rust.fieldsPlaced=0`). `lab rustcheck`: the grass goes through the pass, its canary; Bulwark's `lab fields`:
+  the two ways one picture. A production walk (`stalls --scenario walks --url "this?village=1" --return`): nothing
+  compiled in play, 143 frames a second to the yard (one run of three had two frames of 229 and 208 ms as he set
+  off, not seen again).
+- [ ] What it saves the phone: not measured. Its profile's part "the grass placed at every vertex, as it was" says.
+  If a phone's GPU refuses the pass, the grass is gone there: `rust.fieldsPlaced=0` in the console puts it back.
+- [ ] Its buffers are 48 bytes a blade counted, half as much again for room: 11 MB at that stand. Next, if the
+  phone's memory says so: room by the blades kept, or a blade in 32 bytes.
+- [ ] Next for the grass: a blade's place is the same every frame (its root, its height, its lean); only whether
+  its distance shows it changes. Kept by tile, the pass would read it instead of making it.
