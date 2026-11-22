@@ -5,6 +5,7 @@
 import { PIPELINES } from './pipelinesAside';
 import type { Core } from './core';
 import { TUNE, type Grade } from './globals';
+import { SightFog } from './sightFog';
 
 export class Levels {
   private samples = 4;
@@ -16,7 +17,11 @@ export class Levels {
   /** whether the game left the sun's shadow out of the frame last drawn (a harness reads it) */
   shadowHeld = false;
 
+  /** the fog over what the hero can't see, told with the frame's settings (`sightFog.ts`) */
+  private readonly sight: SightFog;
+
   constructor(private readonly core: Core) {
+    this.sight = new SightFog(core);
     // (ahead of the warm-ups: a material readied then is given the pipelines of the frame's two passes)
     core.engine.set_depth_first(TUNE.depthFirst > 0 && !PIPELINES.depthRefused);
   }
@@ -63,5 +68,6 @@ export class Levels {
     const share = grade.bloomShare ?? 1, dense = window.devicePixelRatio >= 3 ? TUNE.bloomDense : 1;
     if (share * dense !== this.bloomSent) engine.set_bloom_share(this.bloomSent = share * dense);
     this.bloomShare = share;
+    this.sight.tell(!!grade.lite);
   }
 }

@@ -47,10 +47,6 @@
 .menu-crest .logo-art { transition: opacity 1.2s ease; }
 .menu-crest.blown .logo-art { opacity: 0; }
 .logo-tag { margin-top: 10px; font-size: 16px; color: var(--ink-dim); font-style: italic; }
-// the engine that draws the game (Bulwark), under each lobby's logo
-.logo-powered { margin-top: 4px; font-family: 'Cinzel', Georgia, serif; font-size: 10px; font-weight: 700;
-  letter-spacing: .3em; text-transform: uppercase; text-align: center; color: var(--ink-dim); opacity: .8;
-  text-shadow: 0 1px 3px rgba(0,0,0,.9); }
 .class-card { padding: 16px 18px; background: var(--panel-raised); border: 1px solid rgba($frame, .5); }
 /* the name and Change hero on one row at every size (the class buttons that stood there, wrapped, took a line each at
    most zooms, as the text's width rounds) */

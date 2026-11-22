@@ -42,11 +42,6 @@ const ABOVE_RING = { cell: 0.15, radius: 70, segs: 2 };
  *  doesn't even look like grass", "this is high, looks terrible": a sheet two blades wide cut into four strands, all
  *  leaning one way from one root, read as a fern's frond. */
 const ABOVE_NEAR = { cell: RINGS[0].cell, radius: ABOVE_RING.radius * (RINGS[0].cell / ABOVE_RING.cell), under: 30 };
-/** The ring from above with the camera high over the ground: cells twice the size, a quarter of the blades, each
- *  twice as wide, as the rings round a close view have them that far off (`RINGS`: 0.3 m cells from 36 m). From
- *  play, on a phone at the furthest zoom out, 51 m off: "lags a lot at max zoom out", about 20 fps, the frame 1.1
- *  million triangles, over half of them blades a few pixels long. `over` is the camera's height, m. */
-const ABOVE_FAR = { cell: 0.3, over: 36 };
 /** the thin blades of a tuft, on High: one card an instance, two triangles, its blades cut from it as it's shaded,
  *  each fanning out from the crown, bending its own way, its own height (after solstice's grass, MIT: tufts of thin
  *  blades folded along the midrib; from play, of ours on High, "looks terrible", and of its meadow, "this is really
@@ -1062,8 +1057,10 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
       }
       const reach = whole ? wholeReach() : near ? ABOVE_NEAR.radius : ring.radius;
       if (above) {
-        const far = !near && camera.position.y > ABOVE_FAR.over;
-        const ringCell = near ? ABOVE_NEAR.cell : far ? ABOVE_FAR.cell : ring.cell;
+        // (from far above too, the same cells: in cells twice the size, a quarter of the blades each twice as wide,
+        // the grass read as straw laid in streaks, from play "I dont like that we change grass to this on high zoom
+        // outs"; it halved the frame's triangles there)
+        const ringCell = near ? ABOVE_NEAR.cell : ring.cell;
         // (near the ground a card a cell, one tuft each: at the rings' spread the ground showed between them, from
         // play "not dense enough")
         const dense = false;

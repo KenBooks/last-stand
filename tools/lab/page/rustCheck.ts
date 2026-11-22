@@ -84,7 +84,8 @@ function playersPage(): Checked {
   if (!RUNNING.rust || !RUST.bridge) return failed(`the engine isn't drawing: ${RUST.failed || 'not booted'}`);
   const offered = [...document.querySelectorAll('#opt-renderer button')].map((button) => button.textContent);
   if (offered.length) return failed(`the pause menu offers ${offered.join(', ')}: there's one renderer, none to choose`);
-  if (!document.querySelector('.ld-powered, .logo-powered')) return failed('no logo says Powered by Bulwark');
+  // (on the loading screen alone, which is gone from the page by now: from the owner, off the lobby's logo "so that users dont need to stare at it all the time")
+  if (document.querySelector('.logo-powered')) return failed('the logo of the lobby says Powered by Bulwark');
   return passed('the plain address draws by the engine, the pause menu has no renderer to choose');
 }
 

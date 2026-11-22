@@ -128,6 +128,14 @@ export class Engine {
      */
     set_quality(samples: number, shadow_size: number): void;
     /**
+     * The frame's sight, for the fog over what a watcher doesn't see (`Gpu::set_sight`).
+     */
+    set_sight(numbers: Float32Array | number[], rays: Uint16Array | number[]): void;
+    /**
+     * The roofs over the ground, for what stays seen over what isn't (`Gpu::set_sight_roofs`).
+     */
+    set_sight_roofs(texels: Uint8Array | number[], side: number): void;
+    /**
      * The frame's particles, 8 floats each (where it is, how wide, its colour): those blended by their alpha,
      * and those added. Kept until set again.
      */
@@ -184,16 +192,18 @@ export interface InitOutput {
     readonly engine_set_material_params: (a: number, b: number, c: number, d: number) => void;
     readonly engine_set_mesh_vertices: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => number;
     readonly engine_set_quality: (a: number, b: number, c: number) => void;
+    readonly engine_set_sight: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly engine_set_sight_roofs: (a: number, b: number, c: number, d: number) => void;
     readonly engine_set_sprites: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly engine_set_volume: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1717: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1742: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_592: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_592_44: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_592_45: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_594: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1722: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1747: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_597: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_597_46: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_597_47: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_599: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;
