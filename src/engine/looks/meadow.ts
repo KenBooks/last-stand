@@ -7,7 +7,7 @@ import { TUNE } from '../globals';
 
 /** where a ring's numbers are in `m.c`, in floats */
 const AT = { origin: 0, focus: 2, eye: 4, cell: 6, wider: 7, band: 8, combed: 12, side: 13, byStrand: 14, strandsBy: 15,
-  time: 16, half: 17, widthInCells: 18, grows: 19, strandCut: 20, strandsRise: 21, cuts: 22, unshaded: 23 };
+  time: 16, half: 17, widthInCells: 18, grows: 19, strandCut: 20, strandsRise: 21, cuts: 22, unshaded: 23, plain: 24 };
 
 const SHARED = /* wgsl */ `
 fn blade_hash(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
@@ -171,6 +171,8 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   (*s).base = vec4f(mix(shaded + midrib, vec3f(0.4, 0.36, 0.16), smoothstep(0.85, 1.0, along) * 0.35), 1.0);
   // (the face bent up is the lit one from either side: flipped on the back, every blade's back was dark)
   (*s).normal = normalize(in.normal);
+  // (below the level that draws tufts: lit plainly, the engine's Surface.plain)
+  (*s).plain = m.c[6].x;
   return true;
 }
 `,
@@ -196,7 +198,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 };
 
 /** A ring's blades: its uniforms as `world/meadow.ts` sets them when its mesh is about to be drawn. */
-export function bladeLook(u: BladeUniforms, combed: boolean, numbers: BladeNumbers): RustLook {
+export function bladeLook(u: BladeUniforms, combed: boolean, numbers: BladeNumbers, plain: () => boolean): RustLook {
   return {
     shader: BLADES,
     maps: [u.uMeadow.value],
@@ -215,6 +217,7 @@ export function bladeLook(u: BladeUniforms, combed: boolean, numbers: BladeNumbe
       out[AT.strandCut] = numbers.strandCut; out[AT.strandsRise] = numbers.strandsRise;
       out[AT.cuts] = combed ? 1 : 0;
       out[AT.unshaded] = TUNE.grassShaded > 0 ? 0 : 1;
+      out[AT.plain] = plain() && TUNE.grassPlain > 0 ? 1 : 0;
     },
     // (the tiles drawn, a pair of floats each: any number of them, where the numbers held 80, so the tiles were
     // 9 to 21 m wide and every blade of one that touched the view was sent to be dropped as it was placed)

@@ -27,7 +27,7 @@ import { toLobby } from './hallMoves';
 import { holdHour } from '../../../src/game/clock';
 import { holdShadowsOnMove } from '../../../src/world/shadowsOnMove';
 import { groundHeight } from '../../../src/world/ground';
-import { faceCamera, type ViewMode } from '../../../src/core/renderer';
+import { faceCamera, setZoom, type ViewMode } from '../../../src/core/renderer';
 import { GHOST_COUNT_LAYER } from '../../../src/core/layers';
 import { standIn } from './light';
 
@@ -613,7 +613,12 @@ export interface Stand {
   village: boolean;
   /** with `village`, the hour it's lit for (the page's own when not given) */
   hour?: number;
+  /** with `village`, the camera's zoom from above (the lobby's own when not given; 1.7 the furthest out) */
+  zoom?: number;
 }
+
+/** the frames the camera is given to glide to a zoom asked for */
+const ZOOM_FRAMES = 90;
 
 /** The hero stood where `stand` asks: in a biome, or in the lobby's village as `draws --village` stands him. */
 export async function standAt(lab: Lab, stand: Stand): Promise<void> {
@@ -624,6 +629,10 @@ export async function standAt(lab: Lab, stand: Stand): Promise<void> {
   await lab.setup({ view: stand.view, facing: VILLAGE_FACING, fresh: true });
   if (stand.hour !== undefined) holdHour(stand.hour);
   await inVillage(lab, stand.at ?? VILLAGE_SPOT, VILLAGE_FACING);
+  if (stand.zoom !== undefined) {
+    setZoom(stand.zoom);
+    await lab.step(ZOOM_FRAMES);
+  }
 }
 
 /** The run the set-up started left for the village, the hero put at (x, z) facing `facing` and let settle. */

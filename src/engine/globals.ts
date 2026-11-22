@@ -79,6 +79,9 @@ export const TUNE = tunable('rust', {
   /** a counted draw (the meadow's blades) in the depth drawn first too: shaded once a pixel, placed twice (a
    *  profile's, for the device to say which costs less) */
   fieldsFirst: 0,
+  /** the meadow's blades lit plainly below High (their lights' diffuse alone, the sun's shadow read once; 0: lit
+   *  as every surface is, to compare) */
+  grassPlain: 1,
   /** the meadow's blades shaded (0: placed and none shaded, a profile's: what placing them costs alone) */
   grassShaded: 1,
   /** the scene's meshes drawn (0: none, a profile's: the frame's floor, its target cleared, graded and shown) */

@@ -28,6 +28,7 @@ export default {
     frames: { kind: 'number', usage: 'n', help: 'the frames timed a side (60 by default)' },
     foes: { kind: 'number', usage: 'n', help: 'foes stood before the hero (none by default; not in the village)' },
     hour: { kind: 'number', usage: 'h', help: 'with --village, the hour it\'s lit for' },
+    zoom: { kind: 'number', usage: 'z', help: 'with --village, the camera\'s zoom from above (1.7: the furthest out)' },
     village: { kind: 'switch', help: 'in the lobby\'s village instead' },
     skylight: {
       kind: 'switch',
@@ -74,6 +75,7 @@ export default {
       room: options.room,
       cast: options.cast,
       hour: options.hour,
+      zoom: options.zoom,
       skylight: Boolean(options.skylight),
       census: Boolean(options.census),
       three: Boolean(options.three),

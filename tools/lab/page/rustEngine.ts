@@ -32,6 +32,7 @@ export interface RustCommand {
   /** a skill of his held through the frames timed and pictured */
   cast?: string;
   hour?: number;
+  zoom?: number;
   /** the camera turned to the sky's key light, the picture what's round it */
   skylight: boolean;
   /** the scene's materials listed by their kind and what they ask of a renderer */
