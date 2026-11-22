@@ -126,8 +126,12 @@ interface Watched {
   limits: Record<string, number>;
   features: Iterable<string>;
   adapterInfo?: Info;
-  createShaderModule(descriptor: { label?: string }): Module;
+  createShaderModule(descriptor: { label?: string; code?: string }): Module;
 }
+
+/** the code of each shader that draws the depth first, by its label: a refused one is tried again a part at a time (`depthProbe.ts`) */
+const codes = new Map<string, string>();
+export const shaderCode = (label: string): string | undefined => codes.get(label);
 
 /** the limits a pipeline or a pass may be refused by, said with the device */
 const LIMITS = ['maxTextureDimension2D', 'maxTextureDimension3D', 'maxTextureArrayLayers', 'maxBindingsPerBindGroup',
@@ -148,6 +152,7 @@ export function watchDevice(gpu: object, info: Info | undefined): void {
   const make = watched.createShaderModule;
   watched.createShaderModule = (descriptor) => {
     const module = make.call(watched, descriptor);
+    if (descriptor.code?.includes('fn fs_depth(')) codes.set(descriptor.label ?? '', descriptor.code);
     void module.getCompilationInfo?.().then((compiled) => {
       const errors = compiled.messages.filter((message) => message.type === 'error');
       if (errors.length) {

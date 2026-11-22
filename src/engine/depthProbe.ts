@@ -4,7 +4,7 @@
 // made), which is a lead and not a proof. So when one is refused, a few tiny pipelines are tried on the same
 // device, each with one thing of that shader's, and with each way round it; what was made and what wasn't goes in
 // the self-check's report (`said.ts`), and the next change to the shader is chosen by what the device said.
-import { fault } from './said';
+import { fault, shaderCode } from './said';
 
 interface ProbeDevice {
   createShaderModule(descriptor: { label: string; code: string }): object;
@@ -60,11 +60,94 @@ async function tried(device: ProbeDevice, probe: (typeof PROBES)[number]): Promi
   }
 }
 
-/** The probes tried on `device`, once a page (`again` for a harness), and what each came to said as a fault's line. */
-export async function probeDepthOnly(gpu: object, again = false): Promise<void> {
+interface Refused {
+  vertex?: { module?: { label?: string } };
+  fragment?: { module?: { label?: string }; entryPoint?: string; targets?: object[] };
+  multisample?: { count?: number };
+}
+
+const SIGNED = 'in: VertexOut, @builtin(front_facing) front: bool';
+const SEEN_THROUGH = 'if (see_left(in.world, in.clip.xy, vec3f(0.5)) < 0.0) { discard; }';
+const MAPPED = 'let sampled = textureSample(t_base, samp, in.uv); if ((m.base * in.color * sampled).a < m.emissive.w) { discard; }';
+/**
+ * The engine's own `fs_depth` (Bulwark's lit.wgsl) written again a part at a time: each its name, its signature
+ * and its body. The tiny probes above were all made on the phones that refuse the real one, so what they refuse
+ * is in this shader itself.
+ */
+const BODIES: [name: string, signed: string, body: string][] = [
+  ['an empty body', SIGNED, ''],
+  ['an empty body, the face not asked', 'in: VertexOut', ''],
+  ['what is seen through alone', SIGNED, SEEN_THROUGH],
+  ['seen through, then a return inside an if', SIGNED, `if (m.emissive.w <= 0.0) { ${SEEN_THROUGH} return; }`],
+  ['its map and its alpha alone', SIGNED, MAPPED],
+  ['seen through and its map, no return', SIGNED, `${SEEN_THROUGH} ${MAPPED}`],
+];
+
+/** `code` with its `fs_depth` given `signed` and `body` (null: the code has none). */
+export function depthWritten(code: string, signed: string, body: string): string | null {
+  const from = code.indexOf('fn fs_depth(');
+  const open = code.indexOf('{', from);
+  if (from < 0 || open < 0) return null;
+  let depth = 0, to = open;
+  for (; to < code.length; to++) {
+    if (code[to] === '{') depth++;
+    else if (code[to] === '}' && --depth === 0) break;
+  }
+  return `${code.slice(0, from)}fn fs_depth(${signed}) { ${body} }${code.slice(to + 1)}`;
+}
+
+/** what the last probing of a refused pipeline found, a line: a harness reads it */
+export let refusedProbed = '';
+
+/** `refused` asked for again as `changed` makes it: 'made', or 'REFUSED' and what the GPU said. */
+async function again(device: ProbeDevice, refused: Refused, changed: (descriptor: Refused) => Refused): Promise<string> {
+  try {
+    await device.createRenderPipelineAsync({ ...changed({ ...refused }), label: 'depth probe' });
+    return 'made';
+  } catch (thrown) {
+    return `REFUSED (${String((thrown as { message?: string })?.message ?? thrown).split('\n')[0].slice(0, 60)})`;
+  }
+}
+
+/**
+ * The refused pipeline itself asked for again on its device, as it was and changed a thing at a time: its fragment
+ * stage left out, a colour target nothing writes, and its shader's `fs_depth` a part at a time (`BODIES`, written
+ * into the shader's own code, which `said.ts` kept).
+ */
+async function probeRefused(device: ProbeDevice, refused: Refused): Promise<void> {
+  const lines: string[] = [];
+  const say = async (name: string, changed: (descriptor: Refused) => Refused): Promise<void> => {
+    lines.push(`${name}: ${await again(device, refused, changed).catch((thrown: unknown) => `not tried (${String(thrown).slice(0, 60)})`)}`);
+  };
+  await say('as it was', (descriptor) => descriptor);
+  await say('no fragment stage', (descriptor) => ({ ...descriptor, fragment: undefined }));
+  await say('a colour target nothing writes', (descriptor) => ({
+    ...descriptor, fragment: { ...descriptor.fragment, targets: [{ format: 'rgba16float', writeMask: 0 }] },
+  }));
+  const label = refused.fragment?.module?.label ?? '';
+  const code = shaderCode(label);
+  if (!code) lines.push(`the shader "${label}" wasn't kept`);
+  for (const [name, signed, body] of code ? BODIES : []) {
+    const written = depthWritten(code!, signed, body);
+    if (!written) { lines.push(`${name}: no fs_depth in "${label}"`); continue; }
+    const module = device.createShaderModule({ label: 'depth probe', code: written });
+    await say(name, (descriptor) => ({
+      ...descriptor, vertex: { ...descriptor.vertex, module }, fragment: { ...descriptor.fragment, module },
+    }));
+  }
+  refusedProbed = lines.join(' | ');
+  fault(`the refused pipeline (${refused.multisample?.count ?? 1} samples) tried again on this device`, refusedProbed);
+}
+
+/**
+ * The probes tried on `device`, once a page (`again` for a harness), and what each came to said as a fault's line;
+ * then `refused`, the pipeline's own descriptor, tried again as `probeRefused` changes it.
+ */
+export async function probeDepthOnly(gpu: object, refused?: object, again = false): Promise<void> {
   if (asked && !again) return;
   asked = true;
   const device = gpu as ProbeDevice;
+  if (refused) await probeRefused(device, refused as Refused);
   const lines: string[] = [];
   for (const probe of PROBES) {
     lines.push(`${probe.name}: ${await tried(device, probe).catch((thrown: unknown) => `not tried (${String(thrown).slice(0, 80)})`)}`);

@@ -79,7 +79,7 @@ class StandIn {
       if (descriptor.fragment && !descriptor.fragment.targets?.length) {
         PIPELINES.depthRefused = true;
         // (and the device asked which kind of such a pipeline it refuses, for the report: `depthProbe.ts`)
-        void probeDepthOnly(device);
+        void probeDepthOnly(device, descriptor);
       }
       fault(`the pipeline "${descriptor.label ?? ''}" was refused (${refused?.reason ?? 'no reason'})`,
         `${refused?.message || 'the GPU said nothing'} | ${described(descriptor)}`);

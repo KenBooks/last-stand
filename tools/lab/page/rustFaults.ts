@@ -5,10 +5,10 @@
 // stays whole for the checks after); a panic said as the engine says its own; the frame drawn black; and a report
 // packed and read back as `lab trace` reads one. Before any plant, nothing may have been heard: that is the
 // check that this device drew the game with no failure.
-import { depthProbed } from '../../../src/engine/depthProbe';
+import { depthProbed, refusedProbed } from '../../../src/engine/depthProbe';
 import { TUNE } from '../../../src/engine/globals';
 import { asideOn, PIPELINES } from '../../../src/engine/pipelinesAside';
-import { clearFaults, faultsSoFar, frameChecked, watchDevice } from '../../../src/engine/said';
+import { clearFaults, faultsSoFar, frameChecked, shaderCode, watchDevice } from '../../../src/engine/said';
 import { recorder, type Slow } from '../../../src/perf/recorder';
 import { decodeTrace } from '../../../src/perf/traceFormat';
 import { traceReport } from '../../../src/perf/traceReport';
@@ -105,15 +105,21 @@ export async function plantedFaults(lab: Lab): Promise<{ line: string; problems:
     {
       // (what a phone's GPU did: the pipelines of the depth drawn first refused, the rest made)
       name: 'a pipeline of the depth drawn first refused',
-      heard: 'fragment planted.fs_depth',
+      heard: 'fragment lit.fs_depth',
       plant: async () => {
-        const fragment = { module: broken(), entryPoint: 'fs_depth', targets: [] };
-        device.createRenderPipeline({ label: 'scene', layout: 'auto', vertex: { module: broken(), entryPoint: 'vs' }, fragment });
+        // (the engine's own lit shader, refused here for having none of its vertex buffers: the probes then write
+        // its fs_depth again a part at a time, and each writing must still compile)
+        const module = device.createShaderModule({ label: 'lit', code: shaderCode('lit') ?? 'the lit shader was not kept' });
+        const fragment = { module, entryPoint: 'fs_depth', targets: [] };
+        device.createRenderPipeline({ label: 'scene', layout: 'auto', vertex: { module, entryPoint: 'vs_main' }, fragment });
         // (the device is then asked which kinds it refuses: an idle device's answers wait to be sent on)
         for (let frame = 0; frame < PROBED_WITHIN && !depthProbed; frame++) {
           await device.queue.onSubmittedWorkDone();
           await window.__labClock.realFrame();
         }
+        // (a few frames more, for each probe's shader to say what it compiled to)
+        await heardFault('nothing is waited for by this name');
+        uncompiled = faultsSoFar().filter((said) => said.includes('"depth probe" didn\'t compile'));
       },
     },
     {
@@ -130,6 +136,7 @@ export async function plantedFaults(lab: Lab): Promise<{ line: string; problems:
     { name: 'the device lost', heard: 'the device was lost', plant: () => device.destroy() },
   ];
   const caught: string[] = [];
+  let uncompiled: string[] = [];
   for (const layer of layers) {
     clearFaults();
     await layer.plant();
@@ -150,6 +157,12 @@ export async function plantedFaults(lab: Lab): Promise<{ line: string; problems:
   if (probes.length < 7 || probes.some((probe) => !probe.endsWith(': made'))) {
     problems.push(`the depth-only pipelines tried after the refusal: ${depthProbed || 'none'}`);
   }
+  // (and the refused pipeline itself tried again, its shader written a part at a time, each part compiling)
+  const parts = refusedProbed.split(' | ');
+  if (parts.length < 9 || /wasn't kept|no fs_depth|not tried/.test(refusedProbed)) {
+    problems.push(`the refused pipeline tried again: ${refusedProbed || 'not at all'}`);
+  }
+  if (uncompiled.length) problems.push(`a probe's writing of fs_depth didn't compile: ${uncompiled.join(' || ').slice(0, 600)}`);
   clearFaults();
   for (let check = 0; check < BLACK_CHECKS; check++) {
     await lab.step(1);
