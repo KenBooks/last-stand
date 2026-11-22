@@ -5,7 +5,7 @@
 // lamp in turn, on paving where there is some round it ("it was missing for half of them"). `canary` stops him
 // casting by the last lamp, which must be found.
 import * as THREE from 'three';
-import type { Lab } from './lab';
+import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
 import { groundHeight } from '../../../src/world/ground';
@@ -237,6 +237,26 @@ function mostOfTheMoon(lab: Lab, patches: THREE.Vector3[], casts: Map<THREE.Obje
   return Math.max(...patches.map((_, i) => 1 - casting[i] / Math.max(bare[i], 1e-3)));
 }
 
+/** The ground round `patches` pictured from straight over their middle, as `readOver` reads it, the lamps' shadows
+ *  held off: what the moon's reading sees, to look at when it disagrees with the game's own view. */
+async function picturedOver(lab: Lab, patches: THREE.Vector3[], label: string): Promise<Pictured> {
+  const camera = G.camera;
+  const kept = { at: camera.position.clone(), turn: camera.quaternion.clone() };
+  const over = middleOf(patches);
+  camera.position.set(over.x + 0.01, over.y + OVER, over.z);
+  camera.lookAt(over);
+  camera.updateMatrixWorld();
+  engineLampShadows(0);
+  try {
+    return await lab.screen(label);
+  } finally {
+    engineLampShadows(1);
+    camera.position.copy(kept.at);
+    camera.quaternion.copy(kept.turn);
+    camera.updateMatrixWorld();
+  }
+}
+
 /** One lamp's reading: the most his shadow takes behind him by it at each of `BYS`, the most his moon shadow takes
  *  of a patch's light there, and whether he stood on paving. */
 interface ByLamp { lamp: number; his: (number | null)[]; moon: (number | null)[]; paved: boolean }
@@ -248,6 +268,7 @@ export async function heroShadowByLamp(lab: Lab, canary: boolean): Promise<Light
   holdHour(0);
   const casts = new Map<THREE.Object3D, boolean>();
   const read: ByLamp[] = [];
+  const moments: Pictured[] = [];
   // (his shadow drawn every frame: it's read with him casting and not, stood still, which a level that draws the
   // movers only as they move never sees change)
   holdShadowsOnMove('every');
@@ -265,6 +286,9 @@ export async function heroShadowByLamp(lab: Lab, canary: boolean): Promise<Light
         reading.his.push(patches && mostHeTakes(lab, patches, casts, planted));
         const fromMoon = patches && behindFromMoon(G.player.pos.clone());
         reading.moon.push(fromMoon && mostOfTheMoon(lab, fromMoon, casts, planted));
+        if (fromMoon && lamp === 0 && by === BYS[0]) {
+          moments.push(await picturedOver(lab, fromMoon, 'from over the ground away from the moon, by lamp 0'));
+        }
       }
       read.push(reading);
     }
@@ -274,7 +298,7 @@ export async function heroShadowByLamp(lab: Lab, canary: boolean): Promise<Light
     heroCasts(true, casts);
     holdHour(null);
   }
-  return shadowsChecked(read, canary);
+  return { ...shadowsChecked(read, canary), moments };
 }
 
 /** the most two lamps may stand apart for him to be read between them (m: each casting light's reach is 15), where
