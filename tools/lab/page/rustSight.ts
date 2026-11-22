@@ -7,19 +7,10 @@ import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
 import { SIGHT, seenShareAt } from '../../../src/core/sight';
 import { col, particles } from '../../../src/fx/particles';
+import { type Checked, changedShare, failed, passed, pixelsIn } from './rustPixels';
 import { CAMPFIRE } from '../../../src/data/village';
 import { cameraTargetZoom, setZoom } from '../../../src/core/renderer';
 
-/** A check's outcome: a line for the report, and what it found wrong. */
-interface Checked {
-  line: string;
-  problems: string[];
-}
-
-const passed = (line: string): Checked => ({ line: `  ok: ${line}`, problems: [] });
-const failed = (line: string): Checked => ({ line: `  WRONG: ${line}`, problems: [line] });
-
-/** how far round the hero a place is looked for (m), how high over his floor the glow hangs, and how wide it is */
 /** how far apart the places tried out of sight are (m), and how many are tried for one the camera sees */
 const APART = 4;
 const TRIES = 8;
@@ -32,8 +23,7 @@ const ZOOM_OUT = 1.7;
 /** the square of the page pictured round the glow (css px), and how far from the screen's edge it must be (a share) */
 const CLIP_SIDE = 120;
 const EDGE = 0.9;
-/** how much a pixel's channel must differ to count as changed (of 255), and the share of them that says shown */
-const CHANGED = 24;
+/** the share of the pixels round a glow that it must change to count as shown */
 const SHOWN_SHARE = 0.03;
 
 const ray = new THREE.Raycaster();
@@ -81,20 +71,6 @@ function clipRound(place: THREE.Vector3): Clip {
   return { x: x - CLIP_SIDE / 2, y: y - CLIP_SIDE / 2, width: CLIP_SIDE, height: CLIP_SIDE };
 }
 
-/** The page's pixels within `clip`, as the browser pictures them. */
-async function pixelsIn(lab: Lab, clip: Clip, label: string): Promise<Uint8ClampedArray> {
-  const picture = await lab.screen(label, [], clip);
-  const image = new Image();
-  image.src = picture.tiles[0].png;
-  await image.decode();
-  const canvas = document.createElement('canvas');
-  canvas.width = image.width;
-  canvas.height = image.height;
-  const context = canvas.getContext('2d')!;
-  context.drawImage(image, 0, 0);
-  return context.getImageData(0, 0, image.width, image.height).data;
-}
-
 /** A still, bright cluster of the glow pool's particles hung at `place`. */
 function hangGlow(place: THREE.Vector3): void {
   const color = col(0xff40ff, GLOW.bright);
@@ -115,13 +91,7 @@ async function glowShows(lab: Lab, place: THREE.Vector3, label: string): Promise
   await lab.step(2);
   const withIt = await pixelsIn(lab, clip, `${label}, a glow hung there`);
   particles.clear();
-  let changed = 0;
-  for (let at = 0; at < without.length; at += 4) {
-    const differs = Math.abs(without[at] - withIt[at]) + Math.abs(without[at + 1] - withIt[at + 1])
-      + Math.abs(without[at + 2] - withIt[at + 2]);
-    if (differs > CHANGED) changed++;
-  }
-  return changed / (without.length / 4);
+  return changedShare(without, withIt);
 }
 
 /**

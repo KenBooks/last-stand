@@ -81,6 +81,9 @@ export const TUNE = tunable('rust', {
   fieldsFirst: 0,
   /** the village's fog over what the hero can't see (0: none, to compare) */
   sightFog: 1,
+  /** how far off a face turned to the hero the fog reads its place (m; 0: on the face, as the game's own pass
+   *  reads it: the wall he stands against greys further along it) */
+  sightOffFace: 0.6,
   /** the meadow's blades lit plainly below High (their lights' diffuse alone, the sun's shadow read once; 0: lit
    *  as every surface is, to compare) */
   grassPlain: 1,
@@ -177,6 +180,10 @@ export function writeGlobals(g: Float32Array, scene: THREE.Scene, camera: THREE.
     g[GLOBALS.sunColor + 2] = sun.color.b * sun.intensity;
     if (sun.castShadow && TUNE.shadows) {
       const shadowCamera = sun.shadow.camera;
+      // (its projection made from its box as the game has it now: three makes it in its own shadow pass, which
+      // the engine never runs, and it stood as three's default, 5 m either way: the village at noon had no
+      // shadow but at its very middle)
+      shadowCamera.updateProjectionMatrix();
       sun.shadow.updateMatrices(sun);
       scratchMatrix.multiplyMatrices(projectionOf(shadowCamera, projection), shadowCamera.matrixWorldInverse)
         .toArray(g, GLOBALS.shadowView);

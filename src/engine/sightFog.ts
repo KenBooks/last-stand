@@ -26,6 +26,8 @@ export class SightFog {
     SIGHT.uSightSealed.value.toArray(n, 4);
     n[8] = door.x; n[9] = door.y; n[10] = door.z; n[11] = door.w;
     n[12] = SIGHT.uSightDoorOn.value; n[13] = few ? 1 : 0;
+    // (a face turned to him read this far off itself: on it, the wall he stands against greyed along its length)
+    n[14] = TUNE.sightOffFace;
     const roofs = SIGHT.tSightRoofs.value as THREE.DataTexture;
     if (on > 0 && roofs.version !== this.roofs) {
       this.roofs = roofs.version;
