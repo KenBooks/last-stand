@@ -18,6 +18,7 @@ import { lookOf } from './custom';
 import { Geometries } from './geometry';
 import { LampShadows } from './lampShadows';
 import { G } from '../state';
+import { lampShadowsAllowed } from '../core/lamps';
 import { LightCache } from './lightCache';
 import { GLOBALS, PLAIN_GRADE, TUNE, shadowSizeOf, writeGlobals, type Grade } from './globals';
 import { Lights } from './lights';
@@ -383,7 +384,10 @@ export class Bridge {
     // (a lamp's shadow drawn ahead of the frame, whose own records are written over its casters')
     if (this.lightCache.step((mesh) => this.addMesh(mesh))) this.lampShadows.again();
     this.lampShadows.step((mesh) => this.addMesh(mesh));
-    this.lampShadows.moved((mesh) => this.addMesh(mesh), TUNE.lampShadows > 0 ? G.players.map((player) => player.obj) : []);
+    // (only where the level reads the lamps' shadows at all: drawn at Very low, where nothing read them, the
+    // movers' faces were 12 passes a frame for nothing, a phone's GPU split from 15% outside the frame to 48%)
+    const moving = TUNE.lampShadows > 0 && TUNE.points && lampShadowsAllowed();
+    this.lampShadows.moved((mesh) => this.addMesh(mesh), moving ? G.players.map((player) => player.obj) : []);
     core.skipped.clear();
     stats.newMeshes = stats.movedMeshes = stats.newTextures = stats.newMaterials = stats.arms = stats.solid = stats.casters = 0;
     if (scene.matrixWorldAutoUpdate) {

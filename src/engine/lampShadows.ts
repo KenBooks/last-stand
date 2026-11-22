@@ -60,6 +60,8 @@ export class LampShadows {
     this.waiting = Array.from({ length: this.asked }, (_, lamp) => lamp);
   }
 
+  /** the movers' faces that hold something drawn: cleared before they're left */
+  private movedInto = new Set<number>();
   /** the lamps the movers stand by this frame, each with its map of them: `lights.ts` adds a light for each that
    *  takes away what the lamp lit where a mover stands between */
   taking: Taking[] = [];
@@ -93,6 +95,13 @@ export class LampShadows {
       camera.updateProjectionMatrix();
       camera.position.copy(at);
       for (const [face, { axis, up }] of FACES.entries()) {
+        // (a face no mover falls in isn't drawn: of a cube's six, a hero by a lamp is in one or two. One drawn
+        // before is cleared once, by a draw of nothing)
+        const layer = (LAMPS_MOST + k) * FACES.length + face;
+        const inFace = movers.some((mover) => fallsIn(mover.getWorldPosition(centre).sub(at), axis));
+        if (!inFace && !this.movedInto.has(layer)) continue;
+        if (inFace) this.movedInto.add(layer);
+        else this.movedInto.delete(layer);
         camera.up.copy(up);
         camera.lookAt(ahead.copy(at).add(axis));
         camera.updateMatrixWorld();
@@ -100,7 +109,7 @@ export class LampShadows {
         faceView.multiplyMatrices(projectionOf(camera, projection), camera.matrixWorldInverse)
           .toArray(core.globals, GLOBALS.shadowView);
         at.toArray(core.globals, GLOBALS.camPos);
-        core.engine.bake_lamp_face((LAMPS_MOST + k) * FACES.length + face, core.count, core.boneFloats);
+        core.engine.bake_lamp_face(layer, inFace ? core.count : 0, inFace ? core.boneFloats : 0);
       }
       this.taking.push({ lamp, slot: LAMPS_MOST + k });
     }
@@ -158,6 +167,20 @@ export class LampShadows {
 
 /** A lamp a mover stands by, and its place among the movers' maps. */
 export interface Taking { lamp: number; slot: number }
+
+/** a mover's round, m: what of it may reach into a face beside the one its middle is in (`HERO_ROUND`,
+ *  world/lampShadows.ts, its middle a metre up) */
+const MOVER_ROUND = 2.5;
+
+/** Whether a mover whose feet are `off` from a lamp may fall in the face of its cube that looks along `axis`: ahead
+ *  of the lamp that way, and no further to a side than ahead, by its round. */
+function fallsIn(off: THREE.Vector3, axis: THREE.Vector3): boolean {
+  const along = off.dot(axis);
+  if (along < -MOVER_ROUND) return false;
+  const aside = Math.sqrt(Math.max(off.lengthSq() - along * along, 0));
+  // (a face's corner is root two as far aside as ahead)
+  return aside <= along * Math.SQRT2 + MOVER_ROUND * 1.5;
+}
 
 /** Whether `mesh` may stand within `reach` of the lamp at `at`: by its geometry's sphere where it stands; a mesh of
  *  instances (the posts, the trunks) is left to the engine, which culls each. */
