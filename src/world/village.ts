@@ -13,6 +13,9 @@
 // light follows the hour (`daylight`, a uniform's change: nothing compiles), and as a biome it has 10 point lights, two
 // casting the still shadows (the hall's braziers).
 import { unrepeatedNodes } from './villageNodes';
+import { RUNNING } from '../core/rendererChoice';
+import { rustLook } from '../engine/custom';
+import { pavingLook } from '../engine/looks/paving';
 import { WEBGPU } from '../core/webgpu';
 import { villageSkyMaterial } from './skyNodes';
 import * as THREE from 'three';
@@ -346,6 +349,7 @@ function shiftedReads(chunk: keyof typeof THREE.ShaderChunk, map: string, uv: st
 function unrepeated<M extends THREE.MeshStandardMaterial>(m: M): M {
   if (WEBGPU) {
     unrepeatedNodes(m);
+    if (RUNNING.rust) rustLook(m, pavingLook());
     return m;
   }
   m.onBeforeCompile = (shader) => {
