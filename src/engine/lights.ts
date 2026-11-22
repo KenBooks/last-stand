@@ -8,6 +8,8 @@ import type { Core } from './core';
 import { GLOBALS, TUNE, type Lit } from './globals';
 
 const MAX_POINTS = 32;
+/** the lights that take away what a lamp lit behind a mover (the engine's `takers`) */
+const TAKERS = 2;
 const v3 = new THREE.Vector3();
 
 /** how far into the hall's walls the shelter reaches past their inner faces (m; the walls are 0.6 thick) */
@@ -105,14 +107,14 @@ export class Lights implements Lit {
     }
     // (and for each lamp a mover stands by, a light that lights nothing: where a mover stands between it takes away
     // what the lamp lit, the loop's light or the baked. Its lamp whole: its place, its full reach, its colour now)
-    for (const { lamp, slot } of shadowed && TUNE.points ? this.lampTaking() : []) {
-      if (this.points >= MAX_POINTS) break;
+    // (in a place of their own after the frame's 32, which the village's lamps and its places' lights fill)
+    g.fill(0, GLOBALS.takers, GLOBALS.takers + TAKERS * 8);
+    for (const [k, { lamp, slot }] of (shadowed && TUNE.points ? this.lampTaking() : []).slice(0, TAKERS).entries()) {
       const place = (1 + lamp * 2) * 4, light = place + 4;
-      const at = GLOBALS.points + this.points * 8;
+      const at = GLOBALS.takers + k * 8;
       g.set(lampList.subarray(place, place + 4), at);
       g.set(lampList.subarray(light, light + 3), at + 4);
       g[at + 7] = -((lampList[light + 3] > 0 ? 2 : 1) + 4 * (slot + 1));
-      this.points++;
     }
     // (the village's lamps are lit while it's shown and out in a run: left set there, the hall's box of ground lay
     // sunless on the battleground's floor, a dark rectangle. From play: "also weird shadow")

@@ -10,7 +10,7 @@ export const GLOBALS = {
   shadowView: 48, points: 64, camRight: 320, camUp: 324, seeFocus: 328, seeHole: 332, grade: 336, shelter: 344,
   seeHall: 352, seeKinds: 360, floats: 1000,
   // (past what the page clears each frame: the lights' grid, the engine's own, and the arms' view)
-  cells: 1000, armsView: 1004, lightCache: 1020, all: 1032,
+  cells: 1000, armsView: 1004, lightCache: 1020, takers: 1032, all: 1048,
 };
 /** the sun's shadow map, a side, where the game has no sun to say (`SHADOW_SIZE` in the engine's gpu.rs) */
 const SHADOW_SIZE = 2048;
