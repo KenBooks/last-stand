@@ -979,8 +979,12 @@ function oneBandNow(camera: THREE.Camera, k: number): { from: number; to: number
   _eye3.setFromMatrixPosition(camera.matrixWorld);
   oneNow.high = Math.max(0, _eye3.y);
   // (a level that spreads the grass keeps all of it less far: the same blades, fewer of them sooner)
-  oneNow.reach = ONE_GRASS.reach / spread;
-  oneNow.least = (tuftOf() > 1 ? ONE_GRASS.leastTufts : ONE_GRASS.least) / (spread * spread);
+  // (by the root of its spread: at the spread itself Very low kept all of it within 4 m alone and one blade in 64
+  // far off, clumps on bare ground, from play "why I see different grass on very low? didn't we agree about same
+  // grass but not so dense"; Very low thins as Low did, 8 m and one in 16, Low 11 m and one in 8)
+  const thinned = Math.sqrt(spread);
+  oneNow.reach = ONE_GRASS.reach / thinned;
+  oneNow.least = (tuftOf() > 1 ? ONE_GRASS.leastTufts : ONE_GRASS.least) / (thinned * thinned);
   return oneBand(k, oneNow.high, oneNow.reach, oneNow.least);
 }
 

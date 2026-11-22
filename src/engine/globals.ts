@@ -66,7 +66,7 @@ export const TUNE = tunable('rust', {
    *  village's still things are in maps three keeps, which the engine doesn't have) */
   castAll: 1,
   /** the share of the sky's light under the shelter's roof (the hall of heroes' inside), set against three's frame */
-  shelterSky: 0.25,
+  shelterSky: 0.5,
   /** ms a frame spent handing over what isn't shown yet (`prepareAhead`), under the loading screen and after it
    *  (0: nothing ahead, each place handed over as it's first shown) */
   aheadLoading: 30,

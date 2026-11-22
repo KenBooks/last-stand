@@ -47,6 +47,13 @@ export default {
       help: 'a skill of the hero\'s held through the frames timed and pictured (its key, behaviour or name; '
         + '--class whose): what it leaves undrawn is a problem',
     },
+    level: {
+      kind: 'choice',
+      choices: ['high', 'medium', 'low', 'verylow'],
+      usage: 'high|medium|low|verylow',
+      help: 'the quality level switched to once he stands there, as Auto steps to it in play (--boot: the level '
+        + 'the page boots at)',
+    },
     census: { kind: 'switch', help: 'the shown meshes\' materials by kind, and what each asks beyond the engine' },
     three: { kind: 'switch', help: 'the baseline: three.js\'s WebGPU renderer instead, on a page of its own' },
     webgl: { kind: 'switch', help: 'the look players had: three.js\'s WebGL renderer instead, pictured the same' },
@@ -78,6 +85,7 @@ export default {
       village: Boolean(options.village),
       room: options.room,
       cast: options.cast,
+      level: options.level,
       hour: options.hour,
       zoom: options.zoom,
       skylight: Boolean(options.skylight),

@@ -15,6 +15,8 @@ import { skyLightLines, turnToSkyLight } from './skyLight';
 import { foesAt } from './death';
 import { crowdPlaces } from './crowd';
 import * as THREE from 'three';
+import { setQuality } from '../../../src/core/quality';
+import type { QualityLevel } from '../../../src/data/quality';
 import { bindKnown, pressing, skillNamed } from './cast';
 import type { Frame } from './lab';
 import { enterRoom, leaveRoom, roomHere } from '../../../src/game/rooms';
@@ -32,6 +34,8 @@ export interface RustCommand {
   room?: string;
   /** a skill of his held through the frames timed and pictured */
   cast?: string;
+  /** the quality level switched to once he stands there (Auto's step, in play) */
+  level?: QualityLevel;
   hour?: number;
   zoom?: number;
   /** the camera turned to the sky's key light, the picture what's round it */
@@ -68,11 +72,18 @@ interface TimestampPool {
   resolveQueriesAsync(): Promise<number | undefined>;
 }
 
+/** the frames a level switched to is given to settle in */
+const LEVEL_FRAMES = 30;
+
 /** The hero stood where the command asks, its foes before him. */
 async function stand(lab: Lab, command: RustCommand): Promise<string> {
   for (const [path, values] of Object.entries(command.tune)) window.__tune?.(path, values);
   await standAt(lab, command);
   lab.wield({ wear: command.wear, rarity: command.rarity });
+  if (command.level) {
+    setQuality(command.level);
+    await lab.step(LEVEL_FRAMES);
+  }
   if (command.foes > 0 && !command.village) {
     const spots: THREE.Vector3[] = crowdPlaces(command.foes, G.player.pos, G.player.facing);
     await foesAt(lab, spots, spots.map(() => 1));
