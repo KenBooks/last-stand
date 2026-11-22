@@ -22,6 +22,10 @@ const MOST_CELLS = 750_000;
 /** how far under the lowest lamp and over the highest the volume reaches, m */
 const BELOW = 8, ABOVE = 6;
 
+/** the address's `?lightCache=0`: every lamp whole in the frame's loop, for a device with no console to tune by
+ *  (a phone's frame drew black the day the cache was wired in) */
+const OFF = new URLSearchParams(location.search).get('lightCache') === '0';
+
 const at = new THREE.Vector3();
 
 export class LightCache {
@@ -62,7 +66,7 @@ export class LightCache {
   step(record: (mesh: THREE.Mesh) => void): boolean {
     const core = this.core;
     const lights: number[] = [], lamps: number[] = [];
-    if (TUNE.lightCache > 0 && this.casters.length) {
+    if (!OFF && TUNE.lightCache > 0 && this.casters.length) {
       for (let lamp = 0; lamp < LAMPS_MOST; lamp++) {
         const still = lampStill(lamp), place = (1 + lamp * 2) * 4;
         if (!still || !(lampList[place + 3] > NEAR)) continue;
