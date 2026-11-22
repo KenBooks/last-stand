@@ -609,7 +609,8 @@ const spreadOf = (_ring: Ring): number => spread * (tuftOf() > 1 ? TUFT_SPREAD :
 
 /** The thin blades a blade is drawn as at the spread: a tuft's where the grass isn't spread, else the blade whole. */
 // (WebGL's alone: WebGPU's nodes draw the blades as they were, `meadowNodes.ts`)
-const tuftOf = (): number => (!WEBGPU && tufts && spread === 1 ? TUFT : 1);
+// (and the Rust engine's, in every ring: `engine/looks/meadow.ts`)
+const tuftOf = (): number => ((!WEBGPU || ONE) && tufts && spread === 1 ? TUFT : 1);
 
 /** whether the level draws the grass as tufts (a quality's `grassTufts`) */
 let tufts = true;
@@ -713,7 +714,7 @@ const drawnFromAbove = (): boolean => !ONE && (aboveHeld ?? (fromAbove && !whole
 const ONE = RUNNING.rust;
 /** the camera's height over the ground and the level's reach, as a ring was last drawn (the engine's look reads
  *  them: `OneNow`) */
-const oneNow = { high: 0, reach: ONE_GRASS.reach, least: ONE_GRASS.least };
+const oneNow = { high: 0, reach: ONE_GRASS.reach, least: ONE_GRASS.least, tuft: 1, pixel: 0 };
 const _eye3 = new THREE.Vector3();
 /** a reach past any distance: all the grass kept (m) */
 const WHOLE_KEPT = 1e5;
@@ -979,7 +980,7 @@ function oneBandNow(camera: THREE.Camera, k: number): { from: number; to: number
   oneNow.high = Math.max(0, _eye3.y);
   // (a level that spreads the grass keeps all of it less far: the same blades, fewer of them sooner)
   oneNow.reach = ONE_GRASS.reach / spread;
-  oneNow.least = ONE_GRASS.least / (spread * spread);
+  oneNow.least = (tuftOf() > 1 ? ONE_GRASS.leastTufts : ONE_GRASS.least) / (spread * spread);
   return oneBand(k, oneNow.high, oneNow.reach, oneNow.least);
 }
 
@@ -1092,8 +1093,12 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
         ownBand = null;
       }
       if (ONE) {
-        u.uCell.value = ring.cell;
+        // (a tuft's card every other cell each way, as the first rings' on WebGL: its blades are cut from it)
+        u.uCell.value = ring.cell * (tufted ? TUFT_SPREAD : 1);
         u.uStrandsBy.value = 1;
+        oneNow.tuft = tuftOf();
+        // (a pixel's width a metre off the camera: a tuft's blades thinner than a pixel are left out by it)
+        oneNow.pixel = 2 / (camera.projectionMatrix.elements[5] * viewHigh.value);
       }
       if (one) {
         u.uBand.value.set(one.from, one.from, one.to, one.to);
@@ -1163,7 +1168,8 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
     group.add(mesh);
     return mesh;
     };
-    if (near) {
+    // (one grass: every ring has its blades whole and as tufts, the level's drawn)
+    if (near || (ONE && !above)) {
       ringMeshes.push(meshOf(full, false, false));
       meshOf(cardGeometry(), true, true);
     } else if (above) {

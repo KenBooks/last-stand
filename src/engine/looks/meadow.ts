@@ -8,12 +8,26 @@ import { ONE_GRASS } from '../../world/meadowOne';
 
 /** The one grass's numbers as a ring is drawn (`world/meadowOne.ts`): the camera's height over the ground and
  *  how far from it all the grass is kept, and the least share of it kept however far. */
-export interface OneNow { high: number; reach: number; least: number }
+export interface OneNow { high: number; reach: number; least: number; tuft: number; pixel: number }
 
 /** where a ring's numbers are in `m.c`, in floats */
 const AT = { origin: 0, focus: 2, eye: 4, cell: 6, wider: 7, band: 8, combed: 12, side: 13, byStrand: 14, strandsBy: 15,
   time: 16, half: 17, widthInCells: 18, grows: 19, strandCut: 20, strandsRise: 21, cuts: 22, unshaded: 23, plain: 24,
-  one: 25, reach: 26, fall: 27, high: 28, least: 29 };
+  one: 25, reach: 26, fall: 27, high: 28, least: 29, pixel: 30, tuft: 31 };
+
+/** a tuft's card as `world/meadow.ts` has it (its `TUFT_*`): the bins across it, two blades rooted in each, how far
+ *  a half's blades fan out, a blade's half width at its root as a share of the card's, the card's width against a
+ *  whole blade's, how much taller a tuft stands, and how its blades rise through a hand-over */
+const TUFT = { bins: 14, fan: 0.3, blade: 0.2, card: 2.2, taller: 1.75, rise: 0.55, grows: 0.15 };
+const TUFT_WGSL = `
+const TUFT_BINS = ${TUFT.bins.toFixed(1)};
+const TUFT_FAN = ${TUFT.fan};
+const TUFT_BLADE = ${TUFT.blade};
+const TUFT_CARD = ${TUFT.card};
+const TUFT_TALLER = ${TUFT.taller};
+const TUFT_RISE = ${TUFT.rise};
+const TUFT_GROWS = ${TUFT.grows};
+`;
 
 const SHARED = /* wgsl */ `
 fn blade_hash(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
@@ -46,7 +60,7 @@ fn meadow_at(xz: vec2f, span: f32) -> f32 {
 
 const BLADES: RustShader = {
   name: 'meadow-blades',
-  hooks: SHARED + /* wgsl */ `
+  hooks: SHARED + TUFT_WGSL + /* wgsl */ `
 fn blade_pcg(start: vec2u) -> vec2u {
   var v = start * 1664525u + 1013904223u;
   v.x += v.y * 1664525u;
@@ -113,7 +127,9 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   let grows = mask_at(mask_uv);
   let patchy = blade_noise(root * 0.15) * 0.65 + blade_noise(root * 0.55 + 9.1) * 0.35;
   let chance = smoothstep(0.08, 0.6, grass) * smoothstep(0.3, 0.7, grows) * mix(0.75, 1.0, smoothstep(0.25, 0.7, patchy));
-  let by_strand = m.c[3].z * combed_now * step(1.5, wider);
+  // (a tuft's card, where the level draws them: thin blades cut from it as it's shaded, each its own way)
+  let tufted = step(1.5, m.c[7].w);
+  let by_strand = m.c[3].z * combed_now * max(step(1.5, wider), tufted);
   let share = fract(h.z * 3.17) * (1.0 - grows_over);
   var ring_on = mix(smoothstep(share, share + grows_over, in_band), step(0.001, in_band), by_strand);
   if (one) {
@@ -132,8 +148,9 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   let shown = smoothstep(h.z * 0.85, h.z * 0.85 + 0.15, chance) * ring_on;
   // (and one the mask or its ring's hand-over drops: the same)
   if (shown <= 0.0) { (*v).position = vec3f(root.x, 0.0, root.y); return; }
-  let height = shown * mix(0.2, 0.46, h.w) * mix(0.55, 1.0, grass) * mix(0.75, 1.25, tuft) * mix(0.8, 1.15, patchy);
-  let width = shown * cell * wider * m.c[4].z * mix(0.8, 1.25, fract(h.z * 7.13));
+  let height = shown * mix(1.0, TUFT_TALLER, tufted) * mix(0.2, 0.46, h.w) * mix(0.55, 1.0, grass) * mix(0.75, 1.25, tuft)
+    * mix(0.8, 1.15, patchy);
+  let width = shown * cell * wider * m.c[4].z * mix(0.8, 1.25, fract(h.z * 7.13)) * mix(1.0, TUFT_CARD, tufted);
   let turn = h.w * 6.2832 + h.x * 3.0;
   // (at the meadow's edge a blade leans away from it, into the grass)
   let aside = 0.35 / (span * 2.0);
@@ -147,36 +164,65 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   let across0 = vec2f(lean2.y, -lean2.x);
   let facing = vec2f(-to_cam.y, to_cam.x);
   let facing_by = sign(dot(facing, across0) + 1e-4);
-  let turned = normalize(mix(across0, facing * facing_by, (1.0 - abs(dot(to_cam, lean2))) * 0.35));
+  let turned = normalize(mix(across0, facing * facing_by, (1.0 - abs(dot(to_cam, lean2))) * 0.35 * (1.0 - tufted)));
   let across = vec3f(turned.x, 0.0, turned.y);
   let t = shape.x;
   let side_of = shape.y;
-  let tilt = fract(h.x * 13.1) * 0.35 + 0.12;
-  let bend_by = fract(h.y * 7.7) * 0.7 + 0.35;
+  // (a tuft's card stands nearly upright, its blades each arcing their own way within it)
+  let tilt = (fract(h.x * 13.1) * 0.35 + 0.12) * mix(1.0, 0.4, tufted);
+  let bend_by = (fract(h.y * 7.7) * 0.7 + 0.35) * mix(1.0, 0.45, tufted);
   let mid = tilt + bend_by * t * 0.5;
   let angle = tilt + bend_by * t;
   let strands = combed_now * wider * wider * m.c[3].w;
-  let w = width * select(1.0 - pow(t, 2.5), 1.0, strands > 1.5);
-  let bent = across * (side_of * w * 0.5) + lean * (t * height * sin(mid)) + vec3f(0.0, t * height * cos(mid), 0.0);
+  let w = width * select(1.0 - pow(t, 2.5), 1.0, strands > 1.5 || tufted > 0.5);
+  // (a tuft's card bent along its middle, by a share of its own, opening a little wider at its top)
+  let folded = lean * ((1.0 - abs(side_of)) * w * (fract(h.z * 3.9) - 0.5) * 0.9 * tufted * (1.0 + 0.6 * t));
+  let bent = across * (side_of * w * 0.5) + lean * (t * height * sin(mid)) + vec3f(0.0, t * height * cos(mid), 0.0)
+    + folded;
   // the wind: gusts rolling across the meadow and a flutter a blade, bending by the square of t
   let roll = sin(time * 1.5 - root.x * 0.21 - root.y * 0.14) * 0.5 + 0.5;
   let flutter = sin(time * 5.1 + h.y * 6.2832) * 0.25;
-  let wind = vec3f(0.83, 0.0, 0.55) * (t * t * height * (roll * 0.5 + flutter * 0.3 + 0.1));
+  var wind = vec3f(0.83, 0.0, 0.55) * (t * t * height * (roll * 0.5 + flutter * 0.3 + 0.1));
+  if (tufted > 0.5) {
+    // (a tuft's: gusts, patches of moving air that travel downwind, the grass near upright between them; its
+    // card barely flutters and sways mostly in its own plane: world/meadow.ts VERTEX_BLADE)
+    let downwind = vec2f(0.83, 0.55);
+    let veer = (blade_noise(root * 0.035 + time * 0.03) - 0.5) * 2.4;
+    let wind_way = vec2f(downwind.x * cos(veer) - downwind.y * sin(veer), downwind.x * sin(veer) + downwind.y * cos(veer));
+    let gust = blade_noise(root * 0.11 - downwind * time * 0.3) * 0.65 + blade_noise(root * 0.37 - downwind * time * 0.5) * 0.35;
+    let blowing = smoothstep(0.42, 0.78, gust);
+    let beat = sin(time * 1.7 + h.y * 6.2832) * (0.04 + 0.16 * blowing) * 0.25;
+    let sway = turned * dot(wind_way, turned);
+    wind = vec3f(sway.x, 0.0, sway.y) * (t * t * height * (blowing * 0.1 + beat * 0.5 + 0.015));
+  }
   // its upper face along the arc, rounded across: lit as a surface, from both sides
   let up = vec3f(0.0, 1.0, 0.0);
   let face = up * sin(angle) - lean * cos(angle);
-  (*v).normal = normalize(mix(face, up, 0.55) + across * side_of * 0.45);
+  // (a tuft's card is lit as the ground under it, nearly: by its own face a whole tuft stood pale and the next
+  // near black)
+  (*v).normal = normalize(mix(face, up, mix(0.55, 0.9, tufted)) + across * side_of * 0.45 * (1.0 - tufted));
   // spring greens, a tuft's own, some dry and gold
   let green = mix(vec3f(0.075, 0.2, 0.03), vec3f(0.17, 0.32, 0.045), fract(h.y * 3.7));
   let dry = smoothstep(0.72, 1.0, tuft) * 0.7 + smoothstep(0.75, 0.95, patchy) * 0.25;
   (*v).c0 = vec4f(mix(green, vec3f(0.36, 0.33, 0.1), dry), 0.0);
+  if (tufted > 0.5) {
+    // (a tuft's greens: lush to fresh, a tuft in ten dry)
+    let lush = mix(vec3f(0.07, 0.127, 0.024), vec3f(0.108, 0.162, 0.03), fract(h.y * 3.7));
+    let straw = smoothstep(0.86, 1.0, tuft) * 0.25 + smoothstep(0.8, 0.97, patchy) * 0.12;
+    (*v).c0 = vec4f(mix(lush, vec3f(0.2, 0.18, 0.075), straw), 0.0);
+  }
   (*v).c1 = vec4f(t, side_of, strands, h.x);
-  (*v).c2 = vec4f(in_band, by_strand, 0.0, 0.0);
+  // (a pixel's width across the card where the tuft is rooted, the same at its every corner: which of its
+  // blades are left out far off goes by this)
+  let pixel_wide = length(g.cam_pos.xyz - vec3f(root.x, 0.0, root.y)) * m.c[7].z;
+  (*v).c2 = vec4f(in_band, by_strand, tufted, 0.75 * pixel_wide / max(width, 1e-4));
   (*v).position = vec3f(root.x, 0.0, root.y) + bent + wind;
   (*v).color = vec4f(1.0);
 }
 
 fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  // (across the card, a pixel's width: asked before anything is left out)
+  let pixel_across = fwidth(in.c1.y);
   // (a profile's: the blades placed and none shaded)
   if (m.c[5].w > 0.5) { return false; }
   let blade = in.c1.xy;
@@ -184,6 +230,68 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   let growing = in.c2.xy;
   var along = blade.x;
   var across = abs(blade.y);
+  // a tuft's card: thin blades rooted all across it, two a bin, each near upright with a lean and a curve of its
+  // own, those of each half fanning a little from its middle; only the bins a blade here could have come from are
+  // tried (world/meadow.ts FRAGMENT_COLOUR, line for line)
+  var fold = blade.y;
+  var strand_shade = 0.5;
+  let tufted = in.c2.z > 0.5;
+  if (m.c[5].z > 0.5 && tufted) {
+    let card_seed = floor(strands.y * 1024.0 + 0.5) / 1024.0;
+    let u = blade.y * 0.5 + 0.5;
+    // (no blade thinner than a pixel: thinner, far tufts broke into single pixels that came and went)
+    let pixel = pixel_across * 0.5 * 0.75;
+    let from_zone = (floor(u * 2.0) + 0.5) * 0.5;
+    let came_from = from_zone + (u - from_zone) / (1.0 + TUFT_FAN * min(blade.x / 0.75, 1.0));
+    let bin0 = floor(came_from * TUFT_BINS);
+    var nearest = 2.0;
+    var which = 0.0;
+    for (var j = -2; j <= 2; j++) {
+      let bin = bin0 + f32(j);
+      if (bin < 0.0 || bin >= TUFT_BINS) { continue; }
+      for (var i = 0; i < 2; i++) {
+        let id = bin * 2.0 + f32(i);
+        let r1 = fract(sin(id * 12.9898 + card_seed * 78.233) * 43758.5453);
+        let r2 = fract(r1 * 7.31 + id * 0.618);
+        let r3 = fract(r2 * 5.13 + id * 0.37);
+        let tall = mix(0.4, 1.0, r1) * mix(1.0, smoothstep(r2 * TUFT_RISE, r2 * TUFT_RISE + TUFT_GROWS, growing.x), growing.y);
+        let a = blade.x / max(tall, 0.01);
+        if (a > 1.0) { continue; }
+        let root_at = mix(0.08, 0.92, (bin + r3) / TUFT_BINS);
+        let zone = (floor(root_at * 2.0) + 0.5) * 0.5;
+        let middle = root_at + (root_at - zone) * TUFT_FAN * a + ((r2 - 0.5) * 1.7 * a + (r3 - 0.5) * 2.2 * a * a) / TUFT_BINS;
+        // (as wide most of its length, then to a point)
+        let thin = TUFT_BLADE / TUFT_BINS * (1.0 - pow(a, 3.0));
+        // (a blade thinner than a pixel is drawn a pixel wide, and as many fewer of them)
+        let drop_pixel = in.c2.w;
+        if (thin < drop_pixel && fract(r3 * 9.71 + r1 * 3.3) > thin / drop_pixel) { continue; }
+        let half_wide = max(thin, pixel);
+        let off = (u - middle) / half_wide;
+        if (abs(off) < abs(nearest)) {
+          nearest = off;
+          which = id;
+          along = a;
+        }
+      }
+    }
+    if (abs(nearest) > 1.0) { return false; }
+    across = abs(nearest);
+    fold = nearest;
+    strand_shade = fract(sin(which * 7.31 + card_seed * 41.7) * 9631.17);
+    var colour = in.c0.rgb * mix(0.68, 1.1, smoothstep(0.0, 0.85, along)) * (1.0 - across * across * 0.3);
+    // (a blade in six straw, among a tuft's green)
+    colour = mix(colour, vec3f(0.19, 0.185, 0.07) * mix(0.68, 1.05, smoothstep(0.0, 0.85, along)), step(0.84, strand_shade) * 0.4);
+    colour += vec3f(0.02, 0.03, 0.0) * (1.0 - smoothstep(0.04, 0.16, across)) * smoothstep(0.1, 0.4, along);
+    colour = mix(colour, vec3f(0.3, 0.27, 0.11), smoothstep(0.85, 1.0, along) * 0.2);
+    // (folded along its midrib: one half of the V faces the light more than the other; each blade its own shade)
+    colour *= mix(0.9, 1.06, step(0.0, fold)) * mix(0.8, 1.12, strand_shade);
+    (*s).base = vec4f(colour, 1.0);
+    (*s).normal = normalize(in.normal);
+    // (matte: a card's face is no blade's, and its shine lit a whole tuft pale)
+    (*s).roughness = 1.0;
+    (*s).specular = 0.0;
+    return true;
+  }
   // a far ring's sheet cut into strands
   if (m.c[5].z > 0.5 && strands.x > 1.5) {
     let strand_at = (blade.y * 0.5 + 0.5) * strands.x;
@@ -252,6 +360,7 @@ export function bladeLook(u: BladeUniforms, combed: boolean, numbers: BladeNumbe
       out[AT.one] = one ? 1 : 0;
       out[AT.reach] = one?.reach ?? 0; out[AT.fall] = ONE_GRASS.fall; out[AT.high] = one?.high ?? 0;
       out[AT.least] = one?.least ?? 0;
+      out[AT.pixel] = one?.pixel ?? 0; out[AT.tuft] = one && combed ? one.tuft : 1;
     },
     // (the tiles drawn, a pair of floats each: any number of them, where the numbers held 80, so the tiles were
     // 9 to 21 m wide and every blade of one that touched the view was sent to be dropped as it was placed)

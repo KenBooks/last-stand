@@ -17,11 +17,11 @@ const FAR = 85;
 const EDGE = 1e-6;
 
 /** Where the bands of `rings` leave the ground bare or cover it twice, the camera `high` m up at a `spread`. */
-function faults(rings: number[], high: number, spread: number): string[] {
+function faults(rings: number[], high: number, spread: number, least = ONE_GRASS.least): string[] {
   const found: string[] = [];
   let reached = 0;
   for (const k of rings) {
-    const band = oneBand(k, high, ONE_GRASS.reach / spread, ONE_GRASS.least / (spread * spread));
+    const band = oneBand(k, high, ONE_GRASS.reach / spread, least / (spread * spread));
     if (band.to <= band.from) continue;
     if (Math.abs(band.from - reached) > EDGE) {
       found.push(`${high} m up at a spread of ${spread}: ring ${k} begins ${band.from.toFixed(2)} m out, the ring `
@@ -40,6 +40,8 @@ function faults(rings: number[], high: number, spread: number): string[] {
 export function grassBandsEdgeToEdge(): Checked {
   const all = Array.from({ length: RINGS }, (_, k) => k);
   const found = HEIGHTS.flatMap((high) => SPREADS.flatMap((spread) => faults(all, high, spread)));
+  // (and as the level that draws tufts keeps them)
+  found.push(...HEIGHTS.flatMap((high) => faults(all, high, 1, ONE_GRASS.leastTufts)));
   const without = all.filter((k) => k !== 2);
   const canary = HEIGHTS.flatMap((high) => faults(without, high, 1));
   if (!canary.length) return failed('the canary: the grass\'s third ring left out, no ground was found bare');

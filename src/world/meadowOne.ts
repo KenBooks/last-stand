@@ -14,7 +14,11 @@ import { tunable } from '../core/tuning';
  *  however far (from play, of the grass from far above: "just thin the grass and show half the grass"; with none,
  *  a twentieth of the blades were left there, and the meadow read as a mown lawn; a quarter is the far ring's blades
  *  as they were counted, each half as wide) */
-export const ONE_GRASS = tunable('oneGrass', { reach: 10, fall: 2, least: 0.25 });
+// (all of it within 16 m: the lobby's view from above stands 12 to 16 m off the grass it shows, and kept to 10 m
+// it showed half of it there, the ground bare between the tufts)
+// (`leastTufts`: where the level draws tufts, High's: half of them however far, the grass still a meadow from the
+// furthest zoom out)
+export const ONE_GRASS = tunable('oneGrass', { reach: 16, fall: 2, least: 0.25, leastTufts: 0.5 });
 
 /** the eye's distance the blades are drawn in four segments within (m), and how far the last ring goes on the
  *  ground (m) */

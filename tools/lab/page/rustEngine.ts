@@ -234,7 +234,8 @@ async function threeFrames(lab: Lab, command: RustCommand): Promise<Report> {
   const sky = command.skylight ? await turnToSkyLight(lab) : undefined;
   const hold = castHeld(command);
   const renderer = G.renderer as unknown as Timed;
-  const pool = renderer.backend.timestampQueryPool;
+  // (three's WebGL renderer has no pool of timestamps: its frame is pictured, its GPU's time said as 0)
+  const pool = renderer.backend?.timestampQueryPool ?? {};
   const clock = (window as unknown as { __labClock: { realNow: () => number } }).__labClock;
   const pageClock = perfClock.now;
   perfClock.now = clock.realNow;
