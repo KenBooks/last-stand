@@ -28,6 +28,10 @@ export const TUNE = tunable('rust', {
   /** what a profile of the frame takes out in turns (perf/sceneParts.ts): the point lights and the lamps, the
    *  lamps' shadows, the bloom's passes */
   points: 1,
+  /** the scene's own point lights in the frame's loop (a brazier, a fire, a portal: 0 leaves them out, a
+   *  profile's), and the baked lamps' light near them, the loop's too (`lightCache.ts` `NEAR`) */
+  ownPoints: 1,
+  nearLamps: 1,
   lampShadows: 1,
   /** the village's still lamps baked into the engine's light cache (`lightCache.ts`; 0: every lamp whole in the
    *  frame's own loop, to compare) */

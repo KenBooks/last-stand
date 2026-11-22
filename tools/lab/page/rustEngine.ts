@@ -360,6 +360,7 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
     + `${(cache.cells * 16 / 1e6).toFixed(1)} MB on the GPU; baked ${cache.bakes} times, the last ${cache.ms.toFixed(0)} ms on the page; read ${cache.open.toFixed(2)} bright in the open, `
     + `${cache.sheltered.toFixed(2)} under the shelter`);
   if (command.census) lines.push(...census(G.scene, G.camera), ...heaviest(G.scene, G.camera));
+  if (command.census) lines.push('  the frame\'s point lights:', ...bridge.pointLines().map((line) => `    ${line}`));
   lines.push(`  the hero at ${G.player.pos.x.toFixed(1)}, ${G.player.pos.z.toFixed(1)}; the camera's layers ${G.camera.layers.mask}`);
   const problems: string[] = [];
   const turned = sky === undefined ? undefined : skyLightLines(sky);

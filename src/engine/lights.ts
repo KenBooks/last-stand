@@ -63,7 +63,7 @@ export class Lights implements Lit {
       // (the strongest is the sun; the engine has one)
       if (!this.sun || by > this.sun.intensity) this.sun = light as THREE.DirectionalLight;
     } else if ((light as THREE.PointLight).isPointLight) {
-      if (!TUNE.points) return;
+      if (!TUNE.points || !TUNE.ownPoints) return;
       if (this.points === MAX_POINTS) { this.core.skip('point light past 32'); return; }
       const point = light as THREE.PointLight, at = GLOBALS.points + this.points * 8;
       // (asked of the light itself: one the game hides from three, `shownPointLights`, has its matrices left as
@@ -92,6 +92,8 @@ export class Lights implements Lit {
       const place = (1 + lamp * 2) * 4, light = place + 4;
       if (lampList[light + 3] === 0) continue;
       const at = GLOBALS.points + this.points * 8;
+      // (a profile's: a baked lamp's light near it left out, what the loop still works out of it)
+      if (!TUNE.nearLamps && this.lampReach(lamp, lampList[place + 3]) < lampList[place + 3]) continue;
       g.set(lampList.subarray(place, place + 4), at);
       g[at + 3] = this.lampReach(lamp, g[at + 3]);
       g.set(lampList.subarray(light, light + 3), at + 4);
@@ -125,6 +127,22 @@ export class Lights implements Lit {
    *  it, its walls' tops). */
   shelterNow(): number[] {
     return Array.from(this.core.globals.subarray(GLOBALS.shelter, GLOBALS.shelter + 6));
+  }
+
+  /** A harness's: the last frame's point lights as the globals hold them, a line each: where, how far it
+   *  reaches (m; 0 as far as it's seen), its light at its brightest channel, and its kind (a lamp's code under 0,
+   *  else the decay of a light of the scene's own). */
+  pointLines(): string[] {
+    const g = this.core.globals;
+    const lines: string[] = [];
+    for (let k = 0; k < this.points; k++) {
+      const at = GLOBALS.points + k * 8;
+      const where = [g[at], g[at + 1], g[at + 2]].map((v) => v.toFixed(1)).join(' ');
+      const bright = Math.max(g[at + 4], g[at + 5], g[at + 6]).toFixed(1);
+      const kind = g[at + 7] < 0 ? `a lamp (code ${-g[at + 7]})` : `the scene's own, decay ${g[at + 7]}`;
+      lines.push(`at ${where}, reaching ${g[at + 3].toFixed(1)} m, ${bright} bright, ${kind}`);
+    }
+    return lines;
   }
 
   /** The lights the last frame was drawn under, as the globals hold them: for a report. */

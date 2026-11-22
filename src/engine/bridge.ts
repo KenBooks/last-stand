@@ -296,6 +296,8 @@ export class Bridge {
   lightCacheNow(): ReturnType<LightCache['now']> { return this.lightCache.now(); }
   /** A harness's: how many lamps' shadows are drawn, and how many wait. */
   lampShadowsNow(): { drawn: number; waiting: number } { return this.lampShadows.now(); }
+  /** A harness's: the last frame's point lights, a line each (`Lights.pointLines`). */
+  pointLines(): string[] { return this.lit.pointLines(); }
 
   /** `objects` and all under them handed over ahead with the pipelines they'll draw with, shown or not and in
    *  the scene or not: a warm-up's samples (core/shaders.ts), which the scene's walk never meets. A skill's
