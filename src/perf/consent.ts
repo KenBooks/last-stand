@@ -18,8 +18,13 @@ interface Kept { consent: TraceConsent; refusals: number; sent: number[] }
 const KEY = 'last-stand-perf-traces';
 /** after this many Not nows the game stops asking */
 const MOST_REFUSALS = 3;
-/** at most this many sends in any `DAY_MS`, asked or not, and sent without asking this long apart (ms) */
-export const MOST_A_DAY = 10;
+declare const __DEV_TOOLS__: boolean;
+/**
+ * at most this many sends in any `DAY_MS`, asked or not: 10 in production, 100 from a PR's preview, where a tester
+ * chasing a fault sends many in a day (the traces' server holds a preview to the same, server/traces); and sent
+ * without asking this long apart (ms)
+ */
+export const MOST_A_DAY = typeof __DEV_TOOLS__ !== 'undefined' && __DEV_TOOLS__ ? 100 : 10;
 const DAY_MS = 24 * 60 * 60_000;
 const SENT_APART_MS = 10 * 60_000;
 /** how often a waiting stretch looks for its moment (ms), how long after a moment starts it's shown (ms) */

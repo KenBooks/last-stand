@@ -18,7 +18,9 @@
 // past DISK_MAX (100 MB: the traces and the lines beside them); each address may send PER_DAY in any 24 hours from
 // each site (10: what a game holds itself to, src/perf/consent.ts, whose count is the site's own too): a PR's preview
 // or a commit build is a site of its own, so trying a new one isn't held up by the reports sent from the last; and
-// PER_DAY_ALL (40) over every site, as the Origin is the sender's to say and pr-* matches any number of them.
+// PER_DAY_ALL (40) over every site, as the Origin is the sender's to say and pr-* matches any number of them. A
+// preview (PREVIEW_ORIGINS: a PR's, a commit build's) is a tester's: PER_DAY_PREVIEW (100) from each, and
+// PER_DAY_ALL_PREVIEW (200) over every preview, counted apart from the game's own sites.
 // TRUSTED_ADDRESSES (a comma-separated list, a Dokci setting: never in the repo) are never held to it: the owner's
 // own, testing.
 import { createServer } from 'node:http';
@@ -63,6 +65,11 @@ export function settingsFrom(vars) {
     perDay: Number(vars.PER_DAY ?? 10),
     /** the most from one address over every site: the Origin is the sender's to say, and pr-* matches any number */
     perDayAll: Number(vars.PER_DAY_ALL ?? 40),
+    /** the sites that are previews (a PR's, a commit build's), where a tester sends many a day; the most from one
+     *  address from each, and over every one of them (the Origin is the sender's to say here too) */
+    previews: originsFrom(vars.PREVIEW_ORIGINS ?? 'https://pr-*.ls.wellscoped.dev,https://c-*.ls.wellscoped.dev'),
+    perDayPreview: Number(vars.PER_DAY_PREVIEW ?? 100),
+    perDayAllPreview: Number(vars.PER_DAY_ALL_PREVIEW ?? 200),
     /** addresses never held to `perDay` (the owner's, testing) */
     trusted: new Set(String(vars.TRUSTED_ADDRESSES ?? '').split(',').map((a) => a.trim()).filter(Boolean)),
     // the bug reports' (reports.mjs: each limit and what happens past it in the AGENTS.md)
@@ -149,9 +156,11 @@ function addressOf(req) {
 /** Whether `address` may send one more now from the site `origin` (and counts it). */
 function allowed(address, origin, now = Date.now()) {
   if (settings.trusted.has(address)) return true;
+  const preview = settings.previews.has(origin);
   const site = recent(`${address} ${origin}`, now);
-  const all = recent(`${address} *`, now);
-  if (site.length >= settings.perDay || all.length >= settings.perDayAll) return false;
+  const all = recent(`${address} ${preview ? 'previews' : '*'}`, now);
+  const [most, mostAll] = preview ? [settings.perDayPreview, settings.perDayAllPreview] : [settings.perDay, settings.perDayAll];
+  if (site.length >= most || all.length >= mostAll) return false;
   site.push(now);
   all.push(now);
   return true;
