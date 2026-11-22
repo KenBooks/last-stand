@@ -263,7 +263,8 @@ const CAPITAL_STAND_FACING = -1.03;
 const CAPITAL_HALF = 0.33;
 const CAPITAL_STEPS = 4;
 const THROUGH_APART = 0.01;
-const SHAFTS_CORNERS = 1344;
+const ROOM_SHAFTS_CORNERS = 896;
+const PORTICO_SHAFTS_CORNERS = 448;
 const BEHIND_COLUMN = 0.7;
 
 /** What the capital read is drawn in. */
@@ -292,9 +293,12 @@ function columnParts(): { shafts: THREE.Mesh[]; depths: THREE.Mesh[] } {
     const see = (mesh.material as { seeThrough?: { reach?: unknown; wholeOnly?: boolean } } | undefined)?.seeThrough;
     if (!mesh.isMesh || !see?.reach) return;
     if (see.wholeOnly) depths.push(mesh);
-    else if (mesh.geometry.getAttribute('position').count === SHAFTS_CORNERS) shafts.push(mesh);
+    else {
+      const count = mesh.geometry.getAttribute('position').count;
+      if (count === ROOM_SHAFTS_CORNERS || count === PORTICO_SHAFTS_CORNERS) shafts.push(mesh);
+    }
   });
-  if (shafts.length !== 1) throw new Error('lab: village: the hall\'s shafts weren\'t found');
+  if (shafts.length !== 2) throw new Error('lab: village: the hall\'s shafts weren\'t found');
   return { shafts, depths };
 }
 

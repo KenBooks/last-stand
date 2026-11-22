@@ -10,7 +10,7 @@ import { NEAR_GLOW, itemGlowUniforms, type KitLooks } from './materials';
 import {
   BLEND_GONE, HOLE_UNDER, MIDDLE_ATTRIBUTE, PALE, PLACED_BY_MIDDLE, SIGHT_CONE, overShaft, type SeeThrough,
 } from './seeThrough';
-import { DOOR_ROW, DOOR_SOFT, HIS_ROW, SIGHT } from './sight';
+import { DOOR_ROW, DOOR_SOFT, HIS_ROW, SIGHT, SIGHT_LOOK } from './sight';
 import { WEBGPU, gpu, stillMaterialsGo, stillNodes, tsl } from './webgpu';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
@@ -129,28 +129,8 @@ export function seeFade(world: N, see: SeeNodes, mid: N = placeOf()): N {
   const { wgslFn, cameraPosition } = tsl as any;
   return wgslFn(`fn seeFade(wp: vec3f, mid: vec3f, eye: vec3f, focus: vec3f, k: vec4f, minY: f32, across: f32,
     whole: f32, ramp: f32, reach: vec2f, room: vec4f, door: vec4f, doorOn: f32) -> f32 {
-    if (wp.y <= minY) { return 0.0; }
-    var cone = 0.0;
-    let down = eye.y - wp.y;
-    if (doorOn != 0.0 && down > 0.01) {
-      let shape = smoothstep(-0.02, 0.02, min(wp.x - room.x, room.z - wp.x));
-      if (doorOn > 0.0) {
-        cone = doorOn * shape;
-      } else if (eye.z > door.y && wp.z < door.y) {
-        let at = eye + (wp - eye) * (door.y - eye.z) / (wp.z - eye.z);
-        let offMiddle = abs(at.x - ${TERRACE.x.toFixed(2)});
-        let meetsWall = at.y < ${(TERRACE.high + HALL.wallHigh).toFixed(2)} && offMiddle < ${HALL.half.toFixed(2)};
-        let inDoor = at.y < ${(TERRACE.high + HALL.doorHigh).toFixed(2)} && offMiddle < ${HALL.doorHalf.toFixed(2)};
-        if (meetsWall && !inDoor) { cone = 1.0 - shape; }
-      }
-      if (doorOn < 0.0 && wp.z >= door.y && mid.z > door.y && eye.y - focus.y > 0.01) {
-        let midHidden = eye.xz + (mid.xz - eye.xz) * (eye.y - (minY - 0.12)) / (eye.y - focus.y);
-        let midInHall = min(min(midHidden.x - room.x, room.z - midHidden.x),
-          min(midHidden.y - room.y, room.w - midHidden.y));
-        cone = min(-doorOn * 1.5, 1.0) * smoothstep(0.0, 0.3, midInHall);
-      }
-    }
-    if (k.z <= 0.0 && whole <= 0.0) { return cone; }
+    if (wp.y <= minY && k.w > -100.0) { return 0.0; }
+    if (k.z <= 0.0 && whole <= 0.0) { return 0.0; }
     let ca = focus - eye;
     let l = length(ca);
     let dir = ca / l;
@@ -159,7 +139,7 @@ export function seeFade(world: N, see: SeeNodes, mid: N = placeOf()): N {
     let flat = length(ca.xz);
     let on = select(wp.xz, mid.xz, reach.x < ${PLACED_BY_MIDDLE.toFixed(1)});
     let past = select(along - l, dot(wp.xz - focus.xz, ca.xz) / max(flat, 1e-6), flat > 0.01);
-    if (along <= 0.0 || past >= -k.w) { return cone; }
+    if (along <= 0.0 || past >= -k.w) { return 0.0; }
     let off = cp - dir * along;
     let level = vec3f(-dir.z, 0.0, dir.x);
     let levelLength = length(level);
@@ -174,7 +154,7 @@ export function seeFade(world: N, see: SeeNodes, mid: N = placeOf()): N {
     let onLine = select(along / l, dot(cp.xz, toFeet) / max(feetFlat, 1e-6), feetFlat > 1e-4);
     let lineY = eye.y + (feetY - eye.y) * onLine;
     let atHim = smoothstep(lineY - ${HOLE_UNDER.from.toFixed(2)}, lineY - ${HOLE_UNDER.to.toFixed(2)}, wp.y);
-    return max(max((1.0 - smoothstep(k.x, k.y, r)) * k.z * atHim, thinned), cone);
+    return max((1.0 - smoothstep(k.x, k.y, r)) * k.z * atHim, thinned);
   }`)({ wp: world, mid, eye: cameraPosition, ...see });
 }
 
@@ -237,12 +217,16 @@ function maskOwn(material: THREE.Material): void {
 function thinBy(material: N, see: SeeThrough): void {
   if (material.maskNode) return;
   if (see.wholeOnly) {
+    const { select } = tsl as any;
     const still = see.stillWhole ?? 0.15;
     const stillNode = typeof still === 'number' ? still
       : (tsl as any).uniform(still.value).setGroup((tsl as any).renderGroup).onRenderUpdate(() => still.value);
-    // (a column of the portico keeps all its depth, as `wholeDepthMaterial` has it)
-    const porticoKept = see.reach ? middleOf(see).z.greaterThan(seeOfKind(see).door.y) : (tsl as any).bool(false);
-    material.maskNode = thinned(see).lessThanEqual(stillNode).or(porticoKept);
+    // (a column of the portico keeps all its depth outside and drops thinned depth once inside, as `wholeDepthMaterial` has it)
+    const doorY = seeOfKind(see).door.y;
+    const dropAt = see.reach
+      ? select(middleOf(see).z.lessThanEqual(doorY), stillNode, select(stillNode.greaterThan(1), 0.15, 2))
+      : stillNode;
+    material.maskNode = thinned(see).lessThanEqual(dropAt);
     return;
   }
   if (!see.blended) {
@@ -275,21 +259,23 @@ let sightNodes: { on: N; from: N; door: N; doorOn: N } | undefined;
  * floor it hides along the view, at his floor's height, and how far the fog's rays say he sees along it.
  */
 function seeSightCone(world: N, see: SeeThrough): N {
-  const { atan, cameraPosition, dot, length, max, mix, renderGroup, select, smoothstep, texture, uniform, vec2 } = tsl as any;
+  const { atan, cameraPosition, dot, length, max, min, renderGroup, select, smoothstep, texture, uniform, vec2, wgslFn } = tsl as any;
   sightNodes ??= {
     on: uniform(0).setGroup(renderGroup).onRenderUpdate(() => SIGHT_CONE.on.value),
     from: uniform(new THREE.Vector2()).setGroup(renderGroup).onRenderUpdate(() => SIGHT.uSightFrom.value),
     door: uniform(new THREE.Vector4()).setGroup(renderGroup).onRenderUpdate(() => SIGHT.uSightDoor.value),
     doorOn: uniform(0).setGroup(renderGroup).onRenderUpdate(() => SIGHT.uSightDoorOn.value),
   };
+  const nodes = seeOfKind(see);
   // (a kind with a cone of its own, the walls aside of him that stay off with him in the hall)
   const kindOn = see.sightOn;
   const on = kindOn ? uniform(0).setGroup(renderGroup).onRenderUpdate(() => kindOn.value) : sightNodes.on;
   const share = on.abs().mul(see.sightShare ?? 1);
   // (under none, what stands out past the door's line alone: the portico's columns, not the room's)
-  const outsideOnly = on.lessThan(0).and(world.z.lessThan(seeOfKind(see).door.y));
+  const outsideOnly = on.lessThan(0).and(world.z.lessThan(nodes.door.y));
   const down = cameraPosition.y.sub(world.y);
-  const floorDown = cameraPosition.y.sub(seeOfKind(see).minY.sub(SIGHT_CONE.floorClear));
+  const floorY = nodes.minY.sub(SIGHT_CONE.floorClear);
+  const floorDown = cameraPosition.y.sub(floorY);
   const hidden = cameraPosition.xz.add(world.xz.sub(cameraPosition.xz).mul(floorDown).div(down.max(0.01)));
   const { from, to: upTo } = SIGHT_CONE.short;
   // (how far a row's rays see a place `to` off their middle, by each ray's reach as cast, as `seeSeenFrom`)
@@ -301,12 +287,47 @@ function seeSightCone(world: N, see: SeeThrough): N {
     const seen = (reach: N): N => smoothstep(reach.sub(from), reach.sub(upTo), away).oneMinus();
     return select(away.lessThan(0.3), 1, seen(ray.a));
   };
+  // (soft 5-tap angular average over settled .a reaches for the outside doorway cone, matching `seeSeenSoft`)
+  const seenSoftFrom = (to: N, row: number): N => {
+    const away = length(to);
+    const toSafe = select(away.lessThan(0.3), vec2(1, 0), to);
+    const across = atan(toSafe.y, toSafe.x).div(Math.PI * 2).add(0.5);
+    const aside = min(toSafe.x.mul(0).add(SIGHT_LOOK.edge * 0.5).div(away.max(0.3)), SIGHT_LOOK.edgeAngle * 0.5).div(Math.PI * 2);
+    let open: N = toSafe.x.mul(0);
+    for (let tap = -2; tap <= 2; tap++) {
+      const ray = texture(SIGHT.tSight.value, vec2(across.add(aside.mul(tap * 0.5)), row));
+      open = open.add(smoothstep(ray.a.sub(0.05), ray.a.add(0.25), away).oneMinus());
+    }
+    return select(away.lessThan(0.3), 1, open.div(5));
+  };
   // (by his rays, or past the door he sees through by the door's, as `seeSeenAt`)
   const fromDoor = hidden.sub(sightNodes.door.xy);
-  const pastDoor = smoothstep(0, DOOR_SOFT, dot(fromDoor, sightNodes.door.zw)).mul(sightNodes.doorOn);
+  const pastDoor = smoothstep(-DOOR_SOFT, 0, dot(fromDoor, sightNodes.door.zw)).mul(sightNodes.doorOn);
   const seenHere = max(seenFrom(hidden.sub(sightNodes.from), HIS_ROW), seenFrom(fromDoor, DOOR_ROW).mul(pastDoor));
-  const cone = share.mul(seenHere);
-  return select(on.equal(0).or(outsideOnly).or(down.lessThanEqual(0.01)), 0, cone);
+  const columnCone = select(outsideOnly.or(down.lessThanEqual(0.01)), 0, share.mul(seenHere));
+  // (outside doorway cone on `hallFront`/`hallBeam`: ray-box hit against Hall interior when `on == 0 && nodes.doorOn > 0`)
+  const doorHit = wgslFn(`fn doorRoomHit(wp: vec3f, eye: vec3f, floorY: f32) -> vec3f {
+    let rd = wp - eye;
+    if (rd.y >= -0.01 || rd.z >= -0.01) { return vec3f(0.0, 0.0, 0.0); }
+    let safeX = select(min(rd.x, -1e-4), max(rd.x, 1e-4), rd.x >= 0.0);
+    let tYExit = (floorY - eye.y) / rd.y;
+    let tZEnter = (${HALL.inFront.toFixed(2)} - eye.z) / rd.z;
+    let tZExit = (${HALL.wall.toFixed(2)} - eye.z) / rd.z;
+    let tX0 = (${(TERRACE.x - HALL.inHalf).toFixed(2)} - eye.x) / safeX;
+    let tX1 = (${(TERRACE.x + HALL.inHalf).toFixed(2)} - eye.x) / safeX;
+    let tEnter = max(tZEnter, min(tX0, tX1));
+    let tExit = min(tYExit, min(tZExit, max(tX0, tX1)));
+    if (tExit <= tEnter) { return vec3f(0.0, 0.0, 0.0); }
+    let inRoom = smoothstep(0.0, 0.025, tExit - tEnter);
+    let stepBack = select(tExit, max(tEnter, tExit - 0.25 / max(length(rd.xz), 0.1)), tExit < tYExit);
+    let hit = eye.xz + rd.xz * stepBack;
+    return vec3f(hit.x, hit.y, inRoom);
+  }`)({ wp: world, eye: cameraPosition, floorY });
+  const doorFrom = doorHit.xy.sub(sightNodes.door.xy);
+  const doorPast = smoothstep(-DOOR_SOFT, 0, dot(doorFrom, sightNodes.door.zw)).mul(sightNodes.doorOn);
+  const doorSeen = max(seenSoftFrom(doorHit.xy.sub(sightNodes.from), HIS_ROW), seenSoftFrom(doorFrom, DOOR_ROW).mul(doorPast));
+  const doorCone = select(nodes.doorOn.greaterThan(0), nodes.doorOn.mul(doorHit.z).mul(doorSeen), 0);
+  return select(on.equal(0), doorCone, columnCone);
 }
 
 /** What's left of a pale surface as it thins (`PALE` in seeThrough.ts): less of it, by its albedo's luminance. */

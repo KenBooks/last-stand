@@ -1439,7 +1439,7 @@ function seenOnly(colour: any, depthNode: any): any {
   // (past the door he sees through, the room as seen from the doorway: `seeThroughDoor` in sight.ts)
   const door = reference('value', 'vec4', SIGHT.uSightDoor);
   const fromDoor = place.xz.sub(door.xy);
-  const pastDoor = smoothstep(0, DOOR_SOFT, dot(fromDoor, door.zw)).mul(reference('value', 'float', SIGHT.uSightDoorOn));
+  const pastDoor = smoothstep(-DOOR_SOFT, 0, dot(fromDoor, door.zw)).mul(reference('value', 'float', SIGHT.uSightDoorOn));
   // (the doorway's row read only with a door seen through: the same pixels, half the lookups elsewhere)
   const doorOn = reference('value', 'float', SIGHT.uSightDoorOn);
   const throughDoor = select(doorOn.greaterThan(0), seenAround(fromDoor, DOOR_ROW).mul(pastDoor), 0);

@@ -1,11 +1,9 @@
 // `lab village`'s hall of heroes opening for him from above, each from play:
 //
-// `doorConeOpens` ("here should open the wall above hero, so user can see in the cone up"): stood at its door, looking
-// in, the floor he sees through it shows through the wall over it, the cone held shut showing none; and the room is
-// seen as from the doorway ("is hall is tall, I need to see tall from top down, from entrance, so no slanted walls that
-// make it small"), so the floor beside the door, under the front wall's inner face, which his own rays can't reach past
-// the jambs (`seenShareAt` with the doors held off, `holdDoorsOff`), shows too: by his rays alone, two dark wedges
-// stood there as slanted walls. `--canary`: the doors held off, as it was.
+// `doorConeOpens`: stood at the hall's door looking in from outside, `hallFront` and `hallBeam` open along his cone of view
+// (`doorFadeShare >= 0.5`) while whole-wall thinning stays off (`hallFront` 0.00), so the aisle marks show through the
+// open doorway (`>= 75%`) and doorway rays leave the wings beside the door unseen (`<= 25%`). `--canary`: holds the
+// doorway cone shut (`holdDoorMiddleOff`) and casts doorway rays without his line of sight (`holdDoorWedgeOff`).
 //
 // `heroSeenPastHall` ("and here cannot see hero"): stood outside its side wall with the camera over its room, he shows
 // through that wall. `--canary`: its walls held whole.
@@ -17,13 +15,13 @@ import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
-import { holdHallWallsNone, holdSeenFloorWalls } from '../../../src/game/village';
+import { holdDoorMiddleOff, holdHallWallsNone } from '../../../src/game/village';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
 import {
-  holdPropHole, holdPropsThinned, wholeShare,
+  doorFadeShare, holdPropHole, holdPropsThinned, wholeShare,
 } from '../../../src/core/seeThrough';
 import { HALL, TERRACE } from '../../../src/data/village';
-import { holdDoorsOff, seenShareAt } from '../../../src/core/sight';
+import { holdDoorWedgeOff, seenShareAt } from '../../../src/core/sight';
 import { groundHeight } from '../../../src/world/ground';
 import { drawFrame, type Canvas } from './light';
 import { changedShare, viewBy } from './villageHallCull';
@@ -31,9 +29,8 @@ import { hisPixels, shownOf } from './villageHeroInView';
 import type { LightsChecked } from './villageLights';
 
 // (4 s: what thins fades over about a second, `CUT_AWAY_FADE`, and is read once it's all but there)
-/** the frames he's given to settle, the frames a hold takes to reach what's let go of its depth, and the hour */
+/** the frames he's given to settle, and the hour */
 const SETTLE = 240;
-const HOLD_TAKES = 90;
 const HOUR = 12;
 /** a mark's side and its height over the floor (m), how little green against red and blue shows it, and how bright */
 const MARK = 0.5;
@@ -43,18 +40,15 @@ const MARK_BRIGHT = 0.3;
 /** how far out from the door's outer face he stands (m), and looking in: the camera's on his side of it */
 const AT_DOOR = 0.6;
 export const LOOKING_IN = Math.PI;
-/** how far in from the door the floor's marked, down its middle (m); where aside of that it's marked (m aside, m in),
- *  kept where his own rays see none of a mark (`UNSEEN`), and the least of those; and the least shown, the most shown
- *  with the cone held shut */
+/** how far in from the door the floor's marked, down its middle (m); where aside of that it's checked (m aside, m in);
+ *  most wing floor seen; least aisle seen; and most marked floor shown past the solid front wall */
 const FLOOR_IN = [6, 7, 8];
-const ASIDE_ACROSS = [4.5, 5, 5.25];
-const ASIDE_IN = [0.4, 0.6];
-const UNSEEN = 0.05;
-const LEAST_ASIDE = 4;
+const ASIDE_ACROSS = [5.0, 5.25];
+const ASIDE_IN = [0.1];
+const MOST_WING_SEEN = 0.25;
+const LEAST_AISLE_SEEN = 0.9;
 export const LEAST_SHOWN = 0.75;
-/** how far the cone must have opened by then */
-const LEAST_OPEN = 0.5;
-const MOST_SHUT = 0.25;
+const LEAST_DOOR_FADE = 0.5;
 /** where he stands past the hall's east wall, the camera over its room, and the least of him shown */
 const PAST_WALL = HALL.half + 1;
 const PAST_WALL_Z = -24;
@@ -66,25 +60,6 @@ const BY_WALL = HALL.inHalf - 0.4;
 const BY_WALL_Z = -19.5;
 const LOOKING_WEST = -Math.PI / 2;
 const MOST_DOTS = 0.002;
-
-/** The floor's places aside of the door his own rays see none of: a wedge under the front wall's inner face either
- *  side, past the jambs (read with the doors held off, as `seenShareAt` reads the rays as last cast). */
-function unseenAside(): THREE.Vector2[] {
-  const places: THREE.Vector2[] = [];
-  for (const across of ASIDE_ACROSS) {
-    for (const side of [-1, 1]) {
-      for (const inside of ASIDE_IN) {
-        const x = TERRACE.x + side * across;
-        const z = HALL.inFront - inside;
-        if (seenShareAt(x, z) <= UNSEEN) places.push(new THREE.Vector2(x, z));
-      }
-    }
-  }
-  if (places.length < LEAST_ASIDE) {
-    throw new Error(`lab: village: only ${places.length} places aside of the door he can't see`);
-  }
-  return places;
-}
 
 /** The hero stood at (x, z), the camera turned to `facing`, let settle. */
 export async function standFacing(lab: Lab, x: number, z: number, facing: number): Promise<void> {
@@ -144,38 +119,44 @@ export async function fromAboveAtNoon<T>(lab: Lab, read: () => Promise<T>): Prom
   }
 }
 
-/** At the hall's door, the floor he sees through it shown through the wall over it, the room's floor beside the door
- *  too, as seen from the doorway; none with the cone held shut. */
+/** At the hall's door outside, only the middle bay above the doorway thins so the aisle shows while `hallFront`'s wings
+ *  stay solid and doorway sight rays leave the wings beside the door unseen. */
 export async function doorConeOpens(lab: Lab, canary: boolean): Promise<LightsChecked> {
   return fromAboveAtNoon(lab, async () => {
-    await standFacing(lab, TERRACE.x, HALL.door + AT_DOOR, LOOKING_IN);
-    if (wholeShare('hallFront') < LEAST_OPEN) {
-      throw new Error(`lab: village: the cone through the door never opened (${wholeShare('hallFront').toFixed(2)})`);
-    }
+    holdDoorMiddleOff(canary);
+    holdDoorWedgeOff(canary);
     const inCone = FLOOR_IN.map((inside) => floorMark(TERRACE.x, HALL.inFront - inside));
-    holdDoorsOff(true);
-    await lab.step(SETTLE);
-    const aside = unseenAside().map((place) => floorMark(place.x, place.y));
-    holdDoorsOff(canary);
-    await lab.step(SETTLE);
-    const shown = shownMarks(lab, inCone);
-    const asideShown = shownMarks(lab, aside);
-    const shot = canary ? null : await lab.screen('at the door: the room as seen from the doorway', []);
-    holdSeenFloorWalls(true);
-    await lab.step(HOLD_TAKES);
-    const shutShown = shownMarks(lab, inCone);
-    const shutShot = canary ? null : await lab.screen('at the door, the cone held shut', []);
-    holdSeenFloorWalls(false);
-    holdDoorsOff(false);
-    for (const mark of [...inCone, ...aside]) G.scene.remove(mark);
-    const line = `at the hall's door, the floor past it shown through the wall: ${(shown * 100).toFixed(0)}% `
-      + `(at least ${LEAST_SHOWN * 100}%; shut ${(shutShown * 100).toFixed(0)}%, at most ${MOST_SHUT * 100}%), `
-      + `the floor beside the door, past the jambs, ${(asideShown * 100).toFixed(0)}% `
-      + `(at least ${LEAST_SHOWN * 100}%)`;
-    const wrong = shown < LEAST_SHOWN || asideShown < LEAST_SHOWN || shutShown > MOST_SHUT;
-    if (canary) return { lines: [line], problems: [], caught: wrong, moments: [] };
-    const moments = shot && shutShot ? [shot, shutShot] : [];
-    return { lines: [line], problems: wrong ? [line] : [], caught: null, moments };
+    try {
+      await standFacing(lab, TERRACE.x, HALL.door + AT_DOOR, LOOKING_IN);
+      const frontShare = wholeShare('hallFront');
+      const doorShare = doorFadeShare();
+      const shown = shownMarks(lab, inCone);
+      const shot = canary ? null : await lab.screen('at the door: cone-of-view doorway open, lower wings solid', []);
+      const aisleMin = Math.min(...FLOOR_IN.map((inside) => seenShareAt(TERRACE.x, HALL.inFront - inside)));
+      let wingMax = 0;
+      for (const across of ASIDE_ACROSS) {
+        for (const side of [-1, 1]) {
+          for (const inside of ASIDE_IN) {
+            wingMax = Math.max(wingMax, seenShareAt(TERRACE.x + side * across, HALL.inFront - inside));
+          }
+        }
+      }
+      const line = `at the hall's door, hallFront ${frontShare.toFixed(2)} (expected 0), doorMiddle ${doorShare.toFixed(2)}, `
+        + `floor past doorway shown: ${(shown * 100).toFixed(0)}% (at least ${LEAST_SHOWN * 100}%), aisle seen `
+        + `${(aisleMin * 100).toFixed(0)}% (at least ${LEAST_AISLE_SEEN * 100}%), wing floor seen `
+        + `${(wingMax * 100).toFixed(0)}% (at most ${MOST_WING_SEEN * 100}%)`;
+      const wrong = (!canary && (frontShare > 0 || doorShare < LEAST_DOOR_FADE)) || shown < LEAST_SHOWN
+        || aisleMin < LEAST_AISLE_SEEN || wingMax > MOST_WING_SEEN;
+      if (canary) {
+        return { lines: [line], problems: [], caught: shown < LEAST_SHOWN && wingMax > MOST_WING_SEEN, moments: [] };
+      }
+      const moments = shot ? [shot] : [];
+      return { lines: [line], problems: wrong ? [line] : [], caught: null, moments };
+    } finally {
+      for (const mark of inCone) G.scene.remove(mark);
+      holdDoorMiddleOff(false);
+      holdDoorWedgeOff(false);
+    }
   });
 }
 

@@ -15,8 +15,8 @@ export interface SightWall { x0: number; z0: number; x1: number; z1: number }
 export interface SightRoof { x: number; z: number; halfW: number; halfD: number; cos: number; sin: number }
 
 /** A door his sight passes through into a room: its middle on its wall's line, the way into the room (a unit), its half
- *  width, and how far out from it he looks in through it (m). */
-export interface SightDoor { x: number; z: number; nx: number; nz: number; half: number; reach: number }
+ *  width, how far out from it he looks in through it (m), and optionally the doorway passage thickness (m). */
+export interface SightDoor { x: number; z: number; nx: number; nz: number; half: number; reach: number; deep?: number }
 
 /** how many rays go round him, and how far one goes that meets nothing (m) */
 const RAYS = 1024;
@@ -53,7 +53,7 @@ const WEDGE_FROM = 0.3;
 /** how far aside of a door he may stand and still look in through it: its half width and this share of how far out he
  *  stands. Stood against its wall beside it he saw the doorway edge on, and the whole room came out of the fog, the
  *  portico's column before him cleared with it (`lab village --only columnsStayGhosts`) */
-const DOOR_ASIDE = 0.5;
+const DOOR_ASIDE = 0.25;
 // (each ray read alone: filtered, two rays' bands in the middle of their own fades met as a third that neither was)
 sightTexture.minFilter = sightTexture.magFilter = THREE.NearestFilter;
 sightTexture.wrapS = THREE.RepeatWrapping;
@@ -170,6 +170,8 @@ let doorCast: SightDoor | null = null;
 let doorsHeldOff = false;
 /** whether a harness has the door's rays cast without his line of sight through it, as they were */
 let wedgeLeft = false;
+/** whether a harness has the door's wedge shift horizontally toward the doorway center even when standing near a jamb */
+let wedgeCenteredHeld = false;
 let heldOff = false;
 /** whether a harness has the rays shown as cast, at once and one read a pixel, as they were */
 let heldSharp = false;
@@ -194,6 +196,12 @@ export function sightWalls(
 /** For a harness (tools/lab): the doors left out, his rays alone telling what he sees past one, as they did. */
 export function holdDoorsOff(off: boolean): void {
   doorsHeldOff = off;
+}
+
+/** For a harness (tools/lab): the door's wedge shifted toward the doorway center at the jambs, as it was. */
+export function holdDoorWedgeCentered(held: boolean): void {
+  wedgeCenteredHeld = held;
+  doorCast = null;
 }
 
 /** For a harness (tools/lab): the door's rays cast as from the doorway alone, his line of sight through it left out, as
@@ -315,40 +323,72 @@ function doorSeenFrom(x: number, z: number): SightDoor | null {
 }
 
 /** How far a ray from (x, z) along (dx, dz) goes before it leaves what's seen from (hx, hz) through the door: the wedge
- *  between the lines from there through its jambs. */
-function wedgeReach(door: SightDoor, hx: number, hz: number, x: number, z: number, dx: number, dz: number): number {
+ *  between the lines from there through its outer and (when `withDepth`) inner jambs. */
+function wedgeReach(
+  door: SightDoor,
+  hx: number,
+  hz: number,
+  x: number,
+  z: number,
+  dx: number,
+  dz: number,
+  withDepth: boolean,
+): number {
   let nearest = FAR;
-  for (const side of [-1, 1]) {
-    const ex = door.x - door.nz * door.half * side - hx;
-    const ez = door.z + door.nx * door.half * side - hz;
-    const facing = ex * dz - ez * dx;
-    if (Math.abs(facing) < 1e-6) continue;
-    const along = -(ex * (z - hz) - ez * (x - hx)) / facing;
-    if (along > 0 && along < nearest) nearest = along;
+  const depths = withDepth && door.deep ? [0, door.deep] : [0];
+  for (const depth of depths) {
+    for (const side of [-1, 1]) {
+      const ex = door.x - door.nz * door.half * side + door.nx * depth - hx;
+      const ez = door.z + door.nx * door.half * side + door.nz * depth - hz;
+      if (withDepth) {
+        // (jambs at or behind (hx, hz) along the doorway cannot block forward sight through it)
+        if (ex * door.nx + ez * door.nz <= 0.01) continue;
+        const inX = side * ez;
+        const inZ = -side * ex;
+        const s0 = (x - hx) * inX + (z - hz) * inZ;
+        if (s0 <= 0) return 0;
+        const sd = dx * inX + dz * inZ;
+        if (sd < -1e-6) {
+          const along = s0 / -sd;
+          if (along < nearest) nearest = along;
+        }
+      } else {
+        const facing = ex * dz - ez * dx;
+        if (Math.abs(facing) < 1e-6) continue;
+        const along = -(ex * (z - hz) - ez * (x - hx)) / facing;
+        if (along > 0 && along < nearest) nearest = along;
+      }
+    }
   }
   return nearest;
 }
 
-/** The door's rays cast into its second row, from just inside its middle, each as far as the room's walls and his line
- *  of sight through the door from (hx, hz) let it: past the jambs' lines from him he sees none of the room (from play,
- *  "new thinning ignores line of sight": from the stair the whole room came out of the fog and the wall over the door
- *  opened from end to end). */
+/** The door's rays cast into its second row, from just inside its inner jambs, each as far as the room's walls and
+ *  his line of sight through its jambs from (hx, hz) let it: past the jambs' lines from him he sees none of the room
+ *  (from play, "new thinning ignores line of sight": from the stair the whole room came out of the fog and the wall
+ *  over the door opened from end to end). */
 function castDoor(door: SightDoor, hx: number, hz: number): void {
-  const x = door.x + door.nx * DOOR_IN;
-  const z = door.z + door.nz * DOOR_IN;
+  const deep = door.deep ?? 0;
+  const x = door.x + door.nx * (deep + DOOR_IN);
+  const z = door.z + door.nz * (deep + DOOR_IN);
   const row = RAYS * 4;
-  // (seen from `WEDGE_FROM` nearer the door than him: from the doorway the room beside the door too;
-  // from the stair the wedge through the jambs; within it of the door, the whole room)
-  const out = -((hx - door.x) * door.nx + (hz - door.z) * door.nz);
-  const fromDoor = out > WEDGE_FROM ? (out - WEDGE_FROM) / out : 0;
-  const ax = door.x + (hx - door.x) * fromDoor;
-  const az = door.z + (hz - door.z) * fromDoor;
-  const wedged = !wedgeLeft && fromDoor > 0;
+  let ax = hx;
+  let az = hz;
+  let wedged = !wedgeLeft;
+  const withDepth = !wedgeCenteredHeld;
+  if (wedgeCenteredHeld) {
+    // (legacy pull toward doorway middle along with outer-only jamb check, for `--canary`)
+    const out = -((hx - door.x) * door.nx + (hz - door.z) * door.nz);
+    const fromDoor = out > WEDGE_FROM ? (out - WEDGE_FROM) / out : 0;
+    ax = door.x + (hx - door.x) * fromDoor;
+    az = door.z + (hz - door.z) * fromDoor;
+    wedged = !wedgeLeft && fromDoor > 0;
+  }
   for (let i = 0; i < RAYS; i++) {
     const angle = ((i + 0.5) / RAYS - 0.5) * Math.PI * 2;
     const dx = Math.cos(angle);
     const dz = Math.sin(angle);
-    const seen = Math.min(rayReach(x, z, dx, dz), wedged ? wedgeReach(door, ax, az, x, z, dx, dz) : FAR);
+    const seen = Math.min(rayReach(x, z, dx, dz), wedged ? wedgeReach(door, ax, az, x, z, dx, dz, withDepth) : FAR);
     const reach = THREE.DataUtils.toHalfFloat(seen);
     strip[row + i * 4] = reach;
     strip[row + i * 4 + 1] = reach;
@@ -418,7 +458,7 @@ function seenThroughDoorAt(x: number, z: number): number {
   if (on <= 0) return 0;
   const dx = x - door.x;
   const dz = z - door.y;
-  const past = THREE.MathUtils.smoothstep(dx * door.z + dz * door.w, 0, DOOR_SOFT);
+  const past = THREE.MathUtils.smoothstep(dx * door.z + dz * door.w, -DOOR_SOFT, 0);
   return past > 0 ? seenAround(dx, dz, 1) * past * on : 0;
 }
 
@@ -495,7 +535,7 @@ export const SIGHT_GLSL = /* glsl */`
     // (past the door he sees through, the room as seen from the doorway: \`seeThroughDoor\`)
     if (uSightDoorOn > 0.0) {
       vec2 fromDoor = place.xz - uSightDoor.xy;
-      float pastDoor = smoothstep(0.0, ${DOOR_SOFT.toFixed(2)}, dot(fromDoor, uSightDoor.zw));
+      float pastDoor = smoothstep(${(-DOOR_SOFT).toFixed(2)}, 0.0, dot(fromDoor, uSightDoor.zw));
       if (pastDoor > 0.0) open = max(open, seenAround(fromDoor, ${DOOR_ROW.toFixed(2)}) * pastDoor * uSightDoorOn);
     }
     // (the ground seen through a roof is by the rays, green where he sees it, the owner's choice: taken as unseen
