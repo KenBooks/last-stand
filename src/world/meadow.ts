@@ -13,6 +13,7 @@ import { WEBGPU } from '../core/webgpu';
 import { RUNNING } from '../core/rendererChoice';
 import { rustLook } from '../engine/custom';
 import { bladeLook, swardLook } from '../engine/looks/meadow';
+import { ONE_GRASS, oneBand } from './meadowOne';
 import { bladeNodes, swardColorNode } from './meadowNodes';
 import * as THREE from 'three';
 import { canvasOf, ctx2d, readCtx2d } from '../core/textures';
@@ -705,7 +706,17 @@ export function holdMeadowFromAbove(on: boolean | null): void {
  *  developer mode's free camera): it follows the game's own camera's height and reach, and flown high over the village
  *  the grass stood in a circle with the meadow past it bare, from play, "in free cam mode, there is a circle beyond
  *  which grass disappears, it should not". */
-const drawnFromAbove = (): boolean => aboveHeld ?? (fromAbove && !wholeView());
+// (nor under the Rust engine, whose grass is one for every view: `meadowOne.ts`)
+const drawnFromAbove = (): boolean => !ONE && (aboveHeld ?? (fromAbove && !wholeView()));
+
+/** whether the grass is one for every view and zoom (`meadowOne.ts`): the Rust engine's */
+const ONE = RUNNING.rust;
+/** the camera's height over the ground and the level's reach, as a ring was last drawn (the engine's look reads
+ *  them: `OneNow`) */
+const oneNow = { high: 0, reach: ONE_GRASS.reach, least: ONE_GRASS.least };
+const _eye3 = new THREE.Vector3();
+/** a reach past any distance: all the grass kept (m) */
+const WHOLE_KEPT = 1e5;
 
 /** the meadow's half side (m), and how far the last ring reaches in a whole view (m): from anywhere on the meadow to
  *  its far corner, so all of it is drawn wherever the rings' middle is */
@@ -778,7 +789,7 @@ function bladeMaterial(u: RingUniforms, combed: boolean, ring: string): THREE.Me
     if (RUNNING.rust) {
       rustLook(m, bladeLook(u, combed, {
         widthInCells: WIDTH_IN_CELLS, grows: BLADE_GROWS, strandCut: STRAND_CUT, strandsRise: STRANDS_RISE,
-      }, () => !tufts));
+      }, () => !tufts, ONE ? oneNow : null));
     }
     return m;
   }
@@ -961,6 +972,17 @@ export function focusOf(camera: THREE.Camera, out: THREE.Vector2): THREE.Vector2
   return out.set(p.x + _forward.x * along, p.z + _forward.z * along);
 }
 
+/** Ring `k`'s band on the ground round the camera's foot for the one grass (`oneBand`), the camera's place left
+ *  in `_eye3` and what the look reads in `oneNow`. */
+function oneBandNow(camera: THREE.Camera, k: number): { from: number; to: number } {
+  _eye3.setFromMatrixPosition(camera.matrixWorld);
+  oneNow.high = Math.max(0, _eye3.y);
+  // (a level that spreads the grass keeps all of it less far: the same blades, fewer of them sooner)
+  oneNow.reach = ONE_GRASS.reach / spread;
+  oneNow.least = ONE_GRASS.least / (spread * spread);
+  return oneBand(k, oneNow.high, oneNow.reach, oneNow.least);
+}
+
 /** The meadow's grass over `mask`'s square, swaying on the game's clock (an updater keeps the time). */
 export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, updaters: Updater[]): THREE.Group {
   const group = new THREE.Group();
@@ -1006,7 +1028,11 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
     else bandOf(u.uBand.value, k, HAND_OVER);
     rings.push(u);
     // (a sheet of strands is a card too, where its blade had two segments or more: its strands are cut as it's shaded)
-    const full = ring.cell > RINGS[0].cell && ring.segs >= 2 ? cardGeometry() : bladeGeometry(ring.segs);
+    // (one grass: every ring's blades are the first's, whole)
+    const carded = !ONE && ring.cell > RINGS[0].cell && ring.segs >= 2;
+    // (and past the first rings of one segment: 20 m off and more, a blade's bend hardly shows)
+    const segs = ONE && ring.cell > RINGS[0].cell ? 1 : ring.segs;
+    const full = carded ? cardGeometry() : bladeGeometry(segs);
     if (above) {
       aboveGeometries.full = full;
       aboveGeometries.spread = bladeGeometry(ABOVE_SPREAD_SEGS);
@@ -1039,8 +1065,18 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
         geo.instanceCount = 0;
         return;
       }
-      const focus = focusOf(camera, u.uFocus.value).add(focusMoved);
-      eyeOf(camera, above, u.uEye.value);
+      // (one grass: the rings round the camera's foot, each the band of its distances from the camera)
+      const one = ONE && !wholeView() ? oneBandNow(camera, k) : null;
+      // (in a whole view the rings reach as they did, round the sight's end, every blade of each kept)
+      if (ONE && !one) oneNow.reach = WHOLE_KEPT;
+      if (one && one.to <= one.from) {
+        geo.instanceCount = 0;
+        return;
+      }
+      const focus = one
+        ? u.uFocus.value.set(_eye3.x, _eye3.z).add(focusMoved)
+        : focusOf(camera, u.uFocus.value).add(focusMoved);
+      eyeOf(camera, above || (ONE && fromAbove), u.uEye.value);
       // (the last ring out to all the meadow in a whole view, whole to its end: uniforms and a count alone, its own
       // put back as the view is let go)
       const whole = last && wholeView();
@@ -1055,7 +1091,15 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
         u.uS.value = cellsATile(ring);
         ownBand = null;
       }
-      const reach = whole ? wholeReach() : near ? ABOVE_NEAR.radius : ring.radius;
+      if (ONE) {
+        u.uCell.value = ring.cell;
+        u.uStrandsBy.value = 1;
+      }
+      if (one) {
+        u.uBand.value.set(one.from, one.from, one.to, one.to);
+        u.uS.value = Math.ceil((Math.ceil((one.to * 2) / u.uCell.value) + 1) / TILES);
+      }
+      const reach = whole ? wholeReach() : one ? one.to : near ? ABOVE_NEAR.radius : ring.radius;
       if (above) {
         const ringCell = near ? ABOVE_NEAR.cell : ring.cell;
         // (near the ground a card a cell, one tuft each: at the rings' spread the ground showed between them, from
@@ -1102,7 +1146,7 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
               // (from inside the hall of heroes, only what its doorway shows)
               if (hiddenByDoorway(_box)) continue;
               // (nor behind a cottage: over the shoulder and through the eyes, where what's built never thins)
-              if (!above && hiddenBehind(_box, camera.position)) continue;
+              if (!above && !(ONE && fromAbove) && hiddenBehind(_box, camera.position)) continue;
               const x0 = (ox + tx * S) * cell, z0 = (oz + ty * S) * cell;
               if (!anyGrass(x0, z0, x0 + w, z0 + w)) continue;
               if (WEBGPU) u.uTiles.value[listed].set(tx * S, ty * S);

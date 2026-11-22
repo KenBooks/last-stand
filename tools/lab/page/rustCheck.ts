@@ -6,6 +6,7 @@
 import { plantedFaults } from './rustFaults';
 import { glowGoneInTheFog } from './rustSight';
 import { sunCastsShadows } from './rustSun';
+import { grassBandsEdgeToEdge, grassDrawnByItsRings } from './rustGrass';
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
@@ -495,6 +496,8 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(viewOffsetKept());
       checks.push(await lampShadows(lab, bridge));
       checks.push(lightCache(bridge));
+      checks.push(grassBandsEdgeToEdge());
+      checks.push(grassDrawnByItsRings());
       checks.push(await sunCastsShadows(lab));
       checks.push(await glowGoneInTheFog(lab));
       checks.push(await hallFromAbove(lab, bridge));

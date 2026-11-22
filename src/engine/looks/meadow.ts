@@ -4,10 +4,16 @@ import type * as THREE from 'three';
 import type { BladeNumbers, BladeUniforms } from '../../world/meadowNodes';
 import type { RustLook, RustShader } from '../custom';
 import { TUNE } from '../globals';
+import { ONE_GRASS } from '../../world/meadowOne';
+
+/** The one grass's numbers as a ring is drawn (`world/meadowOne.ts`): the camera's height over the ground and
+ *  how far from it all the grass is kept, and the least share of it kept however far. */
+export interface OneNow { high: number; reach: number; least: number }
 
 /** where a ring's numbers are in `m.c`, in floats */
 const AT = { origin: 0, focus: 2, eye: 4, cell: 6, wider: 7, band: 8, combed: 12, side: 13, byStrand: 14, strandsBy: 15,
-  time: 16, half: 17, widthInCells: 18, grows: 19, strandCut: 20, strandsRise: 21, cuts: 22, unshaded: 23, plain: 24 };
+  time: 16, half: 17, widthInCells: 18, grows: 19, strandCut: 20, strandsRise: 21, cuts: 22, unshaded: 23, plain: 24,
+  one: 25, reach: 26, fall: 27, high: 28, least: 29 };
 
 const SHARED = /* wgsl */ `
 fn blade_hash(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
@@ -61,8 +67,12 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   let origin = m.c[0].xy;
   let focus = m.c[0].zw;
   let eye = m.c[1].xy;
-  let cell = m.c[1].z;
-  let wider = m.c[1].w;
+  // (one grass for every view, world/meadowOne.ts: a ring's cell is as many of the finest as its cells are wider,
+  // and its blade that cell's own, as wide as the first ring's)
+  let one = m.c[6].y > 0.5;
+  let cells_wide = m.c[1].w;
+  let cell = select(m.c[1].z, m.c[1].z / cells_wide, one);
+  let wider = select(cells_wide, 1.0, one);
   let band = m.c[2];
   let combed_now = m.c[3].x;
   let side = max(u32(m.c[3].y), 1u);
@@ -76,7 +86,8 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   let pair = bones[(*v).list + listed / 8u][(listed % 8u) / 2u];
   let tile = select(pair.xy, pair.zw, listed % 2u == 1u);
   let within = instance % (side * side);
-  let cell_at = origin + tile + vec2f(f32(within % side), f32(within / side));
+  let ring_cell = origin + tile + vec2f(f32(within % side), f32(within / side));
+  let cell_at = select(ring_cell, ring_cell * cells_wide, one);
   let h = blade_seed(cell_at);
   let first = (cell_at + h.xy) * cell;
   // tufts: the blades pulled towards a centre on a coarse grid
@@ -86,7 +97,13 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   let tuft = blade_hash(tuft_cell + 7.3);
   let root = mix(first, tuft_at, mix(0.1, 0.45, blade_hash(tuft_cell + 3.1)));
   let away = length(root - focus);
-  let in_band = smoothstep(band.x, band.y, away) * (1.0 - smoothstep(band.z, band.w, away));
+  var in_band = 0.0;
+  if (one) {
+    // (a ring's edge is no hand-over: the blades either side of it are the same)
+    in_band = select(0.0, 1.0, away >= band.x && away < band.z);
+  } else {
+    in_band = smoothstep(band.x, band.y, away) * (1.0 - smoothstep(band.z, band.w, away));
+  }
   // (a blade out of its ring's band is drawn as nothing at its root: left here, ahead of the mask's reads and its
   // shape, which every vertex of every blade of a listed tile paid for)
   (*v).color = vec4f(1.0);
@@ -98,7 +115,20 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   let chance = smoothstep(0.08, 0.6, grass) * smoothstep(0.3, 0.7, grows) * mix(0.75, 1.0, smoothstep(0.25, 0.7, patchy));
   let by_strand = m.c[3].z * combed_now * step(1.5, wider);
   let share = fract(h.z * 3.17) * (1.0 - grows_over);
-  let ring_on = mix(smoothstep(share, share + grows_over, in_band), step(0.001, in_band), by_strand);
+  var ring_on = mix(smoothstep(share, share + grows_over, in_band), step(0.001, in_band), by_strand);
+  if (one) {
+    // (the share of the grass kept this far from the camera, and the blade's rank among it: one in four of a
+    // grid's cells is the next grid's too, and theirs are the lowest ranks, so a ring of wider cells holds every
+    // blade still kept where it draws. A blade grows as the share passes its rank.)
+    let far = length(vec2f(away, m.c[7].x));
+    let kept = max(min(pow(m.c[6].z / max(far, 0.01), m.c[6].w), 4.0), m.c[7].y);
+    let at = vec2i(cell_at);
+    let level = min(countTrailingZeros(bitcast<u32>(at.x) | bitcast<u32>(at.y)), 3u);
+    let most = pow(0.25, f32(level));
+    let least = select(most * 0.25, 0.0, level == 3u);
+    let rank = mix(least, most, fract(h.z * 3.17));
+    ring_on = smoothstep(rank, rank * 1.3, kept);
+  }
   let shown = smoothstep(h.z * 0.85, h.z * 0.85 + 0.15, chance) * ring_on;
   // (and one the mask or its ring's hand-over drops: the same)
   if (shown <= 0.0) { (*v).position = vec3f(root.x, 0.0, root.y); return; }
@@ -198,7 +228,8 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 };
 
 /** A ring's blades: its uniforms as `world/meadow.ts` sets them when its mesh is about to be drawn. */
-export function bladeLook(u: BladeUniforms, combed: boolean, numbers: BladeNumbers, plain: () => boolean): RustLook {
+export function bladeLook(u: BladeUniforms, combed: boolean, numbers: BladeNumbers, plain: () => boolean,
+  one: OneNow | null): RustLook {
   return {
     shader: BLADES,
     maps: [u.uMeadow.value],
@@ -218,6 +249,9 @@ export function bladeLook(u: BladeUniforms, combed: boolean, numbers: BladeNumbe
       out[AT.cuts] = combed ? 1 : 0;
       out[AT.unshaded] = TUNE.grassShaded > 0 ? 0 : 1;
       out[AT.plain] = plain() && TUNE.grassPlain > 0 ? 1 : 0;
+      out[AT.one] = one ? 1 : 0;
+      out[AT.reach] = one?.reach ?? 0; out[AT.fall] = ONE_GRASS.fall; out[AT.high] = one?.high ?? 0;
+      out[AT.least] = one?.least ?? 0;
     },
     // (the tiles drawn, a pair of floats each: any number of them, where the numbers held 80, so the tiles were
     // 9 to 21 m wide and every blade of one that touched the view was sent to be dropped as it was placed)
