@@ -214,3 +214,24 @@ Read, not fixed:
   movers' lamps 0.6); the sun's shadow 1.0 (was 1.8), the bloom 1.3, the grass 1.1. The other 4.6 ms of the lit
   shading is in no part: the next thing to try is a lit shader made for the plain levels alone (its shine, coat,
   mirror and sheen compiled out, not branched round), picked at boot as three's WebGPU path picks its own.
+
+## 2026-11-22, night: the white ground's cause, the drop as he sets off
+
+- [x] The village's ground white, its grass gone (the evening's fix was not it): a material with a look of its own
+  asked for the look's maps as it was first met alone, and kept the blanks the game hands out while a worker paints
+  them. `Materials.lookId` asks every frame (`lab rustcheck`: a look's own map marked changed is taken again,
+  canary `rust.looksByMaps=0`). Confirmed in play. The lab's dev boot never showed it: its maps always came first.
+- [x] 70 frames a second as the hero set off, then 144: five shader modules (the other heroes' skills) first met
+  together behind the lobby. Handed over under the loading screen (`otherHeroesSkillsAhead`). `npm run stalls --
+  --scenario walks --url "this?village=1" --return`: worst frame 222 ms to 28. A pipeline or a shader first asked
+  for in play is said among a report's boot notes (`PIPELINES.late`).
+- [ ] The crypt entered from the village, a production boot (`stalls --scenario boot --url "this?village=1"`): its
+  east path 126 of 255, its west 34, where WebGL's (`&renderer=webgl`) read 10 and 12. Not the baked light
+  (`&lightCache=0`: the same), not the maps (the engine holds them as painted). Runs with `rust.points=0` and
+  `rust.shadows=0` read dark, but were pictured with the hero already dead and another camera: they prove nothing.
+  Next: picture both renderers at the same moment (`--before` a fixed wait from Start).
+- [ ] The phone over the shoulder in the village at Very low (J0RW-1EP5, SSB2-NWEB): 16.8 ms, 60 fps; 40 to 72
+  walking; 509 to 545 thousand triangles. The grass 8.4 ms taken out, its shading 1.7 of that: the rest is placing
+  blades, and the first two rings (to 16 m) are the finest cells whatever share is kept, so a blade dropped by its
+  rank still costs its vertices. The lit shading's plain levels already skip their costlier parts by branches: a
+  shader compiled for them alone saves little unless the sun's highlight is made plainer too, which changes the look.
