@@ -165,6 +165,13 @@ function engineParts(): ScenePart[] {
     tunedPart('the flames at a quarter of the scene\'s pixels', 'lowRes', 0),
     tunedPart('the scene\'s depth drawn first, what\'s opaque shaded once a pixel', 'depthFirst', 0),
     tunedPart('the normal, roughness and glow maps read', 'debug', 4, 0),
+    // (the lit shading's own parts, each a look of the engine that leaves one out: Bulwark, lit.wgsl `look`. The
+    // S25's lit shading was 7.1 ms of a 13.8 ms frame at Low in the square, 3.4 of it the lights', the sun's shadow
+    // and the maps: what the rest is, the device says)
+    tunedPart('the lit shading: the baked light of the still lamps', 'debug', 5, 0),
+    tunedPart('the lit shading: the sun, its light and the reads of its shadow', 'debug', 6, 0),
+    tunedPart('the lit shading: the lamps taken by the shadows of what moves', 'debug', 7, 0),
+    tunedPart('the lit shading: the fog', 'debug', 8, 0),
   ];
 }
 
