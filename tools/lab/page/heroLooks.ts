@@ -19,6 +19,7 @@ import { chooseLooks, lookHead, pickLook, profileLook, readyLook } from '../../.
 import { loadProfile } from '../../../src/loot/profile';
 import { saveSlot } from '../../../src/loot/saveSlots';
 import { lateCompiles, programsCompiledInGame } from '../../../src/core/shaders';
+import { frameRect } from '../../../src/core/renderer';
 import { cameraOn, countsOf, shoot, studio, type Shot } from './studio';
 import { opaqueRows } from './pixels';
 
@@ -108,11 +109,12 @@ function pixelsOf(lab: Lab, scene: THREE.Scene, camera: THREE.PerspectiveCamera)
   renderer.toneMapping = toneMapping;
   lab.drawing = drawing;
   const gl = renderer.getContext();
-  const height = gl.drawingBufferHeight;
+  const frame = frameRect();
+  const height = frame.height;
   const width = Math.round(height * TILE_SHAPE);
-  const left = Math.round((gl.drawingBufferWidth - width) / 2);
+  const left = frame.left + Math.round((frame.width - width) / 2);
   const raw = new Uint8Array(width * height * 4);
-  gl.readPixels(left, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, raw);
+  gl.readPixels(left, frame.bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, raw);
   return { data: opaqueRows(raw, width, height).data, width, height };
 }
 

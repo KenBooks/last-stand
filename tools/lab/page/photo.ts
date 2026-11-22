@@ -17,7 +17,7 @@ import * as THREE from 'three';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { photoCamera, photoOn } from '../../../src/ui/photo';
-import { gradeUniforms, overFrame, showOverlays } from '../../../src/core/renderer';
+import { frameRect, gradeUniforms, overFrame, showOverlays } from '../../../src/core/renderer';
 import { GAME_VIGNETTE } from '../../../src/core/photoLook';
 import { programsCompiledInGame } from '../../../src/core/shaders';
 import { HIDDEN_LAYER } from '../../../src/core/layers';
@@ -341,12 +341,12 @@ async function photoTaken(lab: Lab, where: string, letterbox: boolean): Promise<
   await lab.step(READ_FRAMES);
   lab.drawing = false;
   const { name, image } = await caught;
-  const canvas = G.renderer.domElement;
+  const { width, height } = frameRect();
   const [top, middle] = rowsOf(image, [BAR_ROW, 0.5]);
   const problems: string[] = [];
   if (!PHOTO_NAME.test(name)) problems.push(`${where}: the photo was named "${name}"`);
-  if (image.width !== canvas.width || image.height !== canvas.height) {
-    problems.push(`${where}: the photo is ${image.width}x${image.height}, the canvas ${canvas.width}x${canvas.height}`);
+  if (image.width !== width || image.height !== height) {
+    problems.push(`${where}: the photo is ${image.width}x${image.height}, the canvas ${width}x${height}`);
   }
   if (middle.mean < LIT_LEAST) problems.push(`${where}: the photo's middle is black (${middle.mean.toFixed(1)})`);
   if (letterbox && top.brightest > BAR_DARKEST) {

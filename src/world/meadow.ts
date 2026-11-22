@@ -17,6 +17,7 @@ import { asGrass, type Updater } from './props';
 import { hiddenByDoorway } from './doorways';
 import { registerCull } from './culls';
 import { wholeView } from '../core/wholeView';
+import { frameRect } from '../core/renderer';
 
 /** The rings: each cell's size (m), how far out it's drawn (m) and the segments along each blade. */
 const RINGS = [
@@ -1017,7 +1018,7 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
     mesh.frustumCulled = false;
     mesh.receiveShadow = true;
     mesh.onBeforeRender = (renderer, _scene, camera) => {
-      viewHigh.value = renderer.getRenderTarget()?.height ?? renderer.domElement.height;
+      viewHigh.value = renderer.getRenderTarget()?.height ?? frameRect().height;
       const geo = mesh.geometry as THREE.InstancedBufferGeometry;
       // (none listed rather than hidden: a hidden mesh compiles nothing)
       // (from above, near the ground: the first ring's blades in the far ring's tiles; uniforms alone)

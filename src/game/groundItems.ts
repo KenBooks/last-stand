@@ -167,8 +167,7 @@ export function throwItem(item: Item, at?: { x: number; z: number }): void {
 const ray = new THREE.Raycaster(), floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), ndc = new THREE.Vector2(), hit = new THREE.Vector3();
 /** The floor under a point of the screen (client px), or null when it points above the horizon. */
 export function floorAt(cx: number, cy: number): { x: number; z: number } | null {
-  const r = G.renderer.domElement.getBoundingClientRect();
-  ndc.set(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+  ndc.set((cx / window.innerWidth) * 2 - 1, -(cy / window.innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, G.camera);
   return ray.ray.intersectPlane(floorPlane, hit) ? { x: hit.x, z: hit.z } : null;
 }

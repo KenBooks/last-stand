@@ -13,7 +13,7 @@ import { ARENA } from '../data/balance';
 import { HOUSES } from '../data/houses';
 import { isCoop } from '../net/role';
 import { isDown, wasPressed, input } from '../core/input';
-import { frameShot, showOverlays, bloomDrawn } from '../core/renderer';
+import { frameRect, frameShot, showOverlays, bloomDrawn } from '../core/renderer';
 import { applyPhotoLook, FILTER_NAMES, GRADE_LOOK_DRAWN, NEUTRAL_LOOK, PHOTO_FILTERS, type PhotoFilter,
   type PhotoLook } from '../core/photoLook';
 import { HIDDEN_LAYER } from '../core/layers';
@@ -605,11 +605,12 @@ export function photoName(at = new Date()): string {
 
 /** The frame as drawn copied onto a canvas of its size, the letterbox's bars over it. */
 function framed(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const { left, top, width, height } = frameRect();
   const out = document.createElement('canvas');
-  out.width = canvas.width;
-  out.height = canvas.height;
+  out.width = width;
+  out.height = height;
   const context = out.getContext('2d')!;
-  context.drawImage(canvas, 0, 0);
+  context.drawImage(canvas, left, top, width, height, 0, 0, width, height);
   const bar = Math.round(barShare(out.width, out.height) * out.height);
   if (state.letterbox && bar > 0) {
     context.fillStyle = '#000';

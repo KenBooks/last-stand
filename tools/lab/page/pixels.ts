@@ -3,6 +3,7 @@
 // frame drawn outside the game's own chain (a studio's, a look's) came out black. On WebGPU the canvas has no
 // `readPixels`: it's copied onto a 2D canvas in the same task as the draw, as the lab's pictures are.
 import { G } from '../../../src/state';
+import { frameRect } from '../../../src/core/renderer';
 import { WEBGPU } from '../../../src/core/webgpu';
 
 /** An area of the canvas, css px from its top left. */
@@ -15,20 +16,25 @@ export interface Area {
 
 /** The pixels of `area` just drawn on the canvas, as an opaque picture at the drawing buffer's own pixels. */
 export function readOpaque(area: Area): ImageData {
+  const frame = frameRect();
+  const ratio = frame.width / innerWidth;
   if (WEBGPU) {
-    const ratio = G.renderer.domElement.width / innerWidth;
-    const box = { left: area.left * ratio, top: area.top * ratio, width: area.width * ratio, height: area.height * ratio };
+    const box = {
+      left: frame.left + area.left * ratio,
+      top: frame.top + area.top * ratio,
+      width: area.width * ratio,
+      height: area.height * ratio,
+    };
     const image = webGpuPixels(box);
     for (let k = 3; k < image.data.length; k += 4) image.data[k] = 255;
     return image;
   }
   const gl = G.renderer.getContext();
-  const ratio = gl.drawingBufferWidth / innerWidth;
   const width = Math.round(area.width * ratio);
   const height = Math.round(area.height * ratio);
-  const left = Math.round(area.left * ratio);
+  const left = frame.left + Math.round(area.left * ratio);
   // (the drawing buffer's rows run from its bottom)
-  const bottom = gl.drawingBufferHeight - Math.round(area.top * ratio) - height;
+  const bottom = frame.bottom + frame.height - Math.round(area.top * ratio) - height;
   const pixels = new Uint8Array(width * height * 4);
   gl.readPixels(left, bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
   return opaqueRows(pixels, width, height);

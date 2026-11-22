@@ -285,8 +285,9 @@ function drawnBytes(lab: Lab, screen: Screen): Uint8Array {
     lab.drawing = drawing;
   }
   G.renderer.setRenderTarget(null);
+  const frame = renderer.frameRect();
   const bytes = new Uint8Array(screen.width * screen.height * 4);
-  gl.readPixels(0, 0, screen.width, screen.height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+  gl.readPixels(frame.left, frame.bottom, screen.width, screen.height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
   return bytes;
 }
 

@@ -8,6 +8,7 @@
 // message), and after it the form offers the picture to copy or save, as the clipboard holds one or the other.
 // What's typed is kept while the page lives, till a report is sent.
 import { G } from '../state';
+import { frameRect } from '../core/renderer';
 import { BUG_REPORT, REPORT_KINDS, type ReportKind } from '../data/bugReport';
 import { sfx } from '../core/audio';
 import { isCoop } from '../net/role';
@@ -111,14 +112,15 @@ export function bugReportAfterRender(): void {
   if (!shotWanted) return;
   shotWanted = false;
   const view = G.renderer.domElement;
-  if (!view.width || !view.height) { shotState(NO_SHOT, false); return; }
-  const k = Math.min(1, BUG_REPORT.shotSide / Math.max(view.width, view.height));
+  const { left, top, width, height } = frameRect();
+  if (!width || !height) { shotState(NO_SHOT, false); return; }
+  const k = Math.min(1, BUG_REPORT.shotSide / Math.max(width, height));
   const canvas = document.createElement('canvas');
-  canvas.width = Math.round(view.width * k);
-  canvas.height = Math.round(view.height * k);
+  canvas.width = Math.round(width * k);
+  canvas.height = Math.round(height * k);
   const ctx = canvas.getContext('2d');
   if (!ctx) { shotState(NO_SHOT, false); return; }
-  try { ctx.drawImage(view, 0, 0, canvas.width, canvas.height); } catch { shotState(NO_SHOT, false); return; }
+  try { ctx.drawImage(view, left, top, width, height, 0, 0, canvas.width, canvas.height); } catch { shotState(NO_SHOT, false); return; }
   void fittedJpeg(canvas).then((blob) => {
     if (!bugReportOpen()) return;
     if (!blob) { shotState(NO_SHOT, false); return; }
