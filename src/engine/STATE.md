@@ -185,3 +185,32 @@ Open:
 - [ ] Bulwark's `hidden` demo failed one run in three under a shared GPU by under ten pixels: given a tolerance,
   its cause not found.
 - [ ] HDR screens: not planned.
+
+## 2026-11-22, evening: the wall's cone, the white ground, the loading steps
+
+Fixed:
+
+- [x] The hall's front wall fogged from end to end with the hero before it (from play, "the wall that is fully
+  visible to player should not fog up"): the engine thinned by the room's width, as the game did before #760.
+  Bulwark's `see_sight_cone` thins a wall where it hides floor he sees, by his sight's map. Set beside WebGL's
+  frame from above at the terrace's edge (`lab rust --village --at=-1.6,-11.6 --view top`, and `--webgl`): the wall
+  whole but for the doorway's cone in both. The engine's cone reads its own map (soft), WebGL's the rays: their
+  edges aren't the same to a pixel.
+- [x] The village's ground white after a load: a map handed out blank while its worker makes it is painted with no
+  word to its texture, and the engine met it first on a loaded PC. Handed over again when its picture's size
+  changes (`lab rustcheck`: a map painted late, canary `rust.mapsBySize=0`). The cause is read from the code and
+  checked by that; the white ground itself was not reproduced here.
+- [x] More loading steps (seven more names), the lobby's warm-up telling its own.
+- [x] A first visit's "Forging the arena" waited 0.83 s on the GPU's process, the bar still: the logo's link asked
+  after at once. First asked 2.5 s in: 216 ms at most, `npm run stalls -- --scenario boot` passes its budget.
+
+Read, not fixed:
+
+- [ ] The 4070 Ti's boot of 21.7 s (4B6B-BYK7): its JS bench read 24.4 ms (under 10 when the PC is free), a frame
+  held 6.7 s with 117 ms of script in it (the GPU's process busy), the pipelines waited on for 5.5 and 2.7 s. The
+  same build boots in 8 to 10 s here traced. Not told apart from the PC's load.
+- [ ] The phone at the fountain, Low, 3120x1440 (QYAB-63AD): 15.2 ms a frame, 66 fps. The lit shading 9.0 ms, of
+  which its named parts are 4.4 (the fog of sight 1.2, the sun 0.9, the baked light 0.7, the point lights 0.7, the
+  movers' lamps 0.6); the sun's shadow 1.0 (was 1.8), the bloom 1.3, the grass 1.1. The other 4.6 ms of the lit
+  shading is in no part: the next thing to try is a lit shader made for the plain levels alone (its shine, coat,
+  mirror and sheen compiled out, not branched round), picked at boot as three's WebGPU path picks its own.
