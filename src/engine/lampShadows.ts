@@ -88,6 +88,11 @@ export class LampShadows {
       const place = (1 + lamp * 2) * 4, reach = lampList[place + 3];
       at.fromArray(lampList, place);
       core.count = core.boneFloats = 0;
+      // (a frame of its own to what's written once a frame: a skeleton's bones are written at its first mesh and
+      // found again by the frame's number. Written here and taken as written by the frame's own walk, which writes
+      // from the start again, a hero by a lamp was drawn by another skeleton's bones: his skin gone at some
+      // angles, his gear in the air)
+      core.frame++;
       for (const mover of movers) {
         mover.traverseVisible((part) => { if ((part as THREE.Mesh).isMesh) record(part as THREE.Mesh); });
       }
@@ -115,6 +120,7 @@ export class LampShadows {
     }
     core.freshViews();
     core.count = core.boneFloats = 0;
+    core.frame++;
   }
 
   /** A lamp's place among the maps (its own number), or -1 while its faces aren't drawn. */
