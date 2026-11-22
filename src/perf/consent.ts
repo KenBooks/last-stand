@@ -26,7 +26,6 @@ declare const __DEV_TOOLS__: boolean;
  */
 export const MOST_A_DAY = typeof __DEV_TOOLS__ !== 'undefined' && __DEV_TOOLS__ ? 100 : 10;
 const DAY_MS = 24 * 60 * 60_000;
-declare const __DEV_TOOLS__: boolean;
 /**
  * A PR preview's and a dev build's reports sent by a press (a profile, a fault) aren't held to the day's count:
  * a tester's tenth report of a day was refused while chasing a phone's fault. The automatic ones still are, and
