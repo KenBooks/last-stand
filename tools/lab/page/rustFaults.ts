@@ -5,6 +5,7 @@
 // stays whole for the checks after); a panic said as the engine says its own; the frame drawn black; and a report
 // packed and read back as `lab trace` reads one. Before any plant, nothing may have been heard: that is the
 // check that this device drew the game with no failure.
+import { depthProbed } from '../../../src/engine/depthProbe';
 import { TUNE } from '../../../src/engine/globals';
 import { asideOn, PIPELINES } from '../../../src/engine/pipelinesAside';
 import { clearFaults, faultsSoFar, frameChecked, watchDevice } from '../../../src/engine/said';
@@ -16,6 +17,8 @@ import type { Lab } from './lab';
 
 /** how long a plant is given to be heard, in the browser's frames */
 const HEARD_WITHIN = 40;
+/** how long the device is given to answer its probes, in the browser's frames */
+const PROBED_WITHIN = 240;
 /** the black frames in a row the self-check calls a fault */
 const BLACK_CHECKS = 3;
 
@@ -103,9 +106,14 @@ export async function plantedFaults(lab: Lab): Promise<{ line: string; problems:
       // (what a phone's GPU did: the pipelines of the depth drawn first refused, the rest made)
       name: 'a pipeline of the depth drawn first refused',
       heard: 'fragment planted.fs_depth',
-      plant: () => {
+      plant: async () => {
         const fragment = { module: broken(), entryPoint: 'fs_depth', targets: [] };
         device.createRenderPipeline({ label: 'scene', layout: 'auto', vertex: { module: broken(), entryPoint: 'vs' }, fragment });
+        // (the device is then asked which kinds it refuses: an idle device's answers wait to be sent on)
+        for (let frame = 0; frame < PROBED_WITHIN && !depthProbed; frame++) {
+          await device.queue.onSubmittedWorkDone();
+          await window.__labClock.realFrame();
+        }
       },
     },
     {
@@ -137,6 +145,11 @@ export async function plantedFaults(lab: Lab): Promise<{ line: string; problems:
   }
   // (the depth's refusal must have taken the frame back to one pass, and that frame must draw: not black)
   if (!PIPELINES.depthRefused) problems.push('a refused pipeline of the depth drawn first left the pass on');
+  // (and the device must have been asked which kinds it refuses: here, a desktop's, none)
+  const probes = depthProbed.split(' | ');
+  if (probes.length < 7 || probes.some((probe) => !probe.endsWith(': made'))) {
+    problems.push(`the depth-only pipelines tried after the refusal: ${depthProbed || 'none'}`);
+  }
   clearFaults();
   for (let check = 0; check < BLACK_CHECKS; check++) {
     await lab.step(1);

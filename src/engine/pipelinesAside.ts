@@ -8,6 +8,7 @@
 // Only the engine's device, and only the pipelines of its scene (their labels): its post chain's and its maps' are
 // made as it boots and drawn with at once.
 import type * as THREE from 'three';
+import { probeDepthOnly } from './depthProbe';
 import { fault, watchDevice } from './said';
 
 /** what the page asks of the engine ahead of a frame, set as the engine boots (`index.ts`): for the game's code
@@ -75,7 +76,11 @@ class StandIn {
       // (a pipeline of the depth drawn first, which shades nothing: the pass after it draws only where that
       // depth is, so with it left out nothing opaque was drawn at all. A phone's Adreno refuses every one of
       // them, VK_ERROR_UNKNOWN, on some loads: the frame goes back to one pass, `bridge.ts`)
-      if (descriptor.fragment && !descriptor.fragment.targets?.length) PIPELINES.depthRefused = true;
+      if (descriptor.fragment && !descriptor.fragment.targets?.length) {
+        PIPELINES.depthRefused = true;
+        // (and the device asked which kind of such a pipeline it refuses, for the report: `depthProbe.ts`)
+        void probeDepthOnly(device);
+      }
       fault(`the pipeline "${descriptor.label ?? ''}" was refused (${refused?.reason ?? 'no reason'})`,
         `${refused?.message || 'the GPU said nothing'} | ${described(descriptor)}`);
     });
