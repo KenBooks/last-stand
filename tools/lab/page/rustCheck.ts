@@ -4,6 +4,7 @@
 // lit as the square at noon, its roof black from above, a dark rectangle on a battleground's floor, a skill's own
 // effects not drawn, and the engine stopped for good by a canvas nothing had drawn on.
 import { plantedFaults } from './rustFaults';
+import { glowGoneInTheFog } from './rustSight';
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
@@ -493,6 +494,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(viewOffsetKept());
       checks.push(await lampShadows(lab, bridge));
       checks.push(lightCache(bridge));
+      checks.push(await glowGoneInTheFog(lab));
       checks.push(await hallFromAbove(lab, bridge));
       checks.push(await solidAndCoarse(lab, bridge));
       checks.push(await flamesAtFewerPixels(lab, bridge));

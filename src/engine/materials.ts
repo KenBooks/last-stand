@@ -91,7 +91,10 @@ export class Materials {
     maps[1] = held.textureId(material.normalMap);
     maps[2] = held.textureId(rough);
     maps[3] = held.textureId(material.emissiveMap);
-    p[16] = unlit ? 1 : 0;
+    // (2: light added or laid over, shown only where the hero sees: no surface for the sight's fog to grey)
+    const light = material.blending === THREE.AdditiveBlending
+      || (material.blending === THREE.CustomBlending && material.blendSrc === THREE.OneFactor);
+    p[16] = (unlit ? 1 : 0) + (light ? 2 : 0);
     p[17] = material.vertexColors ? 1 : 0;
     p[18] = maps[1] ? 1 : 0;
     p[19] = (maps[2] ? 1 : 0) + (alphaAlone && maps[0] ? 2 : 0);
