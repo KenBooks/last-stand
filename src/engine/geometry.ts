@@ -107,6 +107,17 @@ export class Geometries {
     return id;
   }
 
+  /** A look's list (`RustLook.list`) written after the frame's bones, and where it begins (in rows of 16). */
+  listOf(floats: Float32Array): number {
+    const core = this.core;
+    // (whole rows: a row is a matrix to the shader)
+    const from = core.boneFloats, room = Math.ceil(floats.length / 16) * 16;
+    if (from + room > core.boneCapacity) core.takeViews(core.capacity, (from + room) * 2);
+    core.bones.set(floats, from);
+    core.boneFloats = from + room;
+    return from / 16;
+  }
+
   /**
    * A skinned mesh's bones written after the frame's others, and where they begin (in matrices): each bone times
    * the mesh's own bind matrix, so a skeleton's are written once for each way its meshes are bound. (A hero's pieces

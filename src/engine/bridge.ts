@@ -145,7 +145,8 @@ export class Bridge {
       core.stats.arms++;
     }
     r[at + RAW_INSTANCES] = raw;
-    if (bones >= 0) {
+    // (a mesh's bones: a look's list rides in their place, its mesh where it stands)
+    if (bones >= 0 && (mesh as THREE.SkinnedMesh).isSkinnedMesh) {
       const skinned = mesh as THREE.SkinnedMesh;
       scratchMatrix.multiplyMatrices(mesh.matrixWorld, skinned.bindMatrixInverse).toArray(r, at + 8);
     } else {
@@ -175,7 +176,8 @@ export class Bridge {
     const instanced = mesh as unknown as THREE.InstancedMesh, skinned = mesh as THREE.SkinnedMesh;
     if (instanced.isInstancedMesh && instanced.count === 0) return;
     const set = instanced.isInstancedMesh ? this.geometries.setId(instanced) : 0;
-    const bones = skinned.isSkinnedMesh && skinned.skeleton ? this.geometries.bonesOf(skinned) : -1;
+    const bones = skinned.isSkinnedMesh && skinned.skeleton ? this.geometries.bonesOf(skinned)
+      : look?.list ? this.geometries.listOf(look.list()) : -1;
     const range = geometry.drawRange;
     const from = range.start, to = range.count === Infinity ? Infinity : range.start + range.count;
     if (Array.isArray(mesh.material)) {

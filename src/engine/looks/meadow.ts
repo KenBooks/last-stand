@@ -6,9 +6,7 @@ import type { RustLook, RustShader } from '../custom';
 
 /** where a ring's numbers are in `m.c`, in floats */
 const AT = { origin: 0, focus: 2, eye: 4, cell: 6, wider: 7, band: 8, combed: 12, side: 13, byStrand: 14, strandsBy: 15,
-  time: 16, half: 17, widthInCells: 18, grows: 19, strandCut: 20, strandsRise: 21, cuts: 22, tiles: 32 };
-/** how many tiles a ring lists at most: two a vec4 from `m.c[8]` on */
-const TILES_MOST = 80;
+  time: 16, half: 17, widthInCells: 18, grows: 19, strandCut: 20, strandsRise: 21, cuts: 22 };
 
 const SHARED = /* wgsl */ `
 fn blade_hash(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
@@ -73,7 +71,8 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   let shape = (*v).position;
 
   let listed = instance / (side * side);
-  let pair = m.c[8u + listed / 2u];
+  // (its tile from the draw's list, eight tiles a row: RustLook.list)
+  let pair = bones[(*v).list + listed / 8u][(listed % 8u) / 2u];
   let tile = select(pair.xy, pair.zw, listed % 2u == 1u);
   let within = instance % (side * side);
   let cell_at = origin + tile + vec2f(f32(within % side), f32(within / side));
@@ -206,12 +205,10 @@ export function bladeLook(u: BladeUniforms, combed: boolean, numbers: BladeNumbe
       out[AT.widthInCells] = numbers.widthInCells; out[AT.grows] = numbers.grows;
       out[AT.strandCut] = numbers.strandCut; out[AT.strandsRise] = numbers.strandsRise;
       out[AT.cuts] = combed ? 1 : 0;
-      const tiles = u.uTiles.value, count = Math.min(tiles.length, TILES_MOST);
-      for (let tile = 0; tile < count; tile++) {
-        out[AT.tiles + tile * 2] = tiles[tile].x;
-        out[AT.tiles + tile * 2 + 1] = tiles[tile].y;
-      }
     },
+    // (the tiles drawn, a pair of floats each: any number of them, where the numbers held 80, so the tiles were
+    // 9 to 21 m wide and every blade of one that touched the view was sent to be dropped as it was placed)
+    list: () => u.uTileMap.value.image.data as Float32Array,
   };
 }
 

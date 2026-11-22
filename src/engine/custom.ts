@@ -33,6 +33,9 @@ export interface RustLook {
   moved?(): boolean;
   /** its meshes' `onBeforeRender` is run before each is recorded (it lists what's drawn, sets the numbers) */
   before?: boolean;
+  /** its draw's list, as it is this frame: floats its vertex hook reads by `bones[(*v).list + row]`, 16 a row
+   *  (a field's tiles, any number of them: its numbers hold 80 at most). For a mesh that isn't skinned */
+  list?(): Float32Array;
 }
 
 const looks = new WeakMap<THREE.Material, RustLook>();

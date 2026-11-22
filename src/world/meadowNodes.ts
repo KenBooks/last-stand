@@ -18,6 +18,8 @@ export interface BladeUniforms {
   uCombed: { value: number };
   uS: { value: number };
   uTiles: { value: THREE.Vector2[] };
+  /** the tiles drawn, a pair of floats each (WebGL's map; the Rust engine's list) */
+  uTileMap: { value: THREE.DataTexture };
   uFocus: { value: THREE.Vector2 };
   uEye: { value: THREE.Vector2 };
   uBand: { value: THREE.Vector4 };

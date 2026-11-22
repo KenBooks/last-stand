@@ -80,7 +80,8 @@ const ABOVE_SPREAD_SEGS = 1;
  *  tiles 9 to 21 m wide, and every blade of a tile that touched the view or the ring's band was sent to be dropped in
  *  the vertex shader (from play, 1.5M triangles facing a cottage's wall; with tufts 3.6M: "that's broken"). WebGPU's
  *  nodes still read the array (`meadowNodes.ts`), 8 a side. */
-const TILES = WEBGPU ? 8 : 32;
+// (the Rust engine reads them from its frame's rows, any number: `RustLook.list`)
+const TILES = WEBGPU && !RUNNING.rust ? 8 : 32;
 /** the tiles a side of the blocks they're first tried by (a block out of the view or the ring skips its tiles) */
 const TILE_BLOCK = 4;
 /** how wide a blade is at its root, in its ring's cells, in the first ring; each ring out its blades wider again by its
