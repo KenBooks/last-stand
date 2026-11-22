@@ -32,6 +32,7 @@ import {
 import { STATE } from '../../../src/perf/traceFormat';
 import { scenePixels } from '../../../src/core/renderer';
 import { removeCookie, writeCookie } from '../../../src/core/cookies';
+import { bestCases } from './autoBest';
 
 /** Auto's cookie, the level it settled on (`AUTO_COOKIE` in src/core/quality.ts) */
 const AUTO_COOKIE = 'last-stand-quality-auto';
@@ -463,6 +464,22 @@ function gpuCases(canary: boolean, problems: string[]): string[] {
 }
 
 export function autoQuality(options: AutoOptions): Report {
+  // (the cases below are of Auto's steps and trials against a target of 50 frames a second, as they were written:
+  // played with nothing read of the device's best; the target it reads has cases of its own, `autoBest.ts`)
+  const read = AUTO_QUALITY.probeWindows;
+  AUTO_QUALITY.probeWindows = 0;
+  try {
+    const report = stepsAndTrials(options);
+    AUTO_QUALITY.probeWindows = read;
+    const lines = bestCases(options.canary, report.problems!);
+    return { ...report, text: `${report.text}\n${lines.join('\n')}` };
+  } finally {
+    AUTO_QUALITY.probeWindows = read;
+  }
+}
+
+/** Auto's steps down, its trials of the level above and the GPU's say, against a target of 50 frames a second. */
+function stepsAndTrials(options: AutoOptions): Report {
   const lines = [`Auto quality's walk down from High on a slow device (${DEVICE.high} ms a Mpx at High):`];
   const problems: string[] = [];
   setQuality('auto');
