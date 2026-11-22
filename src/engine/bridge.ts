@@ -7,7 +7,6 @@
 // (`materials.ts`), the geometry and bones (`geometry.ts`), the lights (`lights.ts`), the kinds of see-through
 // (`seeKinds.ts`), the particles (`sprites.ts`) and the frame's globals (`globals.ts`). Here: the scene's matrices,
 // the walk, a record a mesh, what's handed over ahead, and a frame drawn or written down.
-import { PIPELINES } from './pipelinesAside';
 import * as THREE from 'three';
 import type { Engine, InitOutput } from './pkg/bulwark';
 import { perfClock } from '../core/perfClock';
@@ -21,6 +20,7 @@ import { G } from '../state';
 import { lampShadowsAllowed } from '../core/lamps';
 import { LightCache } from './lightCache';
 import { GLOBALS, PLAIN_GRADE, TUNE, shadowSizeOf, writeGlobals, type Grade } from './globals';
+import { Levels } from './levels';
 import { Lights } from './lights';
 import { Maps } from './maps';
 import { Materials, type AnyMaterial } from './materials';
@@ -55,6 +55,8 @@ export class Bridge {
   private lit: Lights;
   private lampShadows: LampShadows;
   private lightCache: LightCache;
+  /** what the quality level asks of the engine (`levels.ts`) */
+  readonly levels: Levels;
   private particles: Sprites;
   /** what a frame handed over and drew */
   readonly stats: Core['stats'];
@@ -82,14 +84,13 @@ export class Bridge {
     this.lit.lampSlot = (lamp) => this.lampShadows.slot(lamp);
     this.lit.lampTaking = () => this.lampShadows.taking;
     this.lightCache = new LightCache(core);
+    this.levels = new Levels(core);
     this.lit.lampReach = this.lampShadows.reachOf = (lamp, reach) => this.lightCache.reachOf(lamp, reach);
     this.lit.ownReach = (light) => this.lightCache.ownReach(light);
     this.particles = new Sprites(core);
     this.stats = core.stats;
     this.skipped = core.skipped;
     this.held = core.held;
-    // (ahead of the warm-ups: a material readied then is given the pipelines of the frame's two passes)
-    engine.set_depth_first(TUNE.depthFirst > 0 && !PIPELINES.depthRefused);
   }
 
   /** What's kept of what was handed over forgotten: the next frame hands everything over again. */
@@ -258,40 +259,8 @@ export class Bridge {
     this.aheadRest = AHEAD_REST;
   }
 
-  /** The engine told the quality level's samples and shadow map, when they change: it drew 4 samples a pixel
-   *  and a map of 2048 at every level, a phone's Very low among them (26 ms a frame on its GPU, from play). */
-  private quality(samples: number, shadowSize: number): void {
-    if (samples === this.samples && shadowSize === this.shadowSize) return;
-    this.samples = samples;
-    this.shadowSize = shadowSize;
-    this.core.engine.set_quality(samples, shadowSize);
-    this.core.freshViews();
-  }
-  /** The samples the scene is drawn with, told ahead of the frame that would say so (`rustSamples`). */
-  samplesAhead(samples: number): void { this.quality(samples, this.shadowSize); }
-  private samples = 4;
   /** the mesh being recorded is the hero's arms through his eyes */
   private armsNow = false;
-  private bloom = true;
-  private bloomShare = 1;
-  /** the share the engine was last told (the level's, by a dense screen's) */
-  private bloomSent = 1;
-  /** whether the game left the sun's shadow out of the frame last drawn (a harness reads it) */
-  shadowHeld = false;
-  private shadowSize = 2048;
-  /** The GPU's clock asked, with no frame drawn: how many frames' times have come back, whether one is on its
-   *  way, and the last (ms). A profile of the frame waits on it between its frames (perf/profiler.ts). */
-  gpuClock(): { reads: number; busy: boolean; ms: number } {
-    this.core.engine.poll_clock();
-    const stats = this.core.engine.stats();
-    return { reads: stats[6], busy: stats[7] > 0, ms: stats[5] };
-  }
-
-  /** A harness's: the samples and the shadow map's side the engine draws with. */
-  qualityNow(): { samples: number; shadowSize: number; bloomShare: number } {
-    return { samples: this.samples, shadowSize: this.shadowSize, bloomShare: this.bloomShare };
-  }
-
   /** The first `lamps` lamps' shadows asked for, of `casters` (`lampShadows.ts`): drawn a lamp a frame. */
   bakeLamps(casters: THREE.Mesh[], lamps: number): void {
     this.lampShadows.ask(casters, lamps);
@@ -411,17 +380,7 @@ export class Bridge {
     this.lightCache.tell();
     this.seeKinds.write();
     const clear = writeGlobals(core.globals, scene, camera, time, this.lit, this.grade);
-    this.quality(this.grade.samples ?? 4, shadowSizeOf(this.lit.sun));
-    if ((TUNE.bloom > 0) !== this.bloom) core.engine.set_bloom(this.bloom = TUNE.bloom > 0);
-    this.shadowHeld = !!grade.shadowHeld;
-    core.engine.hold_shadow(this.shadowHeld && TUNE.shadowTurns > 0);
-    core.engine.set_depth_first(TUNE.depthFirst > 0 && !PIPELINES.depthRefused);
-    core.engine.set_fields_first(TUNE.fieldsFirst > 0);
-    // (on a dense screen, three device pixels or more to a CSS one, the bloom at half its level's share: a glow is
-    // a blur, and its first level was 1560 by 720 on a phone, 2.4 ms of its 18 ms frame at Medium, PSHZ-JAWP)
-    const share = grade.bloomShare ?? 1, dense = window.devicePixelRatio >= 3 ? TUNE.bloomDense : 1;
-    if (share * dense !== this.bloomSent) core.engine.set_bloom_share(this.bloomSent = share * dense);
-    this.bloomShare = share;
+    this.levels.tell(this.grade, shadowSizeOf(this.lit.sun));
     this.particles.send();
     core.freshViews();
     const walked = perfClock.now();

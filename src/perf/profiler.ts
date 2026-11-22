@@ -206,7 +206,7 @@ const ENGINE_WAIT_FRAMES = 240;
  */
 function engineTiming(draw: () => void, draws: () => number, options: ProfileOptions, counted: () => void): TimedDraw {
   const nextFrame = options.nextFrame ?? browserFrame;
-  const clock = () => RUST.bridge!.gpuClock();
+  const clock = () => RUST.bridge!.levels.gpuClock();
   // (the frame drawn in each of the browser's frames while a time is waited for, as the game draws it: the clock
   // takes a frame at a time and leaves these untimed. Drawn only when timed, the GPU sat idle for the frames
   // between and a phone's clocked down and up under it: the same frame read 36 ms and 10 ms within one profile,
@@ -215,9 +215,11 @@ function engineTiming(draw: () => void, draws: () => number, options: ProfileOpt
     await nextFrame();
     if (options.cancelled?.()) throw new ProfileCancelled();
     ENGINE_FRAMES.waited++;
-    if (!clock().busy) return;
+    // (a frame waited through with nothing drawn is idle whether its time has come back or not: counted only while
+    // the clock was busy, a GPU whose times come back within a frame read none idle, and the lab's canary of it
+    // failed on a desktop's)
     if (options.idleBetween) ENGINE_FRAMES.idle++;
-    else draw();
+    else if (clock().busy) draw();
   };
   return async () => {
     await nextFrame();
@@ -312,7 +314,7 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
     options.onProgress?.(progress);
   };
   // (the Rust engine's frames by its own clock, where the browser gives it one: a first time has come back)
-  const engineTimed = RUNNING.rust && !!RUST.bridge && RUST.bridge.gpuClock().reads > 0;
+  const engineTimed = RUNNING.rust && !!RUST.bridge && RUST.bridge.levels.gpuClock().reads > 0;
   const passesTimed = !RUNNING.rust && WEBGPU && timesPasses(G.renderer);
   const gpuTimed = engineTimed || passesTimed;
   const reader = passesTimed ? new PassReader(G.renderer) : null;

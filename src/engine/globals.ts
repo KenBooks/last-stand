@@ -38,6 +38,8 @@ export const TUNE = tunable('rust', {
   lightCache: 1,
   /** the scene's own still lights baked with them (`lightCache.ts` `StillLight`; 0: whole in the frame's loop) */
   cacheOwn: 1,
+  /** the volume read, with the lamps out, only within reach of the baked lights that are no lamp's (0: everywhere) */
+  cacheWhere: 1,
   /** the baked lamps hidden by what stands still (0: their light through every wall, a profile's) */
   cacheShadows: 1,
   bloom: 1,

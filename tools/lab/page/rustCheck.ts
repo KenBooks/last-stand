@@ -116,7 +116,7 @@ function placedRight(where: string): Checked {
 function quality(bridge: Bridge): Checked {
   const asked = sceneSamples() >= 4 ? 4 : 1;
   const sun = G.scene.getObjectByProperty('isDirectionalLight', true) as THREE.DirectionalLight | undefined;
-  const { samples, shadowSize, bloomShare } = bridge.qualityNow();
+  const { samples, shadowSize, bloomShare } = bridge.levels.now();
   // (and its bloom at the level's share of the pixels: whole at every level, Very low drew a bloom the game
   // draws none of, 4 ms of a phone's 47 ms frame)
   if (bloomShare !== bloomShareNow()) {
@@ -296,7 +296,7 @@ async function overCanvas(lab: Lab): Promise<Checked> {
  * the switch off they're drawn with the scene.
  */
 async function flamesAtFewerPixels(lab: Lab, bridge: Bridge): Promise<Checked> {
-  if (bridge.qualityNow().samples >= 4) return passed('at four samples a pixel the flames are drawn with the scene');
+  if (bridge.levels.now().samples >= 4) return passed('at four samples a pixel the flames are drawn with the scene');
   const drawing = lab.drawing;
   lab.drawing = true;
   try {
@@ -324,7 +324,7 @@ async function shadowTurns(lab: Lab, bridge: Bridge, frames: number): Promise<{ 
   let drawn = 0;
   for (let frame = 0; frame < frames; frame++) {
     await lab.step(1);
-    if (!bridge.shadowHeld) continue;
+    if (!bridge.levels.shadowHeld) continue;
     held++;
     if (bridge.stats.shadowDraws > 0) drawn++;
   }

@@ -209,7 +209,8 @@ export class LightCache {
       const { x, y, z } = this.placeOf(light);
       reaches.push(x, y, z, light.distance);
     }
-    this.core.engine.set_lights_apart(new Float32Array(reaches));
+    // (`cacheWhere` 0: nothing said, the volume read everywhere, to compare)
+    this.core.engine.set_lights_apart(TUNE.cacheWhere > 0 ? new Float32Array(reaches) : new Float32Array(36));
     if (furthest) {
       const { x, y, z } = this.placeOf(furthest);
       this.core.engine.set_light_of_its_own(x, y, z, furthest.distance, now(furthest));

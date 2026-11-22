@@ -51,7 +51,7 @@ let resize: ((width: number, height: number) => void) | null = null;
  */
 export function rustSamples(samples: number): void {
   samplesWanted = samples;
-  RUST.bridge?.samplesAhead(samples);
+  RUST.bridge?.levels.samplesAhead(samples);
 }
 /** the samples the game last asked for, for an engine not made yet */
 let samplesWanted: number | null = null;
@@ -76,7 +76,7 @@ export async function bootRust(under: HTMLCanvasElement): Promise<void> {
     const engine = await pipelinesAside(() => Engine.create(made));
     const bridge = new Bridge(engine, wasm);
     RUST.bridge = bridge;
-    if (samplesWanted !== null) bridge.samplesAhead(samplesWanted);
+    if (samplesWanted !== null) bridge.levels.samplesAhead(samplesWanted);
     AHEAD.prepare = (objects) => bridge.prepare(objects);
     AHEAD.bakeLamps = (casters, lamps) => bridge.bakeLamps(casters, lamps);
     resize = (width, height) => engine.resize(width, height);
