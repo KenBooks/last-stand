@@ -92,6 +92,23 @@ export async function bootRust(under: HTMLCanvasElement): Promise<void> {
   }
 }
 
+/**
+ * The engine's frame as a canvas the size of `like` (three's, which a picture's taker measures by): for a picture
+ * taken in the frame's own task, while the engine's canvas still holds it (a photo, a bug report's shot). With
+ * `over`, three's canvas laid over it: the world's overlays. Null if the engine isn't drawing.
+ */
+export function rustFrame(like: HTMLCanvasElement, over: boolean): HTMLCanvasElement | null {
+  if (!RUST.bridge || !canvas || !RUST.on) return null;
+  const out = document.createElement('canvas');
+  out.width = like.width;
+  out.height = like.height;
+  const context = out.getContext('2d');
+  if (!context) return null;
+  context.drawImage(canvas, 0, 0, out.width, out.height);
+  if (over) context.drawImage(like, 0, 0);
+  return out;
+}
+
 /** The frame's scene drawn by the engine at `width` by `height` pixels; false if three is to draw it. */
 export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, width: number, height: number,
   renderer: THREE.WebGLRenderer, grade?: Grade): boolean {

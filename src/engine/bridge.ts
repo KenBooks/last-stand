@@ -21,6 +21,7 @@ import { lampShadowsAllowed } from '../core/lamps';
 import { LightCache } from './lightCache';
 import { GLOBALS, PLAIN_GRADE, TUNE, shadowSizeOf, writeGlobals, type Grade } from './globals';
 import { Levels } from './levels';
+import { FrameLook } from './frameLook';
 import { Lights } from './lights';
 import { Maps } from './maps';
 import { Materials, type AnyMaterial } from './materials';
@@ -57,6 +58,7 @@ export class Bridge {
   private lightCache: LightCache;
   /** what the quality level asks of the engine (`levels.ts`) */
   readonly levels: Levels;
+  private readonly frameLook: FrameLook;
   private particles: Sprites;
   /** what a frame handed over and drew */
   readonly stats: Core['stats'];
@@ -85,6 +87,7 @@ export class Bridge {
     this.lit.lampTaking = () => this.lampShadows.taking;
     this.lightCache = new LightCache(core);
     this.levels = new Levels(core);
+    this.frameLook = new FrameLook(core, this.maps);
     this.lit.lampReach = this.lampShadows.reachOf = (lamp, reach) => this.lightCache.reachOf(lamp, reach);
     this.lit.ownReach = (light) => this.lightCache.ownReach(light);
     this.particles = new Sprites(core);
@@ -384,6 +387,7 @@ export class Bridge {
     this.seeKinds.write();
     const clear = writeGlobals(core.globals, scene, camera, time, this.lit, this.grade);
     this.levels.tell(this.grade, shadowSizeOf(this.lit.sun));
+    this.frameLook.tell(this.grade);
     this.particles.send();
     core.freshViews();
     const walked = perfClock.now();

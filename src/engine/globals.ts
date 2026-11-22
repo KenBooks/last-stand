@@ -132,6 +132,16 @@ export interface Grade {
   shadowHeld?: boolean;
   /** the share of the scene's pixels each way the bloom draws at (the level's `bloomShare`: 0 none at all) */
   bloomShare?: number;
+  /** photo mode's look over the frame (core/photoLook.ts): its exposure, contrast, saturation, colour filter (the
+   *  shadows' and the highlights' matrices and how much of them), focus blur and band, and its bloom against
+   *  the game's own */
+  look?: {
+    on: boolean; exposure: number; contrast: number; saturation: number;
+    filterLo: THREE.Matrix3; filterHi: THREE.Matrix3; filterMix: number;
+    blur: number; focusY: number; focusBand: number; bloom: number;
+  };
+  /** the blood round the screen's edges at low health (core/bloodEdges.ts): its mask, and how far it has come */
+  edges?: { mask: THREE.Texture | null; reach: number };
   /** a level of plain lit shading (the game's `plainLit`: Low and Very low) */
   lite?: boolean;
 }

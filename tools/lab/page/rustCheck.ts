@@ -6,6 +6,7 @@
 import { plantedFaults } from './rustFaults';
 import { glowGoneInTheFog } from './rustSight';
 import { sunCastsShadows } from './rustSun';
+import { bloodAtLowHealth, frameShotHoldsTheFrame, photoLookDrawn } from './rustLook';
 import { grassBandsEdgeToEdge, grassDrawnByItsRings } from './rustGrass';
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
@@ -500,6 +501,8 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(grassDrawnByItsRings());
       checks.push(await sunCastsShadows(lab));
       checks.push(await glowGoneInTheFog(lab));
+      checks.push(await photoLookDrawn(lab));
+      checks.push(await frameShotHoldsTheFrame(lab));
       checks.push(await hallFromAbove(lab, bridge));
       checks.push(await solidAndCoarse(lab, bridge));
       checks.push(await flamesAtFewerPixels(lab, bridge));
@@ -512,6 +515,8 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       await lab.step(5);
       checks.push(placedRight(`the ${command.biome}`));
       checks.push(shelter(bridge, `the ${command.biome}`, false));
+      // (in a run: the lobby shows no low-Health look)
+      checks.push(await bloodAtLowHealth(lab));
       checks.push(await fight(lab, bridge, command.foes));
       checks.push(...await casts(lab, bridge));
       checks.push(await armsThroughTheEyes(lab, bridge, command.biome));

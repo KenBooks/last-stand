@@ -18,7 +18,7 @@ import {
 } from './webgpu';
 import { G } from '../state';
 import { RUNNING } from './rendererChoice';
-import { bootRust, drawRust, rustSamples, RUST } from '../engine';
+import { bootRust, drawRust, rustFrame, rustSamples, RUST } from '../engine';
 import { perfClock } from './perfClock';
 import { sunShadowStill } from '../world/props';
 import { moonShadowKept } from '../world/moonShadow';
@@ -117,9 +117,12 @@ export function setBloomShare(share: number): void {
   leaveBloomOut();
   if (WEBGPU) setBloomShareOnWebGPU(share);
 }
+/** bloom's strength as last set (the Rust engine is told it against the game's own) */
+let bloomStrengthNow = 0.85;
 /** Bloom's strength (photo mode's, `core/photoLook.ts`; `BLOOM_STRENGTH` the game's own): its composite's uniform on
  *  WebGL, its node's on WebGPU, so nothing compiles. */
 export function setBloomStrength(strength: number): void {
+  bloomStrengthNow = strength;
   if (bloomPass) bloomPass.strength = strength;
   if (WEBGPU) setBloomStrengthOnWebGPU(strength);
 }
@@ -1729,11 +1732,11 @@ export function showOverlays(on: boolean): void { overlaysShown = on; }
  */
 export const frameShot = { take: null as ((canvas: HTMLCanvasElement) => void) | null };
 /** The frame handed to the shot waiting for it, if one is. */
-function shotTaken(): void {
+function shotTaken(from: HTMLCanvasElement = gl.domElement): void {
   const take = frameShot.take;
   if (!take) return;
   frameShot.take = null;
-  take(gl.domElement);
+  take(from);
 }
 
 /** the scene's parts shown in the last frame: one shown again has every matrix under it made again */
@@ -1816,8 +1819,20 @@ export function render(): void {
       lite: liteLevel,
       bloomShare,
       shadowHeld: !shadowDrawnLast,
+      look: {
+        on: u.uPhoto.value > 0.5, exposure: u.uExposure.value, contrast: u.uContrast.value,
+        saturation: u.uSaturation.value, filterLo: u.uFilterLo.value, filterHi: u.uFilterHi.value,
+        filterMix: u.uFilterMix.value, blur: u.uBlur.value, focusY: u.uFocusY.value, focusBand: u.uFocusBand.value,
+        bloom: bloomStrengthNow / BLOOM_STRENGTH,
+      },
+      edges: { mask: u.tBlood.value, reach: (u.uLow.value as number) * (1 + 0.06 * (u.uBeat.value as number)) },
     };
     if (drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded)) {
+      // (a photo's picture: the engine's frame, taken before anything is drawn over it)
+      if (frameShot.take) {
+        const frame = rustFrame(gl.domElement, false);
+        if (frame) shotTaken(frame);
+      }
       // (three's canvas over the engine's: clear, but for the world's overlays; left out with none to draw)
       const none = !overlaysShown || overFrame.empty();
       leaveOverOut(none);
