@@ -20,6 +20,7 @@ import { groundHeight } from '../world/ground';
 import { hallSpot } from '../world/heroHall';
 import { heroDetail } from '../entities/models/armor';
 import { applyShadowDetail, qualityLevel } from '../core/quality';
+import type { QualityLevel } from '../data/quality';
 import type { Profile } from '../types';
 import { buildFirst, buildLater, finishNow, finishInSlices, queued } from './behind';
 import { heroShare, warmingRuns } from './warm';
@@ -281,14 +282,23 @@ export function standHeroes(on: boolean, dt: number, still = false): void {
     return;
   }
   for (const p of standing) waited.set(p, (waited.get(p) ?? 0) + dt);
-  if (standing.length) {
-    const p = standing[poseTurn++ % standing.length];
+  // (and each so many times a second at the most, by the quality level: a pose is a hero's whole rig, his arms' IK
+  // and his cloth, 1.2 ms on a desktop and 3 to 7 on a phone, where the village's update was 2.9 ms of a frame as he
+  // walked and 7.4 at its worst, most of it these two; a report from play, SKGH-MHJR. A device at 30 frames a
+  // second poses each 15 times a second as it is, and an idle stance and a glance read the same)
+  const p = standing[poseTurn % Math.max(1, standing.length)];
+  if (p && (waited.get(p) ?? 0) >= 1 / STAND_POSES[qualityLevel()]) {
+    poseTurn++;
     p.glances = true;
     p.update(waited.get(p) ?? dt);
     waited.set(p, 0);
   }
   for (const p of standing) haloRound(p, dt);
 }
+
+/** how many times a second a hero on his plinth is posed at the most, by the quality level (High: at his every turn,
+ *  as it was) */
+const STAND_POSES: Record<QualityLevel, number> = { high: Infinity, medium: 30, low: 20, verylow: 15 };
 
 /** how long a hero wanted on his plinth has waited for his build behind the lobby (s), and the longest he waits
  *  before he's finished at once (nothing building behind the lobby: a warm-up under way) */
