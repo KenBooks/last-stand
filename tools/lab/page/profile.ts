@@ -268,6 +268,27 @@ async function sentProfile(lines: string[], base: string): Promise<Report> {
   return { text: '', problems: [`the profile couldn't be sent: ${sent.error}`] };
 }
 
+/** the most of the browser's frames an engine's profile may wait through with nothing drawn, and the least the
+ *  canary's must: a GPU left idle between timed frames clocks down, and a phone's same frame read 36 ms and 10 */
+const IDLE_MOST = 0.1;
+const IDLE_CANARY_LEAST = 0.3;
+
+/** The problems of a profile's idle frames on the Rust engine: too many, or, with the canary, a profile that draws
+ *  nothing between its timed frames (as it did) not read as idle. */
+async function idleProblems(found: Awaited<ReturnType<typeof profile>>,
+  options: Parameters<typeof profile>[0] & { canary?: boolean }): Promise<string[]> {
+  if (found.idle === undefined) return [];
+  const problems: string[] = [];
+  const share = (idle: number): string => `${(idle * 100).toFixed(0)}%`;
+  if (found.idle > IDLE_MOST) problems.push(`the GPU idle in ${share(found.idle)} of the profile's frames (most ${share(IDLE_MOST)})`);
+  if (!options?.canary) return problems;
+  const left = await profile({ ...options, canary: false, parts: [], idleBetween: true });
+  if (!((left.idle ?? 0) >= IDLE_CANARY_LEAST)) {
+    problems.push(`canary: nothing drawn between timed frames read idle in ${share(left.idle ?? 0)} of them`);
+  }
+  return problems;
+}
+
 /** `lab profile`, one place: the frame's parts timed as the pause menu's profiler times them. */
 export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Report> {
   const level = quality.qualityLevel();
@@ -285,6 +306,7 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
     const found = await profile(options);
     const problems = command.canary ? canaryProblems(found) : [];
     if (!(found.frame > 0)) problems.push('the frame read 0 ms: nothing was timed');
+    problems.push(...(await idleProblems(found, options)));
     problems.push(...pageCanaryProblems(found));
     // (a commit from before WebGPU was profiled names no renderer: an A/B runs this module there too)
     const onWebGPU = (found.renderer ?? 'WebGL').startsWith('WebGPU');

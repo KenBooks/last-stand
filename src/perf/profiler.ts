@@ -56,6 +56,9 @@ export interface Profile {
   /** whether its frames were timed by the GPU's own timestamps (WebGPU's, `passesSinceLastRead`), not the page's
    *  clock round a wait */
   gpuTimed?: boolean;
+  /** on the Rust engine: the share of the browser's frames the profile waited through with no frame drawn in them
+   *  (a GPU left idle clocks down, and its times read slow and uneven) */
+  idle?: number;
   parts: PartCost[];
   /** the parts that can't be timed on this renderer, and why (said in the report in place of their cost) */
   untimed?: { name: string; why: string }[];
@@ -96,6 +99,8 @@ export interface ProfileOptions {
   pageParts?: ScenePart[];
   /** run in each frame a page's part is timed in (the lab's canary: work the interval must see) */
   eachPageFrame?: () => void;
+  /** a harness's canary: on the Rust engine, nothing drawn in the frames a time is waited through, as it was */
+  idleBetween?: boolean;
 }
 
 /** Thrown by `profile` when it was cancelled. */
@@ -186,6 +191,9 @@ function timing(draw: Draw, options: ProfileOptions, counted: () => void, reader
   };
 }
 
+/** the browser's frames an engine's profile waited through, and those of them it drew nothing in */
+const ENGINE_FRAMES = { waited: 0, idle: 0 };
+
 /** the most of the browser's frames a frame's time is waited for from the Rust engine's clock */
 const ENGINE_WAIT_FRAMES = 240;
 
@@ -199,6 +207,18 @@ const ENGINE_WAIT_FRAMES = 240;
 function engineTiming(draw: () => void, draws: () => number, options: ProfileOptions, counted: () => void): TimedDraw {
   const nextFrame = options.nextFrame ?? browserFrame;
   const clock = () => RUST.bridge!.gpuClock();
+  // (the frame drawn in each of the browser's frames while a time is waited for, as the game draws it: the clock
+  // takes a frame at a time and leaves these untimed. Drawn only when timed, the GPU sat idle for the frames
+  // between and a phone's clocked down and up under it: the same frame read 36 ms and 10 ms within one profile,
+  // a part cost more than the whole frame and a dozen read less than nothing, report 37SH-N7E7)
+  const between = async (): Promise<void> => {
+    await nextFrame();
+    if (options.cancelled?.()) throw new ProfileCancelled();
+    ENGINE_FRAMES.waited++;
+    if (!clock().busy) return;
+    if (options.idleBetween) ENGINE_FRAMES.idle++;
+    else draw();
+  };
   return async () => {
     await nextFrame();
     if (options.cancelled?.()) throw new ProfileCancelled();
@@ -206,10 +226,10 @@ function engineTiming(draw: () => void, draws: () => number, options: ProfileOpt
     // timed at all, and the frame drawn twice read 1.08 times once)
     let took = 0;
     for (let drawn = 0; drawn < draws(); drawn++) {
-      for (let waited = 0; waited < ENGINE_WAIT_FRAMES && clock().busy; waited++) await nextFrame();
+      for (let waited = 0; waited < ENGINE_WAIT_FRAMES && clock().busy; waited++) await between();
       const before = clock().reads;
       draw();
-      for (let waited = 0; waited < ENGINE_WAIT_FRAMES && clock().reads === before; waited++) await nextFrame();
+      for (let waited = 0; waited < ENGINE_WAIT_FRAMES && clock().reads === before; waited++) await between();
       took += clock().ms;
     }
     counted();
@@ -301,6 +321,7 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
   const started = now();
   const programs = compiledSoFar();
   const atDraw = WEBGPU ? pipelinesMade().atDraw : 0;
+  ENGINE_FRAMES.waited = ENGINE_FRAMES.idle = 0;
   holdFrames(true);
   if (WEBGPU) holdPipelines(G.renderer, true);
   // (the overlay's reads of the timestamps held: a read takes every pass in three's pool; the passes before let go)
@@ -330,7 +351,8 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
     const compiledAtDraw = WEBGPU ? pipelinesMade().atDraw - atDraw : undefined;
     const renderer = rendererName();
     const found = { frame: medianOf(frames), seconds, compiled, compiledAtDraw, renderer, parts: costs, untimed, shown };
-    return { ...found, gpuTimed };
+    const idle = engineTimed ? ENGINE_FRAMES.idle / Math.max(ENGINE_FRAMES.waited, 1) : undefined;
+    return { ...found, gpuTimed, idle };
   } finally {
     if (passesTimed) holdWebGpuTimes(false);
     if (WEBGPU) holdPipelines(G.renderer, false);
@@ -381,7 +403,8 @@ export function profileLines(found: Profile): string[] {
     : `${found.compiled} programs compiled`;
   const timed = found.gpuTimed ? 'timed by the GPU\'s timestamps' : 'drawn and waited for';
   const frame = `the frame ${found.frame.toFixed(1)} ms (${fps} fps), each frame ${timed}; `
-    + `profiled in ${found.seconds.toFixed(1)} s, ${made}`;
+    + `profiled in ${found.seconds.toFixed(1)} s, ${made}`
+    + (found.idle === undefined ? '' : `, the GPU kept drawing in ${((1 - found.idle) * 100).toFixed(0)}% of the frames between`);
   const lines = [frame, ...found.parts.map((part) => partLine(part, found.frame, onWebGPU))];
   lines.push(...(found.untimed ?? []).map((part) => `${part.name}: ${part.why}`));
   if (!found.shown) return lines;
