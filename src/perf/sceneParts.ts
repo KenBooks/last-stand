@@ -137,7 +137,7 @@ function pixelsPart(): ScenePart {
 
 /** the engine's tuned numbers a profile switches */
 type EngineSwitch = 'points' | 'ownPoints' | 'nearLamps' | 'lampShadows' | 'bloom' | 'shadows' | 'see' | 'debug' | 'nearFirst' | 'shine' | 'solidSee' | 'shadowTurns' | 'lowRes'
-  | 'depthFirst' | 'scene' | 'fieldsFirst' | 'fieldsPlaced' | 'grassShaded' | 'sightFog';
+  | 'depthFirst' | 'scene' | 'fieldsFirst' | 'fieldsPlaced' | 'grassShaded' | 'sightFog' | 'overCleared';
 
 /** A part of the Rust engine's frame, switched by one of its tuned numbers (`TUNE` in engine/globals.ts). */
 function tunedPart(name: string, key: EngineSwitch, off: number,
@@ -161,6 +161,8 @@ function engineParts(): ScenePart[] {
     tunedPart('what hides the hero seen through', 'see', 0),
     tunedPart('the fog over what the hero cannot see', 'sightFog', 0),
     tunedPart('the grass: its blades shaded (without: placed, none shaded)', 'grassShaded', 0),
+    tunedPart('the labels\' and the outline\'s canvas cleared by a pass of its own, as it was (without: by their first '
+      + 'draw)', 'overCleared', 1, 0),
     tunedPart('the grass placed at every vertex, as it was (without: each blade placed once, those kept drawn)',
       'fieldsPlaced', 1, 0),
     tunedPart('the grass left out of the depth drawn first (without: in it, shaded once a pixel, placed twice)', 'fieldsFirst', 1, 0),

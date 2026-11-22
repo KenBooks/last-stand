@@ -6,6 +6,7 @@
 import { plantedFaults } from './rustFaults';
 import { blankCanvas, lookTakesItsMapAgain, mapPaintedLate } from './rustMaps';
 import { grassPlacedOnce } from './rustFields';
+import { overCanvasCleared } from './rustOver';
 import { type Checked, failed, passed } from './rustPixels';
 import { frames, THREE_DRAWS_MOST } from './rustFrames';
 import { hallFromAbove, house, lampShadows, lightCache, shelter, sunShadowInTurns } from './rustVillageChecks';
@@ -312,6 +313,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(await flamesAtFewerPixels(lab, bridge));
       checks.push(await sunShadowInTurns(lab, bridge));
       checks.push(await overCanvas(lab));
+      checks.push(await overCanvasCleared(lab));
       checks.push(await house(lab, bridge, command.room as RoomId));
       checks.push(await blankCanvas(lab, bridge));
       checks.push(await mapPaintedLate(lab, bridge));

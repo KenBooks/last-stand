@@ -4,7 +4,10 @@
 // come from a tree on main (`lab passes --renderer webgpu`, `lab draws`).
 import type { Fixture, Lab, Report } from './lab';
 import { BIOMES, type BiomeId } from '../../../src/data/biomes';
-import type { ViewMode } from '../../../src/core/renderer';
+import { overCanvasLeftOut, type ViewMode } from '../../../src/core/renderer';
+import { outlinedLook } from '../../../src/ui/overlay/outline';
+import { drawnLabels } from '../../../src/ui/overlay/layer';
+import { lastFrameParts } from '../../../src/perf/webgpuPasses';
 import { G } from '../../../src/state';
 import { perfClock } from '../../../src/core/perfClock';
 import { RUST } from '../../../src/engine';
@@ -34,8 +37,8 @@ export interface RustCommand {
   room?: string;
   /** a skill of his held through the frames timed and pictured */
   cast?: string;
-  /** the quality level switched to once he stands there (Auto's step, in play) */
-  level?: QualityLevel;
+  /** the quality levels switched to once he stands there, each in turn (Auto's steps, in play) */
+  levels: QualityLevel[];
   /** the biome's boss stood before him */
   boss?: boolean;
   /** the foes killed, and the frames stepped after it (0: left standing) */
@@ -83,13 +86,45 @@ const BOSS_RISE_FRAMES = 300;
 /** the frames a level switched to is given to settle in */
 const LEVEL_FRAMES = 30;
 
+/** What three draws over the engine's frame (the world's labels, the outline: core/renderer.ts `overFrame`): whether
+ *  its canvas is in the page's frame, what's outlined, and its passes' time on the GPU by three's own timestamps. */
+function overLine(): string {
+  if (overCanvasLeftOut()) return '  three\'s canvas over the engine\'s: left out, nothing to draw on it';
+  const outlined = outlinedLook();
+  const what = outlined ? `an outline round ${outlined.root.name || outlined.root.type}` : 'no outline';
+  const ms = lastFrameParts(G.renderer)?.['over frame'];
+  return `  three's canvas over the engine's: ${drawnLabels().length} labels, ${what}; its passes `
+    + `${ms === undefined ? 'not timed' : `${ms.toFixed(2)} ms on the GPU`}`;
+}
+
+/** the GPU's time for a frame before the command's levels were stepped through (ms; none with no level asked): the
+ *  frame after a trip through other levels is held to it */
+let levelsBefore: number | undefined;
+
+/** The GPU's median time for a frame over `frames` frames drawn (ms), the browser let go after each: its
+ *  timestamps come back on its own time. */
+async function gpuOver(lab: Lab, frames: number): Promise<number> {
+  const bridge = RUST.bridge!;
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  const times: number[] = [];
+  for (let frame = 0; frame < frames; frame++) {
+    await lab.step(1);
+    await window.__labClock.realFrame();
+    times.push(bridge.stats.gpuMs);
+  }
+  lab.drawing = drawing;
+  return median(times);
+}
+
 /** The hero stood where the command asks, its foes before him. */
 async function stand(lab: Lab, command: RustCommand): Promise<string> {
   for (const [path, values] of Object.entries(command.tune)) window.__tune?.(path, values);
   await standAt(lab, command);
   lab.wield({ wear: command.wear, rarity: command.rarity });
-  if (command.level) {
-    setQuality(command.level);
+  levelsBefore = command.levels.length && RUST.bridge ? await gpuOver(lab, LEVEL_FRAMES) : undefined;
+  for (const level of command.levels) {
+    setQuality(level);
     await lab.step(LEVEL_FRAMES);
   }
   if (command.foes > 0 && !command.village) {
@@ -313,6 +348,13 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
     `  the engine's boot: the module ${boot.wasmMs.toFixed(0)} ms, the device and pipelines ${boot.deviceMs.toFixed(0)} ms, `
       + `its first frame ${boot.firstFrameMs.toFixed(0)} ms`,
   ];
+  const told = bridge.levels.now();
+  lines.push(`  the level as the engine was told it: ${told.samples} samples a pixel, the sun's map ${told.shadowSize}, `
+    + `the bloom at ${told.bloomShare} of the scene's pixels`);
+  lines.push(overLine());
+  if (levelsBefore !== undefined) {
+    lines.push(`  before its levels (${command.levels.join(', ')}): the GPU ${levelsBefore.toFixed(2)} ms a frame`);
+  }
   lines.push(`  lit by: ${bridge.lights()}`);
   const lamps = bridge.lampShadowsNow();
   const own = `${lamps.own} of the place's own lights'`;

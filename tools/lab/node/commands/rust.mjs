@@ -6,6 +6,16 @@ import { join } from 'node:path';
 import { saveTape } from '../rustTape.mjs';
 import { OUT } from '../paths.mjs';
 
+const LEVELS = ['high', 'medium', 'low', 'verylow'];
+
+/** `--level`'s text as the levels it names, in turn. */
+function levelsOf(text) {
+  const levels = text ? String(text).split(',') : [];
+  const unknown = levels.find((level) => !LEVELS.includes(level));
+  if (unknown !== undefined) throw labError(`lab: --level: ${unknown} isn't one of ${LEVELS.join(', ')}`);
+  return levels;
+}
+
 /** `lab rust`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
 export default {
   summary: 'the frame of the Rust engine (`src/engine`, Bulwark) where the hero stands, pictured and timed: the walk '
@@ -48,11 +58,11 @@ export default {
         + '--class whose): what it leaves undrawn is a problem',
     },
     level: {
-      kind: 'choice',
-      choices: ['high', 'medium', 'low', 'verylow'],
-      usage: 'high|medium|low|verylow',
+      kind: 'text',
+      usage: 'high|medium|low|verylow[,...]',
       help: 'the quality level switched to once he stands there, as Auto steps to it in play (--boot: the level '
-        + 'the page boots at)',
+        + 'the page boots at); several, each in turn: `--boot verylow --level low,verylow` is Auto trying Low and '
+        + 'going back, which must leave the frame as it was',
     },
     boss: { kind: 'switch', help: 'the boss of the biome stood before him (not in the village)' },
     dying: {
@@ -91,7 +101,7 @@ export default {
       village: Boolean(options.village),
       room: options.room,
       cast: options.cast,
-      level: options.level,
+      levels: levelsOf(options.level),
       boss: Boolean(options.boss),
       dying: Math.round(options.dying ?? 0),
       hour: options.hour,

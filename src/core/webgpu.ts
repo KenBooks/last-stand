@@ -423,17 +423,46 @@ export function labelsMaterial(atlas: THREE.Texture, view: THREE.Vector2): {
   return { material, setAtlas: (t) => { shown.value = t; } };
 }
 
+/** whether the next draw over the frame clears the canvas as its pass begins (`clearOverFrame`) */
+let overClears = false;
+/**
+ * The canvas cleared by the next draw over the frame (`drawOverFrame`), as its pass begins: under the Rust engine
+ * three's canvas holds the world's overlays alone, over the engine's. Cleared by a pass of its own, each draw
+ * after it was a pass that read the whole canvas back first: on a phone's GPU, which draws by tiles, 4.5 million
+ * pixels loaded and stored a pass, three passes a frame with an outline shown (10.9 ms a frame of its GPU, a
+ * report from play, 64P8-0VPK, where a frame with nothing drawn over it took 1.5).
+ */
+export function clearOverFrame(): void {
+  overClears = true;
+  overPasses = 0;
+}
+/** how many passes the frame has drawn onto the canvas over the engine's so far */
+let overPasses = 0;
+/** A pass onto that canvas counted: a clear of its own (`drawOverFrame` counts its draws). */
+export function countOverPass(): void { overPasses++; }
+/** For a harness: the passes the last frame drew onto the canvas over the engine's. */
+export const overFramePasses = (): number => overPasses;
+/** Whether the canvas is still to be cleared: no draw over the frame has begun since `clearOverFrame`. */
+export function overFrameUncleared(): boolean {
+  const left = overClears;
+  overClears = false;
+  return left;
+}
+
 /**
  * `draw` onto the canvas over the frame the pipeline drew: with no tone mapping or conversion asked, so three draws
  * straight onto it (else it draws into a target of its own, empty, and copies that over the frame: the labels' first
- * port blacked the frame out), and not cleared.
+ * port blacked the frame out), and not cleared, but where the canvas is to be cleared first (`clearOverFrame`): then
+ * this draw's pass clears it as it begins.
  */
 export function drawOverFrame(renderer: THREE.WebGLRenderer, draw: () => void): void {
   const r = renderer as unknown as WebGPURenderer;
   const { toneMapping, outputColorSpace, autoClear } = r;
   r.toneMapping = THREE.NoToneMapping;
   r.outputColorSpace = THREE.ColorManagement.workingColorSpace;
-  r.autoClear = false;
+  r.autoClear = overClears;
+  overClears = false;
+  overPasses++;
   r.setRenderTarget(null);
   draw();
   r.toneMapping = toneMapping;

@@ -14,7 +14,7 @@ import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import {
   WEBGPU, drawOverScene, makeWebGPURenderer, makePipeline, renderWebGPU, setBloomShareOnWebGPU,
   setBloomStrengthOnWebGPU, setSceneSamples,
-  setSceneShare, shadeEnvironmentNodes, webgpuSceneTarget,
+  setSceneShare, shadeEnvironmentNodes, webgpuSceneTarget, clearOverFrame, countOverPass, overFrameUncleared,
 } from './webgpu';
 import { G } from '../state';
 import { RUNNING } from './rendererChoice';
@@ -1722,6 +1722,12 @@ function leaveOverOut(out: boolean): void {
   overLeftOut = out;
   gl.domElement.style.opacity = out ? '0' : '';
 }
+/** three's canvas cleared by a pass of its own, now. */
+function clearOverNow(): void {
+  overFrameUncleared();
+  gl.clear(true, true, false);
+  countOverPass();
+}
 /** For a harness: whether three's canvas is left out of the page's frame now. */
 export const overCanvasLeftOut = (): boolean => overLeftOut;
 /** whether the world's overlays are drawn over the frame (photo mode leaves them out: `showOverlays`) */
@@ -1841,10 +1847,15 @@ export function render(): void {
       const none = !overlaysShown || overFrame.empty();
       leaveOverOut(none);
       if (!none) {
+        // (cleared by the first of the overlays' draws, as its pass begins: `clearOverFrame`; by a pass of its
+        // own only where none drew, or with the switch off, as it was: a profile's, to time the two)
         gl.setRenderTarget(null);
         gl.setClearColor(0x000000, 0);
-        gl.clear(true, true, false);
+        const asItWas = RUST.tune.overCleared <= 0 || !WEBGPU;
+        clearOverFrame();
+        if (asItWas) clearOverNow();
         overFrame.draw();
+        if (overFrameUncleared()) clearOverNow();
       }
       framePart('render: drawn (Rust)');
       RUST.renderMs = perfClock.now() - renderBegan;

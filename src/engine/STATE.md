@@ -251,3 +251,15 @@ Read, not fixed:
   phone's memory says so: room by the blades kept, or a blade in 32 bytes.
 - [ ] Next for the grass: a blade's place is the same every frame (its root, its height, its lean); only whether
   its distance shows it changes. Kept by tile, the pass would read it instead of making it.
+- [x] The grass placed once, on the phone (F1N7-RPT9, over the shoulder at Very low): the grass 3.1 ms of a 14.4 ms
+  frame (it was 8.4 of 16.8), 1.5 of it its shading. From play: "no drop in perf when viewing behind the shoulder".
+- [ ] "phone still lagged after walking, fps dropped to 30" (64P8-0VPK, from above at Very low): 88 frames a second
+  to 34 to 43, three's passes over the engine's frame 10.9 ms a frame of its GPU (1.5 in the recordings before).
+  Three's canvas is cleared by its first draw now, not by a pass before it (`clearOverFrame`, `rust.overCleared=0`
+  the old way, a profile's part; `lab rustcheck`). Not measured on the phone. Left if it still lags there: the
+  two canvases laid one over the other while a label or an outline shows, and the outline's edge, 49 reads of its
+  mask a pixel of the outlined thing's box. Both go when the engine draws the overlays itself.
+- Not it: Auto's trial of Low in the same seconds. A trip to Low and back leaves the frame's GPU time as it was
+  (`lab rust --village --view top --boot verylow --level low,verylow`: 0.71 ms before, 0.72 after). Stepped
+  through with no frame drawn between (the lab's own stand), the frame after read 1.25 to 1.49 ms in 4 runs of 7,
+  its picture the same: not explained, and not what play does.

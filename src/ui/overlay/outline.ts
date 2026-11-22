@@ -328,7 +328,8 @@ function drawEdge(gl: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget, look
   u.uStrength.value = look.strength;
   const within = boxOnCanvas(look.targets, glow + BOX_MARGIN);
   const autoClear = gl.autoClear;
-  gl.autoClear = false;
+  // (on WebGPU as `drawOverFrame` set it: this pass may be the one that clears the canvas)
+  if (!WEBGPU) gl.autoClear = false;
   gl.setRenderTarget(null);
   if (within) {
     // (WebGPU's scissor is from the canvas's top, WebGL's from its bottom)

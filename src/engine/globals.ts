@@ -90,6 +90,9 @@ export const TUNE = tunable('rust', {
   /** a counted draw's instances (the meadow's blades) placed once a frame by a pass ahead of the draw, only those
    *  kept drawn (Bulwark's gpu/placed.rs; 0: placed at every vertex of every pass, as they were, to compare) */
   fieldsPlaced: 1,
+  /** three's canvas over the engine's cleared by the first draw of a frame's overlays as its pass begins (0: by
+   *  a pass of its own before them, as it was: each draw after it reads the whole canvas back) */
+  overCleared: 1,
   /** the village's fog over what the hero can't see (0: none, to compare) */
   sightFog: 1,
   /** how far off a face turned to the hero the fog reads its place (m; 0: on the face, as the game's own pass
