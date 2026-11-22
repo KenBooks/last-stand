@@ -8,7 +8,7 @@ declare module '../houses' {
 
 export const HOUSE: House = {
   // (the cottage nearest the notice board, beside the Thornwood's road: from play, its pick)
-  id: 'records', cottage: 0, name: 'The House of Records', half: [4.6, 3.6], high: 3.3,
+  id: 'records', cottage: 0, name: 'House of Records', half: [4.6, 3.6], high: 3.3,
   objects: ([rx, rz]) => [
     // (the great ledger on its lectern, before the trophies)
     { id: 'ledger', use: 'records', at: [0, -0.9], reach: 1.9, stand: [0, 0.4], label: 1.45, tall: 1.6,

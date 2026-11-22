@@ -56,7 +56,7 @@ export function showVillageCard(o: VillageObject | null): void {
     $('.vc-sub', card).textContent = 'Every wave, bank what you found or fight on for more.';
     renderLobbyOptions();
   } else if (o.use === 'training') {
-    $('.vc-title', card).textContent = 'The Training Grounds';
+    $('.vc-title', card).textContent = 'Training Grounds';
     $('.vc-sub', card).textContent =
       'Any wave you have reached, its foes but shades: no harm, loot, score or progress.';
     renderLobbyOptions();

@@ -22,7 +22,7 @@ function scholar(): Omit<VillageObject, 'room'> {
 export const HOUSE: House = {
   // (the cottage south of the square, between the campfire and the training yard: where a new hero learns, the yard
   // a few steps off; its door toward the square. From play: "add library to one of the village houses")
-  id: 'library', cottage: 4, name: 'The Library', half: [5.6, 4.2], high: 3.8,
+  id: 'library', cottage: 4, name: 'Library', half: [5.6, 4.2], high: 3.8,
   objects: ([, lz]) => [
     // (the library's great book on its lectern before the back wall's shelves: the in-game guide)
     { id: 'codex', use: 'guide', at: [0, -lz + 1.6], reach: 1.9, stand: [0, -lz + 2.9], label: 1.55, tall: 1.7,

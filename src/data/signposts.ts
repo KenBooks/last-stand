@@ -10,13 +10,10 @@ export interface SignArm { name: string; to: Spot }
 /** A signpost: where its post stands (x, z) and its arms, the top one first. */
 export interface Signpost { at: Spot; arms: readonly SignArm[] }
 
-/** A name as an arm bears it: without a leading "The" (from the owner: "lets remove "the" from all names"). */
-const armName = (name: string): string => name.replace(/^The /, '');
-
-/** An arm pointing at house `id`'s door, named as its sign over the door is, less its "The". */
+/** An arm pointing at house `id`'s door, named as its sign over the door is. */
 const toHouse = (id: RoomId): SignArm => {
   const door = houseDoor(id);
-  return { name: armName(HOUSES[id].name), to: [door.x, door.z] };
+  return { name: HOUSES[id].name, to: [door.x, door.z] };
 };
 
 /** the ways out and the places a road leads to, as an arm names them */

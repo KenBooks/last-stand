@@ -9,7 +9,7 @@ declare module '../houses' {
 export const HOUSE: House = {
   // (the cottage east of the square, its door on the road to the Crypt's portal, where a party passes on its way to a
   // run: from play, the owner's pick on the village's map)
-  id: 'tavern', cottage: 5, name: 'The Ember & Oak', half: [5.4, 4.0], high: 3.2,
+  id: 'tavern', cottage: 5, name: 'Ember & Oak', half: [5.4, 4.0], high: 3.2,
   objects: ([tx, tz]) => [
     // (the round table by the hearth, a map on it: Play together, the room flow the campfire opens)
     { id: 'partyTable', use: 'coop', at: [-tx + 2.2, -tz + 2.4], reach: 2.1, stand: [-tx + 2.2, -tz + 3.9],
