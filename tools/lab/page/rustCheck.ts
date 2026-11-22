@@ -4,6 +4,7 @@
 // lit as the square at noon, its roof black from above, a dark rectangle on a battleground's floor, a skill's own
 // effects not drawn, and the engine stopped for good by a canvas nothing had drawn on.
 import { plantedFaults } from './rustFaults';
+import { blankCanvas, mapPaintedLate } from './rustMaps';
 import { type Checked, failed, passed } from './rustPixels';
 import { frames, THREE_DRAWS_MOST } from './rustFrames';
 import { hallFromAbove, house, lampShadows, lightCache, shelter, sunShadowInTurns } from './rustVillageChecks';
@@ -214,29 +215,6 @@ async function flamesAtFewerPixels(lab: Lab, bridge: Bridge): Promise<Checked> {
 }
 
 
-/** A canvas nothing has drawn on, shown as a map: the engine draws on after it. */
-async function blankCanvas(lab: Lab, bridge: Bridge): Promise<Checked> {
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 32;
-  const map = new THREE.CanvasTexture(canvas);
-  const card = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), new THREE.MeshBasicMaterial({ map }));
-  card.position.copy(G.player.pos).add(new THREE.Vector3(0, 3, 0));
-  G.scene.add(card);
-  const drawing = lab.drawing;
-  lab.drawing = true;
-  try {
-    await lab.step(3);
-  } catch (error) {
-    return failed(`a blank canvas as a map stopped the engine: ${String(error).slice(0, 200)}`);
-  } finally {
-    lab.drawing = drawing;
-    G.scene.remove(card);
-    map.dispose();
-  }
-  if (bridge.stats.draws < 10) return failed(`after a blank canvas as a map the engine drew ${bridge.stats.draws} things`);
-  return passed('a canvas nothing has drawn on is taken as a map');
-}
-
 /** Every foe of the fight is handed to the engine, and three draws none of the scene. */
 async function fight(lab: Lab, bridge: Bridge, foes: number): Promise<Checked> {
   const spots = crowdPlaces(foes, G.player.pos, G.player.facing);
@@ -333,6 +311,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(await overCanvas(lab));
       checks.push(await house(lab, bridge, command.room as RoomId));
       checks.push(await blankCanvas(lab, bridge));
+      checks.push(await mapPaintedLate(lab, bridge));
       await standIn(lab, { biome: command.biome, view: 'third', facing: 0, fresh: true });
       lab.drawing = true;
       await lab.step(5);

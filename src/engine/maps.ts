@@ -2,8 +2,16 @@
 // texture, a frame written down as a tape), and a base map joined to its alpha map on the page.
 import * as THREE from 'three';
 import type { Core } from './core';
+import { TUNE } from './globals';
 
-interface TextureEntry { id: number; version: number }
+interface TextureEntry { id: number; version: number; width: number }
+
+/** How wide a map's picture is now. The game hands a map out on a blank canvas a pixel wide while a worker makes
+ *  it, and paints it as it comes with no word to the texture (core/textures.ts `paint`: three reads a canvas at
+ *  its first draw, and draws nothing before every map has come). The engine meets a map as its material is first
+ *  described, which a loaded PC put before the map came: the village's ground stayed the blank's, white (from
+ *  play, "village loaded with white ground"). A picture whose width has changed is handed over again. */
+const widthOf = (texture: THREE.Texture): number => (texture.image as { width?: number } | null)?.width ?? 0;
 
 export class Maps {
   private textures = new WeakMap<THREE.Texture, TextureEntry>();
@@ -61,7 +69,8 @@ export class Maps {
   textureId(texture: THREE.Texture | null | undefined): number {
     if (!texture) return 0;
     const core = this.core, entry = this.textures.get(texture);
-    if (entry && entry.version === texture.version) return entry.id;
+    const width = widthOf(texture);
+    if (entry && entry.version === texture.version && (entry.width === width || !TUNE.mapsBySize)) return entry.id;
     if (entry?.id) { core.engine.drop_texture(entry.id); core.held.textures--; }
     const srgb = texture.colorSpace === THREE.SRGBColorSpace;
     // (a picture of the page's is copied on the GPU, the engine making its smaller levels there: read back to bytes
@@ -75,7 +84,7 @@ export class Maps {
       if (!pixels) core.skip('texture not readable');
     }
     if (id) { core.held.textures++; core.stats.newTextures++; }
-    this.textures.set(texture, { id, version: texture.version });
+    this.textures.set(texture, { id, version: texture.version, width });
     core.freshViews();
     return id;
   }

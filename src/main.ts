@@ -176,7 +176,9 @@ async function boot() {
   preloadFlames();
   prepareWind();
   if (VILLAGE) prepareCrest();
-  await loadingStep('Forging the arena', 0.08);
+  // (each long stretch of the boot under a step of its own: under four names the bar stood at one for 3 to 9 s,
+  // from play, "desktop still stuck here for a bit", "can you we add more steps in loading ?")
+  await loadingStep('Forging the arena', 0.05);
   initUIScale();
   releaseClickedFocus();
   initItemIcons();
@@ -228,6 +230,7 @@ async function boot() {
   initLights(scene);
   initEffects();
   initAudio();   // resumed by the first user gesture
+  await loadingStep('Raising the walls', 0.14);
   // (built on the maps' canvases as the workers paint them: nothing is drawn till all have come)
   G.arena = await buildArena(scene, renderer);
   if (VILLAGE) {
@@ -243,6 +246,7 @@ async function boot() {
   // the village shown (or, with no village, the lobby's biome), and its programs compiled while the hero is built
   // (game/warmup.ts)
   if (!VILLAGE) initBiome();
+  await loadingStep('Kindling the lamps', 0.24);
   await compileTheBiome();
   // (the lobby's panels rastered under the loading screen while the hero is built: ui/menus.ts)
   // (the loading screen seen through by a thousandth while the lobby's UI is rehearsed under it: opaque, Chrome
@@ -268,6 +272,7 @@ async function boot() {
   // (the houses' folk seated, the library's scholar and the merchant's Odo: their heads and hands are the heroes',
   // made by now)
   if (VILLAGE) {
+    await loadingStep('Gathering the villagers', 0.45);
     for (const room of Object.values(G.arena.rooms ?? {})) {
       if (!room.seatFolk) continue;
       await painted();
@@ -412,8 +417,8 @@ async function boot() {
   // once the loading screen has left, a hero at a time, each shown on his plinth as he's warm (from play, "we can only
   // load currently selected/default hero... and then load the two others": warmed under the loading screen, a low-end
   // laptop's froze; asked for before it left, they held its wait for smooth frames 4.1 s, a task of 2.5 s in it)
-  if (firstVisit) await loadingStep('Readying the hall', 0.6);
-  await warmLobby(firstVisit);
+  await loadingStep(firstVisit ? 'Readying the hall' : 'Warming the hearth', 0.6);
+  await warmLobby(firstVisit, loadingStep);
   if (VILLAGE) ghostsWarmed();
   const { fight: fightWarmed, all: rest } = warmTheRest(loadingLeft);
   if (firstVisit) {
@@ -432,6 +437,7 @@ async function boot() {
     await Promise.race([fightWarmed, new Promise((done) => setTimeout(done, FIGHT_UNDER_LOADING))]);
   }
   if (VILLAGE) {
+    await loadingStep('Setting the square', 0.78);
     stillLoading(true);
     await rehearseChest(drawn);
     stillLoading(false);

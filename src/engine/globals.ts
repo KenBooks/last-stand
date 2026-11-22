@@ -53,6 +53,9 @@ export const TUNE = tunable('rust', {
   shadowTurns: 1,
   /** what's see-through drawn solid, with what's opaque, while its kind thins nothing (`Materials.solidNow`) */
   solidSee: 1,
+  /** a map whose picture has changed its size since it was handed over is handed over again (0: the canary of
+   *  `lab rustcheck`'s map painted late) */
+  mapsBySize: 1,
   /** what the camera stands inside (the ground, the sky) drawn after the rest of what's opaque (the engine's plan.rs) */
   nearFirst: 1,
   /** the point lights' shine: 0 leaves it out at every level (a profile's), as the lite levels do (`Grade.lite`) */

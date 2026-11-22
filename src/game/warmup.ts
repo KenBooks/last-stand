@@ -206,11 +206,15 @@ export async function compileTheLobby(): Promise<void> {
 const dummies = (): THREE.Object3D[] => G.enemies.map((e) => e.obj);
 const outlined = (): (THREE.Object3D | OutlineTarget)[] => [...dummies(), ...G.arena.allSeats().flatMap((s) => s.outline)];
 
+/** A step of a warm-up told before it's taken: its name, and how far along the loading screen's bar it stands. */
+export type WarmStep = (label: string, progress: number) => Promise<void>;
+
 /** What the lobby shows and can do, warmed before it shows (the lobby's dummies already stand in it, its effects,
  *  loot and skills made with its hero: `compileTheLobby`); the fight's foes built meanwhile (`buildAhead`). With
  *  `hall` (a first visit, which opens on the hero selection screen), the hall of heroes' room too, drawn in the
- *  village's place; its other heroes are warmed after the reveal, a hero at a time (`warmTheRest`). */
-export async function warmLobby(hall = false): Promise<void> {
+ *  village's place; its other heroes are warmed after the reveal, a hero at a time (`warmTheRest`). Each of its
+ *  long stretches is told to `step` first (the loading screen's: a name and how far along the bar). */
+export async function warmLobby(hall = false, step: WarmStep = async () => undefined): Promise<void> {
   // (the hero's class with all it can wear: equipping anything in the lobby compiles nothing)
   await painted();
   const hero = heroAllWorn(G.player.cls.model);
@@ -232,12 +236,14 @@ export async function warmLobby(hall = false): Promise<void> {
   // (a first visit opens on the hall of heroes: its room warmed with the lobby, its other heroes after the reveal, a
   // hero at a time, each shown as he's warm: warmed with the lobby, the two held a low-end laptop's loading screen)
   if (hall) {
+    await step('Raising the hall of heroes', 0.64);
     await warmBuilt([hallPart().build()]);
     hallWarm = true;
   }
   // (the outline a held skill draws round a foe: the dummies' meshes drawn into its mask)
   warmOutline(outlined());
   clearEffects(); clearLights(); particles.clear();
+  await step('Mustering the foes', 0.67);
   await ahead;
 }
 
