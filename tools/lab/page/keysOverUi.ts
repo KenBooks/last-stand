@@ -4,7 +4,9 @@
 // (a press there is the UI's). From play: the number keys cast nothing in a fight while "mouse was hovering over
 // skill", "same thing when hovering over a perf panel", "or any other panel" (#816): the pointer over the UI held
 // every key off, the keyboard's too.
+import { middleOf } from './lab';
 import type { Fixture, Lab, Report } from './lab';
+import { input } from '../../../src/core/input';
 import { G } from '../../../src/state';
 import { on } from '../../../src/events';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
@@ -46,6 +48,18 @@ async function pressed(lab: Lab, key: SkillKey, overUI: boolean, planted: boolea
   return used;
 }
 
+/** A real press of the mouse on a slot of the skill bar, which only shows a tip: whether the game took it as a
+ *  press on the world (its left button down, the pointer not held to be over the UI). */
+async function slotPressed(lab: Lab): Promise<{ taken: boolean; overUI: boolean } | null> {
+  const slot = document.querySelector<HTMLElement>('#hotbar .slot');
+  if (!slot || !slot.getClientRects().length) return null;
+  const at = middleOf(slot);
+  await lab.mouseDown(at);
+  const read = { taken: input.mouse.left, overUI: input.mouse.overUI };
+  await lab.mouseUp(at);
+  return read;
+}
+
 /** `lab overui`: every skill key over the world and over the UI; with `canary` nothing casts over the UI, which the
  *  keyboard's keys must be found to differ by. */
 export async function keysOverUi(lab: Lab, options: KeysOverUiOptions): Promise<Report> {
@@ -70,6 +84,12 @@ export async function keysOverUi(lab: Lab, options: KeysOverUiOptions): Promise<
       problems.push(`${key} (${skill}) ${said(overUI)} with the pointer over the UI, ${said(overWorld)} over the world`);
     }
   }
+  // (and a real press on a slot of the skill bar, which has no action of its own: the world's)
+  const slot = await slotPressed(lab);
+  if (!slot) throw new Error('lab: overui: the skill bar shows no slot to press');
+  lines.push(`a press on a slot of the skill bar: ${slot.taken ? 'the world\'s' : 'not taken'}`
+    + `${slot.overUI ? ', the pointer held to be over the UI' : ''}`);
+  if (!slot.taken || slot.overUI) problems.push('a press on a slot of the skill bar never reached the world');
   // (the state checked to have happened: a keyboard key that casts at all, or nothing was compared)
   if (!keyboardCast) throw new Error('lab: overui: no keyboard key of the hero\'s cast over the world');
   if (!options.canary) return { text: lines.join('\n'), problems };

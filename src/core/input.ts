@@ -230,6 +230,16 @@ function aimAlong(far: number, offHero = false): void {
   input.ground.set(_best.x, _best.y - groundHeight(_best.x, _best.z), _best.z);
 }
 
+/** what of the page's UI shows a tip under the pointer and does nothing of its own on a press: the skill bar's
+ *  slots. A press there is the world's, as on the game's view (from play: "mouse clicks should go through an
+ *  action panel, if it does not have any special action for it... perf action is copy on click for example, so
+ *  that click should not go through", #816). What does act on a press is left out, and takes it. */
+const TIP_ONLY = '#hotbar .slot';
+
+/** Whether a press on `target` is the world's: the game's view, or a part of the UI that only shows a tip. */
+const worldsPress = (target: EventTarget | null, canvas: HTMLElement): boolean =>
+  target === canvas || (target instanceof Element && target.closest(TIP_ONLY) !== null);
+
 function keyName(e: KeyboardEvent): string {
   if (e.code.startsWith('Key')) return e.code.slice(3).toLowerCase();
   if (e.code.startsWith('Digit')) return e.code.slice(5);
@@ -284,12 +294,12 @@ export function initInput(canvas: HTMLCanvasElement, keyboardTarget: (target: st
     if (input.touchMode) return;
     if (pointerLocked()) { lookMove(e); input.mouse.overUI = false; return; }
     input.mouse.x = e.clientX; input.mouse.y = e.clientY;
-    input.mouse.overUI = e.target !== canvas;
+    input.mouse.overUI = !worldsPress(e.target, canvas);
     // the drag keeps rotating over the UI; `buttons` catches a release outside the window
     if (input.mouse.middle) { if (e.buttons & 4) input.orbit += e.movementX; else input.mouse.middle = false; }
   });
-  canvas.addEventListener('mousedown', (e) => {
-    if (input.touchMode) return;
+  window.addEventListener('mousedown', (e) => {
+    if (input.touchMode || !worldsPress(e.target, canvas)) return;
     // the click that takes the pointer for mouse look doesn't also attack
     if (lockWanted && !pointerLocked()) { requestLock(); return; }
     if (e.button === 0) { input.mouse.left = true; input.pressed.add('mouse0'); }
@@ -301,7 +311,7 @@ export function initInput(canvas: HTMLCanvasElement, keyboardTarget: (target: st
     if (e.button === 2) input.mouse.right = false;
     if (e.button === 1) input.mouse.middle = false;
   });
-  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  window.addEventListener('contextmenu', (e) => { if (worldsPress(e.target, canvas)) e.preventDefault(); });
   canvas.addEventListener('wheel', (e) => { input.wheel += Math.sign(e.deltaY); e.preventDefault(); }, { passive: false });
 }
 
