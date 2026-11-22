@@ -1,8 +1,8 @@
-// The Rust engine's trial (`?renderer=rust`, core/rendererChoice.ts): Bulwark, our own WebGPU renderer in Rust and
+// The Rust engine (the plain address where WebGPU is, `?renderer=rust`; core/rendererChoice.ts): Bulwark, our own WebGPU renderer in Rust and
 // WebAssembly (`pkg/`, built from the private repository VictorZakharov/bulwark), draws the game's scene on a canvas
 // of its own laid over three's. The game still boots on three's WebGPU renderer, which goes on making what the
-// engine doesn't yet (warm-ups, portraits, the overlays); only the frame's scene is the engine's. An experiment:
-// nothing of it is loaded unless the address asks.
+// engine doesn't yet (warm-ups, portraits, the overlays); only the frame's scene is the engine's. Loaded where the
+// browser has WebGPU; where it hasn't, or the engine doesn't start, the loading screen says so (no other renderer).
 import type * as THREE from 'three';
 import { Bridge, TUNE, type Grade } from './bridge';
 import { perfClock } from '../core/perfClock';
@@ -58,7 +58,7 @@ export function rustSamples(samples: number): void {
 /** the samples the game last asked for, for an engine not made yet */
 let samplesWanted: number | null = null;
 
-/** The engine made on a canvas of its own over `under`, three's. A failure leaves three drawing. */
+/** The engine made on a canvas of its own over `under`, three's. A failure throws: nothing else draws the game. */
 export async function bootRust(under: HTMLCanvasElement): Promise<void> {
   try {
     const began = performance.now();
@@ -88,9 +88,10 @@ export async function bootRust(under: HTMLCanvasElement): Promise<void> {
   } catch (error) {
     RUST.failed = String(error);
     fault('the engine did not start', String(error));
-    console.error('The Rust engine did not start; three draws the game.', error);
     canvas?.remove();
     canvas = null;
+    // (nothing else draws the game: the boot fails here, and the loading screen says why)
+    throw new Error(`the engine did not start: ${String(error)}`);
   }
 }
 
