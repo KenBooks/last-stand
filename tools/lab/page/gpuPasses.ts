@@ -13,7 +13,7 @@ import type { QualityLevel } from '../../../src/data/quality';
 import type { ViewMode } from '../../../src/core/renderer';
 import * as quality from '../../../src/core/quality';
 import { G } from '../../../src/state';
-import { WEBGPU, webgpuSceneTarget } from '../../../src/core/webgpu';
+import { webgpuSceneTarget } from '../../../src/core/webgpu';
 import { standAt } from './draws';
 import { featureCost, sceneFeatures } from './sceneFeatures';
 import * as perfHud from '../../../src/ui/perfHud';
@@ -129,11 +129,6 @@ export async function gpuPasses(lab: Lab, command: PassesCommand): Promise<Repor
   G.paused = command.paused === true;
   // (pictured as the browser shows it: an A/B's sides compared pixel by pixel, a cost cut keeping the look)
   const pictured = await lab.screen('the frame timed');
-  // (on WebGL the frame alone, pictured: to set beside WebGPU's)
-  if (!WEBGPU) {
-    const text = 'WebGL: the frame pictured alone (its renders are timed on WebGPU, --renderer webgpu)';
-    return { text, problems: [], moments: [pictured] };
-  }
   const renderer = G.renderer as unknown as Timed;
   const pools = renderer.backend.timestampQueryPool;
   const drawing = lab.drawing;

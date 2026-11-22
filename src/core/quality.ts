@@ -12,7 +12,7 @@
 // screen's own pixels: what's cut is other work,
 // never the resolution (from play, "I want to run the game at full phone res, if we need
 // to cut, we need to cut something else, not resolution").
-import { WEBGPU, setPlainLitOnWebGPU } from './webgpu';
+import { setPlainLitOnWebGPU } from './webgpu';
 import * as THREE from 'three';
 import { G } from '../state';
 import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualitySetting } from '../data/quality';
@@ -34,15 +34,7 @@ import { setSkullDetail } from '../world/skull';
 import { setSunShadowStill } from '../world/props';
 import { setClutterShare, setLeafShare, setFloorPlants } from '../world/culling';
 import { setSimpleTrees } from '../world/simpleTrees';
-import { compiledThoughHidden } from './shaders';
 import { setGearGlowByLevel } from './materials';
-
-// (Very low's floor plants, hidden, compiled with the rest on WebGPU: Auto may climb to Low, and show them, mid-fight)
-compiledThoughHidden(() => {
-  if (QUALITY[level].floorPlants) return () => undefined;
-  setFloorPlants(true);
-  return () => setFloorPlants(false);
-});
 
 /** how far the moon's shadows' edges blur on the floor (m): at its default a texel, 1.7 to 7 cm by the map's size,
  *  every shadow's edge was hard */
@@ -336,11 +328,11 @@ function apply(l: QualityLevel, most = Infinity): void {
   setRenderQuality(p, most);
   setHeroDetail(p.heroDetail);
   const shadow = G.arena.moon.shadow;
-  // (WebGL's map is made again at the new size on the next render. WebGPU's is sized once, as it's first made: three
+  // (the map is sized once, as it's first made: three
   // resizes it from `mapSize` as it draws it, but the lit materials kept the old map's binding, and every frame's
   // submit was refused for drawing with it destroyed, 543 times a lab profile, the scene's picture standing still as
   // the game went on: a phone's hero stuck mid pose once Auto stepped down a level, trace 4CP9-45EC)
-  const resizable = !WEBGPU || shadow.map === null;
+  const resizable = shadow.map === null;
   if (shadow.mapSize.x !== p.shadowMap && resizable) {
     shadow.mapSize.set(p.shadowMap, p.shadowMap);
     shadow.map?.dispose();
@@ -369,7 +361,7 @@ function apply(l: QualityLevel, most = Infinity): void {
   setParticleShare(p.particles);
   setGearGlowByLevel(p.gearGlow);
   setFlameSteps(p.flameSteps, p.flameLite);
-  if (WEBGPU) setPlainLitOnWebGPU(p.plainLit);
+  setPlainLitOnWebGPU(p.plainLit);
   for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
   restart();

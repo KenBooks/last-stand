@@ -1,6 +1,6 @@
 # Rust engine experiment: state
 
-The overnight run's state file (2026-11-20). Branch `experiment/rust-engine`, draft PR #797, never to merge as it is.
+The state file of the engine's work, begun as an overnight run (2026-11-20). Branch `experiment/rust-engine`, PR #797. Since 2026-11-22 the engine alone draws the game (the last section).
 
 - Engine: `G:\Git\bulwark`, private `VictorZakharov/bulwark`. Build: `bash scripts/build.sh` there, then copy `pkg/bulwark{.js,.d.ts,_bg.wasm,_bg.wasm.d.ts}` into `src/engine/pkg/`.
 - Game side: `src/engine/bridge.ts` (the scene handed over), `src/engine/index.ts` (boot, canvas), the hook in `core/renderer.ts` `render`.
@@ -253,10 +253,10 @@ Read, not fixed:
   its distance shows it changes. Kept by tile, the pass would read it instead of making it.
 - [x] The grass placed once, on the phone (F1N7-RPT9, over the shoulder at Very low): the grass 3.1 ms of a 14.4 ms
   frame (it was 8.4 of 16.8), 1.5 of it its shading. From play: "no drop in perf when viewing behind the shoulder".
-- [ ] "phone still lagged after walking, fps dropped to 30" (64P8-0VPK, from above at Very low): 88 frames a second
+- [x] "phone still lagged after walking, fps dropped to 30" (64P8-0VPK, from above at Very low): 88 frames a second
   to 34 to 43, three's passes over the engine's frame 10.9 ms a frame of its GPU (1.5 in the recordings before).
   Three's canvas is cleared by its first draw now, not by a pass before it (`clearOverFrame`, `rust.overCleared=0`
-  the old way, a profile's part; `lab rustcheck`). Not measured on the phone. Left if it still lags there: the
+  the old way, a profile's part; `lab rustcheck`). On the phone: the line after next. Left: the
   two canvases laid one over the other while a label or an outline shows, and the outline's edge, 49 reads of its
   mask a pixel of the outlined thing's box. Both go when the engine draws the overlays itself.
 - Not it: Auto's trial of Low in the same seconds. A trip to Low and back leaves the frame's GPU time as it was
@@ -265,8 +265,22 @@ Read, not fixed:
   its picture the same: not explained, and not what play does.
 - [x] The overlays' canvas in one pass, on the phone (TD5N-H10K): three's passes over the engine's frame 1.5 ms
   (10.9 before), 81 to 87 frames a second moving from above at Very low.
-- [ ] "still lags after move" (the same recording): four frames of 92 to 275 ms in a second as he set off, the other
+- [x] "still lags after move" (the same recording): four frames of 92 to 275 ms in a second as he set off, the other
   heroes readied as he neared their hall (a build of 143 ms in one task, their meshes and maps handed over at
-  once). Asked for as the boot ends now, a return's alone (`main.ts`), no boot time added here. Not measured on the
-  phone. Left if a frame there is still long: a hero's build is one task, and what's handed to the engine in a
-  frame has no budget.
+  once). Asked for as the boot ends now, a return's alone (`main.ts`), no boot time added here. From play on the
+  phone: "Gone". Its report after (F3Y8-M4TG, from above at Very low, walking): 83 frames a second, the worst
+  frames in play two of 42 ms, three's passes over the frame 0.4 ms. Left: a hero's build is one task, and
+  what's handed to the engine in a frame has no budget.
+
+## 2026-11-22, the engine alone
+
+From the owner: "we dont need webgl fallback, wegl and old webgpu paths should be removed", "we absolutely do
+not intend to support the old way of rendering".
+
+- [x] The address picks no renderer (`core/rendererChoice.ts`): the engine, on WebGPU. An engine that doesn't
+  start fails the boot, and the loading screen says where the browser has no WebGPU.
+- [x] The branches for three's WebGL renderer and for three's WebGPU renderer drawing the scene are folded out
+  of the game and the tools; the lab and stalls ask for no other renderer.
+- three's WebGPURenderer is still the engine's host: the labels' and the outline's canvas, the portraits. The
+  comparisons with WebGL above (`--webgl`, `--three`, `&renderer=webgl`) can't be run again from this tree:
+  `--ab` against a commit before this one is what's left of them.

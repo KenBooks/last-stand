@@ -20,7 +20,6 @@ import type { BiomeId } from '../../../src/data/biomes';
 import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
 import type { Bridge } from '../../../src/engine/bridge';
-import { RUNNING } from '../../../src/core/rendererChoice';
 import {
   bloomShareNow, overCanvasLeftOut, sceneSamples, sceneSize, showOverlays,
 } from '../../../src/core/renderer';
@@ -49,12 +48,15 @@ const PLACED_WITHIN = 1e-3;
 const CAST_FRAMES = 50;
 const CAST_AHEAD = 8;
 
+/** what an address once chose a renderer by: nothing reads them now, and nothing of the lab's may ask */
+const RENDERER_QUERIES = ['renderer', 'meshlets', 'lights'];
+
 /** The page is the one a player gets: the engine on the plain address, the pause menu with no renderer to
  *  choose (from the owner: "since we only have 1 renderer, we dont need to display an option for it"). */
 function playersPage(): Checked {
-  const asked = new URLSearchParams(location.search).get('renderer');
-  if (asked) return failed(`the page was booted at ?renderer=${asked}, not the plain address players get`);
-  if (!RUNNING.rust || !RUST.bridge) return failed(`the engine isn't drawing: ${RUST.failed || 'not booted'}`);
+  const asked = RENDERER_QUERIES.filter((name) => new URLSearchParams(location.search).has(name));
+  if (asked.length) return failed(`the page's address asks for a renderer (${asked.join(', ')}): there is one`);
+  if (!RUST.bridge) return failed(`the engine isn't drawing: ${RUST.failed || 'not booted'}`);
   const offered = [...document.querySelectorAll('#opt-renderer button')].map((button) => button.textContent);
   if (offered.length) return failed(`the pause menu offers ${offered.join(', ')}: there's one renderer, none to choose`);
   // (on the loading screen alone, which is gone from the page by now: from the owner, off the lobby's logo "so that users dont need to stare at it all the time")

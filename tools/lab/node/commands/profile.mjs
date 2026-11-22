@@ -7,7 +7,7 @@ import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
 /** `lab profile`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
 export default {
   summary: 'the game\'s own profiler, the pause menu\'s Profile this spot, run where the hero stands (`--biome`, '
-    + '`--view`, `--at`, `--level`, `--device`, `--renderer webgpu|meshlets`): each part of the frame taken out in '
+    + '`--view`, `--at`, `--level`, `--device`): each part of the frame taken out in '
     + 'turns by the browser\'s clock, as a player\'s device times itself (`--village` stood in the lobby\'s '
     + 'village), the programs it compiled (over 8 fails; '
     + 'WebGPU\'s pipelines, over 24), a run cancelled midway, and its result sent and read back as `lab trace` '
@@ -80,10 +80,7 @@ export default {
         hour: options.hour,
       };
       const result = await checkProfileSent(await side.command('profileHere', command), service);
-      // (booted on WebGPU, it must have profiled there: a boot that fell back to WebGL would pass for one)
-      const onWebGPU = (options.renderer ?? 'webgl') !== 'webgl';
-      if (!onWebGPU || /, on (WebGPU|the Rust engine)/.test(result.text)) return result;
-      return { ...result, problems: [...result.problems, `booted on ${options.renderer}, profiled on WebGL`] };
+      return result;
     } finally {
       await service.close();
     }

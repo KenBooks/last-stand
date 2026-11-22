@@ -4,7 +4,6 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { pointScale } from '../core/renderer';
-import { WEBGPU } from '../core/webgpu';
 import { starQuads, type StarQuads } from './particleNodes';
 
 const VERT = /* glsl */`
@@ -54,12 +53,11 @@ const SPIN = 1.8, ORBIT = 0.42, BOB = 0.06, FADE = 0.25, STARS = 3, SIZE = 0.26;
 const MOST = STARS * 160;
 
 const pos = new Float32Array(MOST * 3), size = new Float32Array(MOST), alpha = new Float32Array(MOST);
-// (an instance's on WebGPU, a quad each: it draws points a pixel wide; a vertex's for WebGL's points)
-const Attribute = WEBGPU ? THREE.InstancedBufferAttribute : THREE.BufferAttribute;
+// (an instance's, a quad each: WebGPU draws points a pixel wide)
 const attrs = [
-  new Attribute(pos, 3).setUsage(THREE.DynamicDrawUsage),
-  new Attribute(size, 1).setUsage(THREE.DynamicDrawUsage),
-  new Attribute(alpha, 1).setUsage(THREE.DynamicDrawUsage),
+  new THREE.InstancedBufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage),
+  new THREE.InstancedBufferAttribute(size, 1).setUsage(THREE.DynamicDrawUsage),
+  new THREE.InstancedBufferAttribute(alpha, 1).setUsage(THREE.DynamicDrawUsage),
 ];
 const geo = new THREE.BufferGeometry();
 geo.setAttribute('position', attrs[0]);
@@ -74,12 +72,10 @@ const mat = new THREE.ShaderMaterial({
 let quads: StarQuads | null = null;
 let points: THREE.Object3D = new THREE.Points(geo, mat);
 
-/** the stars' mesh made for the renderer that draws it (WebGPU's quads are nodes, made once it's loaded) */
+/** the stars' mesh made once the renderer is loaded (its quads are nodes) */
 function madeForRenderer(): void {
-  if (WEBGPU) {
-    quads = starQuads(attrs as THREE.InstancedBufferAttribute[], mat.uniforms.uFill.value, mat.uniforms.uRim.value);
-    points = quads.mesh;
-  }
+  quads = starQuads(attrs, mat.uniforms.uFill.value, mat.uniforms.uRim.value);
+  points = quads.mesh;
   points.name = 'dazed stars';
   points.frustumCulled = false;
   points.renderOrder = 10;

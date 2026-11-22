@@ -7,7 +7,6 @@
 import * as THREE from 'three';
 import { gpu, tsl } from '../core/webgpu';
 import { seeFade, seeUniforms, type SeeNodes } from '../core/shaderPorts';
-import { RUNNING } from '../core/rendererChoice';
 import { rustLook } from '../engine/custom';
 import { flameLook } from '../engine/looks/fire';
 import type { FLAME_LOOK, KEPT, KEPT_SIZE } from './fireBake';
@@ -473,6 +472,6 @@ export function flameMaterial(uniforms: FlameUniforms, shape: FlameShape): THREE
   // along the view through their middle, as fire.ts has it)
   const see = uniforms as unknown as Record<string, { value: unknown }>;
   material.fragmentNode = see.uSeeK ? light.mul(evenFade(seeUniforms(see), read)) : light;
-  if (RUNNING.rust) rustLook(material, { ...flameLook(uniforms, shape), fades: seeValue('prop') });
+  rustLook(material, { ...flameLook(uniforms, shape), fades: seeValue('prop') });
   return material;
 }

@@ -9,6 +9,7 @@
 // nits): `paper`, how bright the frame's white is, and `peak`, how far its highlights may go. SDR screens, a browser
 // without WebGPU and HDR set off draw as before, with no WebGPU device started.
 //
+// That was the WebGL renderer's way, and nothing starts it now (no WebGL canvas is handed here).
 // On the WebGPU renderer (core/webgpu.ts) the game's own canvas is put in extended range as the renderer is made, when
 // HDR is wanted then (`initHdrForWebGPU`): three configures its canvas once, so a change of the setting or the display
 // shows after a reload there (`reload`).
@@ -163,20 +164,6 @@ function apply(): void {
   for (const listener of listeners) listener();
 }
 
-/** Watches the display and reads the settings: HDR starts once the display is in HDR mode. */
-export function initHdr(canvas: HTMLCanvasElement, context: WebGL2RenderingContext): void {
-  glCanvas = canvas;
-  gl = context as WebGL;
-  settings = readSettings();
-  const query = matchMedia(HDR_DISPLAY);
-  displayHdr = query.matches;
-  query.addEventListener('change', () => {
-    displayHdr = query.matches;
-    apply();
-  });
-  apply();
-}
-
 /** Reads the settings and the display for the WebGPU renderer, about to be made: whether its canvas is to be made in
  *  extended range (a browser that can't take it shows it as SDR). Watches the display for the settings' note.
  *  `qualityAllows`: whether the level the boot starts at lets HDR show (`setHdrAllowed`), as the renderer is made
@@ -240,27 +227,6 @@ export async function forceHdr(on: boolean | null): Promise<void> {
   forced = on;
   apply();
   await starting;
-}
-
-/** The frame drawn into the WebGL canvas, copied onto the HDR canvas to be shown (once the frame is finished). */
-export function presentHdr(copyW?: number, copyH?: number): void {
-  if (!hdrActive() || !presenter || !gl || !glCanvas) return;
-  const width = gl.drawingBufferWidth;
-  const height = gl.drawingBufferHeight;
-  const { canvas, context, device } = presenter;
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
-  }
-  if (canvas.style.width !== glCanvas.style.width) canvas.style.width = glCanvas.style.width;
-  if (canvas.style.height !== glCanvas.style.height) canvas.style.height = glCanvas.style.height;
-  const w = Math.min(copyW ?? width, width), h = Math.min(copyH ?? height, height);
-  if (w < 1 || h < 1) return;
-  const texture = context.getCurrentTexture();
-  // (taken as it is, premultiplied: the grade writes the frame's alpha as 1, and the copy would divide the colour by
-  // any other)
-  const destination = { texture, origin: [0, 0, 0], premultipliedAlpha: true };
-  device.queue.copyExternalImageToTexture({ source: glCanvas, origin: [0, 0] }, destination, [w, h]);
 }
 
 /** The HDR canvas's current texture, as shown this frame (the lab reads it back), or null when HDR is off. */

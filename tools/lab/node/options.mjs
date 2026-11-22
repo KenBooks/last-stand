@@ -174,19 +174,9 @@ function checkTogether(options) {
   if (options.insets && !options.screen && !options.screens) {
     throw labError('--insets are a screen\'s: give its --screen (or --screens)');
   }
-  checkRenderers(options);
   if (!options.screens) return;
   if (options.ab) throw labError('--screens compares this tree on two screens: it takes no --ab');
   if (options.screen) throw labError('--screens names both screens: it takes no --screen');
-}
-
-/** Throws at `--renderers` given other than two, or with another way of comparing or a renderer of its own. */
-function checkRenderers(options) {
-  if (!options.renderers) return;
-  if (options.renderers.length !== 2) throw labError('--renderers: two of them, webgl,webgpu');
-  for (const other of ['ab', 'screens', 'renderer']) {
-    if (options[other]) throw labError(`--renderers compares this tree on two renderers: it takes no --${other}`);
-  }
 }
 
 /** whether an option's kind takes the argument after it as its value (`--count 3`; `--ab` and `--profile` don't) */

@@ -3,7 +3,6 @@
 // GLSL set `gl_Position.z` to its `w` (drawn after everything opaque, the depth test skips every covered pixel).
 import * as THREE from 'three';
 import { gpu, tsl } from '../core/webgpu';
-import { RUNNING } from '../core/rendererChoice';
 import { rustLook } from '../engine/custom';
 import { daySkyLook, nightSkyLook, villageSkyLook } from '../engine/looks/sky';
 
@@ -58,7 +57,7 @@ export function nightSkyMaterial(uniforms: Uniforms): THREE.Material {
     moon: reference('value', 'vec3', uniforms.uMoon),
     zenith: reference('value', 'vec3', uniforms.uZenith),
   }));
-  return RUNNING.rust ? rustLook(dome, nightSkyLook(uniforms)) : dome;
+  return rustLook(dome, nightSkyLook(uniforms));
 }
 
 /** The day sky (`buildDaySky`, its `uHorizon`, `uZenith`, `uSun` and `uTime`): the horizon rising into the zenith, a
@@ -95,7 +94,7 @@ export function daySkyMaterial(uniforms: Uniforms): THREE.Material {
     sun: reference('value', 'vec3', uniforms.uSun),
     time: reference('value', 'float', uniforms.uTime),
   }));
-  return RUNNING.rust ? rustLook(dome, daySkyLook(uniforms)) : dome;
+  return rustLook(dome, daySkyLook(uniforms));
 }
 
 /** The village's sky (`buildDaySky` in `village.ts`, its `uHorizon`, `uZenith`, `uSun`, `uDay` and `uTime`): the sun's
@@ -146,5 +145,5 @@ export function villageSkyMaterial(uniforms: Uniforms): THREE.Material {
     day: reference('value', 'float', uniforms.uDay),
     time: reference('value', 'float', uniforms.uTime),
   }));
-  return RUNNING.rust ? rustLook(dome, villageSkyLook(uniforms)) : dome;
+  return rustLook(dome, villageSkyLook(uniforms));
 }

@@ -116,7 +116,7 @@ const HELP = {
     + 'its functions named from its source maps)'],
   angle: ['', 'ANGLE\'s own work on the GPU process traced too: a shader compiled at a draw (D3DCompile), a program '
     + 'linked or read back from the cache'],
-  dawn: ['', 'Dawn\'s own work traced too (WebGPU, `?renderer=webgpu`): its shaders translated and compiled, its '
+  dawn: ['', 'Dawn\'s own work traced too (WebGPU): its shaders translated and compiled, its '
     + 'pipelines made, and what it read back from its cache'],
   builds: ['', `${BOOT}: the WebGPU node builds each step made (\`?builds\`, \`recordNodeBuilds\` in `
     + 'src/core/webgpu.ts): how many, the new shaders and their WGSL (each a compile of Chrome\'s on every visit), '

@@ -46,15 +46,15 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md); each direct
   count (`page errors`): three logs a shader that failed to compile and draws on without it. A boot that never
   reaches its lobby fails saying what the loading screen said last and the page's errors (`withErrorsTold`): it
   timed out bare, where the page had shown "Something went wrong while loading" with its cause. `--cast key@ms`
-  holds a skill's key that long before the picture (`pictureEnd`), so its look is pictured on each renderer: the
+  holds a skill's key that long before the picture (`pictureEnd`), so its look is pictured on each build: the
   WebGPU port's Maelstrom drew nothing of its walls, seen so.
 - **`--scenario latency` times the input's lag** (`latency.mjs`): a key tapped every quarter second in the lobby,
-  each press timed to the start of the first frame that draws after it and to the GPU done with that frame (a fence
-  put into the game's WebGL 2 context after its draws, polled a message at a time); the display's wait for its
+  each press timed to the start of the first frame that draws after it and to the GPU done with that frame (its
+  first submit to WebGPU's queue, and the queue's word that its work is done); the display's wait for its
   refresh comes on top, alike either way. Its lag shows only where the GPU is the slower side: at 1902x984 the GPU
   kept up and Vsync on and off read alike (11 to 14 ms to the GPU done); at 2560x1440 at 2x (`--window 2560x1440
   --scale 2`) Vsync on read 34 ms, off 152 (frames queued 4 or 5 deep ahead of the GPU, the screen shown 24 times a
-  second), 22 once uncapped frames waited for the GPU (`src/core/frameLoop.ts`). On WebGPU (`?renderer=webgpu`)
+  second), 22 once uncapped frames waited for the GPU (`src/core/frameLoop.ts`). On three's WebGPU renderer, since taken out,
   each press's frame is its first submit and done when the queue says so: 29 ms without the fence, 16 with it. With
   `?frameWaits` it says how many of the game's uncapped frames waited for the GPU (1960 of 2126 at 2560x1440 x2,
   none at all with the CPU slowed 4 times): compare a setting of the loop on one build (`?ahead=N`) by that count,

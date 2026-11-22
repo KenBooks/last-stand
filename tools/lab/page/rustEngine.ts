@@ -1,7 +1,6 @@
 // `lab rust`: the Rust engine's frame (`src/engine`, Bulwark) where the hero stands, pictured and timed: the walk of
 // the scene and the engine's own work by the browser's clock, the GPU's time by the engine's timestamps, its draw
-// calls, objects and triangles, what it couldn't draw by its kind, and its boot. three's figures for the same stand
-// come from a tree on main (`lab passes --renderer webgpu`, `lab draws`).
+// calls, objects and triangles, what it couldn't draw by its kind, and its boot.
 import type { Fixture, Lab, Report } from './lab';
 import { BIOMES, type BiomeId } from '../../../src/data/biomes';
 import { overCanvasLeftOut, type ViewMode } from '../../../src/core/renderer';
@@ -51,8 +50,6 @@ export interface RustCommand {
   census: boolean;
   /** the game's tunable values set before the stand, by their paths (`rust.shadows`: src/engine/bridge.ts `TUNE`) */
   tune: Record<string, number[]>;
-  /** three's WebGPU renderer timed instead, on a page booted on it */
-  three: boolean;
   /** the frame written down as a tape for the engine's own harness, its maps no larger than this a side (0: none) */
   capture: number;
   /** the armour he wears, and the rarity of every item on him (Rare and up glow), as `Fixture` has them */
@@ -68,17 +65,6 @@ const TIMED: (keyof FrameStats)[] = [
 ];
 
 const median = (values: number[]): number => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
-
-/** The renderer as the baseline reads it: its frame's draws, and its timestamps (as `gpuPasses.ts` reads them). */
-interface Timed {
-  info: { render: { drawCalls: number; triangles: number } };
-  backend: { timestampQueryPool: { render: TimestampPool | null } };
-}
-
-interface TimestampPool {
-  timestamps: Map<string, number>;
-  resolveQueriesAsync(): Promise<number | undefined>;
-}
 
 /** how far before him the boss stands (m), and the most frames it may take to rise */
 const BOSS_AHEAD = 7;
@@ -218,60 +204,10 @@ function shadowFrames(kept: number[]): string {
   return `${kept.filter((frames) => frames === 0).length} of ${kept.length}`;
 }
 
-/** The baseline: three's WebGPU frame of the same stand, timed the same way. */
-async function threeFrames(lab: Lab, command: RustCommand): Promise<Report> {
-  const where = await stand(lab, command);
-  const sky = command.skylight ? await turnToSkyLight(lab) : undefined;
-  const hold = castHeld(command);
-  const renderer = G.renderer as unknown as Timed;
-  // (three's WebGL renderer has no pool of timestamps: its frame is pictured, its GPU's time said as 0)
-  const pool = renderer.backend?.timestampQueryPool ?? {};
-  const clock = (window as unknown as { __labClock: { realNow: () => number } }).__labClock;
-  const pageClock = perfClock.now;
-  perfClock.now = clock.realNow;
-  const drawing = lab.drawing;
-  lab.drawing = true;
-  const renders: number[] = [];
-  const gpu: number[] = [];
-  const draws: number[] = [];
-  const triangles: number[] = [];
-  try {
-    await lab.step(hold ? CAST_LEAD : 10, hold);
-    await pool.render?.resolveQueriesAsync();
-    for (let frame = 0; frame < command.frames; frame++) {
-      await lab.step(1, hold);
-      await window.__labClock.realFrame();
-      renders.push(RUST.renderMs);
-      draws.push(renderer.info.render.drawCalls);
-      triangles.push(renderer.info.render.triangles);
-      await pool.render?.resolveQueriesAsync();
-      let frameMs = 0;
-      for (const ms of pool.render?.timestamps.values() ?? []) frameMs += ms;
-      gpu.push(frameMs);
-    }
-  } finally {
-    perfClock.now = pageClock;
-    lab.drawing = drawing;
-  }
-  const pictured = await lab.screen('the WebGPU frame of three.js', [], sky?.clip);
-  const size = G.renderer.domElement;
-  const lines = [
-    `three.js WebGPU: ${where} ${command.view}, ${size.width}x${size.height} drawn, medians of ${command.frames} frames`,
-    `  the render: ${median(renders).toFixed(2)} ms on the CPU; the GPU ${median(gpu).toFixed(2)} ms `
-      + '(every pass: shadows, scene, post chain)',
-    `  ${median(draws)} draw calls, ${median(triangles)} triangles (every pass)`,
-    `  the hero at ${G.player.pos.x.toFixed(1)}, ${G.player.pos.z.toFixed(1)}`,
-  ];
-  const turned = sky === undefined ? undefined : skyLightLines(sky);
-  if (turned) lines.push(turned.line);
-  return { text: lines.join('\n'), problems: turned?.problems ?? [], moments: [pictured] };
-}
-
 export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report> {
   const bridge = RUST.bridge;
   if (!bridge) {
-    if (command.three) return threeFrames(lab, command);
-    const why = RUST.failed || 'the page was not booted on it (--renderer rust)';
+    const why = RUST.failed || 'not booted';
     return { text: `the Rust engine isn't running: ${why}`, problems: ['the Rust engine is not running'], moments: [] };
   }
   const where = await stand(lab, command);

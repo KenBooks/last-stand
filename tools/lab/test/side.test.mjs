@@ -2,7 +2,7 @@
 // mouse's button fields as the page sends them (`buttonFields`).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bootAddress, bootOf, bootText, buttonFields, unwatched } from '../node/side.mjs';
+import { bootOf, bootText, buttonFields, unwatched } from '../node/side.mjs';
 
 const MAIN = 'G:\\Git\\gd-clone';
 const WORKTREE = 'G:\\Git\\gd-clone\\.claude\\worktrees\\hall-staff-glow';
@@ -41,17 +41,9 @@ test('another button pressed, and moved while held', () => {
   assert.deepEqual(buttonFields('mouseReleased', 'right', 0), { button: 'right', buttons: 0, clickCount: 1 });
 });
 
-// (on this branch the plain address loads the Rust engine, so WebGL is asked for by name: src/engine)
-test('a boot on WebGL by default, asked for by name', () => {
-  const boot = bootOf({});
-  assert.equal(boot.renderer, 'webgl');
-  assert.equal(bootAddress('http://localhost:5173/', boot), 'http://localhost:5173/?renderer=webgl');
-  assert.equal(bootText(boot), '');
-});
-
-test('--renderer opens the address the pause menu would, and says so after the hero', () => {
-  const url = 'http://localhost:5173/';
-  assert.equal(bootAddress(url, bootOf({ renderer: 'webgpu' })), `${url}?renderer=webgpu`);
-  assert.equal(bootAddress(url, bootOf({ renderer: 'meshlets' })), `${url}?renderer=webgpu&meshlets=1`);
-  assert.equal(bootText(bootOf({ renderer: 'meshlets', cold: true })), ', cold on meshlets');
+test('a boot names no renderer, whatever the options say: the game has one', () => {
+  const boot = bootOf({ renderer: 'webgpu', cold: true });
+  assert.equal('renderer' in boot, false);
+  assert.equal(bootText(boot), ', cold');
+  assert.equal(bootText(bootOf({})), '');
 });

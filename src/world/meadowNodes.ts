@@ -76,7 +76,7 @@ function bladeFns(): NonNullable<typeof fns> {
   return fns;
 }
 
-/** The mask's grass at `xz` (0 to 1), its edges made ragged, as `MEADOW_AT_GLSL`'s `meadowAt` reads it. */
+/** The mask's grass at `xz` (0 to 1), its edges made ragged. */
 function meadowAtNode(mask: THREE.Texture, half: number, xz: N): N {
   const { clamp, texture, vec2, abs } = tsl as any;
   const { maskNoise } = bladeFns();

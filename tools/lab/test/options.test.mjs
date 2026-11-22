@@ -39,12 +39,11 @@ test('reads a screen, its pixel ratio 1 when left out', () => {
   assert.throws(() => parseCommandLine(['sheet', '--screen', '1280*720']), /--screen: a size and pixel ratio/);
 });
 
-test('reads two renderers, and takes no --ab, --screens or --renderer with them', () => {
-  assert.deepEqual(parseCommandLine(['village', '--renderers', 'webgl,webgpu']).options.renderers, ['webgl', 'webgpu']);
-  assert.throws(() => parseCommandLine(['village', '--renderers', 'webgl']), /--renderers: two of them/);
-  assert.throws(() => parseCommandLine(['village', '--renderers', 'webgl,vulkan']), /--renderers/);
-  assert.throws(() => parseCommandLine(['village', '--renderers', 'webgl,webgpu', '--ab']), /takes no --ab/);
-  assert.throws(() => parseCommandLine(['village', '--renderers=webgl,webgpu', '--renderer=webgpu']), /no --renderer/);
+test('no option picks a renderer: the game has one', () => {
+  assert.throws(() => parseCommandLine(['village', '--renderers', 'webgl,webgpu']), /--renderers/);
+  assert.throws(() => parseCommandLine(['village', '--renderer', 'webgpu']), /--renderer/);
+  assert.throws(() => parseCommandLine(['rust', '--three']), /--three/);
+  assert.throws(() => parseCommandLine(['rust', '--webgl']), /--webgl/);
 });
 
 test('reads two screens, and takes no --ab or --screen with them', () => {

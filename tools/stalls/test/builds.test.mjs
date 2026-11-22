@@ -12,7 +12,7 @@ const build = (at, fields = {}) => ({
 });
 
 test('asks the game for its node builds by the page\'s address', () => {
-  assert.equal(withBuilds('http://127.0.0.1:5199/?renderer=webgpu'), 'http://127.0.0.1:5199/?renderer=webgpu&builds=');
+  assert.equal(withBuilds('http://127.0.0.1:5199/?vsync=0'), 'http://127.0.0.1:5199/?vsync=0&builds=');
   assert.equal(withBuilds('http://127.0.0.1:5199/'), 'http://127.0.0.1:5199/?builds=');
 });
 

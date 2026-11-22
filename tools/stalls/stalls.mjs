@@ -84,25 +84,16 @@ async function openGame(context, url, options) {
   return { page, errors };
 }
 
-/** Whether the page at `url` warms the fight behind its lobby on every visit: WebGPU's does, as the loading screen
- *  leaves (`warmTheRest` in `src/game/warmup.ts`). */
-function warmsBehindTheLobby(url) {
-  const renderer = new URL(url).searchParams.get('renderer') ?? '';
-  return renderer.startsWith('webgpu');
-}
-
 /**
  * Waits out the loading screen and the lobby's panels (a first visit's hero chosen on the screen it opens on), and
- * where the fight warms behind the lobby (`warmsBehindTheLobby`), that warm-up: a WebGPU lobby's scenario read its
- * frames as the fight compiled under them, a median of 20.8 ms.
+ * the fight's warm-up behind the lobby, begun as the loading screen leaves (`warmTheRest` in
+ * `src/game/warmup.ts`): a lobby's scenario read its frames as the fight compiled under them, a median of 20.8 ms.
  */
 async function waitLoaded(page) {
   await page.waitForFunction(loaded, null, { timeout: LOAD_TIMEOUT_MS, polling: 250 });
   await page.evaluate(chooseIfAsked);
   await page.waitForFunction(equipmentShown, null, { timeout: LOAD_TIMEOUT_MS, polling: 250 });
-  if (warmsBehindTheLobby(page.url())) {
-    await page.waitForFunction(fightWarm, null, { timeout: LOAD_TIMEOUT_MS, polling: 250 });
-  }
+  await page.waitForFunction(fightWarm, null, { timeout: LOAD_TIMEOUT_MS, polling: 250 });
 }
 
 /**
@@ -169,7 +160,7 @@ function chromeFor(options) {
 /** `expression` read off `page` into the JSON file beside its end picture (`--read`): what it was read into. */
 async function readOff(page, expression, picture) {
   const path = picture.replace(/end-(\d+)\.png$/, 'read-$1.json');
-  // (a URL beside may not define it, as WebGL's page has no WebGPU records: said, not thrown, so the other runs go on)
+  // (a URL beside may not define it, an older build's: said, not thrown, so the other runs go on)
   const read = await page.evaluate(expression).then((value) => ({ value }), (error) => ({ error }));
   if (read.error) return `${expression} not read: ${read.error.message.split('\n')[0]}`;
   writeFileSync(path, `${JSON.stringify(read.value, null, 1)}\n`);

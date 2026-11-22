@@ -19,8 +19,7 @@ import { countGhosts, depthOfWhatStaysWhole } from '../core/seeThrough';
 import { GHOST_COUNT_LAYER } from '../core/layers';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { packWhileDrawn } from '../core/lightBounds';
-import { castHeroesOverLamps } from './lampShadows';
-import { castMoversOverMoon, holdMoonShadow } from './moonShadow';
+import { holdMoonShadow } from './moonShadow';
 import { hallDoorway } from './hallPortal';
 import { addDoorway, cullByDoorways } from './doorways';
 import { buildCrypt, CRYPT_ENV } from './crypt';
@@ -106,11 +105,6 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   cullWhileDrawn(scene, renderer);
   // (each point light's reach packed for the shaders' loop, before each render: `core/lightBounds.ts`)
   packWhileDrawn(scene);
-  // (the village's alone: its lamps' and its sun's kept shadows, its movers drawn over them)
-  if (VILLAGE) {
-    castHeroesOverLamps(renderer);
-    castMoversOverMoon(renderer, moon);
-  }
   const fog = scene.fog = new THREE.Fog(0);
 
   /** the places built (a fight's biome, where the lobby is the village, once a run first needs it: `buildBiome`) */

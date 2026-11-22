@@ -28,15 +28,12 @@ import { meadowFromAbove } from '../world/meadow';
 import { onWholeView, wholeView } from '../core/wholeView';
 import { CLASS_IDS } from '../data/classes/index';
 import { LAMP_SOFT } from '../core/lamps';
-import { on } from '../events';
 import { standHeroes } from './hall';
 import { dropNameAt } from './groundItems';
 import { isWarm } from './warm';
 import { flash, release, type LightSlot } from '../fx/lights';
 import { lampReachBy, lampsOut, lightLamp, placeLamps, type LampPlace } from '../core/lamps';
-import { RUNNING } from '../core/rendererChoice';
 import { bakeLampShadows } from '../world/lampAtlas';
-import { drawLampShadows, lampShadow, lampShadowReady } from '../world/props';
 
 export interface VillageHooks {
   /** `object` used: its panel, its card or its screen opened */
@@ -396,7 +393,7 @@ export function updateVillage(dt = 0): void {
     // (under the Rust engine nothing of three's is compiled for them, and its own pipelines compile aside: asked for
     // outright. On WebGPU the warm-up behind the lobby is left out, and waited for something to ask: on a return
     // visit nothing did, and the hall's plinths stood empty, from play "forgot to render other heroes in hall")
-    if (RUNNING.rust) want('heroes');
+    want('heroes');
   }
   syncLabels();
 }
@@ -1006,7 +1003,7 @@ function doorwayOnScreen(): boolean {
   return _frustum.intersectsBox(_door);
 }
 
-/** the pool's casting lights held for the lamps (`casters`), the lamps' colour, and whether their places are set */
+/** the pool's lights held for the lamps, the lamps' colour, and whether their places are set */
 let lampLights: LightSlot[] = [];
 const LAMP_COLOR = new THREE.Color(LAMPLIGHT.color);
 let lampsPlaced = false;
@@ -1063,99 +1060,33 @@ export function prepareLamps(renderer: THREE.WebGLRenderer, village: THREE.Objec
  * (`core/lamps.ts`: its light at any distance, as a point light there lights): the street lamps by night, the hall's
  * torches always, each on its side of the hall's walls (switched over at its door, the street lamps went out as the
  * hero walked in, "lights turn off when I enter the hall"). Lit by the pool's lights at the three nearest the hero and
- * drawn as painted pools elsewhere, each lamp turned into lit ground as he walked up ("it looks lame"). The two nearest
- * him (in the hall, its dais's lights first) cast their shadows by the pool's casting lights (`castOnNearest`): each
- * takes its share of its lamp's light, shadowed, and the list lights the rest, so the light stays the same and only its
- * shadow comes in.
+ * drawn as painted pools elsewhere, each lamp turned into lit ground as he walked up ("it looks lame"). No lamp's
+ * shadow is cast by a pooled light: the lights held for that (`lampLights`) stay dark.
  */
-function lightLamps(dt: number): void {
-  const village = G.arena.village, p = G.player.pos;
+function lightLamps(_dt: number): void {
   if (!lampsPlaced) {
     placeTheLamps();
     lampsPlaced = true;
   }
   const shown = G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown && !G.arena.room;
   if (!shown) {
-    castFromLamps(false);
     for (const s of lampLights) release(s);
     lampLights = [];
     lampsOut();
     return;
   }
-  // (inside the hall, or at its door, its dais's lights and the torches nearest him cast, by day too: its roof shades it
-  // whatever the hour; outside, the street lamps nearest him by night)
-  const onTerrace = G.player.obj.position.y > TERRACE.high - 0.1;
-  const atDoor = Math.abs(p.x - TERRACE.x) < HALL.doorHalf * 2 && Math.abs(p.z - HALL.door) < TORCHLIGHT.door;
-  const inside = onTerrace && (inHall(p.x, p.z) || atDoor);
-  // (not on WebGPU: three's observer reads a render object's casting lights by the count it first drew with, and
-  // threw as they changed; a lamp's shadow there has no depth copy to keep, `lampShadows.ts`)
-  const casting = !RUNNING.webgpu && (inside || village.night > 0.01);
   if (!lampLights.length) {
     lampLights = Array.from({ length: LAMP_SHADOWS }, () => flash({ ...LAMPLIGHT, intensity: 0, life: 1, hold: Infinity }));
   }
-  castFromLamps(casting);
-  const n = village.lanterns.length;
-  const near = inside ? village.hallTorches : village.lanterns, base = inside ? n : 0, dais = inside ? TORCHLIGHT.dais : 0;
-  const nearest = !casting ? [] : near.map((l, i) => ({ i: base + i, d: i < dais ? -1 : Math.hypot(l.x - p.x, l.z - p.z) }))
-    .sort((a, b) => a.d - b.d).slice(0, LAMP_SHADOWS).map((l) => l.i);
-  if (casting) castOnNearest(nearest, dt);
-  // (each lamp by the list, but what its casting light takes)
-  const taken = new Map(casters.filter((c) => c.lamp >= 0).map((c) => [c.lamp, c.share]));
+  // (each lamp by the list: no lamp's shadow is cast by a pooled light, the engine draws the lamps' own)
   const all = allLamps();
-  for (let i = 0; i < all.length; i++) {
-    lightLamp(i, LAMP_COLOR, lampLight(i).intensity * (1 - (taken.get(i) ?? 0)));
-  }
-  for (const [k, slot] of lampLights.entries()) {
-    const { lamp, share } = casters[k];
-    const light = lamp < 0 ? { intensity: 0, reach: LAMPLIGHT.distance } : lampLight(lamp);
-    slot.peak = light.intensity * share;
-    slot.light.distance = light.reach * lampReachBy();
+  for (let i = 0; i < all.length; i++) lightLamp(i, LAMP_COLOR, lampLight(i).intensity);
+  for (const slot of lampLights) {
+    slot.peak = 0;
+    slot.light.distance = LAMPLIGHT.distance * lampReachBy();
     slot.light.decay = 2 + LAMP_SOFT;
-    if (lamp >= 0) slot.light.position.copy(all[lamp]).setY(all[lamp].y - LAMPLIGHT.below);
   }
 }
-
-/** whether the lamps' lights cast the shadows, the braziers' not */
-let lampsCast = false;
-/** how fast a lamp's shadow fades in or out (its share a second) */
-const SHADOW_FADE = 2;
-/** the casting lights' lamps (by lantern index, the torches' after; -1: none) and how much of each one's shadow shows
- *  (the first `LAMP_SHADOWS` held lights) */
-const casters = Array.from({ length: LAMP_SHADOWS }, () => ({ lamp: -1, share: 0 }));
-
-/**
- * The casting lights kept on the lamps nearest the hero (`near`), each shadow faded out before its light moves to
- * another lamp, drawn there once of what stands still (`lampShadow`) and faded in, by the share of its lamp's light it
- * takes from the lit shaders' list (`lightLamps`), its shadow whole: handed at once to whichever two lamps were lit
- * brightest, the shadows came and went as he walked ("shadows appear and disappear when walking next to them, it looks
- * lame").
- */
-function castOnNearest(near: number[], dt: number): void {
-  for (const [k, c] of casters.entries()) {
-    const shadow = lampLights[k].light.shadow;
-    const wanted = c.lamp >= 0 && near.includes(c.lamp);
-    // (not before its cube is whole there: drawn a face a frame, `drawLampShadows`)
-    if (wanted) c.share = lampShadowReady(lampLights[k].light) ? Math.min(1, c.share + dt * SHADOW_FADE) : 0;
-    else c.share = Math.max(0, c.share - dt * SHADOW_FADE);
-    if (!wanted && c.share === 0) c.lamp = -1;
-    shadow.intensity = 1;
-  }
-  for (const lamp of near) {
-    if (casters.some((c) => c.lamp === lamp)) continue;
-    const free = casters.find((c) => c.lamp < 0);
-    if (!free) break;
-    free.lamp = lamp;
-    free.share = 0;
-    // (placed on it as the lights are, below, before its shadow is drawn there, a face of its cube a frame)
-    drawLampShadows(lampLights[casters.indexOf(free)].light);
-  }
-}
-
-// (at once: E at the dais opens the hall in this update, after `lightLamps`, and the frame drawn with the room's two
-// casting lights and these compiled what it drew for four, 7.3 s, "choose hero in hall freezes for like 10sec")
-on('hallShown', () => castFromLamps(false));
-// (and a house's room shown: it brings its own two casting lights, as the hall's does)
-on('roomShown', (room) => { if (room) castFromLamps(false); });
 
 /**
  * The lamps' casting lights off for a draw of another place (a warm-up's), returning their undoing. By night, a biome
@@ -1169,18 +1100,6 @@ export function lampsLetGo(): () => void {
   return () => {
     for (const light of casting) light.castShadow = true;
   };
-}
-
-/** The two casting lights' shadows handed to the lamps' (`castOnNearest`), or back to the braziers. */
-function castFromLamps(on: boolean): void {
-  if (on === lampsCast) return;
-  lampsCast = on;
-  for (const light of G.arena.village.stillLights) light.castShadow = !on;
-  for (const [k, slot] of lampLights.entries()) if (k < LAMP_SHADOWS) lampShadow(slot.light, on);
-  for (const c of casters) {
-    c.lamp = -1;
-    c.share = 0;
-  }
 }
 
 /** Each object's name painted with what it says now: its name, or near it what using it does and how (E: on touch

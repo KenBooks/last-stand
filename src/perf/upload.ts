@@ -6,8 +6,6 @@ import { framesUncapped } from '../core/frameLoop';
 import { keyboardLockState } from '../ui/autoFullScreen';
 import * as THREE from 'three';
 import { G } from '../state';
-import { WEBGPU } from '../core/webgpu';
-import { RUNNING } from '../core/rendererChoice';
 import { qualityBudget, qualityLevel, qualitySetting } from '../core/quality';
 import { QUALITY } from '../data/quality';
 import { sceneRatio, sceneSamples, sceneSize, viewMode } from '../core/renderer';
@@ -68,7 +66,7 @@ export function settings(): Record<string, number | string | boolean> {
     pixelRatio: G.renderer.getPixelRatio(),
     view: viewMode(),
     vsync: framesUncapped() ? 'off' : 'on',
-    renderer: WEBGPU ? ['webgpu', RUNNING.meshlets && 'meshlets', RUNNING.lightsEach && 'lights each'].filter(Boolean).join(' ') : 'webgl',
+    renderer: 'webgpu',
     hdr: hdrActive(),
   };
 }

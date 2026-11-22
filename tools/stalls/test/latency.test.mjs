@@ -22,7 +22,7 @@ test('the line gives each wait its median and 90th percentile', () => {
     + 'to the GPU done with it median 22.0 ms, p90 150.0');
 });
 
-test('a page with no probe, or no WebGL 2 canvas, says why it measured nothing', () => {
+test('a page with no probe, or no WebGPU, says why it measured nothing', () => {
   assert.equal(latencyLine(undefined), 'input lag not measured: no probe');
-  assert.equal(latencyLine({ samples: [], error: 'no WebGL 2 canvas' }), 'input lag not measured: no WebGL 2 canvas');
+  assert.equal(latencyLine({ samples: [], error: 'no WebGPU' }), 'input lag not measured: no WebGPU');
 });

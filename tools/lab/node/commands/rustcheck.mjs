@@ -18,10 +18,6 @@ export default {
     foes: { kind: 'number', usage: 'n', help: 'foes stood before the hero in the fight (6)' },
     ...COMMON_OPTIONS,
   },
-  check(options) {
-    // (the engine's page, on the address a player gets: `RENDERER_QUERIES` in side.mjs)
-    options.renderer = 'rust';
-  },
   async each(side, options) {
     const command = {
       biome: options.biome ?? 'forest',

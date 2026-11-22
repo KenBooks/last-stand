@@ -1,36 +1,28 @@
-// Renderer, post-processing chain and the camera rig: top-down, over the shoulder or first person.
-// The scene renders into its own MSAA target; the post passes (bloom, the area's light, the grade), each reading
-// the scene's target itself (`SCENE_READ`), run on plain single-sample targets, since multisampled post targets cost
-// a resolve per pass (very slow on tile-based GPUs such as Apple's).
+// The renderer (three's, the host of our engine, `src/engine`), the frame's grade values and the camera rig: top-down,
+// over the shoulder or first person. The engine draws the scene; three's canvas lies over the engine's for the
+// world's overlays.
 import * as THREE from 'three';
 import { lightTheLamps } from './lamps';
-import { SIGHT, SIGHT_GLSL, aimSight } from './sight';
+import { aimSight } from './sight';
 import { VILLAGE } from './beta';
 import { lightTheLampsOnWebGPU } from './lampNodes';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import {
-  WEBGPU, drawOverScene, makeWebGPURenderer, makePipeline, renderWebGPU, setBloomShareOnWebGPU,
+  drawOverScene, makeWebGPURenderer, makePipeline, renderWebGPU, setBloomShareOnWebGPU,
   setBloomStrengthOnWebGPU, setSceneSamples,
   setSceneShare, shadeEnvironmentNodes, webgpuSceneTarget, clearOverFrame, countOverPass, overFrameUncleared,
 } from './webgpu';
 import { G } from '../state';
-import { RUNNING } from './rendererChoice';
 import { bootRust, drawRust, rustFrame, rustSamples, RUST } from '../engine';
 import { perfClock } from './perfClock';
 import { sunShadowStill } from '../world/props';
 import { moonShadowKept } from '../world/moonShadow';
 import { groundHeight } from '../world/ground';
 import { CAMERA } from '../data/balance';
-import { countGhostLayers } from './ghostLayers';
-import { opaqueByProgram } from './programSort';
 import { clamp, damp } from '../util';
 import { blendedBuiltFirst, sortBlendedFrom, updateSeeThrough } from './seeThrough';
 import { builtOpening, fenceOpened, holeOpening, propsHideHim, propsOpening } from './heroHidden';
 import type { QualityPreset } from '../data/quality';
-import { hdrLevels, initHdr, presentHdr } from './hdr';
+import { hdrLevels } from './hdr';
 import { bloodMask, fitBloodMask } from './bloodEdges';
 import { ARMS_LAYER, WARM_LAYER, GHOST_COUNT_LAYER } from './layers';
 import { takePorts } from './shaderPorts';
@@ -81,390 +73,67 @@ const NO_ADAPT = typeof location !== 'undefined' && /[?&]adapt=0/.test(location.
 let adaptHeld = NO_ADAPT;
 export function holdAdaptation(off: boolean): void { adaptHeld = off || NO_ADAPT; }
 /** bloom left out from now on, or no longer (the lab's trail draws where an effect is, not its glow round it) */
-let bloomPass: UnrealBloomPass | null = null;
 let bloomHeld = false;
 export function holdBloom(off: boolean): void {
   bloomHeld = off;
-  leaveBloomOut();
 }
-/** Bloom drawn, or left out: held off, or the level's share none (Very low's). */
-function leaveBloomOut(): void {
-  if (!bloomPass || !grade) return;
-  const off = bloomHeld || bloomShare <= 0;
-  bloomPass.enabled = !off;
-  // (the grade and the area add bloom's composite themselves: left out, they read none)
-  const added = off ? NO_BLOOM : bloomPass.renderTargetsHorizontal[0].texture;
-  grade.uniforms.tBloom.value = added;
-  areaPass.material.uniforms.tBloom.value = added;
-  // (a level without bloom has no glare from its widest level either: its target would hold its last frame)
-  const glare = bloomPass.renderTargetsVertical[bloomPass.nMips - 1].texture;
-  grade.uniforms.tGlare.value = bloomShare <= 0 ? NO_BLOOM : glare;
-}
-/** what the grade and the area add while bloom is left out */
-const NO_BLOOM = new THREE.DataTexture(new Uint8Array(4), 1, 1);
-NO_BLOOM.needsUpdate = true;
-/** the share of the scene's pixels each way bloom draws at (`setBloomShare`), and the size the post chain gave it */
+/** the share of the scene's pixels each way bloom draws at (`setBloomShare`) */
 let bloomShare = 1;
-const bloomGiven = new THREE.Vector2(1, 1);
 /**
  * Bloom drawn at `share` of the scene's pixels each way (Low's half; from play, an S25 Edge's Profile at full res:
- * bloom 6 ms of an 80 ms frame): its targets sized again, its blurs' steps uniforms, so nothing compiles. Each of its
- * levels is then as wide on the screen as the next one up was.
+ * bloom 6 ms of an 80 ms frame): its targets sized again, so nothing compiles. Each of its levels is then as wide on
+ * the screen as the next one up was.
  */
 export function setBloomShare(share: number): void {
   bloomShare = share;
-  bloomPass?.setSize(bloomGiven.x, bloomGiven.y);
-  leaveBloomOut();
-  if (WEBGPU) setBloomShareOnWebGPU(share);
+  setBloomShareOnWebGPU(share);
 }
 /** bloom's strength as last set (the Rust engine is told it against the game's own) */
 let bloomStrengthNow = 0.85;
-/** Bloom's strength (photo mode's, `core/photoLook.ts`; `BLOOM_STRENGTH` the game's own): its composite's uniform on
- *  WebGL, its node's on WebGPU, so nothing compiles. */
+/** Bloom's strength (photo mode's, `core/photoLook.ts`; `BLOOM_STRENGTH` the game's own): a uniform, so nothing
+ *  compiles. */
 export function setBloomStrength(strength: number): void {
   bloomStrengthNow = strength;
-  if (bloomPass) bloomPass.strength = strength;
-  if (WEBGPU) setBloomStrengthOnWebGPU(strength);
+  setBloomStrengthOnWebGPU(strength);
 }
 /** Whether bloom is drawn now: Very low draws none, and a harness may hold it off. */
 export const bloomDrawn = (): boolean => !bloomHeld && bloomShare > 0;
-/** The grade's uniforms as the pass holds them (its own copies of `GradeShader`'s): photo mode's look sets them. */
-export const gradeUniforms = (): typeof GradeShader.uniforms => grade.uniforms as unknown as typeof GradeShader.uniforms;
 
-/** The pixels bloom's passes draw into its own targets a frame (the lab's): its bright pass, each level's blur
- *  across and down, its composite. (Its blend over the frame is the scene's size at any share.) */
+/** The pixels bloom's passes draw into targets of this module's a frame (the lab's): none, as it has no passes. */
 export function bloomPixels(): number {
-  if (!bloomPass) return 0;
-  const area = (target: THREE.WebGLRenderTarget): number => target.width * target.height;
-  let pixels = area(bloomPass.renderTargetBright) + area(bloomPass.renderTargetsHorizontal[0]);
-  for (let level = 0; level < bloomPass.nMips; level++) {
-    pixels += area(bloomPass.renderTargetsHorizontal[level]) + area(bloomPass.renderTargetsVertical[level]);
-  }
-  return pixels;
+  return 0;
 }
-/**
- * The scene's target as a pass reads it: a NaN or Inf pixel made black and the rest held to 0..64 (bloom would smear
- * a bad pixel into black rectangles), and what he can't see in the fog (core/sight.ts). Read by each pass that reads
- * the scene, bloom's bright pass, the area's first grid and the grade: a pass of its own made it into a target of the
- * frame's size, and bloom was added over that in another, two passes over every pixel (from play, an S25 Edge's post
- * chain 9.4 ms of its 33 ms frame at full res).
- */
-const SCENE_READ = VILLAGE ? /* glsl */`
-  ${SIGHT_GLSL}
-  vec4 sceneAt(sampler2D scene, vec2 uv) {
-    vec4 c = texture2D(scene, uv);
-    bool bad = any(isnan(c)) || any(isinf(c)) || c.r != c.r || c.g != c.g || c.b != c.b;
-    c = bad ? vec4(0.0, 0.0, 0.0, 1.0) : clamp(c, 0.0, 64.0);
-    // (a thinned roof's alpha: how much of the pixel is what is under it, tellsItsShare)
-    return vec4(seenColour(c.rgb, uv, min(c.a, 1.0)), max(c.a, 1.0));
-  }` : /* glsl */`
-  // (with no village there is no fog of what he can't see: the read cleans the pixel alone)
-  vec4 sceneAt(sampler2D scene, vec2 uv) {
-    vec4 c = texture2D(scene, uv);
-    bool bad = any(isnan(c)) || any(isinf(c)) || c.r != c.r || c.g != c.g || c.b != c.b;
-    return bad ? vec4(0.0, 0.0, 0.0, 1.0) : clamp(c, 0.0, 64.0);
-  }`;
 /** Bloom's blur levels, tightest to widest: the halo round an effect, and only a trace of the screen-wide veil. */
 const BLOOM_LEVELS = [0.56, 0.5, 0.35, 0.12, 0.03];
-/** bloom's strength as the game draws it (three's `UnrealBloomPass.strength`, a uniform of its composite) */
+/** bloom's strength as the game draws it */
 export const BLOOM_STRENGTH = 0.85;
-/** photo mode's focus blur at its most: the disc's radius, a share of the frame's height, and its taps */
-const PHOTO_BLUR_MOST = 0.014;
-const PHOTO_BLUR_TAPS = 24;
-const GradeShader = {
+/**
+ * The grade's values, each `{ value }`: set here each frame and by photo mode (core/photoLook.ts), handed to the
+ * engine as it draws a frame (`render`) and read by three's pipeline (core/webgpu.ts `GradeUniforms`).
+ */
+const grade = {
   uniforms: {
-    tDiffuse: { value: null },
     uTime: { value: 0 },
     uHurt: { value: 0 },
     uVignette: { value: 1.05 },
     uLow: { value: 0 }, uBeat: { value: 0 }, tBlood: { value: null as THREE.Texture | null },
-    tGlare: { value: null as THREE.Texture | null },
-    tBloom: { value: null as THREE.Texture | null }, tSightDepth: { value: null as THREE.Texture | null },
-    tSmall: { value: null as THREE.Texture | null }, tLarge: { value: null as THREE.Texture | null },
-    uSmall: { value: ADAPT.top[0] }, uLarge: { value: ADAPT.top[1] },
+    uSmall: { value: ADAPT.top[0] as number }, uLarge: { value: ADAPT.top[1] as number },
     uCap: { value: HI_CAP - HI_KNEE },
     uHdr: { value: 0 }, uPaper: { value: 1 }, uPeak: { value: 1 },
     // photo mode's look (core/photoLook.ts), read only while it's on (`uPhoto`): neutral and left out otherwise
     uPhoto: { value: 0 }, uExposure: { value: 1 }, uContrast: { value: 1 }, uSaturation: { value: 1 },
     uFilterLo: { value: new THREE.Matrix3() }, uFilterHi: { value: new THREE.Matrix3() }, uFilterMix: { value: 0 },
     uBlur: { value: 0 }, uFocusY: { value: 0.5 }, uFocusBand: { value: 0.1 },
-    uSceneTexel: { value: new THREE.Vector2(1, 1) },
   },
-  vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-  fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse; uniform float uTime; uniform float uHurt; uniform float uVignette; uniform sampler2D tGlare;
-    uniform float uLow; uniform float uBeat; uniform sampler2D tBlood;
-    uniform sampler2D tSmall; uniform sampler2D tLarge; uniform float uSmall; uniform float uLarge;
-    uniform float uCap; uniform float uHdr; uniform float uPaper; uniform float uPeak;
-    uniform sampler2D tBloom;
-    uniform float uPhoto; uniform float uExposure; uniform float uContrast; uniform float uSaturation;
-    uniform mat3 uFilterLo; uniform mat3 uFilterHi; uniform float uFilterMix;
-    uniform float uBlur; uniform float uFocusY; uniform float uFocusBand; uniform vec2 uSceneTexel;
-    varying vec2 vUv;
-    ${SCENE_READ}
-    float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
-    // photo mode's focus blur (a tilt-shift: the frame's depth isn't kept outside the village): the scene and its
-    // bloom read over a disc round the pixel, the wider the further it lies above or below the band in focus
-    vec4 photoBlurred(vec2 uv) {
-      float away = max(abs(uv.y - uFocusY) - uFocusBand, 0.0);
-      float radius = uBlur * smoothstep(0.0, 0.3, away) * ${PHOTO_BLUR_MOST.toFixed(3)};
-      if (radius < uSceneTexel.y * 0.5) return sceneAt(tDiffuse, uv) + texture2D(tBloom, uv);
-      vec2 aspect = vec2(uSceneTexel.x / uSceneTexel.y, 1.0);
-      vec4 sum = vec4(0.0);
-      for (int i = 0; i < ${PHOTO_BLUR_TAPS}; i++) {
-        float r = sqrt((float(i) + 0.5) / ${PHOTO_BLUR_TAPS.toFixed(1)}) * radius;
-        float a = float(i) * 2.39996;
-        vec2 at = uv + vec2(cos(a), sin(a)) * r * aspect;
-        sum += sceneAt(tDiffuse, at) + texture2D(tBloom, at);
-      }
-      return sum / ${PHOTO_BLUR_TAPS.toFixed(1)};
-    }
-    // the power of the light over the base that brings an area's average down to its target
-    float adapt(float avg, float target){ return avg > target ? log(target / ${ADAPT_BASE.toFixed(3)}) / log(avg / ${ADAPT_BASE.toFixed(3)}) : 1.0; }
-    // and a pixel adapts to it as far as it's as bright as it: from half the area's average light up (a pixel much
-    // dimmer than its area is beside what makes it bright, which the eye adapts to apart; adapted alike, the stone
-    // round a sunlit blade through the eyes darkened into a veil, its edge on the grid's cells)
-    float adaptAt(float avg, float target, float lum){ return mix(1.0, adapt(avg, target), smoothstep(${ADAPT_ALIKE[0].toFixed(2)}, ${ADAPT_ALIKE[1].toFixed(2)}, lum / max(avg, 1e-4))); }
-    void main(){
-      // the scene and bloom added over it (as its blend added it, at its composite's own pixels)
-      vec4 c;
-      if (uPhoto > 0.5 && uBlur > 0.0) c = photoBlurred(vUv);
-      else c = sceneAt(tDiffuse, vUv) + texture2D(tBloom, vUv);
-      // the eye adapts to a bright area, so a big effect doesn't wash out the view
-      const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
-      float lum = dot(c.rgb, LUM);
-      float g = min(adaptAt(dot(texture2D(tSmall, vUv).rgb, LUM), uSmall, lum), adaptAt(dot(texture2D(tLarge, vUv).rgb, LUM), uLarge, lum));
-      if (lum > ${ADAPT_BASE.toFixed(3)}) c.rgb *= ${ADAPT_BASE.toFixed(3)} * pow(lum / ${ADAPT_BASE.toFixed(3)}, g) / lum;
-      // photo mode's exposure: the light as the eye adapted to it, before the highlights are compressed
-      if (uPhoto > 0.5) c.rgb *= uExposure;
-      // glare (bloom's blurriest level): how large a bright spot is
-      vec3 gl = texture2D(tGlare, vUv).rgb;
-      float glare = max(gl.r, max(gl.g, gl.b));
-      // the scene and its bloom, compressed like the eye: the brightest channel eases towards a
-      // ceiling and the others keep their ratio to it, so a stack of lights stops adding up
-      float m = max(c.r, max(c.g, c.b));
-      if (m > ${HI_KNEE.toFixed(2)}) c.rgb *= (${HI_KNEE.toFixed(2)} + uCap * (1.0 - exp(-(m - ${HI_KNEE.toFixed(2)}) / uCap))) / m;
-      // tone mapping + sRGB here instead of a separate OutputPass (renderer settings, drawn to the screen).
-      // Per channel it squeezes the brightest channel most, so any bright colour ends up white. The eye
-      // adapts to a large bright area and sees its colour, so there pixels are mapped by their brightest
-      // channel instead, keeping their colour; a small hot core may still go white, and ordinary pixels are as before
-      m = max(max(c.r, max(c.g, c.b)), 1e-4);
-      vec3 hue = c.rgb / m * toneMapping(vec3(m)).g;
-      float keep = smoothstep(${HUE_FROM.toFixed(2)}, ${HUE_TO.toFixed(2)}, m) * smoothstep(${GLARE_FROM.toFixed(2)}, ${GLARE_TO.toFixed(2)}, glare);
-      c.rgb = mix(toneMapping(c.rgb), hue, keep);
-      c = linearToOutputTexel(c);
-      // photo mode's contrast, saturation and colour filter, on the frame as shown (sRGB): the filter's shadows and
-      // highlights each by a matrix of their own (the cinematic look's teal and orange), mixed in by its strength
-      if (uPhoto > 0.5) {
-        vec3 p = (c.rgb - 0.5) * uContrast + 0.5;
-        float pl = dot(p, vec3(0.2126, 0.7152, 0.0722));
-        p = mix(vec3(pl), p, uSaturation);
-        vec3 tinted = mix(uFilterLo * p, uFilterHi * p, smoothstep(0.15, 0.75, pl));
-        c.rgb = max(mix(p, tinted, uFilterMix), 0.0);
-      }
-      vec2 d = vUv - 0.5;
-      float r = dot(d, d);
-      float vig = 1.0 - smoothstep(0.12, 0.75, r * uVignette);
-      c.rgb *= mix(0.35, 1.0, vig);
-      // cool shadows, warm highlights
-      float l = dot(c.rgb, vec3(0.299,0.587,0.114));
-      c.rgb = mix(c.rgb * vec3(0.93,0.97,1.08), c.rgb * vec3(1.04,1.0,0.94), smoothstep(0.2,0.8,l));
-      c.rgb += (h(vUv * 900.0 + uTime) - 0.5) * 0.025;
-      // low health (core/lowLife.ts): the world's colour drains away, and the blood round the screen's edges (its
-      // shapes painted in core/bloodEdges.ts: red its cover, green how near to nothing it shows from, blue its shade)
-      // shows as far as the Health has fallen, a little further at each beat of the heart: fresh, thin and bright at
-      // its front with a wet rim, darker and thicker the longer it has shown
-      if (uLow > 0.0) {
-        float grey = dot(c.rgb, vec3(0.299,0.587,0.114));
-        c.rgb = mix(c.rgb, vec3(grey), 0.9 * pow(uLow, 1.5));
-        vec3 mask = texture2D(tBlood, vUv).rgb;
-        float reach = uLow * (1.0 + 0.06 * uBeat);
-        float shown = mask.r * smoothstep(mask.g - 0.03, mask.g + 0.004, reach);
-        float age = clamp((reach - mask.g) / 0.45, 0.0, 1.0);
-        float rim = 1.0 - smoothstep(0.0, 0.035, reach - mask.g);
-        vec3 blood = mix(vec3(0.42,0.015,0.025), vec3(0.11,0.0,0.006), age) * (0.75 + 0.5 * mask.b);
-        blood += vec3(0.28,0.04,0.04) * rim * mask.b;
-        c.rgb = mix(c.rgb, blood, shown * mix(0.62, 0.94, age));
-      }
-      c.rgb = mix(c.rgb, vec3(0.6,0.02,0.02), uHurt * smoothstep(0.05, 0.5, r) * 0.8);
-      // HDR: the frame as an SDR screen shows it (gamma 2.2: Windows shows SDR content by the sRGB curve, which lifts
-      // its shadows), the highlights over the knee grown towards the peak by their brightest channel (hue kept, and
-      // with no room over the paper white, nothing grown), and all of it at the paper white, encoded as extended sRGB
-      if (uHdr > 0.5) {
-        const float K = ${HDR_KNEE.toFixed(2)};
-        vec3 v = pow(clamp(c.rgb, 0.0, 1.0), vec3(2.2));
-        float top = max(v.r, max(v.g, v.b));
-        float room = max(uPeak / uPaper, 1.0);
-        float u = clamp((top - K) / (1.0 - K), 0.0, 1.0);
-        float a = (1.0 - K) / (room - K);
-        if (top > K) v *= (K + (1.0 - K) * u / (1.0 - u * (1.0 - a))) / top;
-        c.rgb = sRGBTransferOETF(vec4(v * uPaper, 1.0)).rgb;
-      }
-      // (the frame is opaque: the scene's alpha is 1 and one more for each layer of added light over it, 3 through
-      // the forest's shafts of light, and in HDR the canvas keeps it: a Mac's screen multiplied the colour by it, #575)
-      gl_FragColor = vec4(c.rgb, 1.0);
-    }`,
 };
+/** The grade's values (`grade`): photo mode's look sets them. */
+export const gradeUniforms = (): typeof grade.uniforms => grade.uniforms;
 
-/** The frame's average light (box downsamples to one pixel), for the grade's adaptation. */
-class AreaPass extends Pass {
-  private steps = [[64, 36], [16, 9], [4, 3]].map(([w, h]) => new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, depthBuffer: false }));
-  readonly small = this.steps[1];
-  readonly large = this.steps[2];
-  /**
-   * The first grid's scene read before the arms through the eyes are drawn over it (`readBefore`), its bloom added
-   * after: the eye adapts to the world, not to the weapon held a hand from it. Read with them, a warrior's axe filled
-   * much of a dark area of the 16x9 grid and raised its average, and the grade darkened the rest of that area round it,
-   * the far portal and the trees beside it, by up to 0.19 of white (#427, `lab haze --class warrior --facings 270`).
-   * Read texel for texel (nearest), as the first grid is drawn at its size.
-   */
-  private before = new THREE.WebGLRenderTarget(64, 36, {
-    type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
-  });
-  /** whether this frame's first grid was read before the arms (`readBefore`) */
-  private readFirst = false;
-  private mat = new THREE.ShaderMaterial({
-    uniforms: {
-      tDiffuse: { value: null as THREE.Texture | null }, uStep: { value: new THREE.Vector2() },
-      uFirst: { value: 0 }, tBloom: { value: null as THREE.Texture | null },
-      tSightDepth: { value: null as THREE.Texture | null }, tBefore: { value: null as THREE.Texture | null },
-    },
-    vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
-    // 8x8 bilinear taps spread over the output texel: a box average of its footprint
-    fragmentShader: /* glsl */`
-      uniform sampler2D tDiffuse; uniform vec2 uStep; uniform float uFirst; uniform sampler2D tBloom; varying vec2 vUv;
-      uniform sampler2D tBefore;
-      ${SCENE_READ}
-      // (uFirst: 0 a grid from the one before it; the first grid's 1 the scene as the grade reads it, bloom with it, as
-      // the eye adapts to the halos too; 2 the scene alone, before the arms are drawn; 3 bloom, added to that)
-      vec3 lightAt(vec2 at) {
-        if (uFirst > 2.5) return texture2D(tBloom, at).rgb;
-        if (uFirst > 1.5) return sceneAt(tDiffuse, at).rgb;
-        if (uFirst > 0.5) return sceneAt(tDiffuse, at).rgb + texture2D(tBloom, at).rgb;
-        return texture2D(tDiffuse, at).rgb;
-      }
-      void main(){
-        vec3 s = vec3(0.0);
-        for (int y = 0; y < 8; y++) for (int x = 0; x < 8; x++)
-          { vec3 v = lightAt(vUv + (vec2(float(x), float(y)) - 3.5) * uStep); s += any(isnan(v)) || any(isinf(v)) ? vec3(0.0) : min(v, vec3(64.0)); }
-        s /= 64.0;
-        if (uFirst > 2.5) s += texture2D(tBefore, vUv).rgb;
-        gl_FragColor = vec4(s, 1.0);
-      }`,
-    depthTest: false, depthWrite: false,
-  });
-  private quad = new FullScreenQuad(this.mat);
-  /** what it draws with (`compilePasses`) */
-  get material(): THREE.ShaderMaterial { return this.mat; }
-  constructor() { super(); this.needsSwap = false; }
-  /** The first grid's scene read from `scene` as it stands, before the arms are drawn over it (`before`); the target
-   *  bound after is the caller's to set. */
-  readBefore(r: THREE.WebGLRenderer, scene: THREE.WebGLRenderTarget): void {
-    this.mat.uniforms.uFirst.value = 2;
-    this.mat.uniforms.tDiffuse.value = scene.texture;
-    this.mat.uniforms.uStep.value.set(1 / this.before.width / 8, 1 / this.before.height / 8);
-    r.setRenderTarget(this.before);
-    this.quad.render(r);
-    this.readFirst = true;
-  }
-  override render(r: THREE.WebGLRenderer, _w: THREE.WebGLRenderTarget, read: THREE.WebGLRenderTarget): void {
-    let src = read;
-    this.mat.uniforms.tBefore.value = this.before.texture;
-    for (const dst of this.steps) {
-      const first = src === read;
-      this.mat.uniforms.uFirst.value = !first ? 0 : this.readFirst ? 3 : 1;
-      this.mat.uniforms.tDiffuse.value = src.texture; src = dst;
-      // taps an eighth of an output texel apart
-      this.mat.uniforms.uStep.value.set(1 / dst.width / 8, 1 / dst.height / 8);
-      r.setRenderTarget(dst);
-      this.quad.render(r);
-    }
-    this.readFirst = false;
-  }
-}
+let gl: THREE.WebGLRenderer, sceneRT: THREE.WebGLRenderTarget;
 
-/** the most taps a side bloom's bright pass takes of the scene (`brightTaps`) */
-const BRIGHT_TAPS_MOST = 4;
-/**
- * Bloom's bright pass reading the scene's target as `SCENE_READ` reads it (three's `LuminosityHighPassShader`), every
- * pixel of it under each of its own. Its target is half bloom's size each way, and one tap reads 2x2 of the scene's
- * pixels: all of them at High, a quarter at Low (bloom at half the scene's pixels each way) and a sixteenth at Very
- * low (a quarter), so a small bright thing (a dummy's mark, a rune, a flame's tongue) was caught by one frame and
- * missed by the next as the view moved, and its whole glow went with it (from play, at Very low: "blinding light...
- * it only happens when I'm moving"; `lab light --levels --walk`). It takes `uTaps` taps a side (1, 2, 4), each its
- * own 2x2 and thresholded alone, as High's one is: uniforms, so a level switched compiles nothing.
- */
-const BRIGHT_FROM_SCENE = /* glsl */`
-  uniform sampler2D tDiffuse; uniform vec3 defaultColor; uniform float defaultOpacity;
-  uniform float luminosityThreshold; uniform float smoothWidth;
-  uniform vec2 uTexel; uniform float uTaps;
-  varying vec2 vUv;
-  ${SCENE_READ}
-  void main() {
-    vec4 outputColor = vec4(defaultColor.rgb, defaultOpacity);
-    vec4 sum = vec4(0.0);
-    for (int y = 0; y < ${BRIGHT_TAPS_MOST}; y++) {
-      if (float(y) >= uTaps) break;
-      for (int x = 0; x < ${BRIGHT_TAPS_MOST}; x++) {
-        if (float(x) >= uTaps) break;
-        // (each tap at the corner four of the scene's pixels share, the taps two pixels apart)
-        vec2 off = (vec2(float(x), float(y)) - 0.5 * (uTaps - 1.0)) * 2.0 * uTexel;
-        vec4 texel = sceneAt(tDiffuse, vUv + off);
-        float alpha = smoothstep(luminosityThreshold, luminosityThreshold + smoothWidth, luminance(texel.xyz));
-        sum += mix(outputColor, texel, alpha);
-      }
-    }
-    gl_FragColor = sum / (uTaps * uTaps);
-  }`;
-
-/**
- * Bloom's levels' weights at `share` of the scene's pixels each way: each level is then as wide on the screen as the
- * one that many halvings up was, so each takes that one's weight, the tightest the weights of those it stands in
- * for, and the widest none. Weighed as at full size, Low's glow was twice as wide for the same weights, and its
- * brightest hundredth of the frame 1.22 times High's by a rune (`lab light --levels`).
- */
-function bloomLevelsAt(share: number): number[] {
-  const up = Math.max(0, Math.round(Math.log2(1 / share)));
-  const tightest = BLOOM_LEVELS.slice(0, up + 1).reduce((sum, weight) => sum + weight, 0);
-  return BLOOM_LEVELS.map((_, level) => (level === 0 ? tightest : BLOOM_LEVELS[level + up] ?? 0));
-}
-
-/** The taps a side bloom's bright pass takes at `share` of the scene's pixels each way: every pixel under it read. */
-const brightTaps = (share: number): number => Math.min(BRIGHT_TAPS_MOST, Math.max(1, Math.round(1 / share)));
-
-let areaPass: AreaPass;
-/** A pass's uniforms given the sight's (shared, set each frame: a pass copies what it's made with) and the scene's
- *  depth, which `SCENE_READ` reads. */
-function sharesTheSight(uniforms: Record<string, THREE.IUniform>): void {
-  Object.assign(uniforms, SIGHT);
-  uniforms.tSightDepth = { value: sceneRT.depthTexture };
-}
-let composer: EffectComposer, grade: ShaderPass, gl: THREE.WebGLRenderer, sceneRT: THREE.WebGLRenderTarget;
-/** the post chain's materials: those its passes draw into its targets with, and the grade's, drawn to the screen */
-let passMaterials: { intoTargets: THREE.ShaderMaterial[]; toScreen: THREE.ShaderMaterial[] } = { intoTargets: [], toScreen: [] };
-
-/**
- * The post chain's programs compiled now, each for what it draws into (a target, or the screen: the grade's, and
- * `onScreen`'s, the overlay's), so the GPU's threads link them side by side: the first full frame linked each as it
- * first drew it, one after another (0.33 s on a first visit).
- */
+/** What is drawn straight onto the canvas (`onScreen`: the overlay's) compiled now, ahead of its first draw. */
 export function compilePasses(onScreen: THREE.Scene[]): void {
-  const quad = passTriangle();
-  const compiled = (materials: THREE.Material[], target: THREE.WebGLRenderTarget | null): void => {
-    const holder = new THREE.Scene();
-    holder.add(...materials.map((material) => new THREE.Mesh(quad, material)));
-    gl.setRenderTarget(target);
-    gl.compile(holder, passCamera);
-  };
-  const prev = gl.getRenderTarget();
-  // (WebGPU draws its own pipeline: the WebGL chain's passes are never drawn there, makePipeline in webgpu.ts)
-  if (!WEBGPU) {
-    compiled(passMaterials.intoTargets, sceneRT);
-    compiled(passMaterials.toScreen, null);
-  }
   for (const scene of onScreen) gl.compile(scene, passCamera);
-  gl.setRenderTarget(prev);
-  quad.dispose();
 }
 
 /** A pass's full-screen triangle as three's full-screen quad has it, to compile a pass's material on: positions and
@@ -590,21 +259,6 @@ function placeArmsCamera(): void {
   armsCam.updateMatrixWorld();
 }
 
-/** Draws the arms layer over the world's frame in the bound target: its depth cleared first, so nothing of the world
- *  goes through them; the world's shadows kept, not drawn again; nothing behind them (the scene's background). */
-function drawArmsOver(): void {
-  placeArmsCamera();
-  const autoClear = gl.autoClear, shadows = gl.shadowMap.autoUpdate, background = G.scene.background;
-  gl.autoClear = false;
-  gl.shadowMap.autoUpdate = false;
-  G.scene.background = null;
-  gl.clearDepth();
-  gl.render(G.scene, armsCam);
-  gl.autoClear = autoClear;
-  gl.shadowMap.autoUpdate = shadows;
-  G.scene.background = background;
-}
-
 /** The world's lights' shadows held as they are for `draw` (`shadow.autoUpdate`: on WebGPU each camera's draw would
  *  draw every shadow map again). */
 function withShadowsKept(draw: () => void): void {
@@ -619,8 +273,9 @@ function withShadowsKept(draw: () => void): void {
   for (const shadow of held) shadow.autoUpdate = true;
 }
 
-/** `drawArmsOver` on WebGPU: into the scene's pass's target as it stands, its colour kept and its depth cleared, as
- *  the post chain reads it next. */
+/** Draws the arms layer over the world's frame, into the scene's pass's target as it stands: its colour kept and its
+ *  depth cleared first, so nothing of the world goes through them, as the post chain reads it next; the world's
+ *  shadows kept, not drawn again; nothing behind them (the scene's background). */
 function drawArmsOverPass(): void {
   if (armsFov === null) return;
   placeArmsCamera();
@@ -670,15 +325,14 @@ export function holdSunShadow(held: boolean): void { sunShadowHeld = held; }
  * and at 144 a second its 72 show no lag. Told by the frames' mean: by each frame's own time, a frame that missed the
  * screen's refresh (13.9 ms at 144 Hz) had the next draw the shadow too, which missed it again, and the game stayed at
  * half the screen's rate with the shadow in every frame. A 60 Hz screen's stay whole. (`?shadowEvery=1` draws it every
- * frame, to compare.) On WebGL every frame draws it, but on a level that asks for it in turns (Very low,
- * `setShadowInTurns`) at any frame rate.
+ * frame, to compare.) A level may ask for it in turns at any frame rate (Very low, `setShadowInTurns`).
  */
 function sunShadowInTurns(): void {
   const now = performance.now();
   frameMean += (Math.min(now - lastFrameAt, 2 * SHADOW_IN_TURNS_MS) - frameMean) * FRAME_MEAN_SHARE;
   const fast = frameMean < SHADOW_IN_TURNS_MS;
   lastFrameAt = now;
-  const turns = shadowInTurns || (WEBGPU && fast);
+  const turns = shadowInTurns || fast;
   const skip = turns && shadowDrawnLast && !SHADOW_EVERY_FRAME;
   shadowDrawnLast = !skip;
   // (where the sun's shadow is the still world's alone, it's drawn with the still shadows, by no frame of its own)
@@ -820,40 +474,9 @@ function shadeEnvironment(): void {
     `radiance *= mix( ${ENV_IN_SHADOW.toFixed(2)}, 1.0, sunShadow );\n\t${ENV_SPECULAR}`);
 }
 
-/** WEBGL_provoking_vertex, as its spec names it (lib.dom has no type for it) */
-interface ProvokingVertex { FIRST_VERTEX_CONVENTION_WEBGL: number; provokingVertexWEBGL(mode: number): void }
-
-/**
- * A `flat` varying taken from a triangle's first vertex, where the browser can (WEBGL_provoking_vertex): D3D11 takes
- * it from the first, and for GL's last ANGLE added a geometry shader to every program with one, compiled at its first
- * draw on the GPU process's main thread and run on every draw after (the crowds' rows: models/crowd.ts, whose flat
- * values are the same at each of a triangle's vertices).
- */
-function firstVertexProvokes(context: WebGLRenderingContext | WebGL2RenderingContext): void {
-  const provoking = context.getExtension('WEBGL_provoking_vertex') as ProvokingVertex | null;
-  provoking?.provokingVertexWEBGL(provoking.FIRST_VERTEX_CONVENTION_WEBGL);
-}
-
-/**
- * The unpacking state three reads back before a copy into part of a texture (`copyTextureToTexture`, and an upload
- * of part of one) set to what it is, so three's state knows it: it asks the GPU's process for each value it hasn't
- * set itself, a round trip that waits for everything sent before it, and a first visit's lobby frame waited 41 ms on
- * the first label's copy into the overlays' atlas (`ui/overlay/atlas.ts`) while the hall's heroes' programs compiled
- * (`npm run stalls -- --scenario boot`, the lobby's frames held up).
- */
-function unpackStateKnown(renderer: THREE.WebGLRenderer): void {
-  const context = renderer.getContext() as WebGL2RenderingContext;
-  for (const name of [context.UNPACK_ROW_LENGTH, context.UNPACK_IMAGE_HEIGHT, context.UNPACK_SKIP_PIXELS,
-    context.UNPACK_SKIP_ROWS, context.UNPACK_SKIP_IMAGES]) renderer.state.pixelStorei(name, 0);
-}
-
 /** Each uncapped frame's GPU work fenced (`core/frameLoop.ts`), so the frames never queue ahead of the GPU. */
-function fenceFrames(renderer: THREE.WebGLRenderer | WebGPURenderer): void {
-  if (!WEBGPU) {
-    setFrameFence(glFence((renderer as THREE.WebGLRenderer).getContext() as WebGL2RenderingContext));
-    return;
-  }
-  // (WebGPURenderer's WebGL 2 backend, `?renderer=webgpu-gl`, has a context and no device)
+function fenceFrames(renderer: THREE.WebGLRenderer): void {
+  // (where WebGPURenderer found no WebGPU device it has a WebGL 2 context instead)
   const backend = (renderer as unknown as { backend: { device?: GPUDevice; gl?: WebGL2RenderingContext } }).backend;
   if (backend.device) setFrameFence(gpuFence(backend.device.queue));
   else if (backend.gl) setFrameFence(glFence(backend.gl));
@@ -867,17 +490,14 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   shadeEnvironment();
   // (the village's lamps in every lit shader, and its lights' soft falloff: the village's alone, core/beta.ts)
   if (VILLAGE) lightTheLamps();
-  if (WEBGPU) drawOverScene(drawArmsOverPass);
-  const renderer = gl = WEBGPU ? await makeWebGPURenderer(hdrAllowed)
-    : new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  if (WEBGPU) {
-    takePorts(renderer as unknown as WebGPURenderer);
-    // (`?envShadow=0` leaves the environment unshadowed, to compare)
-    if (VILLAGE) lightTheLampsOnWebGPU();
-    if (!/[?&]envShadow=0/.test(location.search)) shadeEnvironmentNodes({ environment: ENV_IN_SHADOW, ambient: AMBIENT_IN_SHADOW });
-  }
+  drawOverScene(drawArmsOverPass);
+  const renderer = gl = await makeWebGPURenderer(hdrAllowed);
+  takePorts(renderer as unknown as WebGPURenderer);
+  if (VILLAGE) lightTheLampsOnWebGPU();
+  // (`?envShadow=0` leaves the environment unshadowed, to compare)
+  if (!/[?&]envShadow=0/.test(location.search)) shadeEnvironmentNodes({ environment: ENV_IN_SHADOW, ambient: AMBIENT_IN_SHADOW });
   const cr = canvasRatio();
-  const { cw, ch } = canvasTargetCss(window.innerWidth, window.innerHeight);
+  const cw = window.innerWidth, ch = window.innerHeight;
   renderer.setPixelRatio(cr);
   renderer.setSize(cw, ch);
   canvasFitted.w = cw; canvasFitted.h = ch; canvasFitted.pr = cr;
@@ -894,12 +514,8 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   // round trip waits for everything sent before it (a first visit's lobby warm-up waited 0.45 s there, behind its
   // programs)
   renderer.capabilities.getMaxAnisotropy();
-  if (!WEBGPU) unpackStateKnown(renderer as THREE.WebGLRenderer);
-  if (!WEBGPU && !/[?&]programSort=0/.test(location.search)) opaqueByProgram(renderer as THREE.WebGLRenderer);
-  if (!WEBGPU) firstVertexProvokes(renderer.getContext());
   container.appendChild(renderer.domElement);
-  if (RUNNING.rust) await bootRust(renderer.domElement);
-  if (!WEBGPU) initHdr(renderer.domElement, renderer.getContext() as WebGL2RenderingContext);
+  await bootRust(renderer.domElement);
   fenceFrames(renderer);
 
   const scene = new THREE.Scene();
@@ -908,113 +524,30 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   const camera = new THREE.PerspectiveCamera(CAMERA.fov, window.innerWidth / window.innerHeight, 0.5, 300);
 
   const size = sceneSize(new THREE.Vector2());
+  // (never drawn into: it holds the scene's size and samples for what reads them, `pointScale`, `sceneSamples`)
   sceneRT = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
-  // (read back by what he can see: core/sight.ts)
-  if (VILLAGE) sceneRT.depthTexture = new THREE.DepthTexture(size.x, size.y, THREE.UnsignedIntType);
-  composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, depthBuffer: false }));
-  // Every pass reads the scene's target itself (`SCENE_READ`), cleaned and fogged as it reads it: the composer's own
-  // buffers are read by none
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), BLOOM_STRENGTH, 0, 0.9);
-  // each blur level's weight, tightest to widest (radius 0: used as they are). The widest levels spread a
-  // bright effect over half the screen as a pale veil that fogs up the scene, so they only add a trace
-  bloom.compositeMaterial.uniforms.bloomFactors.value = BLOOM_LEVELS;
-  bloom.materialHighPassFilter.fragmentShader = BRIGHT_FROM_SCENE;
-  bloom.materialHighPassFilter.uniforms.uTexel = { value: new THREE.Vector2(1 / size.x, 1 / size.y) };
-  bloom.materialHighPassFilter.uniforms.uTaps = { value: brightTaps(bloomShare) };
-  sharesTheSight(bloom.materialHighPassFilter.uniforms);
-  // (its composite is added by the grade and the area, not blended over a copy of the frame: three draws no
-  // material that isn't visible)
-  bloom.blendMaterial.visible = false;
-  const bloomFrom = bloom.render.bind(bloom);
-  bloom.render = (renderer, write, _read, delta, mask) => bloomFrom(renderer, write, sceneRT, delta, mask);
-  composer.addPass(bloom);
-  bloomPass = bloom;
-  // (sized by the post chain as every pass is, then by its share: `setBloomShare`)
-  bloomGiven.copy(size);
-  const sizeBloom = bloom.setSize.bind(bloom);
-  bloom.setSize = (width, height) => {
-    bloomGiven.set(width, height);
-    sizeBloom(Math.max(4, Math.round(width * bloomShare)), Math.max(4, Math.round(height * bloomShare)));
-    // (the scene's own pixel, and the taps that read every one under the bright pass's)
-    bloom.materialHighPassFilter.uniforms.uTexel.value.set(1 / width, 1 / height);
-    bloom.materialHighPassFilter.uniforms.uTaps.value = brightTaps(bloomShare);
-    bloom.compositeMaterial.uniforms.bloomFactors.value = bloomLevelsAt(bloomShare);
-  };
-  // after bloom: the eye adapts to all the light that reaches it, halos included
-  const area = new AreaPass();
-  areaPass = area;
-  sharesTheSight(area.material.uniforms);
-  area.material.uniforms.tBloom.value = bloom.renderTargetsHorizontal[0].texture;
-  const areaFrom = area.render.bind(area);
-  area.render = (renderer, write) => areaFrom(renderer, write, sceneRT);
-  composer.addPass(area);
-  grade = new ShaderPass(GradeShader, 'none');
-  grade.uniforms.tDiffuse.value = sceneRT.texture;
-  grade.uniforms.tBloom.value = bloom.renderTargetsHorizontal[0].texture;
-  sharesTheSight(grade.uniforms);
-  grade.uniforms.tGlare.value = bloom.renderTargetsVertical[bloom.nMips - 1].texture;
-  // (set on the pass: it copies the uniforms it's made with, a texture's settings too, and the copy never saw the mask painted)
   grade.uniforms.tBlood.value = bloodMask;
-  grade.uniforms.tSmall.value = area.small.texture;
-  grade.uniforms.tLarge.value = area.large.texture;
-  composer.addPass(grade);
-  leaveBloomOut();
-  passMaterials = {
-    intoTargets: [
-      bloom.materialHighPassFilter, ...bloom.separableBlurMaterials, bloom.compositeMaterial, area.material,
-    ],
-    toScreen: [grade.material],
-  };
-  // the perf overlay times each pass on the GPU
-  for (const [label, pass] of [['area', area], ['bloom', bloom], ['grade', grade]] as [string, Pass][]) {
-    const run = pass.render.bind(pass);
-    pass.render = (...a: Parameters<typeof run>) => { gpuMarks.mark(label); run(...a); };
-  }
-
-  if (WEBGPU) {
-    const looks = {
-      highlights: { knee: HI_KNEE, cap: HI_CAP }, hdrKnee: HDR_KNEE, adaptBase: ADAPT_BASE, adaptAlike: ADAPT_ALIKE,
-      hue: [HUE_FROM, HUE_TO], glare: [GLARE_FROM, GLARE_TO], bloom: BLOOM_LEVELS,
-    } as const;
-    await makePipeline(renderer, scene, camera, looks, grade.uniforms as never);
-  }
+  const looks = {
+    highlights: { knee: HI_KNEE, cap: HI_CAP }, hdrKnee: HDR_KNEE, adaptBase: ADAPT_BASE, adaptAlike: ADAPT_ALIKE,
+    hue: [HUE_FROM, HUE_TO], glare: [GLARE_FROM, GLARE_TO], bloom: BLOOM_LEVELS,
+  } as const;
+  await makePipeline(renderer, scene, camera, looks, grade.uniforms);
   G.scene = scene; G.camera = camera; G.renderer = renderer;
   window.addEventListener('resize', fitViewport);
   fitViewport();
   return { scene, camera, renderer };
 }
 
-/** The active portion of the drawing buffer filled by this frame (physical pixels). On a screen-sized touch canvas the
- *  window sits at the top-left while the buffer covers the whole screen (`bottom > 0`), so WebGL bottom-up reads and
- *  scissors start at `bottom`, whereas DOM/2D copies crop from (`left`, `top`) = `(0, 0)`. */
+/** The frame's box within the canvas (physical pixels): the whole of it, the window's, so `left`, `top` and `bottom`
+ *  are 0. */
 export interface FrameRect { left: number; top: number; bottom: number; width: number; height: number }
-
-/** whether the lab forces the screen-sized canvas on/off (`null` follows `(pointer: coarse)`) */
-let screenCanvasHeld: boolean | null = null;
-/**
- * Whether the WebGL canvas holds the whole screen's pixels from boot so entering full screen on a phone never
- * reallocates the drawing buffer (WebGL only: WebGPU's swap chain is managed separately).
- */
-const usesScreenCanvas = (): boolean =>
-  !WEBGPU && (screenCanvasHeld ?? (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches));
-
-/** Target CSS dimensions for the canvas: the whole screen (oriented like the window) on touch, or the window itself. */
-function canvasTargetCss(w: number, h: number): { cw: number; ch: number } {
-  if (!usesScreenCanvas()) return { cw: w, ch: h };
-  const sw = window.screen?.width || 0;
-  const sh = window.screen?.height || 0;
-  // iOS Safari keeps `screen.width/height` in portrait after rotating to landscape, so align long/short sides to the window.
-  const long = Math.max(sw, sh), short = Math.min(sw, sh);
-  const land = w >= h;
-  return { cw: Math.max(w, land ? long : short), ch: Math.max(h, land ? short : long) };
-}
 
 /** the window size, device pixel ratio, and target canvas CSS size last fitted */
 const fitted = { w: 0, h: 0, dpr: 0, cw: 0, ch: 0 };
 /** the CSS size and pixel ratio the backing canvas was last allocated at */
 const canvasFitted = { w: 0, h: 0, pr: 0 };
 
-/** The active frame's box within the WebGL canvas, in physical pixels. */
+/** The frame's box within three's canvas, in physical pixels. */
 export function frameRect(): FrameRect {
   const dom = gl.domElement;
   const pr = gl.getPixelRatio();
@@ -1025,23 +558,9 @@ export function frameRect(): FrameRect {
   return { left: 0, top: 0, bottom: dom.height - height, width, height };
 }
 
-/** Restricts default-framebuffer draws to the window's top-left slice of a screen-sized canvas. */
-function applyScreenViewport(): void {
-  if (WEBGPU) return;
-  const dom = gl.domElement;
-  const { width: vw, height: vh, bottom } = frameRect();
-  const pr = gl.getPixelRatio();
-  if (bottom === 0 && vw === dom.width && vh === dom.height) {
-    gl.setViewport(0, 0, fitted.w, fitted.h);
-  } else {
-    // +0.25 px keeps Three's round() in setViewport and floor() in setRenderTarget(null) on the exact integer pixel.
-    gl.setViewport(0, (bottom + 0.25) / pr, (vw + 0.25) / pr, (vh + 0.25) / pr);
-  }
-}
-
-/** Overrides `(pointer: coarse)` for `lab resize`, immediately refitting the canvas and viewport (`null` restores auto). */
-export function holdScreenCanvas(on: boolean | null): void {
-  screenCanvasHeld = on;
+/** For `lab resize`: the canvas and the viewport fitted again now. (The canvas is the window's own on this renderer,
+ *  whatever is asked: a screen-sized one was the WebGL renderer's, on touch.) */
+export function holdScreenCanvas(_on: boolean | null): void {
   fitViewport();
 }
 /** the most pixels the scene renders: the quality's, and Auto's budget (core/quality.ts) */
@@ -1059,15 +578,15 @@ function samplesOn(asked: number, ratio: number): number {
   if (share >= 4) return 4;
   return share >= 2 ? 2 : 0;
 }
-/** Sets the scene target's MSAA to the level's samples on this screen (it's made again on its next use). */
+/** Sets the scene's MSAA to the level's samples on this screen, three's pass's and the engine's. */
 function fitSamples(): void {
   const samples = samplesOn(askedSamples, canvasRatio());
   if (sceneRT.samples !== samples) {
     sceneRT.samples = samples;
     sceneRT.dispose();
   }
-  if (WEBGPU) setSceneSamples(samples);
-  if (RUNNING.rust) rustSamples(samples);
+  setSceneSamples(samples);
+  rustSamples(samples);
 }
 /** The MSAA samples the scene renders with now. */
 export const sceneSamples = (): number => sceneRT.samples;
@@ -1128,7 +647,7 @@ function fitViewport(): boolean {
   const w = window.innerWidth, h = window.innerHeight, dpr = window.devicePixelRatio || 1;
   if (w < 1 || h < 1) return false;
   const cr = canvasRatio();
-  const { cw, ch } = canvasTargetCss(w, h);
+  const cw = w, ch = h;
   if (w === fitted.w && h === fitted.h && dpr === fitted.dpr && cw === fitted.cw && ch === fitted.ch) return false;
   fitted.w = w; fitted.h = h; fitted.dpr = dpr; fitted.cw = cw; fitted.ch = ch;
   G.camera.aspect = w / h;
@@ -1138,17 +657,13 @@ function fitViewport(): boolean {
     gl.setSize(cw, ch);
     canvasFitted.w = cw; canvasFitted.h = ch; canvasFitted.pr = cr;
   }
-  applyScreenViewport();
   applySceneRatio();
-  composer.setSize(w, h);
   fitSceneTarget();
-  // (another screen's density asks for other samples)
-  if (!WEBGPU) fitSamples();
   return true;
 }
 
-/** The offscreen target the scene is rendered into (shaders must be compiled for it). */
-export const sceneTarget = (): THREE.WebGLRenderTarget => (WEBGPU ? webgpuSceneTarget() as THREE.WebGLRenderTarget : sceneRT);
+/** The offscreen target three's scene pass renders into (what its warm-ups are handed). */
+export const sceneTarget = (): THREE.WebGLRenderTarget => webgpuSceneTarget() as THREE.WebGLRenderTarget;
 
 /** What a point's size (m) over its distance is multiplied by for its size in the scene's pixels: the scene's
  *  target's height over the view's height 1 m out. (Sized by the canvas's height, a point was as many times too
@@ -1156,15 +671,14 @@ export const sceneTarget = (): THREE.WebGLRenderTarget => (WEBGPU ? webgpuSceneT
  *  #243's phone, 9 times the pixels to fill.) */
 export const pointScale = (): number => sceneRT.height / (2 * Math.tan(THREE.MathUtils.degToRad(G.camera.fov) / 2));
 
-/** the scene's ratio the post chain was last sized at */
+/** the scene's ratio three's passes were last sized at */
 let appliedSceneRatio = 0;
-/** Sizes the post chain at the scene's ratio if it changed (the composer resizes every pass for it); whether it did. */
+/** Sizes three's passes at the scene's ratio if it changed; whether it did. */
 function applySceneRatio(): boolean {
   const r = sceneRatio();
   if (r === appliedSceneRatio) return false;
   appliedSceneRatio = r;
-  composer.setPixelRatio(r);
-  if (WEBGPU) setSceneShare(sceneShare());
+  setSceneShare(sceneShare());
   return true;
 }
 
@@ -1703,8 +1217,6 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
 
 const ease = (t: number): number => t * t * (3 - 2 * t);
 const _fwd = new THREE.Vector3(), _pivot = new THREE.Vector3(), _look = new THREE.Vector3(), _quat = new THREE.Quaternion(), _quat2 = new THREE.Quaternion();
-/** Where the perf overlay's GPU timing moves on to the next part of the frame (a no-op unless it's on). */
-export const gpuMarks = { mark: (_label: string): void => {} };
 /** What is drawn over the finished frame, on the canvas at its own pixel ratio: the world's overlays (ui/overlay). */
 export const overFrame = { draw: (): void => {}, empty: (): boolean => false };
 /** whether three's canvas is left out of the page's frame under the Rust engine: nothing is drawn over the
@@ -1748,32 +1260,6 @@ function shotTaken(from: HTMLCanvasElement = gl.domElement): void {
   take(from);
 }
 
-/** the scene's parts shown in the last frame: one shown again has every matrix under it made again */
-const partsShown = new WeakSet<THREE.Object3D>();
-
-/**
- * The world matrices of the scene's parts shown made for the frame, the hidden ones left out: three walks every object
- * as it renders, shown or not, recursing into a hidden part whatever its flags (r187's `updateMatrixWorld`), and the
- * houses' rooms, the other biomes and the hall's room were 2,700 of the village's 3,800 objects, a walk of about 1 ms
- * a frame (`npm run lab -- perf --village --profile`). Within a part shown, three's own walk. A part shown again is
- * made whole in that frame, as what's under it may have been placed while it was hidden. Returns true: the caller's
- * render needn't walk the scene again.
- */
-function matricesOfShownOnly(scene: THREE.Scene): boolean {
-  // (the scene itself never moves: its matrix made again each frame marked every object under it changed)
-  scene.matrixAutoUpdate = false;
-  scene.matrixWorldAutoUpdate = true;
-  for (const part of scene.children) {
-    if (!part.visible) {
-      partsShown.delete(part);
-      continue;
-    }
-    part.updateMatrixWorld(!partsShown.has(part));
-    partsShown.add(part);
-  }
-  return true;
-}
-
 /** what marks each of the render's passes as a part of the frame (`markPassesWith`; none until the game sets it) */
 let framePart: (name: string) => void = () => {};
 
@@ -1793,7 +1279,7 @@ export function render(): void {
   const renderBegan = perfClock.now();
   // a change the resize event missed: fit, and tell the rest of the page (UI scale...) too
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
-  // (the grade's, WebGPU's too: core/webgpu.ts `graded`)
+  // (the grade's: the engine's below, and three's pipeline's, core/webgpu.ts `graded`)
   grade.uniforms.uTime.value = G.time;
   grade.uniforms.uHurt.value = rig.hurt;
   const frame = frameRect();
@@ -1812,98 +1298,57 @@ export function render(): void {
   u.uCap.value = (HI_CAP - HI_KNEE) * Math.max(1, hdr.peak / hdr.paper);
   // (a photo's frame graded for an SDR screen: the picture is saved as one)
   if (frameShot.take) u.uHdr.value = 0;
-  u.uSceneTexel.value.set(1 / sceneRT.width, 1 / sceneRT.height);
   sunShadowInTurns();
   aimSight(G.camera);
   framePart('render: its set-up');
-  if (RUNNING.rust) {
-    // (the scene's size as the quality level and Auto's budget have it now: three's own target, read here before,
-    // is sized inside three's frame, which the engine's replaces, so the engine drew the screen's every pixel at
-    // every level: a phone at Very low 3120 by 1440, reports H37Q-PEYK and DGAP-G8SJ)
-    const pixels = { width: sceneSize(_size).x, height: _size.y };
-    const graded = {
-      small: u.uSmall.value, large: u.uLarge.value, cap: u.uCap.value, vignette: u.uVignette.value as number,
-      hurt: u.uHurt.value as number, low: u.uLow.value as number, samples: sceneSamples(),
-      arms: armsFov === null ? null : (placeArmsCamera(), armsCam),
-      lite: liteLevel,
-      casterLeast,
-      bloomShare,
-      shadowHeld: !shadowDrawnLast,
-      look: {
-        on: u.uPhoto.value > 0.5, exposure: u.uExposure.value, contrast: u.uContrast.value,
-        saturation: u.uSaturation.value, filterLo: u.uFilterLo.value, filterHi: u.uFilterHi.value,
-        filterMix: u.uFilterMix.value, blur: u.uBlur.value, focusY: u.uFocusY.value, focusBand: u.uFocusBand.value,
-        bloom: bloomStrengthNow / BLOOM_STRENGTH,
-      },
-      edges: { mask: u.tBlood.value, reach: (u.uLow.value as number) * (1 + 0.06 * (u.uBeat.value as number)) },
-    };
-    if (drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded)) {
-      // (a photo's picture: the engine's frame, taken before anything is drawn over it)
-      if (frameShot.take) {
-        const frame = rustFrame(gl.domElement, false);
-        if (frame) shotTaken(frame);
-      }
-      // (three's canvas over the engine's: clear, but for the world's overlays; left out with none to draw)
-      const none = !overlaysShown || overFrame.empty();
-      leaveOverOut(none);
-      if (!none) {
-        // (cleared by the first of the overlays' draws, as its pass begins: `clearOverFrame`; by a pass of its
-        // own only where none drew, or with the switch off, as it was: a profile's, to time the two)
-        gl.setRenderTarget(null);
-        gl.setClearColor(0x000000, 0);
-        const asItWas = RUST.tune.overCleared <= 0 || !WEBGPU;
-        clearOverFrame();
-        if (asItWas) clearOverNow();
-        overFrame.draw();
-        if (overFrameUncleared()) clearOverNow();
-      }
-      framePart('render: drawn (Rust)');
-      RUST.renderMs = perfClock.now() - renderBegan;
-      return;
+  // (the scene's size as the quality level and Auto's budget have it now: three's own target, read here before,
+  // is sized inside three's frame, which the engine's replaces, so the engine drew the screen's every pixel at
+  // every level: a phone at Very low 3120 by 1440, reports H37Q-PEYK and DGAP-G8SJ)
+  const pixels = { width: sceneSize(_size).x, height: _size.y };
+  const graded = {
+    small: u.uSmall.value, large: u.uLarge.value, cap: u.uCap.value, vignette: u.uVignette.value as number,
+    hurt: u.uHurt.value as number, low: u.uLow.value as number, samples: sceneSamples(),
+    arms: armsFov === null ? null : (placeArmsCamera(), armsCam),
+    lite: liteLevel,
+    casterLeast,
+    bloomShare,
+    shadowHeld: !shadowDrawnLast,
+    look: {
+      on: u.uPhoto.value > 0.5, exposure: u.uExposure.value, contrast: u.uContrast.value,
+      saturation: u.uSaturation.value, filterLo: u.uFilterLo.value, filterHi: u.uFilterHi.value,
+      filterMix: u.uFilterMix.value, blur: u.uBlur.value, focusY: u.uFocusY.value, focusBand: u.uFocusBand.value,
+      bloom: bloomStrengthNow / BLOOM_STRENGTH,
+    },
+    edges: { mask: u.tBlood.value, reach: (u.uLow.value as number) * (1 + 0.06 * (u.uBeat.value as number)) },
+  };
+  if (drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded)) {
+    // (a photo's picture: the engine's frame, taken before anything is drawn over it)
+    if (frameShot.take) {
+      const frame = rustFrame(gl.domElement, false);
+      if (frame) shotTaken(frame);
     }
-  }
-  if (WEBGPU) {
-    renderWebGPU();
-    framePart('render: drawn (WebGPU)');
-    shotTaken();
-    if (overlaysShown) overFrame.draw();
+    // (three's canvas over the engine's: clear, but for the world's overlays; left out with none to draw)
+    const none = !overlaysShown || overFrame.empty();
+    leaveOverOut(none);
+    if (!none) {
+      // (cleared by the first of the overlays' draws, as its pass begins: `clearOverFrame`; by a pass of its
+      // own only where none drew, or with the switch off, as it was: a profile's, to time the two)
+      gl.setRenderTarget(null);
+      gl.setClearColor(0x000000, 0);
+      const asItWas = RUST.tune.overCleared <= 0;
+      clearOverFrame();
+      if (asItWas) clearOverNow();
+      overFrame.draw();
+      if (overFrameUncleared()) clearOverNow();
+    }
+    framePart('render: drawn (Rust)');
     RUST.renderMs = perfClock.now() - renderBegan;
     return;
   }
-  // (its depth read back from above alone: in every other view no pixel reads it)
-  sceneRT.resolveDepthBuffer = VILLAGE && SIGHT.uSightOn.value > 0;
-  // (the ghosts over each pixel, for each to keep less where they lie one over another: what blends thins in the
-  // village alone)
-  const ghosts = G.arena.place === 'village' && !G.arena.hallShown && !G.arena.room && rig.view !== 'first';
-  // (the frame's matrices made once, before the ghosts' count and the scene: three made them all again for each
-  // render, a walk of every object, a sixth of the village's render on the CPU, `lab perf --village`)
-  const walked = VILLAGE && matricesOfShownOnly(G.scene);
-  framePart('render: matrices');
-  if (ghosts) gpuMarks.mark('ghosts');
-  G.scene.matrixWorldAutoUpdate = !walked;
-  try {
-    const counted = countGhostLayers(gl, G.scene, G.camera, sceneRT.width, sceneRT.height, ghosts);
-    framePart('render: ghosts counted');
-    gl.setRenderTarget(sceneRT);
-    gpuMarks.mark('scene');
-    // (with no village, the ghosts' count never draws: three's own walk as the scene renders)
-    if (counted) G.scene.matrixWorldAutoUpdate = false;
-    gl.render(G.scene, G.camera);
-    framePart('render: the scene and its shadows');
-  } finally {
-    G.scene.matrixWorldAutoUpdate = true;
-  }
-  if (armsFov !== null) {
-    gpuMarks.mark('arms');
-    areaPass.readBefore(gl, sceneRT);
-    gl.setRenderTarget(sceneRT);
-    drawArmsOver();
-  }
-  composer.render();
-  framePart('render: the post chain');
+  // (the engine off: three's own pipeline draws the scene)
+  renderWebGPU();
+  framePart('render: drawn (WebGPU)');
   shotTaken();
-  gpuMarks.mark('overlay');
   if (overlaysShown) overFrame.draw();
-  presentHdr(frame.width, frame.height);
-  framePart('render: overlays');
+  RUST.renderMs = perfClock.now() - renderBegan;
 }

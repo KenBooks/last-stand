@@ -8,7 +8,6 @@
 // swelling from nothing as the growth passes it, and withers back (`uWither`).
 import * as THREE from 'three';
 import { portShader, type Port, type Tsl } from '../core/shaderPorts';
-import { RUNNING } from '../core/rendererChoice';
 import { effectLook, num, rgb } from '../engine/effects';
 import { groundHeight } from '../world/ground';
 
@@ -220,7 +219,7 @@ class Parts {
     geo.setAttribute('aFan', new THREE.Float32BufferAttribute(this.fan, 3));
     geo.setAttribute('aAlong', new THREE.Float32BufferAttribute(this.along, 1));
     geo.setAttribute('aKind', new THREE.Float32BufferAttribute(this.kind, 1));
-    if (RUNNING.rust) this.packed(geo);
+    this.packed(geo);
     geo.setIndex(this.index);
     geo.computeBoundingSphere();
     // (bound by its growth's places alone: out by its girth, its splay and its reared head)

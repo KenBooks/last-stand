@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { G } from '../../state';
 import { frameRect, overFrame } from '../../core/renderer';
-import { WEBGPU, drawOverFrame, labelsMaterial } from '../../core/webgpu';
+import { drawOverFrame, labelsMaterial } from '../../core/webgpu';
 import { uiScales } from '../scale';
 import { drawOutline, outlineShown } from './outline';
 import {
@@ -111,7 +111,7 @@ if (typeof document !== 'undefined') document.fonts?.addEventListener('loadingdo
 
 // --- drawing: one instanced quad a label, its box in canvas pixels and its slot's corners in the atlas
 let mesh: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.Material> | null = null;
-/** the size of the canvas the labels are placed in (px), and the atlas they show: the material's, either renderer's */
+/** the size of the canvas the labels are placed in (px), and the atlas they show: the material's */
 const view = new THREE.Vector2();
 let setAtlas: (texture: THREE.Texture) => void = () => {};
 let rects: THREE.InstancedBufferAttribute, uvs: THREE.InstancedBufferAttribute, alphas: THREE.InstancedBufferAttribute;
@@ -123,7 +123,7 @@ function makeMesh(room: number): void {
   const geo = new THREE.InstancedBufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0], 3));
   geo.setIndex([0, 2, 1, 1, 2, 3]);
-  // (three's start is Infinity, which WebGL clamps to the attributes' room, and WebGPU's draw refuses)
+  // (three's start is Infinity, which WebGPU's draw refuses)
   geo.instanceCount = 0;
   rects = new THREE.InstancedBufferAttribute(new Float32Array(room * 4), 4).setUsage(THREE.DynamicDrawUsage);
   uvs = new THREE.InstancedBufferAttribute(new Float32Array(room * 4), 4).setUsage(THREE.DynamicDrawUsage);
@@ -136,28 +136,7 @@ function makeMesh(room: number): void {
     mesh.geometry = geo;
     return;
   }
-  const mat = WEBGPU ? nodeMaterial() : new THREE.ShaderMaterial({
-    uniforms: { uAtlas: { value: atlasTexture() }, uView: { value: view } },
-    vertexShader: /* glsl */ `
-      attribute vec4 aRect;
-      attribute vec4 aUv;
-      attribute float aAlpha;
-      uniform vec2 uView;
-      varying vec2 vUv;
-      varying float vAlpha;
-      void main() {
-        vec2 px = aRect.xy + position.xy * aRect.zw;
-        gl_Position = vec4(px.x / uView.x * 2.0 - 1.0, 1.0 - px.y / uView.y * 2.0, 0.0, 1.0);
-        vUv = mix(aUv.xy, aUv.zw, position.xy);
-        vAlpha = aAlpha;
-      }`,
-    fragmentShader: /* glsl */ `
-      uniform sampler2D uAtlas;
-      varying vec2 vUv;
-      varying float vAlpha;
-      void main() { gl_FragColor = texture2D(uAtlas, vUv) * vAlpha; }`,
-  });
-  if (!WEBGPU) setAtlas = (texture) => { (mat as THREE.ShaderMaterial).uniforms.uAtlas.value = texture; };
+  const mat = nodeMaterial();
   Object.assign(mat, {
     // (premultiplied by alpha: the atlas is, from the canvas)
     blending: THREE.CustomBlending,
@@ -175,7 +154,7 @@ function makeMesh(room: number): void {
   scene.add(mesh);
 }
 
-/** The labels' material on WebGPU: the same draw, as nodes (core/webgpu.ts). */
+/** The labels' material, as nodes (core/webgpu.ts). */
 function nodeMaterial(): THREE.Material {
   const made = labelsMaterial(atlasTexture(), view);
   setAtlas = made.setAtlas;
@@ -258,14 +237,7 @@ function drawLabels(): void {
   view.set(f.width, f.height);
   // (the atlas is made again, larger, as labels take more canvas pixels: a higher ratio, a larger UI)
   setAtlas(atlasTexture());
-  if (WEBGPU) drawOverFrame(gl, () => gl.render(scene, camera));
-  else {
-    const auto = gl.autoClear;
-    gl.autoClear = false;
-    gl.setRenderTarget(null);
-    gl.render(scene, camera);
-    gl.autoClear = auto;
-  }
+  drawOverFrame(gl, () => gl.render(scene, camera));
   if (count === 0) mesh!.geometry.instanceCount = 0;
 }
 // (an outline round what a held skill would take, under the labels: a foe's bar and numbers stay over it)

@@ -2,7 +2,7 @@
 import type { Lab, Report } from '../lab';
 import type { RustCommand } from '../rustEngine';
 
-/** `lab rust`, one place: the Rust engine's frame beside three's WebGPU frame, pictured and timed. */
+/** `lab rust`, one place: the Rust engine's frame, pictured and timed. */
 export async function rustHere(lab: Lab, command: RustCommand): Promise<Report> {
   const { rustEngine } = await import('../rustEngine');
   return rustEngine(lab, command);

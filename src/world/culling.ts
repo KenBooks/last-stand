@@ -5,10 +5,8 @@
 // camera's view are packed to the front of its instances: one draw a mesh as before, of what is in view. (Split into
 // meshes of their own, a cell each, they cut as many triangles but drew 45 to 60 times more a frame.) What casts a
 // shadow casts it from a copy of its own, drawn by the shadow map alone, of the instances in the map's box.
-import { RUNNING } from '../core/rendererChoice';
 import * as THREE from 'three';
 import { TAU } from '../util';
-import { WEBGPU } from '../core/webgpu';
 
 /** The cell an instance standing `at` (in its mesh's frame), the `i`th, is in. */
 export type CellOf = (at: THREE.Vector3, i: number) => string | number;
@@ -63,71 +61,17 @@ export function aroundViews(around: AroundShadows): () => void {
   return () => aroundView.delete(around);
 }
 
-const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _c = new THREE.Color(), _sphere = new THREE.Sphere();
-
-/** A mesh of `mesh`'s geometry and material casting its shadow, every instance of it, drawn by the shadow map alone. */
-function shadowCasterOf(mesh: THREE.InstancedMesh): THREE.InstancedMesh {
-  const caster = new THREE.InstancedMesh(mesh.geometry, mesh.material, mesh.count);
-  for (let i = 0; i < mesh.count; i++) {
-    mesh.getMatrixAt(i, _m);
-    caster.setMatrixAt(i, _m);
-    if (!mesh.instanceColor) continue;
-    mesh.getColorAt(i, _c);
-    caster.setColorAt(i, _c);
-  }
-  caster.name = `${mesh.name}: shadows`;
-  caster.castShadow = true;
-  caster.computeBoundingSphere();
-  inShadowsOnly(caster);
-  return caster;
-}
+const _m = new THREE.Matrix4(), _c = new THREE.Color(), _sphere = new THREE.Sphere();
 
 /**
- * `mesh` culled cell by cell from now on, its instances sorted into cells by `cellOf` (`eachInstance`, `ringSector`,
- * `gridCell`). Returns what to add to the scene: the mesh, and when it casts a shadow, the copy that casts it in its
- * place (its instances outside the shadow map's box let go by `trimShadowCasters`).
+ * What to add to the scene for `mesh`, whose instances stand in cells (`_cellOf`: `eachInstance`, `ringSector`,
+ * `gridCell`): the mesh itself, left whole.
  */
-export function cullInCells(mesh: THREE.InstancedMesh, cellOf: CellOf): THREE.InstancedMesh[] {
+export function cullInCells(mesh: THREE.InstancedMesh, _cellOf: CellOf): THREE.InstancedMesh[] {
   // (the Rust engine culls an instance at a time itself, in its own view and the sun's: the mesh is left whole, as
   // built. Packed by cells here, its count stood wherever three's last render left it, as the engine runs none of
   // what hangs on three's render: the Thornwood drew without its trees)
-  if (RUNNING.rust) return [mesh];
-  const byCell = new Map<string | number, number[]>();
-  for (let i = 0; i < mesh.count; i++) {
-    mesh.getMatrixAt(i, _m);
-    const key = cellOf(_p.setFromMatrixPosition(_m), i);
-    if (!byCell.has(key)) byCell.set(key, []);
-    byCell.get(key)!.push(i);
-  }
-  const caster = mesh.castShadow ? shadowCasterOf(mesh) : null;
-  if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
-  const from = mesh.instanceMatrix.array, fromColors = mesh.instanceColor?.array;
-  const matrices = new Float32Array(mesh.count * 16);
-  const colors = fromColors ? new Float32Array(mesh.count * 3) : null;
-  const cells: Cell[] = [];
-  let at = 0;
-  for (const indices of byCell.values()) {
-    const sphere = new THREE.Sphere().makeEmpty();
-    cells.push({ start: at, count: indices.length, sphere, shown: true });
-    for (const i of indices) {
-      matrices.set(from.subarray(i * 16, i * 16 + 16), at * 16);
-      if (colors) colors.set(fromColors!.subarray(i * 3, i * 3 + 3), at * 3);
-      sphere.union(_sphere.copy(mesh.geometry.boundingSphere!).applyMatrix4(_m.fromArray(from, i * 16)));
-      at++;
-    }
-  }
-  (from as Float32Array).set(matrices);
-  // (on WebGPU the usage stays static: three refreshes a mesh of dynamic instances in full at every draw, where a new
-  // version of them is enough for it to see they changed)
-  if (!WEBGPU) mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  if (colors) {
-    (fromColors as Float32Array).set(colors);
-    if (!WEBGPU) mesh.instanceColor!.setUsage(THREE.DynamicDrawUsage);
-  }
-  mesh.castShadow = false;
-  mesh.computeBoundingSphere();
-  culled.push({ mesh, matrices, colors, cells });
-  return caster ? [mesh, caster] : [mesh];
+  return [mesh];
 }
 
 /** the share of a clutter mesh's instances drawn (`setClutterShare`) */

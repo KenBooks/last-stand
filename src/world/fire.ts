@@ -5,7 +5,6 @@
 // camera goes round them (sheets turned to the camera turned with it); a bed of coal lumps glowing
 // through cracks in their char; embers drifting up and smoke over it. One swell of the flames' height and the light's (a fire a metre across puffs about
 // 1.5 times a second) moves them together. `tools/lab` `fire` measures it.
-import { RUNNING } from '../core/rendererChoice';
 import { rustLook } from '../engine/custom';
 import { emberLook } from '../engine/looks/fire';
 import * as THREE from 'three';
@@ -16,7 +15,6 @@ import { seeThrough, seeThroughFade } from '../core/seeThrough';
 import { inTheFog } from '../core/sight';
 import type { Updater } from './props';
 import { runPhase } from './runPhase';
-import { WEBGPU } from '../core/webgpu';
 import { emberNodes, flameMaterial, type EmberLooks, type FlameUniforms } from './fireNodes';
 import { BAKE, decodeFrame, DOMAIN, FLAME_LOOK, FRAME_CELLS, KEPT, KEPT_SIZE, LOOP, TILES, type BakedFlames }
   from './fireBake';
@@ -563,7 +561,7 @@ export function emberMat(centre: THREE.Vector3, radius: number, heat = 1): THREE
         #include <aomap_fragment>`);
   };
   mat.customProgramCacheKey = () => 'fire-ember';
-  if (RUNNING.rust) rustLook(mat, emberLook({ time: emberTime, centre: centreValue, radius: radiusValue, heat: heatValue }));
+  rustLook(mat, emberLook({ time: emberTime, centre: centreValue, radius: radiusValue, heat: heatValue }));
   // (on WebGPU, its look as nodes: world/fireNodes.ts; its own values a property of its own, read off it as drawn)
   const looks: EmberLooks = { time: emberTime, centre: centreValue, radius: radiusValue, heat: heatValue };
   Object.defineProperty(mat, 'emberLooks', { value: looks, configurable: true });
@@ -618,7 +616,7 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
   if (spec.bowl) flames.uniforms.uBowl.value = spec.bowl.map(([y, r]) => new THREE.Vector2(y, r));
   knowLogs(flames.uniforms.uLogs.value, spec.logs ?? [], scene.matrixWorld, inWorld);
   const box = flameBox(radius, height);
-  const drawnWith = WEBGPU ? flameMaterial(flames.uniforms as unknown as FlameUniforms, FLAME_SHAPE) : flames;
+  const drawnWith = flameMaterial(flames.uniforms as unknown as FlameUniforms, FLAME_SHAPE);
   const volume = new THREE.Mesh(new THREE.BoxGeometry(box.x * 2, box.y, box.z * 2).translate(0, box.y / 2, 0), drawnWith);
   volume.userData.noMeshlets = true;
   // (found by the profiler, perf/sceneParts.ts, to time the flames alone)

@@ -89,13 +89,6 @@ export const COMMON_OPTIONS = {
       + 'for, the fight\'s and the other heroes\' programs cold until something needs them (the lab\'s own boot asks '
       + 'for them at once and waits)',
   },
-  renderer: {
-    kind: 'choice',
-    choices: ['webgl', 'webgpu', 'webgpu-gl'],
-    usage: 'webgl|webgpu|webgpu-gl',
-    help: 'the renderer the page boots on, by its address as the pause menu opens it (`?renderer=webgpu`: '
-      + 'WebGPURenderer; webgpu-gl its WebGL 2 backend; WebGL, the game\'s default, by default)',
-  },
   first: {
     kind: 'switch',
     help: 'the page booted as a player\'s first visit: no saved hero, so the game boots its default one (--class '
@@ -107,26 +100,11 @@ export const COMMON_OPTIONS = {
     help: 'the page booted with the lobby as it is without the village beta (its panels over the battleground: '
       + 'src/core/beta.ts); by default the lab boots the village, which its lobby\'s commands measure',
   },
-  renderer: {
-    kind: 'choice',
-    choices: ['webgl', 'webgpu', 'meshlets', 'rust'],
-    usage: 'webgl|webgpu|meshlets',
-    help: 'the page booted on this renderer, as the pause menu\'s switch opens it: WebGL (the default), WebGPU '
-      + '(?renderer=webgpu), or WebGPU with its GPU-driven drawing (?renderer=webgpu&meshlets=1)',
-  },
   screen: {
     kind: 'screen',
     usage: 'WxH[@ratio]',
     help: 'the page put on a screen of this size (css px) and pixel ratio once it has booted, as a window moved onto '
       + 'another monitor is (1280x720@3: a 4K screen at 300%; 1920x1080@1 by default)',
-  },
-  renderers: {
-    kind: 'list',
-    choices: ['webgl', 'webgpu', 'webgpu-gl'],
-    usage: 'webgl,webgpu',
-    help: 'this tree booted on two renderers, one after the other, compared as --ab compares two commits: the lines '
-      + 'and the pictures that differ (webgl,webgpu: what the WebGPU trial draws otherwise; its pictures must be '
-      + 'the page\'s own, `lab.screen`, as WebGPU\'s canvas can\'t be read back by WebGL\'s readPixels)',
   },
   screens: {
     kind: 'screens',

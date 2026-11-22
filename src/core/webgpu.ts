@@ -1,8 +1,7 @@
-// The game on three's WebGPURenderer, behind `?renderer=webgpu` (docs/research/webgpu.md): the renderer made and
-// given what the WebGL code around it asks of a WebGLRenderer, and the post chain as a node pipeline.
+// three's WebGPURenderer, the host of our engine (`src/engine`, docs/research/webgpu.md): the renderer made and given
+// what the code around it asks of a WebGLRenderer, and three's own post chain as a node pipeline.
 import * as THREE from 'three';
 import { DOOR_ROW, DOOR_SOFT, HIS_ROW, SIGHT, ROOFS_HALF, SIGHT_LOOK } from './sight';
-import type { ClusterWait } from './meshlets';
 import type { RenderPipeline, WebGPURenderer } from 'three/webgpu';
 import { RUNNING } from './rendererChoice';
 import { VILLAGE } from './beta';
@@ -11,8 +10,7 @@ import type { KitLooks } from './materials';
 import { SKY_ENVIRONMENT, skyEnvironment, type SkyEnvironment } from './skyEnvironment';
 import type { EnvColours } from '../world/props';
 
-/** Whether this page draws with WebGPURenderer: by its address alone (`?renderer=webgpu`, which the pause menu opens;
- *  `?renderer=webgpu-gl` its WebGL 2 backend), core/rendererChoice.ts. */
+/** Whether three's WebGPURenderer is the page's host: always (core/rendererChoice.ts). */
 export const WEBGPU = RUNNING.webgpu;
 
 /** the point lights the shaders' loop takes (`DynamicLighting`): a biome's eight without shadows, the hero's two,
@@ -95,22 +93,6 @@ function skipBloomWhileOff(glow: { updateBefore(frame: unknown): unknown }): voi
 let samplesChosen: number | null = null;
 /** the scene's pass as far as its samples go */
 let samplesOf: { options: { samples?: number }; renderTarget: THREE.RenderTarget } | null = null;
-/** the compiles started and not yet waited for (`compiled`) */
-const compiling: Promise<unknown>[] = [];
-
-/** Waits for every compile started so far (and any started meanwhile) to have made its pipelines. */
-export async function compiled(): Promise<void> {
-  while (compiling.length) await Promise.all(compiling.splice(0));
-}
-
-let clusters: ClusterWait = { hold: () => () => 0, back: () => Promise.resolve() };
-/** The GPU-driven drawing's clusters (`?meshlets`, core/meshlets.ts) held back from the frames while a warm-up
- *  compiles, so their batches' shaders are compiled there (`warmUpWebGPU`): built as the lobby first drew them, they
- *  held its frames up to 270 ms. The release lets those held in and says how many. */
-export const holdClusters = (): (() => number) => clusters.hold();
-/** waits for every cluster asked so far to be back */
-export const clustersBack = (): Promise<void> => clusters.back();
-
 /** The target the scene's pass draws into: what its pipelines are made for, the warm-ups' too. */
 export const webgpuSceneTarget = (): THREE.RenderTarget => sceneTarget!;
 /** a light node of three's as `shadeEnvironmentNodes` reads it */
@@ -320,34 +302,20 @@ export async function makeWebGPURenderer(hdrAllowed: boolean): Promise<THREE.Web
   gpu = await import('three/webgpu');
   tsl = await import('three/tsl');
   const { WebGPURenderer } = gpu;
-  // (the canvas in extended range for HDR, as the WebGL renderer's presenter is: core/hdr.ts)
+  // (the canvas in extended range for HDR: core/hdr.ts)
   const outputType = initHdrForWebGPU(hdrAllowed) ? THREE.HalfFloatType : undefined;
   const renderer = new WebGPURenderer({
-    antialias: false, powerPreference: 'high-performance', forceWebGL: RUNNING.webgpuOnGl, trackTimestamp: true, outputType,
+    antialias: false, powerPreference: 'high-performance', forceWebGL: false, trackTimestamp: true, outputType,
   });
   await renderer.init();
   uploader = renderer;
-  // three's GPU-driven drawing (r187): clusters of 64 triangles culled and their detail picked on the GPU, for what
-  // it supports (static meshes and instanced ones in plain node materials); the rest drawn as before
-  if (RUNNING.meshlets) {
-    const meshlets = await import('three/addons/pipelines/MeshletDrawingPipeline.js');
-    const { MeshletDrawingPipeline } = meshlets;
-    // (exported by three, not by its types)
-    batchesBuiltApart((meshlets as unknown as { MeshletBatch: unknown }).MeshletBatch);
-    const drawing = new MeshletDrawingPipeline();
-    const { clustersInWorkers } = await import('./meshlets');
-    clusters = clustersInWorkers(drawing) ?? clusters;
-    (renderer as unknown as { drawingPipeline: unknown }).drawingPipeline = batchesKept(stillAlone(drawing));
-  }
   // the point lights casting no shadow drawn by one loop over a uniform array in each lit shader, where three wrote
   // each out in full (the physical model's every term, eight times over): the lit fragment shaders were 55 kB of
   // WGSL each, 3.5 MB of the 4.6 the game made, and Chrome's DXC compiled them again on every visit (its cache
-  // never served them). `?lights=each` for three's own, to compare.
-  if (!RUNNING.lightsEach) {
-    await loopPassesUnreached();
-    const { DynamicLighting } = await import('three/addons/lighting/DynamicLighting.js');
-    renderer.lighting = new DynamicLighting({ maxPointLights: MAX_LOOPED_LIGHTS });
-  }
+  // never served them).
+  await loopPassesUnreached();
+  const { DynamicLighting } = await import('three/addons/lighting/DynamicLighting.js');
+  renderer.lighting = new DynamicLighting({ maxPointLights: MAX_LOOPED_LIGHTS });
   plainLitNodes();
   compileShadowsToo(renderer);
   compilesTakeTurns(renderer);
@@ -359,17 +327,9 @@ export async function makeWebGPURenderer(hdrAllowed: boolean): Promise<THREE.Web
   compileSlice(COMPILE_SLICE.loading);
   // (own properties over the class's getters: `compile` is one)
   const stand = (key: string, value: unknown) => Object.defineProperty(renderer, key, { value, writable: true });
-  // the WebGL code's compiles started as `compileAsync`, for the target set (the warm-ups': the scene's pass's,
-  // `sceneTarget` in renderer.ts): its pipelines made on the GPU's threads, its node builds a slice a frame, where
-  // they were made at each material's first draw, on the main thread (the loading screen froze 10-15 s); waited for
-  // by `compiled`. (Nothing listed as made: no WebGL programs to link.)
-  stand('compile', (scene: THREE.Object3D, camera: THREE.Camera, target?: THREE.Scene | null) => {
-    // (under the Rust engine three draws the overlays and a few targets alone: nothing of the scene is compiled
-    // for it ahead, src/engine)
-    if (RUNNING.rust) return new Set<THREE.Material>();
-    compiling.push(renderer.compileAsync(scene, camera, target ?? null).catch((e: unknown) => console.error('WebGPU compile:', e)));
-    return new Set<THREE.Material>();
-  });
+  // (three draws the overlays and a few targets alone, the engine the scene: nothing of the scene is compiled for
+  // three ahead, src/engine. Nothing listed as made: no WebGL programs to link.)
+  stand('compile', () => new Set<THREE.Material>());
   // (the labels' atlas is sized within it: missing, its side was NaN, a texture 1 px wide)
   const maxTextureSize = (renderer.backend as unknown as GpuBackend).device?.limits.maxTextureDimension2D ?? 4096;
   stand('capabilities', { getMaxAnisotropy: () => renderer.getMaxAnisotropy(), isWebGL2: true, maxTextureSize });
@@ -834,8 +794,6 @@ type Monitored = {
   looksSeen?: Float32Array;
   /** whether its looks changed since its last draw: why it was refreshed in full (`fullBecause`) */
   looksChanged?: boolean;
-  /** a meshlet batch's place in its culling's buffers as this render object last drew it (`batchMoved`) */
-  batchSeen?: Float32Array;
   /** what a stand-in's base held as this render object last drew it (`baseChanged`) */
   baseSeen?: Float32Array;
 };
@@ -872,29 +830,6 @@ function baseChanged(base: BaseValues, seen: Float32Array): boolean {
   changed = seeAt(seen, at++, base.map?.id ?? 0) || changed;
   changed = seeAt(seen, at++, base.normalMap?.id ?? 0) || changed;
   return seeAt(seen, at, base.roughnessMap?.id ?? 0) || changed;
-}
-
-/** each meshlet batch's draw materials' batch (`batchesBuiltApart`) */
-const batchOf = new WeakMap<THREE.Material, Batch>();
-
-/** how many buffers have been freed (`batchesBuiltApart`) */
-let buffersFreed = 0;
-
-/** Whether what `batch`'s draws read differs from what `seen` holds, `seen` set to it: where it lies in its culling's
- *  buffers, which move as the culling is resized and as other batches come and go, and those buffers themselves,
- *  which a resize or a grown pool replaces: drawn on with the old ones, whole passes were refused every frame
- *  (`Buffer used in submit while destroyed`, 500 times a boot). Any buffer freed refreshes them all once: nothing is
- *  freed in a steady frame. */
-function batchMoved(batch: Batch, seen: Float32Array): boolean {
-  const { dataOffset, queueOffset, counterOffset, maxWorkItems } = batch.rangeNodes;
-  let moved = seeAt(seen, 0, dataOffset.value);
-  moved = seeAt(seen, 1, queueOffset.value) || moved;
-  moved = seeAt(seen, 2, counterOffset.value) || moved;
-  moved = seeAt(seen, 3, maxWorkItems.value) || moved;
-  moved = seeAt(seen, 4, batch.instanceOffset?.value ?? 0) || moved;
-  moved = seeAt(seen, 5, batch.transformCount?.value ?? 0) || moved;
-  moved = seeAt(seen, 7, buffersFreed) || moved;
-  return seeAt(seen, 6, batch.transformPreviousCount?.value ?? 0) || moved;
 }
 
 /** Whether `value` differs from `seen[i]`, `seen[i]` set to it (as the array holds it: a float32 never equals the
@@ -937,9 +872,7 @@ function looksChanged(looks: KitLooks, seen: Float32Array): boolean {
  * change (`looksChanged`: its nodes read them off the material, `kitNodes` in core/shaderPorts.ts): refreshed at each
  * draw, the lobby's two training dummies standing still were 31 full refreshes a frame (and 16 more as they swayed).
  * Its looks are kept on each render object: three's observer is one for every render object of a node build, and
- * kept on it, the two dummies' looks took turns and refreshed every draw. A meshlet batch's draws are too, and as
- * the batch moves in its culling's buffers (`batchMoved`): they read everything else off buffers the culling fills,
- * and were 38 full refreshes a frame, none of them changing anything.
+ * kept on it, the two dummies' looks took turns and refreshed every draw.
  */
 function stillWhereStill(renderer: WebGPURenderer): void {
   const nodes = (renderer as unknown as { _nodes: { needsRefresh(built: Monitored): number } })._nodes;
@@ -957,16 +890,11 @@ function stillWhereStill(renderer: WebGPURenderer): void {
     }
     // (and the shadow maps' depth materials: what makes a caster's shadow change moves it, which is a refresh)
     const shadow = (built.material as { isShadowPassMaterial?: boolean }).isShadowPassMaterial === true;
-    const batch = batchOf.get(built.material);
-    const still = shadow || batch !== undefined || stillNodes.has(built.material);
+    const still = shadow || stillNodes.has(built.material);
     // (at every draw: three sets it again as each render object of the build is first drawn, and a still material
-    // holds a node, `refreshedEachDraw` in core/shaderPorts.ts, for the meshlets' copy of it)
+    // holds a node, `refreshedEachDraw` in core/shaderPorts.ts)
     if (still) built.getMonitor().hasNode = false;
     const type = needsRefresh(built);
-    if (batch !== undefined) {
-      built.batchSeen ??= new Float32Array(8).fill(NaN);
-      return batchMoved(batch, built.batchSeen) ? 2 : type;
-    }
     const looks = built.material.kitLooks;
     if (!looks || !still) return type;
     built.looksSeen ??= new Float32Array(LOOKS_COUNT).fill(NaN);
@@ -1142,176 +1070,8 @@ function compileShadowsToo(renderer: WebGPURenderer): void {
   };
 }
 
-/** the meshes the meshlet pipeline may draw: what the biomes stand, which never moves (`stillForMeshlets`) */
-const still = new WeakSet<object>();
-
-/** what's done to each still mesh's material as it's given to the meshlet pipeline (`stillMaterialsGo`) */
-let givingMaterial: (material: THREE.Material) => void = () => {};
-/** `give` run on every still mesh's material from now on. */
-export function stillMaterialsGo(give: (material: THREE.Material) => void): void {
-  givingMaterial = give;
-}
-
-/** Everything under `roots` (the biomes and the hall as they're built) given to the meshlet pipeline. */
-export function stillForMeshlets(...roots: THREE.Object3D[]): void {
-  if (!RUNNING.meshlets) return;
-  for (const root of roots) {
-    root.traverse((object) => {
-      // (a ray-march in a box: nothing in it to cull, and its copy in a batch drew its flames as a pale mound)
-      if (object.userData.noMeshlets) return;
-      still.add(object);
-      const { material } = object as THREE.Mesh;
-      if (Array.isArray(material)) material.forEach(givingMaterial);
-      else if (material) givingMaterial(material);
-    });
-  }
-}
-
-type Meshlets = { _isMeshlet(object: object, ...rest: unknown[]): boolean };
-
-/**
- * The meshlet pipeline kept to still meshes (`stillForMeshlets`): it took every mesh it could, the heroes' and the
- * training dummies' moving parts too, and after the pause menu closed the dummies were gone and a tan shell of their
- * burlap stood round the hero in the middle of the dais.
- */
-function stillAlone<T>(drawing: T): T {
-  const pipeline = drawing as unknown as Meshlets;
-  const isMeshlet = pipeline._isMeshlet.bind(pipeline);
-  pipeline._isMeshlet = (object, ...rest) => still.has(object) && isMeshlet(object, ...rest);
-  return drawing;
-}
-
-type Batch = {
-  meshes: THREE.Mesh[];
-  prepassMeshes: THREE.Mesh[];
-  rangeNodes: Record<'dataOffset' | 'queueOffset' | 'counterOffset' | 'maxWorkItems', { value: number }>;
-  instanceOffset?: { value: number };
-  transformCount?: { value: number };
-  transformPreviousCount?: { value: number };
-  setupDraw(shared: unknown): void;
-};
-type NodeMaterialKey = { customProgramCacheKey(this: THREE.Material): string };
-
-/**
- * Each meshlet batch's draws built apart. A batch draws with a copy of its material that takes the material's own
- * properties, so where the game's material has a `customProgramCacheKey` of its own (`seeThrough`'s, for WebGL) the
- * copy's node build was keyed by it alone, blind to the batch's nodes, and every batch of a see-through material
- * shared the first one's build: its offsets into the culling's queue and objects with it. The crypt's obelisks and
- * beacons drew another batch's range, so nothing at all (#331), and so, likely, did the forest's stones (da9701e).
- */
-function batchesBuiltApart(MeshletBatch: unknown): void {
-  const prototype = (MeshletBatch as { prototype: Batch }).prototype;
-  const setupDraw = prototype.setupDraw;
-  const nodeKey = (gpu.NodeMaterial.prototype as unknown as NodeMaterialKey).customProgramCacheKey;
-  let made = 0;
-  prototype.setupDraw = function (this: Batch, shared: unknown) {
-    setupDraw.call(this, shared);
-    const tag = `|batch${made++}`;
-    for (const { material } of this.meshes) {
-      const drawn = material as THREE.Material;
-      drawn.customProgramCacheKey = () => nodeKey.call(drawn) + tag;
-    }
-    // (their constructor makes the prepass's after `setupDraw`: found by the batch's draws as they're first refreshed)
-    for (const { material } of this.meshes) batchOf.set(material as THREE.Material, this);
-  };
-  // (what a batch's draws bind is replaced as buffers go: `batchMoved`)
-  const attribute = THREE.BufferAttribute.prototype as unknown as { dispose(this: object): void };
-  const dispose = attribute.dispose;
-  attribute.dispose = function (this: object) {
-    buffersFreed++;
-    dispose.call(this);
-  };
-}
-
-type KeptBatch = { capacity: number; dispose(): void; relocate(): boolean };
-type KeptEntry = { unusedProjections: number; batch: KeptBatch | null; source: KeptEntry | null };
-type KeptRecord = {
-  entries: KeptEntry[];
-  staticGroups: Map<unknown, { entries: KeptEntry[]; unusedProjections: number }>;
-  culling: unknown;
-};
-type Keeping = {
-  renderer: { _compilationPromises: unknown[] | null };
-  createBatch(entry: KeptEntry, ...rest: unknown[]): unknown;
-  _drawBatches(renderList: unknown, record: KeptRecord): void;
-  _shrinkCulling(record: KeptRecord, entries: KeptEntry[]): void;
-  _getCullingCapacity(entries: KeptEntry[], capacities: number[], ...rest: unknown[]): unknown;
-  _disposeBatches(record: KeptRecord, kept: Set<KeptEntry>): void;
-  _addGeometries(culling: unknown, entries: KeptEntry[]): boolean;
-};
-
-/**
- * The meshlet batches a warm-up compiled kept, however long the frames leave them undrawn, and every batch kept
- * through its culling's resize. The warm-ups compile into the frames' own render list, where three drops a batch:
- * one undrawn for 60 projections (0.4 s at 144 Hz); and every one not drawn in the projection that resizes the
- * culling, which each warm-up's new biome or part did, and the lobby's frames as they shrank it to their own. So the
- * lobby's frames made their own batches again after each warm-up, the warm-ups' draws theirs, and the fight's first
- * frames once more, each a node build in its frame: 1477 builds at a draw in the lobby's first seconds, its frames
- * held up 200 to 740 ms. A resized culling is sized for the undrawn batches too, and they're moved into it.
- */
-function batchesKept<T>(drawing: T): T {
-  const keeping = drawing as unknown as Keeping;
-  const warmed = new WeakSet<KeptEntry>();
-  /** the render list being drawn or shrunk, and its batches undrawn there, kept through its resize */
-  let record: KeptRecord | null = null;
-  let undrawn: KeptEntry[] = [];
-  const within = <A extends unknown[]>(run: (...args: A) => void) => (at: KeptRecord, ...args: A): void => {
-    record = at;
-    undrawn = [];
-    try {
-      run(...args);
-    } finally {
-      record = null;
-      undrawn = [];
-    }
-  };
-  const createBatch = keeping.createBatch.bind(keeping);
-  keeping.createBatch = (entry, ...rest) => {
-    if (keeping.renderer._compilationPromises !== null) warmed.add(entry);
-    return createBatch(entry, ...rest);
-  };
-  const drawBatches = keeping._drawBatches.bind(keeping);
-  keeping._drawBatches = (renderList, at) => within(() => {
-    for (const entry of at.entries) if (warmed.has(entry)) entry.unusedProjections = 0;
-    for (const group of at.staticGroups.values()) {
-      if (group.entries.some((entry) => warmed.has(entry))) group.unusedProjections = 0;
-    }
-    drawBatches(renderList, at);
-  })(at);
-  const shrinkCulling = keeping._shrinkCulling.bind(keeping);
-  keeping._shrinkCulling = (at, entries) => within(() => shrinkCulling(at, entries))(at);
-  const cullingCapacity = keeping._getCullingCapacity.bind(keeping);
-  keeping._getCullingCapacity = (entries, capacities, ...rest) => {
-    undrawn = record === null ? [] : undrawnOf(record, new Set(entries));
-    const all = [...entries, ...undrawn];
-    return cullingCapacity(all, [...capacities, ...undrawn.map((entry) => entry.batch!.capacity)], ...rest);
-  };
-  const disposeBatches = keeping._disposeBatches.bind(keeping);
-  keeping._disposeBatches = (at, kept) => disposeBatches(at, new Set([...kept, ...undrawn]));
-  const addGeometries = keeping._addGeometries.bind(keeping);
-  keeping._addGeometries = (culling, entries) => {
-    const added = addGeometries(culling, entries);
-    if (undrawn.length === 0 || record?.culling !== culling) return added;
-    const moved = undrawn;
-    undrawn = [];
-    const fits = addGeometries(culling, moved);
-    for (const entry of moved) {
-      if (fits && entry.batch!.relocate()) continue;
-      entry.batch!.dispose();
-      entry.batch = null;
-    }
-    return added;
-  };
-  return drawing;
-}
-
-/** `record`'s entries with a batch that aren't among `drawn`, whose objects' batch (a shared one's) is kept too. */
-function undrawnOf(record: KeptRecord, drawn: Set<KeptEntry>): KeptEntry[] {
-  const all = [...record.entries, ...[...record.staticGroups.values()].flatMap((group) => group.entries)];
-  const undrawn = all.filter((entry) => entry.batch !== null && !drawn.has(entry));
-  const kept = new Set([...drawn, ...undrawn]);
-  return undrawn.filter((entry) => entry.source === null || kept.has(entry.source));
-}
+/** For the biomes and the hall as they're built: nothing now (three's GPU-driven drawing took them, and is gone). */
+export function stillForMeshlets(..._roots: THREE.Object3D[]): void {}
 
 /** what of three's renderer a compile's state is kept by (`compilesTakeTurns`) */
 type Precompiling = {
@@ -1587,7 +1347,7 @@ function compressed(colour: any, { knee }: Highlights, u: GradeUniforms): unknow
   return vec4(colour.rgb.mul(scale), colour.a);
 }
 
-/** The WebGL grade's uniforms the WebGPU one reads (core/renderer.ts `GradeShader`), each `{ value }` */
+/** The grade's values three's pipeline reads (core/renderer.ts `grade`), each `{ value }` */
 export interface GradeUniforms {
   uTime: { value: number };
   uCap: { value: number };
@@ -1736,7 +1496,7 @@ let sky: SkyEnvironment | null = null;
  */
 export function oneEnvironment(scene: THREE.Scene, colours: EnvColours): void {
   const map = scene.environment;
-  if (!WEBGPU || !map) return;
+  if (!map) return;
   sky ??= skyEnvironment();
   sky.set(colours);
   environment ??= (map as THREE.CubeTexture).isCubeTexture ? tsl.cubeTexture(map as THREE.CubeTexture) : tsl.texture(map);
@@ -1784,7 +1544,6 @@ function mirror(light: THREE.PointLight, rigged: THREE.PointLight): void {
  * has as many as the rig, as many casting (`arena.ts` checks): the casters take its first slots.
  */
 export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): void {
-  if (!WEBGPU) return;
   const lightsOf = rigPlaces.lightsOf;
   for (const group of groups) rigMorePointLights(group);
   groups = rigPlaces.groups;
@@ -1836,7 +1595,6 @@ const rigPlaces = { groups: [] as THREE.Object3D[], lightsOf: new Map<THREE.Obje
 /** A place built after the rig was made (a fight's biome, built at the run's start: world/arena.ts) copied by it too:
  *  it has as many lights as every place, so the rig's lit pipelines take it as they are. */
 export function rigMorePointLights(group: THREE.Object3D): void {
-  if (!WEBGPU) return;
   const lights = pointLightsIn(group);
   rigPlaces.lightsOf.set(group, lights);
   rigPlaces.groups.push(group);

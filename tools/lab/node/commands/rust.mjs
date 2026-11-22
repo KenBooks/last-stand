@@ -20,12 +20,11 @@ function levelsOf(text) {
 export default {
   summary: 'the frame of the Rust engine (`src/engine`, Bulwark) where the hero stands, pictured and timed: the walk '
     + 'of the scene and the work of the engine by the clock of the browser, the GPU by its timestamps, its draw '
-    + 'calls and triangles, what it could not draw by its kind, its boot (`--village`, `--foes n`; `--three` the '
-    + 'same stand on the WebGPU renderer of three.js, the baseline; `--census` the shown materials by what they '
-    + 'ask of a renderer; `--tune rust.debug=1` the reach of the sun alone; `--capture 512` the frame written '
+    + 'calls and triangles, what it could not draw by its kind, its boot (`--village`, `--foes n`; `--census` '
+    + 'the shown materials by what they ask of a renderer; `--tune rust.debug=1` the reach of the sun alone; `--capture 512` the frame written '
     + 'down as a tape, its maps no larger than that a side, which the `replay` of the engine draws, pictures '
     + 'and times with no browser)',
-  help: 'the Rust engine against three\'s WebGPU renderer, where the hero stands: pictures, frame times, draws, boot',
+  help: 'the Rust engine\'s frame where the hero stands: pictures, frame times, draws, boot',
   options: {
     biome: {
       kind: 'choice',
@@ -71,8 +70,6 @@ export default {
       help: 'with --foes, each killed and pictured this many frames on: its fall and its dissolve (40: half gone)',
     },
     census: { kind: 'switch', help: 'the shown meshes\' materials by kind, and what each asks beyond the engine' },
-    three: { kind: 'switch', help: 'the baseline: three.js\'s WebGPU renderer instead, on a page of its own' },
-    webgl: { kind: 'switch', help: 'the look players had: three.js\'s WebGL renderer instead, pictured the same' },
     capture: {
       kind: 'number',
       usage: 'side',
@@ -86,10 +83,6 @@ export default {
   check(options) {
     if (options.frames !== undefined && !(options.frames >= 1)) throw labError('rust --frames: 1 or more');
     if (options.capture !== undefined && !(options.capture >= 16)) throw labError('rust --capture: 16 or more');
-    if (options.capture && options.three) throw labError('rust --capture: the engine\'s frame, not --three\'s');
-    // (the engine's page, or with --three a page of three's WebGPU renderer, the same stand timed the same way)
-    if (options.webgl) options.three = true;
-    options.renderer = options.webgl ? 'webgl' : options.three ? 'webgpu' : 'rust';
   },
   async each(side, options) {
     const command = {
@@ -108,7 +101,6 @@ export default {
       zoom: options.zoom,
       skylight: Boolean(options.skylight),
       census: Boolean(options.census),
-      three: Boolean(options.three),
       capture: Math.round(options.capture ?? 0),
       wear: options.wear?.filter((part) => part !== 'none'),
       rarity: options.rarity,

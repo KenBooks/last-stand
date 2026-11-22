@@ -7,8 +7,6 @@
 // `drawAsOne.ts`). `?farDetail=0` draws every triangle at any distance, for A/B.
 import * as THREE from 'three';
 import { coarseIndex, detailSettled, farIndex, shadowDetailVersion, shadowsWhole, tickDetail } from './shadowDetail';
-import { WEBGPU } from '../../core/webgpu';
-import { RUNNING } from '../../core/rendererChoice';
 
 /** how far from the camera he goes coarse, and how near he comes back whole (m): apart, so he never flips on a line.
  *  The close views stand 3 to 5 m off him; the view from above 18 and more. */
@@ -165,8 +163,7 @@ export function farDetail(root: THREE.Object3D): FarDetail {
     get far() { return far; },
     get meshes() { return pairs.length; },
     update(distance) {
-      // (the Rust engine draws each part on its own, as WebGL does: fewer triangles from afar there too)
-      if (WEBGPU && !RUNNING.rust) return;
+      // (the Rust engine draws each part on its own: fewer triangles from afar)
       // (a frame's turn at the geometries still to be simplified, his and his shadow's)
       tickDetail();
       if (found !== shadowDetailVersion() && (!settled || wasWhole !== shadowsWhole())) find();

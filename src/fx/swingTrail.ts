@@ -10,7 +10,6 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { nearGlow } from '../core/materials';
 import { portShader } from '../core/shaderPorts';
-import { RUNNING } from '../core/rendererChoice';
 import { tunable } from '../core/tuning';
 import { effectLook, num } from '../engine/effects';
 import { armsLayerOf } from '../entities/viewModel';
@@ -118,7 +117,7 @@ function trailGeometry(columns: number): THREE.BufferGeometry {
     g.setAttribute(name, new THREE.BufferAttribute(new Float32Array(columns * 6), 3).setUsage(THREE.DynamicDrawUsage));
   }
   // (the Rust engine's vertex has no attribute of the trail's own: it reads these numbers as its normal)
-  if (RUNNING.rust) g.setAttribute('normal', g.getAttribute('trail'));
+  g.setAttribute('normal', g.getAttribute('trail'));
   const index: number[] = [];
   for (let c = 0; c + 1 < columns; c++) {
     const v = c * 2;

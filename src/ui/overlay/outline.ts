@@ -11,7 +11,7 @@ import { uiScales } from '../scale';
 import { CROWD_LAYER } from '../../core/layers';
 import { frameRect, passCamera, passTriangle } from '../../core/renderer';
 import { portShader } from '../../core/shaderPorts';
-import { WEBGPU, drawOverFrame } from '../../core/webgpu';
+import { drawOverFrame } from '../../core/webgpu';
 
 /** the outline's width, and its soft glow's past it (px of the UI's reference layout, at the HUD's scale) */
 const WIDTH = 2.5;
@@ -328,18 +328,11 @@ function drawEdge(gl: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget, look
   u.uStrength.value = look.strength;
   const within = boxOnCanvas(look.targets, glow + BOX_MARGIN);
   const autoClear = gl.autoClear;
-  // (on WebGPU as `drawOverFrame` set it: this pass may be the one that clears the canvas)
-  if (!WEBGPU) gl.autoClear = false;
+  // (kept as `drawOverFrame` set it: this pass may be the one that clears the canvas)
   gl.setRenderTarget(null);
   if (within) {
-    // (WebGPU's scissor is from the canvas's top, WebGL's from its bottom)
-    if (WEBGPU) within.y = canvasSize.y - within.y - within.w;
-    else {
-      const f = frameRect();
-      within.x += f.left;
-      within.y += f.bottom;
-      within.addScalar(0.25);
-    }
+    // (WebGPU's scissor is from the canvas's top)
+    within.y = canvasSize.y - within.y - within.w;
     // (in css px: the renderer scales the scissor by its pixel ratio)
     gl.setScissor(within.divideScalar(gl.getPixelRatio()));
     gl.setScissorTest(true);
@@ -360,8 +353,7 @@ export function drawOutline(): void {
   if (!look || look.targets.some((target) => !target.root.parent)) return;
   const gl = G.renderer;
   const mask = drawMask(gl, look.targets);
-  if (WEBGPU) drawOverFrame(gl, () => drawEdge(gl, mask, look));
-  else drawEdge(gl, mask, look);
+  drawOverFrame(gl, () => drawEdge(gl, mask, look));
 }
 
 /**
@@ -396,8 +388,7 @@ export async function warmOutline(roots: readonly Outlinable[],
   if (!edge || !target || !targets[0]) return;
   const look = { targets, given: targets, color: new THREE.Color(), strength: 0 };
   const mask = target;
-  if (WEBGPU) drawOverFrame(gl, () => drawEdge(gl, mask, look));
-  else drawEdge(gl, mask, look);
+  drawOverFrame(gl, () => drawEdge(gl, mask, look));
 }
 
 /** `root`'s masks compiled into the mask's target, alone (no lights, no fog, as `drawMask` draws it), what draws no

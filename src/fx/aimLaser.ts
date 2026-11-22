@@ -8,7 +8,6 @@ import { G } from '../state';
 import { addEffect } from './effects';
 import { sceneRatio, sceneSize } from '../core/renderer';
 import { portShader, type Tsl } from '../core/shaderPorts';
-import { RUNNING } from '../core/rendererChoice';
 import { effectLook, num, rgb, type EffectLook } from '../engine/effects';
 
 /** the line's and the dot's width (css px), how bright and opaque, how quickly it eases in and out (s) */
@@ -211,12 +210,10 @@ function lineGeometry(): THREE.BufferGeometry {
   for (let i = 0; i < n; i++) side.setX(i, i % 2 ? 1 : -1);
   // (the Rust engine's vertex has no attributes of the line's own: its next point as its normal, its side and how far
   // along as its uv, `write`)
-  if (RUNNING.rust) {
-    g.setAttribute('normal', g.getAttribute('next'));
-    const uv = new THREE.BufferAttribute(new Float32Array(n * 2), 2).setUsage(THREE.DynamicDrawUsage);
-    for (let i = 0; i < n; i++) uv.setX(i, side.getX(i));
-    g.setAttribute('uv', uv);
-  }
+  g.setAttribute('normal', g.getAttribute('next'));
+  const uv = new THREE.BufferAttribute(new Float32Array(n * 2), 2).setUsage(THREE.DynamicDrawUsage);
+  for (let i = 0; i < n; i++) uv.setX(i, side.getX(i));
+  g.setAttribute('uv', uv);
   const idx: number[] = [];
   for (let l = 0; l < LASER_LINES; l++) for (let i = 0; i < LASER_POINTS - 1; i++) {
     const v = (l * LASER_POINTS + i) * 2;
@@ -236,7 +233,7 @@ function dotGeometry(): THREE.BufferGeometry {
   }
   g.setAttribute('corner', new THREE.BufferAttribute(corner, 2));
   // (the Rust engine's vertex has no attribute of the dot's own: its corner as its uv)
-  if (RUNNING.rust) g.setAttribute('uv', g.getAttribute('corner'));
+  g.setAttribute('uv', g.getAttribute('corner'));
   g.setIndex(idx);
   return g;
 }
