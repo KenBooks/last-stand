@@ -43,6 +43,9 @@ export class Lights implements Lit {
   /** how far a light of the scene's own reaches in the frame's loop: its own reach, or as near as its baked light
    *  leaves it (`lightCache.ts`; set by the bridge) */
   ownReach: (light: THREE.PointLight) => number = (light) => light.distance;
+  /** one of the place's own lights' place among the maps of the lamps' shadows, -1 for none (`lampShadows.ts`
+   *  `ownSlot`; set by the bridge) */
+  ownSlot: (light: THREE.PointLight) => number = () => -1;
 
   constructor(private core: Core) {}
 
@@ -73,7 +76,11 @@ export class Lights implements Lit {
       // they stood when it was hidden)
       point.getWorldPosition(v3);
       g[at] = v3.x; g[at + 1] = v3.y; g[at + 2] = v3.z; g[at + 3] = this.ownReach(point);
-      g[at + 4] = c.r * by; g[at + 5] = c.g * by; g[at + 6] = c.b * by; g[at + 7] = point.decay;
+      // (its decay, and a hundred for each place up to its own among the lamps' maps where it casts the shadow of
+      // what stands still round it: the engine's lit shader takes the two apart)
+      const slot = lampShadowsAllowed() && TUNE.lampShadows > 0 ? this.ownSlot(point) : -1;
+      g[at + 4] = c.r * by; g[at + 5] = c.g * by; g[at + 6] = c.b * by;
+      g[at + 7] = Math.min(point.decay, 99) + (slot >= 0 ? 100 * (slot + 1) : 0);
       this.points++;
     } else {
       this.core.skip(light.type);

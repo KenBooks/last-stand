@@ -10,12 +10,13 @@
 import * as THREE from 'three';
 import type { Engine, InitOutput } from './pkg/bulwark';
 import { perfClock } from '../core/perfClock';
-import { shownPointLights } from '../core/webgpu';
+import { shownPlace, shownPointLights } from '../core/webgpu';
 import { Core, MAX_MAP, RECORD } from './core';
 import { casterGeometry } from '../entities/models/farDetail';
 import { lookOf } from './custom';
 import { Geometries } from './geometry';
 import { LampShadows } from './lampShadows';
+import { AHEAD } from './pipelinesAside';
 import { G } from '../state';
 import { lampShadowsAllowed } from '../core/lamps';
 import { LightCache } from './lightCache';
@@ -89,7 +90,8 @@ export class Bridge {
     this.levels = new Levels(core);
     this.frameLook = new FrameLook(core, this.maps);
     this.lit.lampReach = this.lampShadows.reachOf = (lamp, reach) => this.lightCache.reachOf(lamp, reach);
-    this.lit.ownReach = (light) => this.lightCache.ownReach(light);
+    this.lit.ownReach = this.lampShadows.ownReachOf = (light) => this.lightCache.ownReach(light);
+    this.lit.ownSlot = (light) => this.lampShadows.ownSlot(light);
     this.particles = new Sprites(core);
     this.stats = core.stats;
     this.skipped = core.skipped;
@@ -275,7 +277,7 @@ export class Bridge {
   /** A harness's: the lamps in the engine's light cache and its last bake (`lightCache.ts`). */
   lightCacheNow(): ReturnType<LightCache['now']> { return this.lightCache.now(); }
   /** A harness's: how many lamps' shadows are drawn, and how many wait. */
-  lampShadowsNow(): { drawn: number; waiting: number } { return this.lampShadows.now(); }
+  lampShadowsNow(): ReturnType<LampShadows['now']> { return this.lampShadows.now(); }
   /** A harness's: the last frame's point lights, a line each (`Lights.pointLines`). */
   pointLines(): string[] { return this.lit.pointLines(); }
 
@@ -365,6 +367,8 @@ export class Bridge {
     this.lit.begin();
     // (a lamp's shadow drawn ahead of the frame, whose own records are written over its casters')
     if (this.lightCache.step((mesh) => this.addMesh(mesh))) this.lampShadows.again();
+    // (the shown place's own casting lights: asked again as the place, its lights or its props change)
+    this.lampShadows.keepOwn(shownPlace(), shownPointLights(), AHEAD.propsRev, camera.position);
     this.lampShadows.step((mesh) => this.addMesh(mesh));
     // (only where the level reads the lamps' shadows at all: drawn at Very low, where nothing read them, the
     // movers' faces were 12 passes a frame for nothing, a phone's GPU split from 15% outside the frame to 48%)

@@ -24,6 +24,10 @@ const FACES: { axis: THREE.Vector3; up: THREE.Vector3 }[] = [
 /** the lamps whose shadows of what moves are drawn each frame (Bulwark's `LAMP_MOVERS`), their maps after the still
  *  lamps' */
 const MOVER_LAMPS = 2;
+/** a place's own lights that cast the shadow of what stands still round them (Bulwark's `LAMP_OWN`), their maps
+ *  after the movers': a biome's two warmest (its braziers, its bonfires), a room's hearth and chandelier
+ *  (world/props.ts `staticShadow`) */
+const OWN_LIGHTS = 4;
 
 const at = new THREE.Vector3(), ahead = new THREE.Vector3(), centre = new THREE.Vector3();
 const projection = new THREE.Matrix4(), faceView = new THREE.Matrix4();
@@ -42,6 +46,13 @@ export class LampShadows {
   reachOf: (lamp: number, reach: number) => number = (_lamp, reach) => reach;
   /** how many lamps were last asked for */
   private asked = 0;
+  /** the place's own casting lights, each whether its faces are drawn, what casts into them, and those still to
+   *  draw */
+  private own: { light: THREE.PointLight; drawn: boolean }[] = [];
+  private ownCasters: THREE.Mesh[] = [];
+  private ownWaiting: number[] = [];
+  /** how far one of them reaches in the frame's loop, which reads its faces that far (set by the bridge) */
+  ownReachOf: (light: THREE.PointLight) => number = (light) => light.distance;
 
   constructor(private core: Core) {}
 
@@ -51,6 +62,45 @@ export class LampShadows {
     this.casters = casters;
     this.asked = Math.min(lamps, LAMPS_MOST);
     this.waiting = Array.from({ length: this.asked }, (_, lamp) => lamp);
+  }
+
+  /** The place's own casting `lights` (the first `OWN_LIGHTS` of them) asked for, of `casters` as they stand: asked
+   *  again whenever what stands still changes (a prop broken, another place shown). One drawn before keeps its
+   *  maps in use until it's drawn again. */
+  askOwn(lights: THREE.PointLight[], casters: THREE.Mesh[]): void {
+    const kept = this.own;
+    this.own = lights.slice(0, OWN_LIGHTS).map((light, at) => ({ light, drawn: kept[at]?.light === light && kept[at].drawn }));
+    this.ownCasters = casters;
+    this.ownWaiting = this.own.map((_, at) => at);
+  }
+
+  /** what the place's own lights were last asked for: the place, its props' state, the lights by their ids */
+  private ownAsked = '';
+
+  /**
+   * The shown `place`'s own casting lights kept drawn: of its `lights`, the lit ones that cast (`staticShadow`),
+   * the `OWN_LIGHTS` nearest `eye`; asked again when the place, those lights or its props' state (`rev`) change.
+   * (The game draws three's from a hook of three's render, which the engine never runs.)
+   */
+  keepOwn(place: THREE.Object3D | undefined, lights: readonly THREE.PointLight[], rev: number, eye: THREE.Vector3): void {
+    const casting = place ? lights.filter((light) => light.castShadow && light.intensity > 0) : [];
+    if (casting.length > OWN_LIGHTS) {
+      const off = new Map(casting.map((light) => [light, light.getWorldPosition(centre).distanceToSquared(eye)]));
+      casting.sort((a, b) => off.get(a)! - off.get(b)!);
+      casting.length = OWN_LIGHTS;
+      // (in one order however near each is, so a step among them asks for nothing)
+      casting.sort((a, b) => a.id - b.id);
+    }
+    const asked = `${place?.id} ${rev} ${casting.map((light) => light.id).join(',')}`;
+    if (asked === this.ownAsked) return;
+    this.ownAsked = asked;
+    this.askOwn(casting, place ? stillCasters(place) : []);
+  }
+
+  /** One of the place's own lights' place among the maps, or -1 while it has none drawn. */
+  ownSlot(light: THREE.PointLight): number {
+    const at = this.own.findIndex((own) => own.light === light && own.drawn);
+    return at < 0 ? -1 : LAMPS_MOST + MOVER_LAMPS + at;
   }
 
   /** Every lamp's faces to draw again, none read meanwhile: the lamps reach another distance in the frame's loop
@@ -133,8 +183,9 @@ export class LampShadows {
   }
 
   /** How many lamps' shadows are drawn, and how many wait. */
-  now(): { drawn: number; waiting: number } {
-    return { drawn: this.drawn.size, waiting: this.waiting.length };
+  now(): { drawn: number; waiting: number; own: number } {
+    const own = this.own.filter((light) => light.drawn).length;
+    return { drawn: this.drawn.size, waiting: this.waiting.length + this.ownWaiting.length, own };
   }
 
   /**
@@ -144,14 +195,32 @@ export class LampShadows {
    */
   step(record: (mesh: THREE.Mesh) => void): void {
     const lamp = this.waiting.shift();
-    if (lamp === undefined) return;
-    const core = this.core, place = (1 + lamp * 2) * 4;
+    if (lamp === undefined) {
+      // (then one of the place's own lights, by the same six faces)
+      const next = this.ownWaiting.shift();
+      const own = next === undefined ? undefined : this.own[next];
+      if (next === undefined || !own) return;
+      own.light.getWorldPosition(at);
+      const far = this.ownReachOf(own.light);
+      if (!(far > LAMP_NEAR)) return;
+      this.faces(record, this.ownCasters, far, LAMPS_MOST + MOVER_LAMPS + next);
+      own.drawn = true;
+      return;
+    }
+    const place = (1 + lamp * 2) * 4;
     at.fromArray(lampList, place);
     // (as far as its light is read: the lit shader takes the faces' far plane from the light's own reach)
     const reach = this.reachOf(lamp, lampList[place + 3]);
     if (!(reach > LAMP_NEAR)) return;
+    this.faces(record, this.casters, reach, lamp);
+    this.drawn.add(lamp);
+  }
+
+  /** The six faces round `at` drawn of `casters` within `reach` of it, into the maps' place `slot`. */
+  private faces(record: (mesh: THREE.Mesh) => void, casters: THREE.Mesh[], reach: number, slot: number): void {
+    const core = this.core;
     core.count = core.boneFloats = 0;
-    for (const mesh of this.casters) {
+    for (const mesh of casters) {
       if (!inReach(mesh, reach)) continue;
       record(mesh);
     }
@@ -167,12 +236,22 @@ export class LampShadows {
       faceView.multiplyMatrices(projectionOf(camera, projection), camera.matrixWorldInverse)
         .toArray(core.globals, GLOBALS.shadowView);
       at.toArray(core.globals, GLOBALS.camPos);
-      core.engine.bake_lamp_face(lamp * FACES.length + k, core.count, 0);
+      core.engine.bake_lamp_face(slot * FACES.length + k, core.count, 0);
     }
     core.freshViews();
     core.count = core.boneFloats = 0;
-    this.drawn.add(lamp);
   }
+}
+
+/** What stands still under `shown` and casts a shadow: its shown meshes that cast one, none moved by its bones. */
+export function stillCasters(shown: THREE.Object3D): THREE.Mesh[] {
+  const casters: THREE.Mesh[] = [];
+  shown.updateMatrixWorld(true);
+  shown.traverseVisible((part) => {
+    const mesh = part as THREE.Mesh;
+    if (mesh.isMesh && mesh.castShadow && !(mesh as unknown as THREE.SkinnedMesh).isSkinnedMesh) casters.push(mesh);
+  });
+  return casters;
 }
 
 /** A lamp a mover stands by, and its place among the movers' maps. */

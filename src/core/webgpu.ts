@@ -1797,6 +1797,10 @@ export function shownPointLights(): readonly THREE.PointLight[] {
 }
 const NO_LIGHTS: readonly THREE.PointLight[] = [];
 
+/** The place shown now, of those the rig copies its lights from (the Rust engine draws its lights' shadows of
+ *  what stands still in it: engine/lampShadows.ts). */
+export const shownPlace = (): THREE.Object3D | undefined => rigPlaces.groups.find((group) => group.visible);
+
 /** the places the rig copies its lights from, each with its point lights (`rigPointLights`, `rigMorePointLights`) */
 const rigPlaces = { groups: [] as THREE.Object3D[], lightsOf: new Map<THREE.Object3D, THREE.PointLight[]>() };
 

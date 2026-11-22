@@ -116,7 +116,7 @@ export class Engine {
         return ret >>> 0;
     }
     /**
-     * A shader of the page's: WGSL for the lit shader's two hooks (lit.wgsl). Its id.
+     * A shader of the page's: WGSL for the lit shader's two hooks (lit/*.wgsl). Its id.
      * @param {string} hooks
      * @returns {number}
      */

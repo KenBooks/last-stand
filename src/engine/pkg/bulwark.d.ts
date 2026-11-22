@@ -13,7 +13,7 @@ export class Engine {
     add_material(params: Float32Array | number[], maps: Uint32Array | number[], key: number): number;
     add_mesh(positions: Float32Array | number[], normals: Float32Array | number[], uvs: Float32Array | number[], colors: Float32Array | number[], color_size: number, indices: Uint32Array | number[], joints: Uint16Array | number[], weights: Float32Array | number[]): number;
     /**
-     * A shader of the page's: WGSL for the lit shader's two hooks (lit.wgsl). Its id.
+     * A shader of the page's: WGSL for the lit shader's two hooks (lit/*.wgsl). Its id.
      */
     add_shader(hooks: string): number;
     /**

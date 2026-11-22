@@ -19,6 +19,9 @@ export const AHEAD = {
   /** the first `lamps` lamps' shadows drawn of `casters`, which stand still (world/lampAtlas.ts asks, as it asks
    *  three for its atlas; `lampShadows.ts` draws them) */
   bakeLamps: null as ((casters: THREE.Mesh[], lamps: number) => void) | null,
+  /** how many times the props have changed (world/destructible.ts `state.rev`, told here: the engine can't import
+   *  the world's props, a cycle through the overlays): a place's own lights' shadows are drawn again then */
+  propsRev: 0,
 };
 
 /** the engine's scene pipelines: how many were asked for, and how many are still compiling */

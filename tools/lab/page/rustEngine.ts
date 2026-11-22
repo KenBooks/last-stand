@@ -362,7 +362,8 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   ];
   lines.push(`  lit by: ${bridge.lights()}`);
   const lamps = bridge.lampShadowsNow();
-  lines.push(`  the lamps' shadows: ${lamps.drawn} lamps' drawn, ${lamps.waiting} waiting`);
+  const own = `${lamps.own} of the place's own lights'`;
+  lines.push(`  the lamps' shadows: ${lamps.drawn} lamps' drawn and ${own}, ${lamps.waiting} waiting`);
   const cache = bridge.lightCacheNow();
   lines.push(`  the light cache: ${cache.lamps} lamps and ${cache.own} of the scene's own lights in ${cache.cells} cells of ${cache.cell.toFixed(2)} m, `
     + `${(cache.cells * 16 / 1e6).toFixed(1)} MB on the GPU; baked ${cache.bakes} times, the last ${cache.ms.toFixed(0)} ms on the page; read ${cache.open.toFixed(2)} bright in the open, `
