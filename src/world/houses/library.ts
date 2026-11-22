@@ -548,7 +548,7 @@ export function build(group: THREE.Group): Room {
     cx.beginPath(); cx.moveTo(40, h - 60); cx.bezierCurveTo(w * 0.4, h * 0.6, w * 0.5, h * 0.3, w - 50, 60); cx.stroke();
     cx.setLineDash([]);
     cx.fillStyle = '#3a200c'; cx.textAlign = 'center'; cx.font = `700 24px ${DISPLAY}`;
-    cx.fillText('The Known Lands', w / 2, 44, w - 40);
+    cx.fillText('Known Lands', w / 2, 44, w - 40);
   });
   framed(east, M, chart, 0.9, 1.75, 0.8, 1.0);
   const chair = armchair(g, M, hx - 1.9, 0.9, CHAIR_TURN), chairAt = { x: hx - 1.9, z: 0.9, r: 0.58, h: 1.1 };

@@ -48,7 +48,7 @@ export interface WaveBoss { id: EnemyId; twin?: EnemyId; short: string; banner: 
 
 export const BIOMES: Record<BiomeId, BiomeDef> = {
   crypt: {
-    label: 'Crypt', title: 'The Crypt',
+    label: 'Crypt', title: 'Crypt',
     pool: (w) => {
       const p: [EnemyId, number][] = [['imp', 3], ['husk', 4]];
       if (w >= 2) p.push(['witch', 2 + w * 0.2]);
@@ -63,7 +63,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     music: { lobby: 'shadowed-dusk', battle: 'crypt-motif' },
   },
   forest: {
-    label: 'Forest', title: 'The Thornwood',
+    label: 'Forest', title: 'Thornwood',
     pool: (w) => {
       const p: [EnemyId, number][] = [['thornling', 3], ['mossback', 4]];
       if (w >= 2) p.push(['sporecaller', 2 + w * 0.2]);

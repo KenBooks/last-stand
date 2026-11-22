@@ -57,14 +57,14 @@ export const HOUSE_OBJECTS: readonly VillageObject[] = (() => {
     return {
       id: `${id}Door`, use: 'enter', room: undefined, into: id, at: [d.x + Math.sin(d.facing) * 0.35, d.z + Math.cos(d.facing) * 0.35],
       // (its prompt on the door's leaf, under the sign over it: at the head, the two stood one on the other, from play)
-      reach: 2.0, stand: [s.x, s.z], label: 1.75, tall: 2.3, name: HOUSES[id].name, verb: 'Go in',
+      reach: 2.0, stand: [s.x, s.z], label: 1.75, tall: 2.3, name: HOUSES[id].name, verb: 'Enter',
     };
   });
   const way = (id: RoomId): VillageObject => {
     const z = HOUSES[id].half[1];
     return {
       id: `${id}Out`, use: 'leave', room: id, at: [0, z - 0.2], reach: 1.4, stand: [0, z - 1.0], label: 2.25, tall: 2.2,
-      name: 'Door', verb: 'Go out',
+      name: 'Door', verb: 'Leave',
     };
   };
   const inside = ROOM_IDS.flatMap((id) => (HOUSES[id].objects?.(HOUSES[id].half) ?? []).map((o) => ({ ...o, room: id })));

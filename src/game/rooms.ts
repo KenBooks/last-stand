@@ -195,7 +195,7 @@ export function recordsShown(): RecordsShown {
   const name = CLASSES[p.classId].name;
   const bests: Board = {
     title: 'Best Waves Banked',
-    rows: heroes.flatMap(({ id, p: h }) => BIOME_IDS.map((b) => [`${CLASSES[id].name} · ${BIOMES[b].title.replace(/^The /, '')}`, String(h.records.bestBanked[b] ?? '—')] as const)),
+    rows: heroes.flatMap(({ id, p: h }) => BIOME_IDS.map((b) => [`${CLASSES[id].name} · ${BIOMES[b].title}`, String(h.records.bestBanked[b] ?? '—')] as const)),
   };
   const fav = favouriteSkill(c);
   const feats: Board = {
