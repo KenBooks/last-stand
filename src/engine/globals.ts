@@ -65,8 +65,10 @@ export const TUNE = tunable('rust', {
   /** every opaque mesh casts the sun's shadow, not only those three is told to draw into its own map (the
    *  village's still things are in maps three keeps, which the engine doesn't have) */
   castAll: 1,
-  /** the share of the sky's light under the shelter's roof (the hall of heroes' inside), set against three's frame */
-  shelterSky: 0.5,
+  /** the share of the sky's light under the shelter's roof (the hall of heroes' inside), set against WebGL's frame
+   *  there at High and Very low (`lab rust --village --at -1.5,-18 --view third --webgl`): at a quarter its floor
+   *  was a third as bright */
+  shelterSky: 0.9,
   /** ms a frame spent handing over what isn't shown yet (`prepareAhead`), under the loading screen and after it
    *  (0: nothing ahead, each place handed over as it's first shown) */
   aheadLoading: 30,

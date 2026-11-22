@@ -82,6 +82,30 @@ export function shelter(bridge: Bridge, where: string, wanted: boolean): Checked
   return passed(`${where}: the hall's inside sheltered up to its walls' tops (${high.toFixed(1)} m)`);
 }
 
+/** The meshes standing inside the hall's walls, under its ceiling, that are hidden (they or what holds them): each
+ *  by its material and place. From play's pictures: its columns' iron bands and its torches' brackets weren't drawn
+ *  from above, where WebGL draws them. */
+function hiddenInHall(): string[] {
+  const at = new THREE.Vector3();
+  const unseen: string[] = [];
+  const shown = (object: THREE.Object3D): boolean => {
+    for (let o: THREE.Object3D | null = object; o && o !== G.scene; o = o.parent) if (!o.visible) return false;
+    return true;
+  };
+  G.arena.shownGroup().traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || shown(mesh)) return;
+    mesh.getWorldPosition(at);
+    const inside = Math.abs(at.x - TERRACE.x) < HALL.inHalf && at.z < HALL.inFront - 1 && at.z > HALL.columnZ[3]
+      && at.y > TERRACE.high && at.y < TERRACE.high + HALL.wallHigh - 0.5;
+    if (!inside) return;
+    const material = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial;
+    const place = `${at.x.toFixed(1)}, ${at.y.toFixed(1)}, ${at.z.toFixed(1)}`;
+    unseen.push(`${mesh.name || mesh.geometry.type} in #${material.color?.getHexString() ?? '?'} at ${place}`);
+  });
+  return unseen;
+}
+
 /** Stood inside the hall, seen from above: what stands over him thins, by the game's own kinds, none left out. */
 export async function hallFromAbove(lab: Lab, bridge: Bridge): Promise<Checked> {
   G.player.place(new THREE.Vector3(TERRACE.x, TERRACE.high, HALL.columnZ[1]), Math.PI);
@@ -90,6 +114,10 @@ export async function hallFromAbove(lab: Lab, bridge: Bridge): Promise<Checked> 
   const past = [...bridge.skipped].filter(([kind]) => kind.startsWith('see-through'));
   if (past.length) return failed(`in the hall from above: ${past[0][1]} things of a see-through kind the engine has no room for`);
   if (!thinning) return failed(`in the hall from above nothing thins over him (${held} kinds held): its roof hides him`);
+  const unseen = hiddenInHall();
+  if (unseen.length) {
+    return failed(`in the hall from above ${unseen.length} of its own things are hidden: ${unseen.slice(0, 4).join('; ')}`);
+  }
   return passed(`in the hall from above ${thinning} of the engine's ${held} kinds of see-through thin over him`);
 }
 
