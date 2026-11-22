@@ -95,16 +95,34 @@ the light cache and fields (the grass). Virtual geometry waits for content that 
 - Day 4, the furthest zoom out. From play on the phone at Medium, zoom 1.7: about 20 fps, 1.18 million triangles; its profile (AFWA-QQXG, the phone hot, its parts' baselines 17 to 36 ms): the grass 6.3 ms, 4.7 of them its blades' shading, in the depth first 1.0 ms less. So the grass's cost there is its shading, not its blades' placing. Two changes: from over 36 m up the ring from above is in 0.3 m cells (`ABOVE_FAR` in world/meadow.ts: 1.11 million triangles to 0.54 in the lab, the blades wider and streakier at that height), and below High the blades are lit plainly (Bulwark `Surface.plain`, `rust.grassPlain`: 2% of the picture differs by over 10 in 255, none by over 25). `lab rust --zoom`. Neither measured on the phone yet. The village's fog of what he can't see is still not ported.
 - Day 4, the fog over what he can't see, ported (`sightFog.ts`, Bulwark's gpu/sight.rs): each surface fogged by its own place as it's lit, from the game's rays and roofs' map; beside three's frame behind the cottages the wedge is the same. Not looked at: a house's inside, the hall shut to him, a door seen through; the particles aren't fogged. Its part in a profile: 0.7 ms of 4.3 here. From play: the grass in larger cells from far above taken back out ("I dont like that we change grass to this on high zoom outs"), the blades lit plainly kept; Powered by Bulwark off the lobby's logo, kept on the loading screen. Open: "grass used to be fancier on high before (webgl)".
 
-## What's not ported yet (the audit's list, begun 2026-11-22)
+## The queue, as of 2026-11-22 evening
 
-From the owner: "audit what else is not ported to the engine, and port it... I dont want to find out by accident... I want to only test when everything is ported, tested in lab". `lab rust`'s not-drawn line reads nothing in the village (noon, night over the shoulder, a room), the forest and the crypt with 24 foes: what's left is what no mesh count shows. Each line is ticked only with a lab check beside three's frame.
+From play, each to fix and hold with a lab check, in this order:
 
-- [ ] The post chain: the blood round the screen's edges, photo mode, HDR screens.
+- [ ] The hall's walls' tops stripe (z-fighting): seen in `lab rust --village --at=-1.6,-22.3 --zoom 0.9` too. Not looked into.
+- [ ] The hall's floor lit in squares that follow the hero: a ground cell held 8 point lights and the hall has more (Bulwark cells.rs, now 16). Not confirmed in a picture: the lab's frame showed no squares before or after.
+- [ ] Smoke over the campfire "should disappear instantly once it moves into fog of war": the particles aren't fogged by the sight fog.
+- [ ] The fog along a wall he hugs: "he can definitely see along the wall he's hugging". Not looked at whether three's frame has it too (the same rays).
+- [ ] One grass formula: "we need to have a single grass formula, which we will adopt to various devices.... do not change grass depending on viewing angle (we even have a bug about it)". The plan: a blade is its fine cell's, whatever ring or view draws it; coarser levels are subsets of the finer ones' very blades (a blade's level by its cell's coordinates), each level shown while the eye is within its reach, so zooming out only takes blades away and never changes those left. No ring from above of its own, no widening. A device's level scales the reaches.
+- [ ] The paving's repeat shows (#819): its unrepeated maps aren't ported.
+- [ ] "Grass used to be fancier on high before (webgl)": on High the engine's blades are three's WebGPU's shape for shape; three's are darker in a tuft's depth. `lab rust --webgl` pictures three's WebGL at the same stand (its picture wasn't written the one time it was tried).
+
+The inventory of what three shows that the engine doesn't (a read of the code by a subagent, 2026-11-22: each to be confirmed in a picture before it's ported or struck off):
+
+- [ ] The bug report's screenshot reads three's canvas: blank under the engine (`ui/bugReport.ts`).
+- [ ] Photo mode: the shot, its bloom strength and grade never reach the engine. HDR screens. The blood round the edges and its heartbeat at low health.
+- [ ] `TUNE.castAll`: every mesh that receives the sun's shadow casts it, so what a level keeps from casting (small parts, heroes and foes at Very low, the yard's ghost) casts; shadow-only casters shown by three's hooks aren't drawn as such.
+- [ ] Hands: no dual-quaternion skinning, no triplanar maps (`entities/models/hands.ts`).
+- [ ] Hair cards and the scholar's cards lit from behind as from the front (the engine turns a back face's normal over).
+- [ ] The warrior's fur doesn't sway (`furSway.ts`).
+- [ ] Painted signs and door faces aren't held under the bloom (`signPaint.ts` `underBloom`).
+- [ ] Floor relief (parallax) on the crypt's cobbles and the forest's floor.
+- [ ] The falling water's share of the sky by the hour; the water's capped glints.
+- [ ] `nearGlow` on plain additive effect materials (the ranger's streaks, starfall, the quarry's reticle, Iron Bellow's halo and plates, runes and cracks, plain bolts): not dimmed near the camera.
+- [ ] Glow particles: no dimming by distance, one softness where the game has two.
+- [ ] Physical materials' clearcoat and sheen, `bumpMap`, `flatShading`, `polygonOffset`, a metalness map beside a roughness map: none read.
 - [ ] The kit's look: a painted face's hair tint, a worn item's glow, the hood's shade, the shine's cap.
-- [ ] The water's share of the sky by the hour and its capped glints; the paving's unrepeated maps.
 - [ ] Each membrane and flame fading as its prop dissolves.
-- [ ] The places' own point lights cast nothing (a house's candles, a biome's two casting lights).
-- [ ] The fog over what he can't see: a house's inside, the hall shut to him, a door seen through, not looked at beside three's; the particles aren't fogged.
-- [ ] The grass on High: from play, "grass used to be fancier on high before (webgl)" (not looked at yet).
-- [ ] Pipelines made ahead under the loading screen (a cold browser compiles each at its first draw; the 4070 Ti's report 80NM-443E: a boot of 44 s, frames of 6 and 13 s, the PC under load from the lab).
-- [ ] To go through and add here: every skill's effects of each class (`lab rust --cast`), the hero selection screen and the hall of heroes, the portraits, the outlines and the world's overlays, a death's dissolve, co-op's ghosts and colours, each biome's boss.
+- [ ] The places' own point lights cast nothing.
+- [ ] Pipelines made ahead under the loading screen (the 4070 Ti's report 80NM-443E: a boot of 44 s, frames of 6 and 13 s).
+- [ ] Still to look at beside three's frame: every class's skills (`lab rust --cast`), the hero selection screen, the hall of heroes' heroes, each biome's boss, a death's dissolve, co-op's ghosts and colours; the fog inside a house, in the hall shut to him, through a door.

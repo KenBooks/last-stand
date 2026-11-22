@@ -1057,9 +1057,6 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
       }
       const reach = whole ? wholeReach() : near ? ABOVE_NEAR.radius : ring.radius;
       if (above) {
-        // (from far above too, the same cells: in cells twice the size, a quarter of the blades each twice as wide,
-        // the grass read as straw laid in streaks, from play "I dont like that we change grass to this on high zoom
-        // outs"; it halved the frame's triangles there)
         const ringCell = near ? ABOVE_NEAR.cell : ring.cell;
         // (near the ground a card a cell, one tuft each: at the rings' spread the ground showed between them, from
         // play "not dense enough")

@@ -49,6 +49,7 @@ export default {
     },
     census: { kind: 'switch', help: 'the shown meshes\' materials by kind, and what each asks beyond the engine' },
     three: { kind: 'switch', help: 'the baseline: three.js\'s WebGPU renderer instead, on a page of its own' },
+    webgl: { kind: 'switch', help: 'the look players had: three.js\'s WebGL renderer instead, pictured the same' },
     capture: {
       kind: 'number',
       usage: 'side',
@@ -62,7 +63,8 @@ export default {
     if (options.capture !== undefined && !(options.capture >= 16)) throw labError('rust --capture: 16 or more');
     if (options.capture && options.three) throw labError('rust --capture: the engine\'s frame, not --three\'s');
     // (the engine's page, or with --three a page of three's WebGPU renderer, the same stand timed the same way)
-    options.renderer = options.three ? 'webgpu' : 'rust';
+    if (options.webgl) options.three = true;
+    options.renderer = options.webgl ? 'webgl' : options.three ? 'webgpu' : 'rust';
   },
   async each(side, options) {
     const command = {
