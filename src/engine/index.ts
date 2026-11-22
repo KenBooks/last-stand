@@ -7,6 +7,7 @@ import type * as THREE from 'three';
 import { Bridge, TUNE, type Grade } from './bridge';
 import { perfClock } from '../core/perfClock';
 import { AHEAD, PIPELINES, pipelinesAside } from './pipelinesAside';
+import { keepWhatsSaid } from './said';
 
 /** How the trial went, for the lab and the console (`window.__rust`). */
 export const RUST = {
@@ -68,6 +69,7 @@ export async function bootRust(under: HTMLCanvasElement): Promise<void> {
     under.style.position = 'relative';
     under.before(canvas);
     const made = canvas;
+    keepWhatsSaid();
     const engine = await pipelinesAside(() => Engine.create(made));
     const bridge = new Bridge(engine, wasm);
     RUST.bridge = bridge;
