@@ -7,6 +7,7 @@ import { WEBGPU_CACHE } from './webgpuCache.mjs';
 import { AUTOPLAY } from './autoplay.mjs';
 import { liveCss, partsOf, VARIANTS } from './variants.mjs';
 import { LISTED_LEAST, LISTED_MS, LOBBY_LISTED_MS } from './analyze.mjs';
+import { MOST_GPU_WAIT_MS } from './gpuWaits.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
 const SWITCHES = new Set([
@@ -96,6 +97,10 @@ const HELP = {
     + 'first as its exit is made ready), and where the exit draws checked at each of its draws against where the '
     + 'letters, the lobby\'s logo and the window are (`windFit.mjs`)'],
   trips: ['n', `boot, with --resize: how many times the window goes to its size and comes back (${TRIPS} by default)`],
+  'most-gpu-wait': ['ms', `boot: the most a step's waits of the main thread on the GPU's process may come to, `
+    + `from the game's first step on (${MOST_GPU_WAIT_MS} by default): over it, the run fails`],
+  'plant-gpu-wait': ['ms', 'boot: the main thread made to wait on the GPU\'s process this long as the arena\'s '
+    + 'step begins, the canary of that budget'],
   'stale-wind': ['', 'boot, with --resize: the exit placed once and never again (each place it sets after its first '
     + 'ignored), the canary of its check'],
   auto: ['level@px', 'Auto\'s quality as a device settled it, a report\'s Quality line (`low@518400`: Low, at most '
@@ -206,6 +211,8 @@ export function readOptions(argv) {
     stallBlow: Number(written['stall-blow'] ?? 0),
     stallLobby: Number(written['stall-lobby'] ?? 0),
     blinkExit: Number(written['blink-exit'] ?? 0),
+    mostGpuWait: Number(written['most-gpu-wait'] ?? MOST_GPU_WAIT_MS),
+    plantGpuWait: Number(written['plant-gpu-wait'] ?? 0),
     auto: written.auto ?? null,
     window: sizeOf(written.window ?? '1536x864', 'window'),
     resize: written.resize === undefined ? null : sizeOf(written.resize, 'resize'),

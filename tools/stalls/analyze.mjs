@@ -1,6 +1,7 @@
 // What a measure of the stalls found (tools/stalls): the page's frames and the trace's Skia program links put on one
 // clock, each stall with the programs built in it, the tasks they were built inside, and what the page changed just
 // before it.
+import { gpuWaitsIn } from './gpuWaits.mjs';
 import { jsIn, jsSamples, jsUnder } from './profile.mjs';
 
 /** a frame this long or longer is a stall (ms), and one this long is listed on its own unless the command says
@@ -830,6 +831,7 @@ function bootStep(name, from, to, record, traced) {
     gpuMain: sharedWork(onGpuMain, 1).slice(0, BOOT_WORK_SHOWN),
     gpuCompiles: gpuCompilesIn(traced.placed, from, to),
     dawn: dawnIn(traced.dawn, from, to),
+    gpuWaits: gpuWaitsIn(traced, traced.stamp, from, to),
     js: traced.samples.length ? jsIn(traced.samples, from, to, 1) : null,
   };
 }

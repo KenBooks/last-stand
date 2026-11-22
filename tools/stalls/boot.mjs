@@ -46,7 +46,8 @@ async function bootContext(browser, url, variant, options) {
   await context.addInitScript(noCapture);
   const stalls = { stallBlow: options.stallBlow, stallLobby: options.stallLobby };
   const blinks = { blinkExit: options.blinkExit, blinkFrames: BLINK_FRAMES };
-  await context.addInitScript(bootRecording, { mark: MARK, ...stalls, ...blinks });
+  const plants = { plantGpuWait: options.plantGpuWait };
+  await context.addInitScript(bootRecording, { mark: MARK, ...stalls, ...blinks, ...plants });
   if (options.resize) await context.addInitScript(windFitRecording, { stale: options.staleWind });
   for (const part of partsOf(variant)) await context.addInitScript(VARIANTS[part].script, VARIANTS[part].arg);
   const cookies = [
@@ -196,12 +197,15 @@ function bootNotes(visit, options, left, errors, picture) {
   const held = options.stallLobby ? [`each of the lobby's frames held up ${options.stallLobby} ms for a second`] : [];
   const blinks = `the loading screen hidden for a frame ${options.blinkExit} times as it left`;
   const blinked = options.blinkExit ? [blinks] : [];
+  const planted = `the main thread made to wait on the GPU's process ${options.plantGpuWait} ms as the arena's `
+    + 'step began (the canary)';
+  const waited = options.plantGpuWait ? [planted] : [];
   const leftNote = left ? [LEFT_NOTES[left]] : [];
   const hero = changesHero(visit, options) ? ['Change hero pressed, not Start'] : [];
   const failed = errors.length ? [`page errors: ${distinctErrors(errors).join(' | ')}`] : [];
   const read = options.read ? [`${options.read} read into ${picture.read}`] : [];
   const builds = options.builds ? ['its WebGPU node builds recorded (`?builds`), each step\'s listed'] : [];
-  const notes = [visit.note, ...auto, ...slowed, ...trips, ...stalled, ...held, ...blinked, ...stale, ...leftNote,
+  const notes = [visit.note, ...auto, ...slowed, ...trips, ...stalled, ...held, ...blinked, ...waited, ...stale, ...leftNote,
     ...hero, ...failed, ...read, ...builds];
   return [...notes, `its end pictured in ${picture.end}`];
 }
