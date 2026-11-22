@@ -159,7 +159,7 @@ export async function plantedFaults(lab: Lab): Promise<{ line: string; problems:
   }
   // (and the refused pipeline itself tried again, its shader written a part at a time, each part compiling)
   const parts = refusedProbed.split(' | ');
-  if (parts.length < 13 || /wasn't kept|no fs_depth|not tried/.test(refusedProbed)) {
+  if (parts.length < 16 || /wasn't kept|no fs_depth|not tried/.test(refusedProbed)) {
     problems.push(`the refused pipeline tried again: ${refusedProbed || 'not at all'}`);
   }
   if (uncompiled.length) problems.push(`a probe's writing of fs_depth didn't compile: ${uncompiled.join(' || ').slice(0, 600)}`);

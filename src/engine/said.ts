@@ -11,7 +11,7 @@
 
 /** how many different faults are kept, how much of each, and how much of the first the notice shows */
 const KEPT = 12;
-const LONGEST = 1500;
+const LONGEST = 3000;
 const SHOWN = 160;
 
 const faults: string[] = [];

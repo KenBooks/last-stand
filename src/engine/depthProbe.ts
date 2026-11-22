@@ -90,7 +90,22 @@ const BODIES: [name: string, signed: string, body: string][] = [
   ['a surface made, the face not read', SIGNED, `${SURFACE.replace(FACED, '')} if (!surface_hook(&s, in)) { discard; }`],
   ['a surface made and its hook run', SIGNED, `${SURFACE} if (!surface_hook(&s, in)) { discard; }`],
   ['the hook run, then what is seen through', SIGNED, `${SURFACE} if (!surface_hook(&s, in)) { discard; } ${SEEN_THROUGH}`],
+  // (those too were made, and the whole was still refused: what none of them held)
+  ['its map written again as an alpha map', SIGNED, 'var sampled = textureSample(t_base, samp, in.uv); '
+    + 'if (m.flags.w > 1.5) { sampled = vec4f(1.0, 1.0, 1.0, sampled.g); } if (sampled.a < m.emissive.w) { discard; }'],
+  ['its map read inside an if', SIGNED, 'if (m.emissive.w > 0.0) { let sampled = textureSample(t_base, samp, in.uv); '
+    + 'if (sampled.a < m.emissive.w) { discard; } }'],
 ];
+
+/** `code`'s own `fs_depth` body, as it stands (null: the code has none). */
+function ownBody(code: string): string | null {
+  const from = code.indexOf('fn fs_depth(');
+  const open = code.indexOf('{', from);
+  const whole = depthWritten(code, '', '');
+  if (from < 0 || open < 0 || !whole) return null;
+  const after = whole.length - (from + 'fn fs_depth() {  }'.length);
+  return code.slice(open + 1, code.length - after - 1);
+}
 
 /** `code` with its `fs_depth` given `signed` and `body` (null: the code has none). */
 export function depthWritten(code: string, signed: string, body: string): string | null {
@@ -136,7 +151,9 @@ async function probeRefused(device: ProbeDevice, refused: Refused): Promise<void
   const label = refused.fragment?.module?.label ?? '';
   const code = shaderCode(label);
   if (!code) lines.push(`the shader "${label}" wasn't kept`);
-  for (const [name, signed, body] of code ? BODIES : []) {
+  // (the control: the shader's own body sent again as a new shader. Made, the refusal isn't in its text at all)
+  const own = code ? ownBody(code) : null;
+  for (const [name, signed, body] of code ? [['its own body, sent again', SIGNED, own ?? ''] as const, ...BODIES] : []) {
     const written = depthWritten(code!, signed, body);
     if (!written) { lines.push(`${name}: no fs_depth in "${label}"`); continue; }
     const module = device.createShaderModule({ label: 'depth probe', code: written });
