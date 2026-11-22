@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { afterBiome, biomeReady, everyBiomeReady, readyBiome, readyEveryBiome } from './game/biomeReady';
 import { bossReady, everyBossWarm, readyEveryBoss, readyNextBoss } from './game/bossReady';
 import { G } from './state';
+import { keepBootPaceHidden } from './core/hiddenBoot';
 import { pipelinesAtOnceFromNow, setPlainLitOnWebGPU, WEBGPU } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
 import { CAMERA, LOBBY, COOP } from './data/balance';
@@ -158,6 +159,9 @@ const drawnBy = (renderer: THREE.WebGLRenderer) => async (): Promise<void> => {
 };
 
 async function boot() {
+  // (a page hidden while it loads keeps the boot's pace: core/hiddenBoot.ts)
+  // (`?bootPace=0` the boot as it was, the canary of `npm run stalls -- --scenario boot --covered`)
+  if (!location.search.includes('bootPace=0')) keepBootPaceHidden(loadingLeft);
   // (full screen at the first gesture, the loading screen's too: armed after the hero, a click as it loaded did nothing)
   initAutoFullScreen();
   // the ground, wall and bark maps are made in workers meanwhile (they'd block the page for a second), the lobby's

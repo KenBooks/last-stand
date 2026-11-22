@@ -162,8 +162,8 @@ const bootPictures = (index) => ({
 /** A Chrome of its own for a measure, as `options` have its window. */
 function chromeFor(options) {
   const { width, height } = options.window;
-  const { headed, scale, gpuMemory } = options;
-  return startChrome({ outDir: join(OUT, 'profiles'), headed, scale, width, height, gpuMemory });
+  const { headed, scale, gpuMemory, kept } = options;
+  return startChrome({ outDir: join(OUT, 'profiles'), headed, scale, width, height, gpuMemory, kept });
 }
 
 /** `expression` read off `page` into the JSON file beside its end picture (`--read`): what it was read into. */

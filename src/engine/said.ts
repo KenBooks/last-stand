@@ -17,6 +17,8 @@ const SHOWN = 160;
 const faults: string[] = [];
 /** what the device is, said once it's made: its adapter, and the limits a refusal may turn on */
 let device = '';
+/** the engine's device as it was made (its adapter, its features, its limits); '' before */
+export const deviceSaid = (): string => device;
 let notice: HTMLElement | null = null;
 let line: HTMLElement | null = null;
 

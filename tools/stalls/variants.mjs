@@ -44,6 +44,28 @@ function seeded(seed) {
 }
 
 /**
+ * Every WebGPU shader new to the graphics driver's own cache, as on a player's first load of a new build: each
+ * `0.5` in its source is written with `digits` after it (0.5000001234), so its code differs by nothing the eye
+ * sees and the driver has compiled none of it. A fresh profile empties Chrome's caches alone: the driver keeps
+ * its own for chrome.exe across profiles (NVIDIA's DXCache), so a build booted here once boots warm ever after,
+ * where the player who loaded it first waited 48 s (report BM6R-CTRB; this tool's boot of the same build after
+ * it: 13.8 s).
+ */
+function newShaders(digits) {
+  const device = globalThis.GPUDevice?.prototype;
+  if (!device) return;
+  const make = device.createShaderModule;
+  device.createShaderModule = function (descriptor) {
+    const code = String(descriptor.code).replace(/(?<![\w.])0\.5(?![\d.eE])/g, `0.5000001${digits}`);
+    // (read back with `--read "window.__newShaders"`: how many shaders were made, and how many of them differ)
+    const count = (globalThis.__newShaders ??= { made: 0, changed: 0 });
+    count.made++;
+    if (code !== descriptor.code) count.changed++;
+    return make.call(this, { ...descriptor, code });
+  };
+}
+
+/**
  * WebGL without KHR_parallel_shader_compile, as some GPUs and browsers give it: three takes every program as linked at
  * once, and the first read of one links it there, the page waiting (from play, a low-end laptop's join froze its tab,
  * "Chrome offers to kill the tab").
@@ -119,6 +141,8 @@ export const VARIANTS = {
   qualityLow: { script: quality, arg: 'low' },
   qualityVerylow: { script: quality, arg: 'verylow' },
   noParallelCompile: { script: noParallelCompile },
+  // (its digits this run's own: a second run finds none of the first's in the driver's cache)
+  newShaders: { script: newShaders, arg: String(1000 + (Date.now() % 9000)) },
   tooltipLayer: { script: styled, arg: '#tooltip { will-change: transform; }' },
   noTooltip: { script: styled, arg: '#tooltip { display: none !important; }' },
   // (and the slot's focus with no look at all: its classes still change, but nothing they style shows)

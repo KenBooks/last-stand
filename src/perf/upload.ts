@@ -95,6 +95,16 @@ function game(): Record<string, number | string | boolean> {
 }
 
 /** The slow stretch's trace, packed. */
+/** The boot's steps with what the engine waited on among them, in time's order; after them the engine's device. */
+function bootStepsWithWaits(steps: [number, string][]): string {
+  // (read off the page, not imported: the engine's modules and the report's import each other round a cycle)
+  type Said = { pipelines: { notes: [number, string][] }; device: () => string };
+  const rust = (window as unknown as { __rust?: Said }).__rust;
+  const all = [...steps, ...(rust?.pipelines.notes ?? [])].sort((a, b) => a[0] - b[0]);
+  const device = rust?.device() ?? '';
+  return all.map(([t, label]) => `${t} ${label}`).join(' | ') + (device ? ` | ${device.split(' | features')[0]}` : '');
+}
+
 export function traceOf(slow: Slow): Uint8Array {
   const { snapshot } = slow;
   const columns: ColumnInfo[] = Object.keys(snapshot.columns).map((name) => ({ name, kind: snapshot.kinds[name] }));
@@ -125,7 +135,7 @@ export function traceOf(slow: Slow): Uint8Array {
     reason,
     device: device(),
     settings: settings(),
-    game: { ...game(), scene: snapshot.scene ?? '', bootSteps: b.steps.map(([t, label]) => `${t} ${label}`).join(' | '),
+    game: { ...game(), scene: snapshot.scene ?? '', bootSteps: bootStepsWithWaits(b.steps),
       bootStalls: bootStallSummary(b.stalls ?? []) },
     columns,
     longFrames: snapshot.longFrames,

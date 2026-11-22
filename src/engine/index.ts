@@ -7,7 +7,7 @@ import type * as THREE from 'three';
 import { Bridge, TUNE, type Grade } from './bridge';
 import { perfClock } from '../core/perfClock';
 import { AHEAD, PIPELINES, pipelinesAside } from './pipelinesAside';
-import { fault, keepWhatsSaid, watchFrame } from './said';
+import { deviceSaid, fault, keepWhatsSaid, watchFrame } from './said';
 
 /** the frames drawn since the loading screen left */
 let loadedFrames = 0;
@@ -33,6 +33,8 @@ export const RUST = {
   failed: '',
   /** the scene's pipelines: asked for, and still compiling aside (`pipelinesAside.ts`) */
   pipelines: PIPELINES,
+  /** the engine's device as it was made, for a report */
+  device: deviceSaid,
   /** the next frame is written down as a tape, its maps no larger than this a side (0: none asked); and the tape */
   captureNext: 0,
   tape: null as Blob | null,

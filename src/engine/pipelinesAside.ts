@@ -26,7 +26,30 @@ export const AHEAD = {
 
 /** the engine's scene pipelines: how many were asked for, and how many are still compiling */
 /** `depthRefused`: a pipeline of the depth drawn first was refused, so the frame is drawn without that pass */
-export const PIPELINES = { made: 0, compiling: 0, refused: 0, depthRefused: false };
+export const PIPELINES = {
+  made: 0,
+  compiling: 0,
+  refused: 0,
+  depthRefused: false,
+  /** what the boot waited on, for a slow boot's report (perf/upload.ts lays them among its steps): when (ms from
+   *  the navigation) and what. A 48 s boot (BM6R-CTRB) said only which loading step was long. */
+  notes: [] as [number, string][],
+  /** the ms the loading screens may still wait for pipelines, all their waits together (`pipelinesReady`) */
+  waitLeft: 12000,
+};
+
+/** the engine's device, for asking how long the GPU's process takes to answer */
+let asked: Device | null = null;
+
+/** How long the GPU's process takes to answer the engine's device now (ms): past a frame or two, it's busy with
+ *  something that holds every canvas's frames with it. -1 with no device. */
+async function gpuAnswerMs(): Promise<number> {
+  const queue = (asked as unknown as { queue?: { onSubmittedWorkDone?: () => Promise<void> } } | null)?.queue;
+  if (!queue?.onSubmittedWorkDone) return -1;
+  const began = performance.now();
+  await queue.onSubmittedWorkDone();
+  return performance.now() - began;
+}
 
 /** the labels of the pipelines stood in for (Bulwark's gpu/pipelines.rs) */
 const ASIDE = new Set(['scene', 'shadow', 'sprites']);
@@ -120,6 +143,7 @@ function patchPasses(): void {
 /** `device`'s scene pipelines compiled aside from here on (the engine's device; a harness's second one). */
 export function asideOn(device: object): void {
   const made = device as Device;
+  asked ??= made;
   const make = made.createRenderPipeline;
   made.createRenderPipeline = (descriptor: Descriptor): object =>
     (ASIDE.has(descriptor.label ?? '') ? new StandIn(made, descriptor) : make.call(made, descriptor));
@@ -148,14 +172,33 @@ export async function pipelinesAside<T>(boot: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Resolves once no pipeline is compiling, or after `most` ms (a loading bar waits for what its place draws with). */
-export function pipelinesReady(most: number): Promise<void> {
-  const until = performance.now() + most;
-  return new Promise((done) => {
+/** the shortest a wait is logged from (ms) */
+const NOTED_FROM = 400;
+
+/**
+ * Resolves once no pipeline is compiling, or after `most` ms (a loading bar waits for what its place draws with),
+ * or once the loading screens' waits together have used their budget (`PIPELINES.waitLeft`): each waited up to
+ * 15 s, a boot's four 48 s in all on a desktop whose GPU's process was slow to compile, where the lobby shown with
+ * a thing or two a few frames late is the lesser harm. A long wait is logged with what it waited for.
+ */
+export async function pipelinesReady(most: number): Promise<void> {
+  const began = performance.now();
+  const until = began + Math.min(most, PIPELINES.waitLeft);
+  const { made, compiling } = PIPELINES;
+  await new Promise<void>((done) => {
     const look = (): void => {
       if (PIPELINES.compiling === 0 || performance.now() >= until) done();
       else setTimeout(look, 30);
     };
     look();
   });
+  const waited = performance.now() - began;
+  PIPELINES.waitLeft = Math.max(0, PIPELINES.waitLeft - waited);
+  if (waited < NOTED_FROM) return;
+  const left = PIPELINES.compiling;
+  const note: [number, string] = [Math.round(began), `(pipelines: ${made} made, ${compiling} compiling; waited `
+    + `${Math.round(waited)} ms, ${left} left)`];
+  PIPELINES.notes.push(note);
+  // (and how busy the GPU's process is after it, said when it answers: never waited for)
+  void gpuAnswerMs().then((ms) => { note[1] = note[1].replace(/\)$/, `; the GPU answered in ${Math.round(ms)} ms)`); });
 }

@@ -46,7 +46,7 @@ test('fills in the defaults', () => {
     links: false,
     before: null,
     read: null,
-    coldReturn: false,
+    coldReturn: false, restart: false, covered: false,
     warmBehind: false,
     changeHero: false,
     returning: false,

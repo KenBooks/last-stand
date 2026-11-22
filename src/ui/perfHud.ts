@@ -106,6 +106,8 @@ function watchBootFrames(): void {
   void loadingLeft.then(() => {
     bootLeft = performance.now();
     RUST.loaded = true;
+    // (the boot's budget of waits for pipelines is the loading screen's: a later bar's waits are each its own)
+    RUST.pipelines.waitLeft = Infinity;
   });
   new PerformanceObserver((list) => {
     for (const e of list.getEntries()) {
