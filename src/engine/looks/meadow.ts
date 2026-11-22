@@ -86,6 +86,10 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   let root = mix(first, tuft_at, mix(0.1, 0.45, blade_hash(tuft_cell + 3.1)));
   let away = length(root - focus);
   let in_band = smoothstep(band.x, band.y, away) * (1.0 - smoothstep(band.z, band.w, away));
+  // (a blade out of its ring's band is drawn as nothing at its root: left here, ahead of the mask's reads and its
+  // shape, which every vertex of every blade of a listed tile paid for)
+  (*v).color = vec4f(1.0);
+  if (in_band <= 0.0) { (*v).position = vec3f(root.x, 0.0, root.y); return; }
   let grass = meadow_at(root, span);
   let mask_uv = root / (span * 2.0) + 0.5;
   let grows = mask_at(mask_uv);
@@ -95,6 +99,8 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   let share = fract(h.z * 3.17) * (1.0 - grows_over);
   let ring_on = mix(smoothstep(share, share + grows_over, in_band), step(0.001, in_band), by_strand);
   let shown = smoothstep(h.z * 0.85, h.z * 0.85 + 0.15, chance) * ring_on;
+  // (and one the mask or its ring's hand-over drops: the same)
+  if (shown <= 0.0) { (*v).position = vec3f(root.x, 0.0, root.y); return; }
   let height = shown * mix(0.2, 0.46, h.w) * mix(0.55, 1.0, grass) * mix(0.75, 1.25, tuft) * mix(0.8, 1.15, patchy);
   let width = shown * cell * wider * m.c[4].z * mix(0.8, 1.25, fract(h.z * 7.13));
   let turn = h.w * 6.2832 + h.x * 3.0;

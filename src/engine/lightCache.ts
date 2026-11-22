@@ -203,6 +203,13 @@ export class LightCache {
     }
     this.told = { open, sheltered };
     this.core.engine.set_light_strength(open, sheltered, apartOf ? apart / apartOf : 0);
+    // (and where they reach: with the lamps out, by day, the volume is read within those reaches alone)
+    const reaches: number[] = [];
+    for (const light of apartLights) {
+      const { x, y, z } = this.placeOf(light);
+      reaches.push(x, y, z, light.distance);
+    }
+    this.core.engine.set_lights_apart(new Float32Array(reaches));
     if (furthest) {
       const { x, y, z } = this.placeOf(furthest);
       this.core.engine.set_light_of_its_own(x, y, z, furthest.distance, now(furthest));
