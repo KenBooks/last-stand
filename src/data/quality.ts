@@ -132,4 +132,8 @@ export const QUALITY = Object.fromEntries(QUALITY_ORDER.map((level) => [level, {
 export const AUTO_QUALITY = {
   minFps: 50, window: 4, quickWindow: 1, farBelow: 0.5, settle: 2, longestFrame: 1, gpuShare: 0.8, gpuFrames: 8,
   retry: 30,
+  // (the frame rate Auto holds: this share of the best the device shows, which is the lowest level's, read over
+  // `probeWindows` quick windows there once every `probeDays` days and whenever Auto is at the bottom; 0 windows:
+  // never read, `minFps` the target as it was)
+  holdBest: 0.9, probeWindows: 2, probeDays: 7,
 };

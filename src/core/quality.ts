@@ -1,5 +1,10 @@
 // Graphics quality: the player's setting (auto / high / medium / low / very low, cookie) and the
-// level in effect. Auto steps down while frame rate stays low, judging play alone (no loading frame) and, where its
+// level in effect. Auto holds the best frame rate the device shows on its screen: what the lowest level reaches,
+// read there (`probe`), and nine tenths of it the target (from the owner: "auto on any device should always try
+// to reach max FPS on any screen", "but we should try to make it run in a higher quality setting, still.... if we
+// can"). Held to 50 frames a second, a 120 Hz phone that ran 109 to 117 at its lower levels was raised to Medium
+// and left at 62, then 28 as it warmed (trace YJ7A-A409). Auto steps down while frame rate stays under the target,
+// judging play alone (no loading frame) and, where its
 // GPU's time a frame is known, only a GPU too slow for the target. Each boot or fresh Auto choice,
 // once the game is shown, it tries higher levels in turn, each kept once it holds its frame rate for a
 // window, else left for the settled one at its first quick window under the target and put off
@@ -16,6 +21,7 @@ import { setParticleShare } from '../fx/particles';
 import { setFlameSteps } from '../world/fire';
 
 import { readCookie, writeCookie } from './cookies';
+import { framesUncapped } from './frameLoop';
 import { setHeroDetail } from '../entities/models/armor';
 import { setRubbleShadows } from '../fx/rubble';
 import { setReliefSteps } from './parallax';
@@ -73,6 +79,90 @@ let retryIn = Infinity;
 /** the levels already tried again this visit: each a step down left is tried once */
 const retried = new Set<QualityLevel>();
 
+// the best frame rate the device has shown at the lowest level and the day it was read, `fps/day`
+const BEST_COOKIE = 'last-stand-quality-best';
+/** the best frames a second the lowest level has shown (0: not read yet), and the day it was read (days since
+ *  1970) */
+let best = 0, bestDay = 0;
+/** the level Auto left to read the lowest one's frame rate, while it reads it; the windows read and their best */
+let probeFrom: QualityLevel | null = null;
+let probeWindows = 0, probeBest = 0;
+/** the windows in a row at the bottom, outside a probe, and the best of them: the device's best as it is now */
+let bottomWindows = 0, bottomBest = 0;
+/** how many windows at the bottom, all under the target, say the screen shows fewer frames than it did */
+const BOTTOM_SAYS = 5;
+
+const today = (): number => Math.floor(Date.now() / 86_400_000);
+
+/** The frames a second Auto holds: `holdBest` of the best the lowest level has shown, `minFps` where that isn't
+ *  known, is never read (`probeWindows` 0) or frames are uncapped (they come as fast as they're drawn, and the
+ *  screen's own rate isn't theirs). Exported for a harness (`lab auto`) and the report. */
+export function autoTarget(): number {
+  if (!(best > 0) || AUTO_QUALITY.probeWindows <= 0 || framesUncapped()) return AUTO_QUALITY.minFps;
+  return AUTO_QUALITY.holdBest * best;
+}
+
+function readBest(): void {
+  const [fps, day] = (readCookie(BEST_COOKIE) ?? '').split('/').map(Number);
+  best = fps > 0 ? fps : 0;
+  bestDay = day > 0 ? day : 0;
+}
+
+function keepBest(fps: number): void {
+  best = fps;
+  bestDay = today();
+  writeCookie(BEST_COOKIE, `${fps.toFixed(1)}/${bestDay}`);
+}
+
+/** Whether the lowest level's frame rate is to be read now: never read, or `probeDays` ago (a phone's battery
+ *  saver, a window moved to another screen). */
+const probeDue = (): boolean => AUTO_QUALITY.probeWindows > 0 && !framesUncapped()
+  && (!(best > 0) || today() - bestDay >= AUTO_QUALITY.probeDays);
+
+/** The lowest level gone to for `probeWindows` quick windows, to read the best the device shows. */
+function probe(): string {
+  probeFrom = level;
+  probeWindows = probeBest = 0;
+  const bottom = QUALITY_ORDER[QUALITY_ORDER.length - 1];
+  if (level !== bottom) apply(bottom);
+  else restart();
+  return `reading ${bottom}`;
+}
+
+/** A frame of a probe: once its windows are read, their best kept and the level it left gone back to. */
+function probing(dt: number): string | null {
+  quick.push(dt);
+  quickTime += dt;
+  if (quickTime < AUTO_QUALITY.quickWindow) return null;
+  probeBest = Math.max(probeBest, 1 / median(quick));
+  quick.length = 0;
+  quickTime = 0;
+  if (++probeWindows < AUTO_QUALITY.probeWindows) return null;
+  keepBest(probeBest);
+  const back = probeFrom!;
+  probeFrom = null;
+  if (back !== level) apply(back);
+  return `best ${probeBest.toFixed(0)}`;
+}
+
+/** A frame at the bottom, outside a probe: each window's frame rate read, the best raised by one over it, and
+ *  lowered to what `BOTTOM_SAYS` windows in a row show at the most where all are under the target (the screen
+ *  shows fewer frames than when it was read: nothing lower to go to, and no level above could be kept). */
+function atBottomNow(dt: number): void {
+  if (AUTO_QUALITY.probeWindows <= 0 || framesUncapped() || dt > HITCH) return;
+  quick.push(dt);
+  quickTime += dt;
+  if (quickTime < AUTO_QUALITY.quickWindow) return;
+  const fps = 1 / median(quick);
+  quick.length = 0;
+  quickTime = 0;
+  bottomWindows++;
+  bottomBest = Math.max(bottomBest, fps);
+  if (fps > best) keepBest(fps);
+  else if (bottomWindows >= BOTTOM_SAYS && bottomBest < autoTarget()) keepBest(bottomBest);
+  if (bottomWindows >= BOTTOM_SAYS) bottomWindows = bottomBest = 0;
+}
+
 /** The window started again, both paths. */
 function restart(): void {
   frames = time = 0;
@@ -96,7 +186,7 @@ export function noteGpuFrame(ms: number): void {
  *  then a slow window was the CPU's or the loading's, and no lower level helps. None known: no say. */
 function gpuHeld(times: number[]): boolean {
   if (times.length < AUTO_QUALITY.gpuFrames) return false;
-  return median([...times]) <= AUTO_QUALITY.gpuShare * 1000 / AUTO_QUALITY.minFps;
+  return median([...times]) <= AUTO_QUALITY.gpuShare * 1000 / autoTarget();
 }
 
 const isLevel = (v: string | null): v is QualityLevel => v !== null && v in QUALITY;
@@ -177,6 +267,9 @@ export function initQuality(): void {
  */
 export function bootAuto(settled: QualityLevel): void {
   trialFrom = null;
+  probeFrom = null;
+  bottomWindows = bottomBest = 0;
+  readBest();
   retryIn = Infinity;
   retried.clear();
   aboveNext = settled !== QUALITY_ORDER[0] && trialDue();
@@ -219,6 +312,8 @@ export const qualityBudget = (): number => budget;
 export function setQuality(s: QualitySetting): void {
   setting = s;
   trialFrom = null;
+  probeFrom = null;
+  readBest();
   retryIn = Infinity;
   retried.clear();
   aboveNext = false;
@@ -315,7 +410,7 @@ export const loadingFrame = (s: { warming: boolean; readying: boolean; hall: boo
 /** Feed the real (unclamped) frame delta each frame while the game is running. Returns Auto's step, if it took one
  *  (`low`), for the performance trace to mark. */
 export function sampleQuality(dt: number): string | null {
-  if (setting !== 'auto' || (atBottom() && !aboveNext && retryIn === Infinity)) return null;
+  if (setting !== 'auto') return null;
   if (dt > AUTO_QUALITY.longestFrame) return null;   // tab switch, breakpoint: not a performance signal
   if (settle > 0) {
     // let a level change take effect first (the GPU's frames still coming back drawn at the level before)
@@ -327,9 +422,16 @@ export function sampleQuality(dt: number): string | null {
     retryIn = Infinity;
     aboveNext = true;
   }
+  // (the best the device shows read first: the target every level is held to)
+  if (probeFrom) return probing(dt);
+  if (!trialFrom && probeDue()) return probe();
   if (aboveNext) return tryAbove();
-  // (at the bottom, only waiting to try the level above again: nothing lower to judge)
-  if (atBottom() && !trialFrom) return null;
+  // (at the bottom: nothing lower to judge; its frame rate is the best there is)
+  if (atBottom() && !trialFrom) {
+    atBottomNow(dt);
+    return null;
+  }
+  bottomWindows = bottomBest = 0;
   quick.push(dt);
   quickTime += dt;
   // (far below the target, judged by the window's middle frame, which a hitch doesn't move: to Low at once; a device
@@ -340,8 +442,8 @@ export function sampleQuality(dt: number): string | null {
     const gpuFine = gpuHeld(gpuQuick);
     // (the level above, tried, is left at the first window under the target: judged by the 4 s path, a phone at 26
     // to 47 frames a second there stayed 6 s a boot, trace 9JA7-BSSS)
-    if (trialFrom && fps < AUTO_QUALITY.minFps && !gpuFine) return step(false);
-    if (fps < AUTO_QUALITY.minFps * AUTO_QUALITY.farBelow && !gpuFine) return step(true);
+    if (trialFrom && fps < autoTarget() && !gpuFine) return step(false);
+    if (fps < autoTarget() * AUTO_QUALITY.farBelow && !gpuFine) return step(true);
     quick.length = 0;
     quickTime = 0;
     gpuQuick.length = 0;
@@ -353,7 +455,7 @@ export function sampleQuality(dt: number): string | null {
   const fps = frames / time;
   const gpuFine = gpuHeld(gpuWindow);
   restart();
-  if (fps < AUTO_QUALITY.minFps && !gpuFine) return step(false);
+  if (fps < autoTarget() && !gpuFine) return step(false);
   return trialFrom ? keepTrial() : null;
 }
 
@@ -408,7 +510,7 @@ function stepDown(): void {
 
 /** Whether Auto is trying the level above the settled one: its frames are Auto's trial, not the device's pace at its
  *  level, and the performance recorder leaves them out of play (src/perf/recorder.ts). */
-export const autoTrying = (): boolean => trialFrom !== null;
+export const autoTrying = (): boolean => trialFrom !== null || probeFrom !== null;
 
 /** Whether Auto has stepped as far down as it goes (a harness's: `lab auto`). */
 export const autoAtBottom = (): boolean => atBottom();
