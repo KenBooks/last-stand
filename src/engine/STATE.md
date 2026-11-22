@@ -263,3 +263,10 @@ Read, not fixed:
   (`lab rust --village --view top --boot verylow --level low,verylow`: 0.71 ms before, 0.72 after). Stepped
   through with no frame drawn between (the lab's own stand), the frame after read 1.25 to 1.49 ms in 4 runs of 7,
   its picture the same: not explained, and not what play does.
+- [x] The overlays' canvas in one pass, on the phone (TD5N-H10K): three's passes over the engine's frame 1.5 ms
+  (10.9 before), 81 to 87 frames a second moving from above at Very low.
+- [ ] "still lags after move" (the same recording): four frames of 92 to 275 ms in a second as he set off, the other
+  heroes readied as he neared their hall (a build of 143 ms in one task, their meshes and maps handed over at
+  once). Asked for as the boot ends now, a return's alone (`main.ts`), no boot time added here. Not measured on the
+  phone. Left if a frame there is still long: a hero's build is one task, and what's handed to the engine in a
+  frame has no budget.

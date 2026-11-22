@@ -5,6 +5,7 @@ import { bossReady, everyBossWarm, readyEveryBoss, readyNextBoss } from './game/
 import { G } from './state';
 import { keepBootPaceHidden } from './core/hiddenBoot';
 import { pipelinesAtOnceFromNow, setPlainLitOnWebGPU, WEBGPU } from './core/webgpu';
+import { RUNNING } from './core/rendererChoice';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
 import { CAMERA, LOBBY, COOP } from './data/balance';
 import { HALL, START_SPOTS, TERRACE, YARD_DUMMIES, biomeOfHour, inHall, type VillageObject } from './data/village';
@@ -439,6 +440,14 @@ async function boot() {
     await otherHeroesSkillsAhead();
     await Promise.race([fightWarmed, new Promise((done) => setTimeout(done, FIGHT_UNDER_LOADING))]);
   }
+  // (under the Rust engine the other heroes begun here too, on a return: nothing of three's is compiled for them
+  // there, a hero's warm-up is his build and his meshes and maps handed to the engine. Readied as he neared their
+  // hall, a phone's frames as he set off across the square were 92 to 275 ms, four in a second: one task of 143 ms,
+  // and the GPU's process taking all they have at once, a report from play, TD5N-H10K. Asked for and not waited
+  // for: they're built beside the boot's last steps and behind the loading screen as it leaves, where waited for
+  // under it a return's boot was 1.4 s longer here. A first visit opens on the hall, and readies them as its
+  // screen leaves.)
+  if (RUNNING.rust && VILLAGE && !firstVisit) want('heroes');
   if (VILLAGE) {
     await loadingStep('Setting the square', 0.78);
     stillLoading(true);
