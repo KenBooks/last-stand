@@ -21,7 +21,9 @@ import {
   chooseIfAsked, equipmentShown, fightWarm, loaded, menuStowed, recordFromNow, seededProfile, seedStash, startRecording,
   stopRecording, useStyle,
 } from './page.mjs';
-import { bootRoundsText, bootText, measureText, roundsText, summaryText } from './report.mjs';
+import {
+  bootRoundsText, bootText, gpuWaitProblems, measureText, roundsText, summaryText,
+} from './report.mjs';
 import { pickHero, SCENARIOS } from './scenarios.mjs';
 import { serveTrees, THIS_TREE } from './serve.mjs';
 import { sourcesOf } from './sourceMap.mjs';
@@ -384,10 +386,15 @@ async function main() {
   const summaries = booting
     ? [bootRoundsText(measures)]
     : [summaryText(measures), ...(options.rounds > 1 ? [roundsText(measures)] : [])];
-  const text = [...sections, ...summaries].join('\n\n');
+  // (a boot's steps over the budget of the main thread's waits on the GPU's process fail the run)
+  const problems = booting ? measures.flatMap((measure) => gpuWaitProblems(measure, options.mostGpuWait)) : [];
+  const failed = problems.map((problem) => `FAILED: ${problem}`);
+  const text = [...sections, ...summaries, ...failed].join('\n\n');
   writeFileSync(join(OUT, 'report.txt'), `${text}\n`);
   if (measures.length > 1) console.log(`\n${summaries.join('\n\n')}`);
+  if (failed.length) console.log(`\n${failed.join('\n')}`);
   console.log(`\n(written to ${join(OUT, 'report.txt')})`);
+  if (failed.length) process.exitCode = 1;
 }
 
 await main();

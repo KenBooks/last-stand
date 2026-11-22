@@ -251,8 +251,11 @@ function withArtsShadow(data: Pixels, w: number, h: number, art: HTMLElement | n
   const zoom = art.offsetWidth ? art.getBoundingClientRect().width / art.offsetWidth : 1;
   const scale = dpr * zoom;
   const [, colour, dx, dy, blur] = shadow;
+  // (both canvases kept in the page's own memory, `willReadFrequently`: with the letters' on the GPU, drawing it into
+  // the other read it back from there, the page's thread waiting on the GPU's process for it, 430 ms of a return's
+  // boot behind the lobby's compiles; `npm run stalls -- --scenario boot` lists such waits by step)
   const letters = new OffscreenCanvas(w, h);
-  letters.getContext('2d')!.putImageData(new ImageData(data, w, h), 0, 0);
+  letters.getContext('2d', { willReadFrequently: true })!.putImageData(new ImageData(data, w, h), 0, 0);
   const shaded = new OffscreenCanvas(w, h);
   const ctx = shaded.getContext('2d', { willReadFrequently: true })!;
   ctx.filter = `drop-shadow(${colour} ${+dx * scale}px ${+dy * scale}px ${+blur * scale}px)`;

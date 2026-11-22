@@ -105,7 +105,7 @@ export function stopRecording(mark) {
  * `blinkExit` times the loading screen hidden for a frame as it leaves, every `blinkFrames` frames from the reveal
  * while it's on the page, each blink's time kept (`blinks`): the canary of the film's flickers.
  */
-export function bootRecording({ mark, stallBlow, stallLobby, blinkExit, blinkFrames }) {
+export function bootRecording({ mark, stallBlow, stallLobby, blinkExit, blinkFrames, plantGpuWait }) {
   const record = { start: performance.now(), frames: [], phases: [{ name: 'the document fetched', at: 0 }] };
   // (the page's clock on the wall's, ms: the film's frames are timed by the wall's, `film.mjs`)
   record.origin = performance.timeOrigin;
@@ -149,9 +149,20 @@ export function bootRecording({ mark, stallBlow, stallLobby, blinkExit, blinkFra
   };
   window.__stalls = record;
   console.timeStamp(mark);
+  // (the canary of the budget of waits on the GPU's process, `--plant-gpu-wait`: a pixel read back from a context
+  // of its own over and over, each read a round trip the main thread waits out)
+  const waitOnGpu = (ms) => {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    if (!gl) return;
+    const pixel = new Uint8Array(4);
+    const until = performance.now() + ms;
+    while (performance.now() < until) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+  };
   // (each once: a phase pushed by a step of the run's own, the hero chosen, isn't taken back by the loading screen's)
   const phase = (name) => {
-    if (!record.phases.some((each) => each.name === name)) record.phases.push({ name, at: performance.now() });
+    if (record.phases.some((each) => each.name === name)) return;
+    record.phases.push({ name, at: performance.now() });
+    if (plantGpuWait && name === 'Forging the arena') waitOnGpu(plantGpuWait);
   };
   let last = record.start;
   const tick = (now) => {

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { analyzeBoot, REVEALED, SLOW_LAUNCHES } from '../analyze.mjs';
 import { bootRecording, loaded, stopBootRecording } from '../page.mjs';
-import { bootRoundsText, bootText } from '../report.mjs';
+import { bootRoundsText, bootText, gpuWaitProblems } from '../report.mjs';
 
 const MARK = 'stalls:boot';
 /** the page's renderer and one of its workers */
@@ -373,6 +373,45 @@ test('lists the GPU process\'s main thread\'s work in each step apart', () => {
   assert.deepEqual(findings.steps[1].gpuMain, []);
   const text = bootText({ name: 'x', notes: [], findings });
   assert.match(text, /\n {4}the GPU process's main thread's, ms: 120\.0 MainLinkLoadEvent::wait on GPU Process /);
+});
+
+test('lists the main thread\'s waits on the GPU\'s process in each step, and holds the game\'s steps to a budget', () => {
+  const other = { pid: 9, tid: 92 };
+  const events = [
+    ...trace(),
+    // (the loading screen's context made, before the game's first step: listed, not held to the budget)
+    workAt('CommandBufferProxyImpl::WaitForGetOffset', PAGE, 130, 500),
+    // (in the arena's step: a finish and the wait inside it, counted once; a short read; another thread's, never)
+    workAt('CommandBufferHelper::Finish', PAGE, 350, 300),
+    workAt('CommandBufferProxyImpl::WaitForGetOffset', PAGE, 360, 280),
+    workAt('CommandBufferProxyImpl::WaitForToken', PAGE, 700, 150),
+    workAt('CommandBufferProxyImpl::WaitForGetOffset', other, 400, 900),
+  ];
+  const findings = analyzeBoot(record(), events, MARK);
+  const [, loading, arena] = findings.steps;
+  assert.equal(loading.gpuWaits.count, 1);
+  assert.equal(arena.gpuWaits.count, 2);
+  assert.equal(arena.gpuWaits.ms, 450);
+  assert.deepEqual(arena.gpuWaits.longest.map((wait) => [wait.task, wait.at, wait.ms]), [
+    ['CommandBufferHelper::Finish', 350, 300],
+    ['CommandBufferProxyImpl::WaitForToken', 700, 150],
+  ]);
+  const measure = { name: 'x', notes: [], findings };
+  const text = bootText(measure);
+  assert.match(text, /the main thread waited on the GPU's process 2 times, 450 ms in all; the longest: 300 ms at /);
+  assert.match(text, /1 times, 500 ms in all \(before the first step of the game: not held to the budget\)/);
+  assert.deepEqual(gpuWaitProblems(measure, 400), [
+    'x: Forging the arena: the main thread waited on the GPU\'s process 450 ms (most 400 ms)',
+  ]);
+  assert.deepEqual(gpuWaitProblems(measure, 450), []);
+});
+
+test('a boot with no wait on the GPU\'s process says nothing of them', () => {
+  const findings = analyzeBoot(record(), trace(), MARK);
+  assert.equal(findings.steps[2].gpuWaits.count, 0);
+  const measure = { name: 'x', notes: [], findings };
+  assert.doesNotMatch(bootText(measure), /waited on the GPU/);
+  assert.deepEqual(gpuWaitProblems(measure, 0), []);
 });
 
 test('lists no maps for a build that times none', () => {

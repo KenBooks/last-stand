@@ -1,6 +1,7 @@
 // The stalls' report (tools/stalls): each measure's frames, the Skia programs built and every long stall with what
 // was built in it and what the page changed just before, then the measures side by side.
 import { GPU_STEP_MS, LISTED_MS, STALL_MS } from './analyze.mjs';
+import { BEFORE_THE_GAME, gpuWaitsOver } from './gpuWaits.mjs';
 import { FIT_MOST_PX } from './windFit.mjs';
 
 const ms = (value) => `${value.toFixed(0)} ms`;
@@ -290,6 +291,7 @@ function bootStepLines(step, { links = false } = {}) {
   ];
   if (step.work.length) lines.push(workLine('its work', step.work));
   if (step.gpuMain?.length) lines.push(workLine('the GPU process\'s main thread\'s', step.gpuMain));
+  if (step.gpuWaits?.count) lines.push(gpuWaitsLine(step));
   if (step.gpuCompiles) lines.push(gpuCompilesLine(step.gpuCompiles));
   if (step.dawn) lines.push(dawnLine(step.dawn));
   if (step.builds) lines.push(...buildsLines(step.builds));
@@ -297,6 +299,29 @@ function bootStepLines(step, { links = false } = {}) {
   if (step.js?.own.length) lines.push(jsLine('its JS, each function\'s own time', step.js.own));
   if (step.js?.within.length) lines.push(jsLine('and with what it calls', step.js.within));
   return lines;
+}
+
+/** A boot step's waits of the main thread on the GPU's process (`gpuWaits.mjs`): how many, their time in all, and
+ *  the longest, each with when it began and the function that waited (with `--js`). */
+function gpuWaitsLine(step) {
+  const { count, ms: all, longest } = step.gpuWaits;
+  const each = longest.map((wait) => {
+    const where = wait.waitedIn.length ? ` in ${wait.waitedIn.join(' < ')}` : '';
+    return `${ms(wait.ms)} at ${bootSeconds(wait.at)} (${wait.task.split('::').pop()}${where})`;
+  });
+  const early = BEFORE_THE_GAME.includes(step.name);
+  const exempt = early ? ' (before the first step of the game: not held to the budget)' : '';
+  return `    the main thread waited on the GPU's process ${count} times, ${ms(all)} in all${exempt}; `
+    + `the longest: ${each.join('; ')}`;
+}
+
+/** A boot's steps over the budget of the main thread's waits on the GPU's process (`mostMs`), each as a problem's
+ *  line; none within it. */
+export function gpuWaitProblems(measure, mostMs) {
+  return gpuWaitsOver(measure.findings.steps, mostMs).map((step) => {
+    return `${measure.name}: ${step.name}: the main thread waited on the GPU's process ${ms(step.gpuWaits.ms)} `
+      + `(most ${ms(mostMs)})`;
+  });
 }
 
 /** The maps the game's workers made in a boot: how many (and how many read back from a visit before), when, their
