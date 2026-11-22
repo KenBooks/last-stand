@@ -140,3 +140,48 @@ The inventory of what three showed that the engine didn't:
 - [ ] Seen and left: the hall's porch ceiling lit warmer than three's; High's tufts a little paler than WebGL's; the
   campfire's bloom smaller than three's; a clear coat's and a sheen's share of the surroundings is a guess, not
   three's own.
+
+## 2026-11-22, late: the slow loads, Very low, the hall, and what was set beside WebGL
+
+Fixed, each with its measure:
+
+- [x] The 44 and 48 s loads on the 4070 Ti (80NM-443E, BM6R-CTRB): the page loading under another window. A
+  browser gives a hidden page no frames and its timers a second apart, and the boot waits on both between its
+  steps. `core/hiddenBoot.ts`: until the loading screen has left, a worker stands by every frame and short timer
+  (`?bootPace=0`: the boot as it was). `npm run stalls -- --scenario boot --covered`: 23.4 s a first visit and
+  26.3 a return, to 8.9 and 7.8; uncovered 9.5 and 7.8 as before. No cold cache reproduced it (`--variants
+  newShaders`, `--restart`, `--headed`: 7 to 14 s each). The game's shared code, every renderer's.
+- [x] A slow boot's report says what it waited on: the loading screens' waits for pipelines among the boot's
+  steps (`PIPELINES.notes`), how long the GPU's process took to answer, the engine's device. Those waits share
+  12 s in all (they were 15 s each).
+- [x] Very low's grass (from play: "why I see different grass on very low?"): thinned by the root of the level's
+  spread. A close view on a phone 181k triangles to 338k (Medium 766k).
+- [x] The hall of heroes too dark on the phone: the plain levels had no highlight and read no roughness. Bulwark
+  gives the baked light a plain highlight there (`lit_plainly`); the sky's share under the roof 0.9, set against
+  WebGL's frame. A hall's frame's mean of 255: 42/34/28 against WebGL's 43/35/30 at High, 38/32/27 against
+  42/34/29 at Very low (its floor was 1.3, WebGL's 13).
+- [x] The thinned roof a milky band over the hall's floor from above: what blends keeps the cube of its share.
+- [x] Rough iron black out of every light's reach: a metal mirrors the sky at any roughness.
+- [x] Small still things cast the sun's shadow by the level (`minCasterRadius`), not at every level.
+- [x] The sun's shadow on a phone, 1.8 ms of 15.9 (6CP6-4XFR): the whole still map was copied each frame something
+  moved. Put back where the movers were alone (Bulwark `gpu/sun.rs`). Not yet read on the phone.
+- [x] Set beside WebGL's frame and matching (`lab rust ... --webgl`): a house's inside over the shoulder and from
+  above, both biomes' bosses (`--boss`), fallen foes (`--foes 5 --dying 30`), the hero selection screen
+  (`lab ui --states heroes --renderer rust`), an armoured hero.
+
+Open:
+
+- [ ] The hall's column bands and its torches' cups are not drawn from above (drawn over the shoulder; WebGL
+  draws them, three's WebGPU thinned). Not the thinning (the iron taken out of its list), not the depth drawn
+  first (`rust.depthFirst=0`), not a hidden object (`lab rustcheck` counts none). The columns are a blended kind
+  (`hallColumn`) whose depth the game draws by a twin that writes no colour, which the engine takes for a
+  caster alone: the next thing to try.
+- [ ] The phone in the hall at Very low: 24 ms of GPU from play's overlay (63 fps). Needs its Profile this spot
+  there; nothing of it is measured.
+- [ ] The phone's frame at Medium (6CP6-4XFR): the grass 2.3 ms and the bloom 1.2 untouched.
+- [ ] The village's grass is lighter and yellower than WebGL's from above; the crypt's cobbles lack WebGL's
+  moonlit gleam; a house's shadows under its furniture are softer.
+- [ ] Not set beside WebGL: co-op's ghosts and colours, the fog through a doorway.
+- [ ] Bulwark's `hidden` demo failed one run in three under a shared GPU by under ten pixels: given a tolerance,
+  its cause not found.
+- [ ] HDR screens: not planned.
