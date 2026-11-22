@@ -8,7 +8,7 @@ import { TUNE } from './globals';
 import { NEAR_GLOW } from '../core/materials';
 import { isDualQuaternionSkinned } from '../entities/models/dualQuaternion';
 import { kitLookOf } from './looks/kit';
-import type { Maps } from './maps';
+import { mapStamp, type Maps } from './maps';
 import type { SeeKinds } from './seeKinds';
 
 /** a material key's bit: its shader leaves its vertices where they are, so it casts (`CASTS_AS_PLACED` in plan.rs) */
@@ -24,6 +24,9 @@ interface MaterialEntry {
   /** its own shader's numbers as last sent, and its volume */
   custom?: Float32Array;
   volume?: number;
+  /** its look's own maps as last sent, and its every map's stamp added up then (`mapsStamp`) */
+  extra?: Uint32Array;
+  mapsAt?: number;
 }
 
 export type AnyMaterial = THREE.Material & Partial<{
@@ -170,11 +173,21 @@ export class Materials {
     let entry = this.materials.get(material);
     if (entry && entry.seen === frame) return entry.id;
     const look = lookOf(material) ?? kitLookOf(material);
-    if (TUNE.still && look?.moved && entry?.id && !look.moved()) {
+    // (not once a map of its own has changed, by its version or its picture's size: it's handed over again and its
+    // old one dropped, and a look that stood still was never asked its maps again and kept drawing with it, the village's ground and its grass white with nothing to read; from play, "village loaded
+    // with white ground", "same problem on desktop")
+    const stamp = look ? mapsStamp(material, look) : 0;
+    const mapsKept = entry?.mapsAt === stamp || !TUNE.looksByMaps;
+    if (TUNE.still && look?.moved && entry?.id && mapsKept && !look.moved()) {
       entry.seen = frame;
       return entry.id;
     }
-    if (look) return look.shared ? this.sharedLookId(material, look, entry) : this.lookId(material, look, entry);
+    if (look) {
+      const id = look.shared ? this.sharedLookId(material, look, entry) : this.lookId(material, look, entry);
+      const now = this.materials.get(material);
+      if (now) now.mapsAt = stamp;
+      return id;
+    }
     const key = this.describe(material);
     if (key < 0) {
       if (!entry) {
@@ -322,23 +335,33 @@ export class Materials {
     numbers.fill(0);
     look.numbers(numbers);
     const volume = this.volumeId(look.volume?.());
-    // (a volume made anew, a loop baked since: the material made again round it)
-    if (entry && entry.volume !== volume) {
-      core.engine.drop_material(entry.id);
-      core.held.materials--;
-      entry = undefined;
-    }
-    if (!entry) {
-      const extra = this.scratchExtra;
+    const extra = this.scratchExtra;
+    // (its own maps asked after every frame, not as it's first met alone: the game hands a map out blank while a
+    // worker makes it, and a look met before its maps had come drew with the blanks for good, the village's ground,
+    // its paving and its grass white; from play, "village loaded with white ground", "same problem on desktop")
+    const held0 = entry;
+    const asked = !held0 || !!TUNE.looksByMaps;
+    if (asked) {
       extra[0] = held.textureId(look.maps?.[0]);
       extra[1] = held.textureId(look.maps?.[1]);
       extra[2] = volume;
       extra[3] = held.textureId(look.maps?.[2]);
       extra[4] = held.textureId(look.maps?.[3]);
+    }
+    // (a volume made anew, a loop baked since, or a map of its own handed over under another id: the material made
+    // again round it)
+    const sameMaps = !held0 || !asked
+      || (maps.every((map, slot) => map === held0.maps[slot]) && extra.every((map, slot) => map === held0.extra?.[slot]));
+    if (entry && (entry.volume !== volume || !sameMaps)) {
+      core.engine.drop_material(entry.id);
+      core.held.materials--;
+      entry = undefined;
+    }
+    if (!entry) {
       const id = core.engine.add_custom_material(this.shaderId(look), p, maps, key, numbers, extra);
       entry = {
         id, params: p.slice(), maps: maps.slice(), key, seen: core.frame, changes: 0, own: true, custom: numbers.slice(),
-        volume,
+        volume, extra: extra.slice(),
       };
       this.materials.set(material, entry);
       core.held.materials++;
@@ -358,4 +381,14 @@ export class Materials {
     }
     return kept.id;
   }
+}
+
+/** A material's every map's stamp added up (`mapStamp`), its look's own maps with them: moved when any of them
+ *  would be handed to the engine again. */
+function mapsStamp(material: AnyMaterial, look: RustLook): number {
+  let sum = mapStamp(material.map) + mapStamp(material.alphaMap) + mapStamp(material.normalMap) + mapStamp(material.bumpMap)
+    + mapStamp(material.roughnessMap) + mapStamp(material.metalnessMap) + mapStamp(material.emissiveMap);
+  const own = look.maps;
+  if (own) for (let slot = 0; slot < own.length; slot++) sum += mapStamp(own[slot]);
+  return sum;
 }

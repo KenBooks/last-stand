@@ -4,7 +4,7 @@
 // lit as the square at noon, its roof black from above, a dark rectangle on a battleground's floor, a skill's own
 // effects not drawn, and the engine stopped for good by a canvas nothing had drawn on.
 import { plantedFaults } from './rustFaults';
-import { blankCanvas, mapPaintedLate } from './rustMaps';
+import { blankCanvas, lookTakesItsMapAgain, mapPaintedLate } from './rustMaps';
 import { type Checked, failed, passed } from './rustPixels';
 import { frames, THREE_DRAWS_MOST } from './rustFrames';
 import { hallFromAbove, house, lampShadows, lightCache, shelter, sunShadowInTurns } from './rustVillageChecks';
@@ -304,6 +304,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(await glowGoneInTheFog(lab));
       checks.push(await photoLookDrawn(lab));
       checks.push(await frameShotHoldsTheFrame(lab));
+      checks.push(await lookTakesItsMapAgain(lab, bridge));
       checks.push(await hallFromAbove(lab, bridge));
       checks.push(await solidAndCoarse(lab, bridge));
       checks.push(await flamesAtFewerPixels(lab, bridge));

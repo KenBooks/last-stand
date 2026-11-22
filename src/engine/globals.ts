@@ -56,6 +56,9 @@ export const TUNE = tunable('rust', {
   /** a map whose picture has changed its size since it was handed over is handed over again (0: the canary of
    *  `lab rustcheck`'s map painted late) */
   mapsBySize: 1,
+  /** a material with a look of its own is asked its own maps every frame (0: as it's first met alone, the canary
+   *  of `lab rustcheck`'s look whose map is painted late) */
+  looksByMaps: 1,
   /** what the camera stands inside (the ground, the sky) drawn after the rest of what's opaque (the engine's plan.rs) */
   nearFirst: 1,
   /** the point lights' shine: 0 leaves it out at every level (a profile's), as the lite levels do (`Grade.lite`) */

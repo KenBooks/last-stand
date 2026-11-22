@@ -13,6 +13,11 @@ interface TextureEntry { id: number; version: number; width: number }
  *  play, "village loaded with white ground"). A picture whose width has changed is handed over again. */
 const widthOf = (texture: THREE.Texture): number => (texture.image as { width?: number } | null)?.width ?? 0;
 
+/** A number that moves when `texture` would be handed over again (`Maps.textureId`): its version and its
+ *  picture's width; 0 for none. */
+export const mapStamp = (texture: THREE.Texture | null | undefined): number =>
+  (texture ? (texture.version + 1) * 8191 + widthOf(texture) : 0);
+
 export class Maps {
   private textures = new WeakMap<THREE.Texture, TextureEntry>();
   private cutOuts = new Map<string, number>();
