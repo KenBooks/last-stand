@@ -41,6 +41,8 @@ export const TUNE = tunable('rust', {
   /** the baked lamps hidden by what stands still (0: their light through every wall, a profile's) */
   cacheShadows: 1,
   bloom: 1,
+  /** the bloom's share of its level's on a dense screen (3 device pixels or more to a CSS one; 1: the level's own) */
+  bloomDense: 0.5,
   /** what asks for it drawn at a share of the scene's pixels (0: with the scene, a profile's) */
   lowRes: 1,
   /** the scene's depth drawn ahead of its shading: what's opaque shaded once a pixel (0: in one pass) */

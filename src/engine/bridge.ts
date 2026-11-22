@@ -274,6 +274,8 @@ export class Bridge {
   private armsNow = false;
   private bloom = true;
   private bloomShare = 1;
+  /** the share the engine was last told (the level's, by a dense screen's) */
+  private bloomSent = 1;
   /** whether the game left the sun's shadow out of the frame last drawn (a harness reads it) */
   shadowHeld = false;
   private shadowSize = 2048;
@@ -414,8 +416,11 @@ export class Bridge {
     this.shadowHeld = !!grade.shadowHeld;
     core.engine.hold_shadow(this.shadowHeld && TUNE.shadowTurns > 0);
     core.engine.set_depth_first(TUNE.depthFirst > 0 && !PIPELINES.depthRefused);
-    const share = grade.bloomShare ?? 1;
-    if (share !== this.bloomShare) core.engine.set_bloom_share(this.bloomShare = share);
+    // (on a dense screen, three device pixels or more to a CSS one, the bloom at half its level's share: a glow is
+    // a blur, and its first level was 1560 by 720 on a phone, 2.4 ms of its 18 ms frame at Medium, PSHZ-JAWP)
+    const share = grade.bloomShare ?? 1, dense = window.devicePixelRatio >= 3 ? TUNE.bloomDense : 1;
+    if (share * dense !== this.bloomSent) core.engine.set_bloom_share(this.bloomSent = share * dense);
+    this.bloomShare = share;
     this.particles.send();
     core.freshViews();
     const walked = perfClock.now();
