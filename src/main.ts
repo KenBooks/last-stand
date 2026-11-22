@@ -89,7 +89,9 @@ import { initPerfHud, readGpuAhead, perfBeginFrame, perfEndFrame, perfSplit, per
 import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
-import { compileTheBiome, compileTheLobby, queueHeroesBehind, warmLobby, warmTheRest } from './game/warmup';
+import {
+  compileTheBiome, compileTheLobby, otherHeroesSkillsAhead, queueHeroesBehind, warmLobby, warmTheRest,
+} from './game/warmup';
 import { hurry, isAllWarm, isReadying, isWarming, want, warmingNote, whenWarm } from './game/warm';
 import { initReadying, isJoining, joiningShare, layOutReadyingAhead, READYING, settleReadying, showJoining } from './ui/readying';
 import { hdrAllowedAtBoot, heroDetailAtBoot, holdQuality, initQuality, loadingFrame, plainLitAtBoot, sampleQuality } from './core/quality';
@@ -434,6 +436,7 @@ async function boot() {
   // screen, in long slices, it takes a moment on a return; what a first visit hasn't done by then goes on behind)
   if (WEBGPU) {
     await loadingStep('Readying the fight', 0.7);
+    await otherHeroesSkillsAhead();
     await Promise.race([fightWarmed, new Promise((done) => setTimeout(done, FIGHT_UNDER_LOADING))]);
   }
   if (VILLAGE) {

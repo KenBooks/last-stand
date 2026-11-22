@@ -9,6 +9,7 @@ import { NEAR_GLOW } from '../core/materials';
 import { isDualQuaternionSkinned } from '../entities/models/dualQuaternion';
 import { kitLookOf } from './looks/kit';
 import { mapStamp, type Maps } from './maps';
+import { PIPELINES } from './pipelinesAside';
 import type { SeeKinds } from './seeKinds';
 
 /** a material key's bit: its shader leaves its vertices where they are, so it casts (`CASTS_AS_PLACED` in plan.rs) */
@@ -231,6 +232,10 @@ export class Materials {
     let id = this.shaders.get(look.shader.name);
     if (id === undefined) {
       id = this.core.engine.add_shader(look.shader.hooks);
+      // (one first met once the loading screens are done with: its pipelines compile as the player plays)
+      if (PIPELINES.waitLeft === Infinity) {
+        PIPELINES.notes.push([Math.round(performance.now()), `(a shader first met in play: ${look.shader.name})`]);
+      }
       this.shaders.set(look.shader.name, id);
       this.core.freshViews();
     }

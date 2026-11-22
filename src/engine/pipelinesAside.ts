@@ -36,7 +36,12 @@ export const PIPELINES = {
   notes: [] as [number, string][],
   /** the ms the loading screens may still wait for pipelines, all their waits together (`pipelinesReady`) */
   waitLeft: 12000,
+  /** how many were first asked for once the loading screens were done with (`waitLeft` endless) */
+  late: 0,
 };
+
+/** how many pipelines first asked for in play are said among the notes */
+const LATE_NOTED = 40;
 
 /** the engine's device, for asking how long the GPU's process takes to answer */
 let asked: Device | null = null;
@@ -90,6 +95,12 @@ class StandIn {
   constructor(device: Device, descriptor: Descriptor) {
     PIPELINES.made++;
     PIPELINES.compiling++;
+    // (one first asked for once the loading screens are done with: it compiles as the player plays, the GPU's
+    // process busy with it; said among the boot's notes with what it is, the first `LATE_NOTED` of them)
+    if (PIPELINES.waitLeft === Infinity && PIPELINES.late < LATE_NOTED) {
+      PIPELINES.notes.push([Math.round(performance.now()), `(a pipeline first asked for in play: ${described(descriptor)})`]);
+    }
+    if (PIPELINES.waitLeft === Infinity) PIPELINES.late++;
     device.createRenderPipelineAsync(descriptor).then((real) => {
       this.real = real;
       PIPELINES.compiling--;

@@ -11,6 +11,7 @@
 // and a third of the boot's are the fight's alone (`lab programs`).
 import { RUNNING } from '../core/rendererChoice';
 import { painted } from '../world/arena';
+import { AHEAD } from '../engine/pipelinesAside';
 import { isLazyFoe, loadFoe } from '../entities/bosses';
 import { lampsLetGo } from './village';
 import * as THREE from 'three';
@@ -487,6 +488,22 @@ async function heroBuiltInSlices(model: string, step: () => Promise<void>): Prom
   if (await finishInSlices(`worn ${model}`, step, behindSlice)) return;
   await preloadHeads(heroDetail());
   heroesAhead.set(model, await builtInSlices(heroAllWornSteps(model, AWAY), step, behindSlice));
+}
+
+/**
+ * The other heroes' skills' own shaders handed to the Rust engine under the loading screen (nothing where it isn't
+ * drawing): each is a shader module of the whole lit shader, made on the GPU process's main thread, and the five of
+ * them (a slash's arc, a bellow's face, the aim's line and dot, the glint's motes) came together behind the lobby a
+ * few seconds after it showed, the frames at 77 to 80 a second for one as the hero set off (`npm run stalls --
+ * --scenario walks`: a task of 309 ms there, 1.4 s of compiles; from play, "when I start moving on desktop, it drops
+ * to 70, then recovers back to 144"). The heroes themselves still warm behind the lobby.
+ */
+export async function otherHeroesSkillsAhead(): Promise<void> {
+  if (!AHEAD.prepare) return;
+  for (const model of otherHeroModels()) {
+    await painted();
+    AHEAD.prepare(skillSamples(model));
+  }
 }
 
 /** Each other class's hero, with all he can wear, away from the arena, and his skills' samples. */
