@@ -19,6 +19,7 @@ import {
 import { G } from '../state';
 import { sunShadowStill } from '../world/props';
 import { moonShadowKept } from '../world/moonShadow';
+import { groundHeight } from '../world/ground';
 import { CAMERA } from '../data/balance';
 import { countGhostLayers } from './ghostLayers';
 import { opaqueByProgram } from './programSort';
@@ -1304,16 +1305,66 @@ function overHead(): number {
 /** For a harness (tools/lab): the boom let stand behind what's built, as it did. */
 export function boomStandsBehind(on: boolean): void { boomThrough = on; }
 
-/** `pivot` brought back toward (x, z) short of a wall between: beside a wall or a column the shoulder he looks over stood
- *  through it, and the boom, read from there, never met it. */
-function shoulderClear(pivot: THREE.Vector3, x: number, z: number): void {
-  const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
-  if (!wall || !wall.cast(_boomAt.set(x, pivot.y, z), pivot, _boomHit)) return;
-  const reach = Math.max(0, _boomHit.point.distanceTo(_boomAt) - BOOM_OFF);
-  pivot.sub(_boomAt).setLength(reach).add(_boomAt);
+/** minimum clearance kept between the 3rd-person camera and any floor underneath or along the boom (m) */
+const CAMERA_FLOOR_CLEAR = 0.4;
+const FLOOR_STEP = 0.15;
+const FLOOR_RADIUS = 0.2;
+const FLOOR_RING: readonly (readonly [number, number])[] = [
+  [FLOOR_RADIUS, 0], [-FLOOR_RADIUS, 0], [0, FLOOR_RADIUS], [0, -FLOOR_RADIUS],
+];
+let floorHeroOnly = false;
+/** For a harness (tools/lab): ignore elevated floors along the 3rd-person boom and at the camera, as it was. */
+export function holdCameraFloorHeroOnly(on: boolean): void { floorHeroOnly = on; }
+
+/** Highest walkable floor round (x, z) (m): includes the terrace edge, stair steps, and hall dais. */
+function cameraFloorAt(x: number, z: number): number {
+  let highest = groundHeight(x, z);
+  for (const [dx, dz] of FLOOR_RING) highest = Math.max(highest, groundHeight(x + dx, z + dz));
+  return highest;
 }
 
-/** The boom back from `pivot` along the view, short of the first wall the line to the camera meets in the village. */
+/** Share of `from -> to` before crossing within `clear` m of any elevated floor below; 1 if clear all the way. */
+function floorReach(from: THREE.Vector3, to: THREE.Vector3, clear = CAMERA_FLOOR_CLEAR): number {
+  const steps = Math.max(1, Math.ceil(from.distanceTo(to) / FLOOR_STEP));
+  let prev = 0;
+  for (let step = 0; step <= steps; step++) {
+    const t = step / steps;
+    const px = from.x + (to.x - from.x) * t;
+    const py = from.y + (to.y - from.y) * t;
+    const pz = from.z + (to.z - from.z) * t;
+    if (py < cameraFloorAt(px, pz) + clear) {
+      let lo = prev;
+      let hi = t;
+      for (let i = 0; i < 5; i++) {
+        const mid = (lo + hi) * 0.5;
+        const mx = from.x + (to.x - from.x) * mid;
+        const my = from.y + (to.y - from.y) * mid;
+        const mz = from.z + (to.z - from.z) * mid;
+        if (my < cameraFloorAt(mx, mz) + clear) hi = mid;
+        else lo = mid;
+      }
+      return lo;
+    }
+    prev = t;
+  }
+  return 1;
+}
+
+/** `pivot` brought back toward (x, z) short of a wall or elevated floor between: beside a wall or stair edge the
+ *  shoulder stood through it, and the boom, read from there, never met it. */
+function shoulderClear(pivot: THREE.Vector3, x: number, z: number): void {
+  const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
+  if (wall && wall.cast(_boomAt.set(x, pivot.y, z), pivot, _boomHit)) {
+    const reach = Math.max(0, _boomHit.point.distanceTo(_boomAt) - BOOM_OFF);
+    pivot.sub(_boomAt).setLength(reach).add(_boomAt);
+  }
+  if (!boomThrough && !floorHeroOnly) {
+    const clear = floorReach(_boomAt.set(x, pivot.y, z), pivot);
+    if (clear < 1) pivot.lerpVectors(_boomAt, pivot, clear);
+  }
+}
+
+/** The boom back from `pivot` along the view, short of the first wall or elevated floor the line to the camera meets. */
 function boomClear(pivot: THREE.Vector3, x: number, chest: number, z: number, dt: number): number {
   const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
   // (the village's alone: elsewhere the boom is at its length at once)
@@ -1327,18 +1378,31 @@ function boomClear(pivot: THREE.Vector3, x: number, chest: number, z: number, dt
   if (wall && wall.cast(_boomFrom.set(x, chest, z), _boomAt.copy(pivot).addScaledVector(_fwd, -most), _boomHit)) {
     most = Math.max(BOOM_LEAST, most * _boomHit.t - BOOM_OFF);
   }
+  // (short of an elevated floor — terrace, portico, stairs, dais — so pitching up lower on the stairs pulls in cleanly
+  // rather than sinking under the portico floor or scraping behind the terrace lip)
+  if (!boomThrough && !floorHeroOnly) {
+    const pivotFloor = floorReach(pivot, _boomAt.copy(pivot).addScaledVector(_fwd, -most));
+    if (pivotFloor < 1) most = Math.max(BOOM_LEAST, most * pivotFloor);
+    const chestFloor = floorReach(_boomFrom.set(x, chest, z), _boomAt.copy(pivot).addScaledVector(_fwd, -most));
+    if (chestFloor < 1) most = Math.max(BOOM_LEAST, most * chestFloor);
+  }
   // (in at once, out by a spring: a post passed behind him sent it in and out)
   boomNow = Math.min(most, damp(Math.max(boomNow, BOOM_LEAST), most, BOOM_OUT, dt));
   return boomNow;
 }
 
-/** The camera brought back on his side of a wall it stands past: the boom's least, pressed against a wall, put it inside
- *  the wall, whose far side then showed through (from play, "still seeing through walls from inside"). */
+/** The camera brought back on his side of a wall or elevated floor it stands past: the boom's least, pressed against
+ *  a wall or ledge, put it inside the obstacle, whose far side then showed through. */
 function cameraClear(camera: THREE.Vector3, x: number, chest: number, z: number): void {
   const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
-  if (!wall || !wall.cast(_boomFrom.set(x, chest, z), camera, _boomHit)) return;
-  const reach = Math.max(0, _boomHit.point.distanceTo(_boomFrom) - CAMERA_OFF_WALL);
-  camera.sub(_boomFrom).setLength(reach).add(_boomFrom);
+  if (wall && wall.cast(_boomFrom.set(x, chest, z), camera, _boomHit)) {
+    const reach = Math.max(0, _boomHit.point.distanceTo(_boomFrom) - CAMERA_OFF_WALL);
+    camera.sub(_boomFrom).setLength(reach).add(_boomFrom);
+  }
+  if (!boomThrough && !floorHeroOnly) {
+    const clear = floorReach(_boomFrom.set(x, chest, z), camera);
+    if (clear < 1) camera.lerpVectors(_boomFrom, camera, clear);
+  }
 }
 
 /** how far across from his head's middle the camera stands over it (m), how far over at the middle (m), and where that
@@ -1390,14 +1454,17 @@ const _sortToward = new THREE.Vector3();
 
 function nearClear(camera: THREE.Vector3, sy: number, cy: number, fov: number): number {
   const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
-  if (!wall || farNearKept) return FAR_NEAR;
+  const checkFloor = !boomThrough && !floorHeroOnly;
+  if ((!wall && !checkFloor) || farNearKept) return FAR_NEAR;
   _nearRight.set(cy, 0, -sy);
-  // (either side, and an eave over it)
-  for (const way of [1, -1, 0]) {
-    _nearWay.copy(_nearRight).multiplyScalar(way);
-    if (way === 0) _nearWay.set(0, 1, 0);
-    if (!wall.cast(camera, _boomAt.copy(camera).addScaledVector(_nearWay, SIDE_REACH), _boomHit)) continue;
-    camera.addScaledVector(_nearWay, Math.min(0, _boomHit.t * SIDE_REACH - SIDE_ROOM));
+  if (wall) {
+    // (either side, and an eave over it)
+    for (const way of [1, -1, 0]) {
+      _nearWay.copy(_nearRight).multiplyScalar(way);
+      if (way === 0) _nearWay.set(0, 1, 0);
+      if (!wall.cast(camera, _boomAt.copy(camera).addScaledVector(_nearWay, SIDE_REACH), _boomHit)) continue;
+      camera.addScaledVector(_nearWay, Math.min(0, _boomHit.t * SIDE_REACH - SIDE_ROOM));
+    }
   }
   _nearUp.crossVectors(_nearRight, _fwd);
   const high = Math.tan(THREE.MathUtils.degToRad(fov / 2));
@@ -1405,10 +1472,19 @@ function nearClear(camera: THREE.Vector3, sy: number, cy: number, fov: number): 
   let share = 1;
   for (const [x, y] of NEAR_POINTS) {
     _nearWay.copy(_fwd).addScaledVector(_nearRight, x * wide).addScaledVector(_nearUp, y * high).multiplyScalar(FAR_NEAR);
-    if (!wall.cast(camera, _boomAt.copy(camera).add(_nearWay), _boomHit)) continue;
-    // (off what slopes over it, an eave, as the plane comes no nearer than BOOM_NEAR)
-    camera.addScaledVector(_boomHit.normal, Math.max(0, NEAR_HELD - _boomHit.t) * _nearWay.length());
-    share = Math.min(share, Math.max(_boomHit.t, NEAR_HELD));
+    if (wall && wall.cast(camera, _boomAt.copy(camera).add(_nearWay), _boomHit)) {
+      // (off what slopes over it, an eave, as the plane comes no nearer than BOOM_NEAR)
+      camera.addScaledVector(_boomHit.normal, Math.max(0, NEAR_HELD - _boomHit.t) * _nearWay.length());
+      share = Math.min(share, Math.max(_boomHit.t, NEAR_HELD));
+    }
+    if (checkFloor) {
+      _boomAt.copy(camera).add(_nearWay);
+      const floorAt = groundHeight(_boomAt.x, _boomAt.z) + 0.05;
+      if (_boomAt.y < floorAt && _nearWay.y < -1e-4) {
+        const t = (floorAt - camera.y) / _nearWay.y;
+        share = Math.min(share, Math.max(t, NEAR_HELD));
+      }
+    }
   }
   return share < 1 ? Math.max(BOOM_NEAR, FAR_NEAR * share * 0.85) : FAR_NEAR;
 }
@@ -1474,10 +1550,13 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
       _pivot.y += BOOM_RISE * over;
       cam.position.copy(_pivot).addScaledVector(_fwd, -boom);
       cameraClear(cam.position, focus.x, floor + height * 0.7, focus.z);
+      const floorLimit = (cx: number, cz: number): number =>
+        (floorHeroOnly ? floor : Math.max(floor, cameraFloorAt(cx, cz))) + CAMERA_FLOOR_CLEAR;
+      cam.position.y = Math.max(floorLimit(cam.position.x, cam.position.z), cam.position.y);
       headClear(cam.position, focus.x, floor + height * HEAD_AT, focus.z);
       near = Math.min(0.5 + (BOOM_NEAR - 0.5) * over, nearClear(cam.position, sy, cy, fov + BOOM_WIDER * over));
       fov += BOOM_WIDER * over;
-      cam.position.y = Math.max(floor + 0.4, cam.position.y);
+      cam.position.y = Math.max(floorLimit(cam.position.x, cam.position.z), cam.position.y);
     } else {
       fov = CAMERA.first.fov; near = 0.08;
       cam.position.set(focus.x - sy * 0.12, floor + height * 0.9, focus.z - cy * 0.12);

@@ -242,6 +242,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     fountainStopsArrows: () => fountainStopsArrows(lab, options.canary),
     cameraBeforeWalls: () => unposed(() => cameraBeforeWalls(lab, options.canary)),
     cameraOutsideHim: async () => (await import('./villageCameraInside')).cameraOutsideHim(lab, options.canary),
+    cameraOverFloors: async () => (await import('./villageCameraFloor')).cameraOverFloors(lab, options.canary),
     hallFrontFades: () => hallFrontFades(lab, options.canary),
     firesWhereTheyStand: () => firesWhereTheyStand(lab, options.canary),
     heroChosenQuick: () => heroChosenQuick(lab, options.canary),

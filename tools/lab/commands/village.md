@@ -120,7 +120,7 @@ nor his head's middle than 0.4 (at least 0.33 and 0.53); the 8 spots it comes ne
 the game's frames, his head's meshes drawn at every one, the nearest pictured as it was and as it is (a warrior backed
 against the front wall beside the door looking out at the square: his arms and shield and no head, then his crown at
 the frame's foot); `--canary` hides his body by nearness and lets the camera into his head: hidden at 8 of 8, inside him
-at 16 spots) (`hallFrontFades`: from above, the frame
+at 16 spots) (`cameraOverFloors`, `page/villageCameraFloor.ts`, from play: stood on the terrace stairs pitching up or level in 3rd person, the camera clamped only to the hero's lower step and sank under the 1.6 m portico floor or behind the terrace lip: sweeps 482 spots across the stairs and hall dais edge over facings, pitches and booms, verifying zero under-floor or floor-blocked spots, steady frames <= 0.02 m, crown in frame, and picturing the three stair/portico angles; `--canary` runs `holdCameraFloorHeroOnly` and verifies both under-floor and floor-blocked counts are caught) (`hallFrontFades`: from above, the frame
 against the frame with the front wall hidden, 15 to 90% of its share left as a ghost, at most 15% thinner a frame, and over
 the shoulder not thinned; `page/villageHallFade.ts`; `--canary` hides it, as it was) (`firesWhereTheyStand`: each ember
 spawned over 240 frames within 1.5 m of a fire's flames, each fire's shader told its place; 16 strays and 2 shaders
