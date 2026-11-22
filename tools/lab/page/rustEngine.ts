@@ -10,6 +10,7 @@ import { perfClock } from '../../../src/core/perfClock';
 import { RUST } from '../../../src/engine';
 import type { FrameStats } from '../../../src/engine/bridge';
 import { standAt } from './draws';
+import { skyLightLines, turnToSkyLight } from './skyLight';
 import { foesAt } from './death';
 import { crowdPlaces } from './crowd';
 import * as THREE from 'three';
@@ -31,6 +32,8 @@ export interface RustCommand {
   /** a skill of his held through the frames timed and pictured */
   cast?: string;
   hour?: number;
+  /** the camera turned to the sky's key light, the picture what's round it */
+  skylight: boolean;
   /** the scene's materials listed by their kind and what they ask of a renderer */
   census: boolean;
   /** the game's tunable values set before the stand, by their paths (`rust.shadows`: src/engine/bridge.ts `TUNE`) */
@@ -227,6 +230,7 @@ function shadowFrames(kept: number[]): string {
 /** The baseline: three's WebGPU frame of the same stand, timed the same way. */
 async function threeFrames(lab: Lab, command: RustCommand): Promise<Report> {
   const where = await stand(lab, command);
+  const sky = command.skylight ? await turnToSkyLight(lab) : undefined;
   const hold = castHeld(command);
   const renderer = G.renderer as unknown as Timed;
   const pool = renderer.backend.timestampQueryPool;
@@ -257,7 +261,7 @@ async function threeFrames(lab: Lab, command: RustCommand): Promise<Report> {
     perfClock.now = pageClock;
     lab.drawing = drawing;
   }
-  const pictured = await lab.screen('the WebGPU frame of three.js');
+  const pictured = await lab.screen('the WebGPU frame of three.js', [], sky?.clip);
   const size = G.renderer.domElement;
   const lines = [
     `three.js WebGPU: ${where} ${command.view}, ${size.width}x${size.height} drawn, medians of ${command.frames} frames`,
@@ -266,7 +270,9 @@ async function threeFrames(lab: Lab, command: RustCommand): Promise<Report> {
     `  ${median(draws)} draw calls, ${median(triangles)} triangles (every pass)`,
     `  the hero at ${G.player.pos.x.toFixed(1)}, ${G.player.pos.z.toFixed(1)}`,
   ];
-  return { text: lines.join('\n'), problems: [], moments: [pictured] };
+  const turned = sky === undefined ? undefined : skyLightLines(sky);
+  if (turned) lines.push(turned.line);
+  return { text: lines.join('\n'), problems: turned?.problems ?? [], moments: [pictured] };
 }
 
 export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report> {
@@ -277,6 +283,7 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
     return { text: `the Rust engine isn't running: ${why}`, problems: ['the Rust engine is not running'], moments: [] };
   }
   const where = await stand(lab, command);
+  const sky = command.skylight ? await turnToSkyLight(lab) : undefined;
   const hold = castHeld(command);
   /** what a frame timed left undrawn, by its kind: the most of any frame */
   const undrawn = new Map<string, number>();
@@ -322,7 +329,7 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
     console.error = consoleError;
   }
   await pipelinesCompiled(lab);
-  const pictured = await lab.screen('the Rust engine\'s frame');
+  const pictured = await lab.screen('the Rust engine\'s frame', [], sky?.clip);
   const of = (name: keyof FrameStats): number => median(read.get(name)!);
   const skipped = [...undrawn].sort((a, b) => b[1] - a[1]).map(([kind, count]) => `${kind} ${count}`);
   const canvas = document.getElementById('rust-canvas') as HTMLCanvasElement;
@@ -355,6 +362,9 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   if (command.census) lines.push(...census(G.scene, G.camera), ...heaviest(G.scene, G.camera));
   lines.push(`  the hero at ${G.player.pos.x.toFixed(1)}, ${G.player.pos.z.toFixed(1)}; the camera's layers ${G.camera.layers.mask}`);
   const problems: string[] = [];
+  const turned = sky === undefined ? undefined : skyLightLines(sky);
+  if (turned) lines.push(turned.line);
+  if (turned) problems.push(...turned.problems);
   if (command.capture) {
     // (the frame written down for the engine's own harness: the node side fetches `__rustTape` and saves it)
     RUST.captureNext = command.capture;

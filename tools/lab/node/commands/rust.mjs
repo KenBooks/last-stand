@@ -29,6 +29,11 @@ export default {
     foes: { kind: 'number', usage: 'n', help: 'foes stood before the hero (none by default; not in the village)' },
     hour: { kind: 'number', usage: 'h', help: 'with --village, the hour it\'s lit for' },
     village: { kind: 'switch', help: 'in the lobby\'s village instead' },
+    skylight: {
+      kind: 'switch',
+      help: 'through his eyes, turned to the sky\'s key light (the sun, by night the moon): the picture is its '
+        + 'disc and what\'s round it',
+    },
     room: {
       kind: 'text',
       usage: 'id',
@@ -61,7 +66,7 @@ export default {
   async each(side, options) {
     const command = {
       biome: options.biome ?? 'forest',
-      view: options.view ?? 'top',
+      view: options.view ?? (options.skylight ? 'first' : 'top'),
       at: options.at,
       frames: Math.round(options.frames ?? 60),
       foes: Math.round(options.foes ?? 0),
@@ -69,6 +74,7 @@ export default {
       room: options.room,
       cast: options.cast,
       hour: options.hour,
+      skylight: Boolean(options.skylight),
       census: Boolean(options.census),
       three: Boolean(options.three),
       capture: Math.round(options.capture ?? 0),
