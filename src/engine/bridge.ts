@@ -389,11 +389,11 @@ export class Bridge {
     core.engine.render(TUNE.scene > 0 ? core.count : 0, core.boneFloats, clear[0], clear[1], clear[2]);
     const drawn = perfClock.now();
     const [draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy, shadowTriangles, shadowsKept,
-      lowDraws]
+      lowDraws, lightsLeftOut]
       = core.engine.stats();
     Object.assign(stats, {
       records: core.count, draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy, shadowTriangles, shadowsKept,
-      lowDraws,
+      lowDraws, lightsLeftOut,
       placeMs: placed - began, walkMs: walked - placed, engineMs: drawn - walked,
     });
   }

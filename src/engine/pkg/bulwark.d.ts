@@ -144,7 +144,9 @@ export class Engine {
     /**
      * What the last frame drew: draw calls, the shadow's draw calls, objects, things out of view, triangles, and
      * the GPU's time for its passes (ms; 0 where the browser doesn't time them), how many frames' times have
-     * come back so far, and whether one is on its way (1: a frame drawn now isn't timed).
+     * come back so far, and whether one is on its way (1: a frame drawn now isn't timed); the shadow's
+     * triangles, the frames its map was kept, the draws at a share of the pixels, and how many times a point
+     * light was left out of a ground cell it reaches.
      */
     stats(): Float32Array;
 }
@@ -198,12 +200,12 @@ export interface InitOutput {
     readonly engine_set_volume: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1722: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1747: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_597: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_597_46: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_597_47: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_599: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1723: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1748: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_598: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_598_46: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_598_47: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_600: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

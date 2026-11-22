@@ -127,7 +127,7 @@ function heaviest(scene: THREE.Object3D, camera: THREE.Camera): string[] {
 
 /** what's read of each frame, and averaged */
 const TIMED: (keyof FrameStats)[] = [
-  'placeMs', 'walkMs', 'engineMs', 'gpuMs', 'records', 'draws', 'shadowDraws', 'shadowTriangles', 'shadowsKept', 'lowDraws', 'objects', 'culled', 'triangles',
+  'placeMs', 'walkMs', 'engineMs', 'gpuMs', 'records', 'draws', 'shadowDraws', 'shadowTriangles', 'shadowsKept', 'lowDraws', 'lightsLeftOut', 'objects', 'culled', 'triangles',
 ];
 
 const median = (values: number[]): number => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
@@ -335,6 +335,7 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   const skipped = [...undrawn].sort((a, b) => b[1] - a[1]).map(([kind, count]) => `${kind} ${count}`);
   const canvas = document.getElementById('rust-canvas') as HTMLCanvasElement;
   const { boot, bridge: { held } } = { boot: RUST.boot, bridge };
+  const leftOut = Math.max(...read.get('lightsLeftOut')!);
   const lines = [
     `${where} ${command.view}, ${canvas.width}x${canvas.height} drawn, medians of ${command.frames} frames`,
     `  the render: ${median(renders).toFixed(2)} ms on the CPU (its matrices ${of('placeMs').toFixed(2)}, the scene walked ${of('walkMs').toFixed(2)}, `
@@ -345,6 +346,7 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
       + `in ${of('draws')} draw calls (+${of('shadowDraws')} for the sun's shadow), ${of('triangles')} triangles (+${of('shadowTriangles')})`,
     `  ${of('lowDraws')} draws at a quarter of the scene's pixels, laid over it`,
     `  the sun's shadow drawn in ${shadowFrames(read.get('shadowsKept')!)} frames timed, kept as it was in the rest`,
+    `  point lights left out of a ground cell they reach: ${leftOut} (a cell holds 16)`,
     `  held: ${held.meshes} meshes, ${held.textures} maps, ${held.materials} materials, ${held.sets} instance sets; `
       + `handed over while timed: ${handedOver.meshes} meshes, ${handedOver.textures} maps, ${handedOver.materials} materials`,
     `  not drawn (a frame): ${skipped.join(', ') || 'nothing'}`,
@@ -378,6 +380,8 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
     if (!(window as unknown as { __rustTape: Blob | null }).__rustTape) problems.push('no tape was written');
   }
   if (!(of('draws') > 0)) problems.push('the engine drew nothing');
+  // (a cell lit by fewer lights than the one beside it shows as a square on the ground that follows the hero)
+  if (leftOut > 0) problems.push(`${leftOut} times a point light was left out of a ground cell it reaches`);
   // (a skill's own look left out: from play, "no mage visual effects on spells when casting them")
   if (command.cast && skipped.length) problems.push(`${command.cast} cast: not drawn by the engine: ${skipped.join(', ')}`);
   for (const line of new Set(said)) problems.push(`said while drawing: ${line.slice(0, 1500)}`);
