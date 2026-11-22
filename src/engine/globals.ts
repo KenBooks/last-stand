@@ -146,6 +146,8 @@ export interface Grade {
   edges?: { mask: THREE.Texture | null; reach: number };
   /** a level of plain lit shading (the game's `plainLit`: Low and Very low) */
   lite?: boolean;
+  /** the least a still thing is across to cast the sun's shadow at this level (m: the game's `minCasterRadius`) */
+  casterLeast?: number;
 }
 export const PLAIN_GRADE: Grade = { small: 1e4, large: 1e4, cap: 1, vignette: 1.05, hurt: 0, low: 0 };
 

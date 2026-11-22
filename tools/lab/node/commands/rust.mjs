@@ -54,6 +54,12 @@ export default {
       help: 'the quality level switched to once he stands there, as Auto steps to it in play (--boot: the level '
         + 'the page boots at)',
     },
+    boss: { kind: 'switch', help: 'the boss of the biome stood before him (not in the village)' },
+    dying: {
+      kind: 'number',
+      usage: 'frames',
+      help: 'with --foes, each killed and pictured this many frames on: its fall and its dissolve (40: half gone)',
+    },
     census: { kind: 'switch', help: 'the shown meshes\' materials by kind, and what each asks beyond the engine' },
     three: { kind: 'switch', help: 'the baseline: three.js\'s WebGPU renderer instead, on a page of its own' },
     webgl: { kind: 'switch', help: 'the look players had: three.js\'s WebGL renderer instead, pictured the same' },
@@ -86,6 +92,8 @@ export default {
       room: options.room,
       cast: options.cast,
       level: options.level,
+      boss: Boolean(options.boss),
+      dying: Math.round(options.dying ?? 0),
       hour: options.hour,
       zoom: options.zoom,
       skylight: Boolean(options.skylight),

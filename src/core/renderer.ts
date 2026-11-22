@@ -1176,10 +1176,13 @@ function fitSceneTarget(): void {
 
 /** whether the level in use has the plain lit shading (Low and Very low: `plainLit`), for the Rust engine's */
 let liteLevel = false;
+/** the level's least caster of the sun's shadow (m, its `minCasterRadius`), for the Rust engine's */
+let casterLeast = 0;
 /** Apply the render-cost settings of a quality preset, live, the scene rendering `budget` pixels at most (Auto's).
  *  None of them change shader variants. */
 export function setRenderQuality(p: QualityPreset, budget = Infinity): void {
   liteLevel = p.plainLit;
+  casterLeast = p.minCasterRadius;
   pixelCap = p.pixels;
   pixelBudget = budget;
   // (the canvas keeps the screen's pixels: the scene alone renders fewer)
@@ -1817,6 +1820,7 @@ export function render(): void {
       hurt: u.uHurt.value as number, low: u.uLow.value as number, samples: sceneSamples(),
       arms: armsFov === null ? null : (placeArmsCamera(), armsCam),
       lite: liteLevel,
+      casterLeast,
       bloomShare,
       shadowHeld: !shadowDrawnLast,
       look: {

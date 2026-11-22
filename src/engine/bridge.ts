@@ -47,6 +47,24 @@ const PLAIN_UPDATE = THREE.Object3D.prototype.updateMatrixWorld;
 
 const scratchMatrix = new THREE.Matrix4();
 
+/** each still mesh's radius in the world (m), found once: it doesn't move */
+const radii = new WeakMap<THREE.Mesh, number>();
+
+/**
+ * How far a still mesh reaches from its middle (m). A level keeps what's smaller than its least caster from
+ * casting the sun's shadow (`minCasterRadius`: 9 cm at High, 30 at Very low), and the still things taken for casters
+ * (`TUNE.castAll`) cast whatever their size.
+ */
+function radiusOf(mesh: THREE.Mesh): number {
+  let radius = radii.get(mesh);
+  if (radius === undefined) {
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    radius = (mesh.geometry.boundingSphere?.radius ?? Infinity) * mesh.matrixWorld.getMaxScaleOnAxis();
+    radii.set(mesh, radius);
+  }
+  return radius;
+}
+
 export class Bridge {
   private core: Core;
   private maps: Maps;
@@ -140,7 +158,8 @@ export class Bridge {
     // (a body moved by its bones casts only where the game says: a level keeps the heroes and the foes from
     // casting, and taken for the village's still things they cast at every level, 260 thousand triangles a frame)
     const still = !(mesh as THREE.SkinnedMesh).isSkinnedMesh;
-    const casts = cast !== 'none' && (mesh.castShadow || (TUNE.castAll && mesh.receiveShadow && still));
+    const casts = cast !== 'none' && (mesh.castShadow || (TUNE.castAll && mesh.receiveShadow && still
+      && radiusOf(mesh) >= (this.grade.casterLeast ?? 0)));
     r[at + 6] = (casts ? CASTS_SHADOW : 0) | (mesh.frustumCulled ? 0 : NEVER_CULLED)
       | (material.colorWrite === false || cast === 'only' ? SHADOW_ONLY : 0)
       | (this.materials.solidNow(material) ? SOLID : 0)

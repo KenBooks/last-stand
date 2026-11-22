@@ -3,7 +3,7 @@
 // calls, objects and triangles, what it couldn't draw by its kind, and its boot. three's figures for the same stand
 // come from a tree on main (`lab passes --renderer webgpu`, `lab draws`).
 import type { Fixture, Lab, Report } from './lab';
-import type { BiomeId } from '../../../src/data/biomes';
+import { BIOMES, type BiomeId } from '../../../src/data/biomes';
 import type { ViewMode } from '../../../src/core/renderer';
 import { G } from '../../../src/state';
 import { perfClock } from '../../../src/core/perfClock';
@@ -36,6 +36,10 @@ export interface RustCommand {
   cast?: string;
   /** the quality level switched to once he stands there (Auto's step, in play) */
   level?: QualityLevel;
+  /** the biome's boss stood before him */
+  boss?: boolean;
+  /** the foes killed, and the frames stepped after it (0: left standing) */
+  dying?: number;
   hour?: number;
   zoom?: number;
   /** the camera turned to the sky's key light, the picture what's round it */
@@ -72,6 +76,9 @@ interface TimestampPool {
   resolveQueriesAsync(): Promise<number | undefined>;
 }
 
+/** how far before him the boss stands (m), and the most frames it may take to rise */
+const BOSS_AHEAD = 7;
+const BOSS_RISE_FRAMES = 300;
 /** the frames a level switched to is given to settle in */
 const LEVEL_FRAMES = 30;
 
@@ -86,7 +93,17 @@ async function stand(lab: Lab, command: RustCommand): Promise<string> {
   }
   if (command.foes > 0 && !command.village) {
     const spots: THREE.Vector3[] = crowdPlaces(command.foes, G.player.pos, G.player.facing);
-    await foesAt(lab, spots, spots.map(() => 1));
+    const foes = await foesAt(lab, spots, spots.map(() => 1));
+    if (command.dying) {
+      for (const foe of foes) foe.takeDamage(1e6, { by: G.player });
+      await lab.step(command.dying);
+    }
+  }
+  if (command.boss && !command.village) {
+    const ahead = new THREE.Vector3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing)).multiplyScalar(BOSS_AHEAD);
+    const boss = lab.spawnFoe(BIOMES[G.arena.biome].boss, G.player.pos.clone().add(ahead).setY(0));
+    await lab.until(() => boss.spawning <= 0, BOSS_RISE_FRAMES, 'the boss never rose');
+    boss.dazed = 999;
   }
   if (command.room) return `the ${command.room}'s room (${await inAndOut(lab, command.room as RoomId)})`;
   return command.village ? 'the village' : `${G.arena.biome}${command.foes ? `, ${command.foes} foes` : ''}`;
