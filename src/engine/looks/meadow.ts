@@ -3,10 +3,11 @@
 import type * as THREE from 'three';
 import type { BladeNumbers, BladeUniforms } from '../../world/meadowNodes';
 import type { RustLook, RustShader } from '../custom';
+import { TUNE } from '../globals';
 
 /** where a ring's numbers are in `m.c`, in floats */
 const AT = { origin: 0, focus: 2, eye: 4, cell: 6, wider: 7, band: 8, combed: 12, side: 13, byStrand: 14, strandsBy: 15,
-  time: 16, half: 17, widthInCells: 18, grows: 19, strandCut: 20, strandsRise: 21, cuts: 22 };
+  time: 16, half: 17, widthInCells: 18, grows: 19, strandCut: 20, strandsRise: 21, cuts: 22, unshaded: 23 };
 
 const SHARED = /* wgsl */ `
 fn blade_hash(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
@@ -146,6 +147,8 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
 }
 
 fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  // (a profile's: the blades placed and none shaded)
+  if (m.c[5].w > 0.5) { return false; }
   let blade = in.c1.xy;
   let strands = in.c1.zw;
   let growing = in.c2.xy;
@@ -211,6 +214,7 @@ export function bladeLook(u: BladeUniforms, combed: boolean, numbers: BladeNumbe
       out[AT.widthInCells] = numbers.widthInCells; out[AT.grows] = numbers.grows;
       out[AT.strandCut] = numbers.strandCut; out[AT.strandsRise] = numbers.strandsRise;
       out[AT.cuts] = combed ? 1 : 0;
+      out[AT.unshaded] = TUNE.grassShaded > 0 ? 0 : 1;
     },
     // (the tiles drawn, a pair of floats each: any number of them, where the numbers held 80, so the tiles were
     // 9 to 21 m wide and every blade of one that touched the view was sent to be dropped as it was placed)

@@ -416,6 +416,7 @@ export class Bridge {
     this.shadowHeld = !!grade.shadowHeld;
     core.engine.hold_shadow(this.shadowHeld && TUNE.shadowTurns > 0);
     core.engine.set_depth_first(TUNE.depthFirst > 0 && !PIPELINES.depthRefused);
+    core.engine.set_fields_first(TUNE.fieldsFirst > 0);
     // (on a dense screen, three device pixels or more to a CSS one, the bloom at half its level's share: a glow is
     // a blur, and its first level was 1560 by 720 on a phone, 2.4 ms of its 18 ms frame at Medium, PSHZ-JAWP)
     const share = grade.bloomShare ?? 1, dense = window.devicePixelRatio >= 3 ? TUNE.bloomDense : 1;

@@ -74,6 +74,11 @@ export const TUNE = tunable('rust', {
   still: 1,
   /** the hole that keeps the hero in sight under what hides him (0: none dropped) */
   see: 1,
+  /** a counted draw (the meadow's blades) in the depth drawn first too: shaded once a pixel, placed twice (a
+   *  profile's, for the device to say which costs less) */
+  fieldsFirst: 0,
+  /** the meadow's blades shaded (0: placed and none shaded, a profile's: what placing them costs alone) */
+  grassShaded: 1,
   /** the scene's meshes drawn (0: none, a profile's: the frame's floor, its target cleared, graded and shown) */
   scene: 1,
 });

@@ -309,7 +309,8 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
     problems.push(...(await idleProblems(found, options)));
     problems.push(...pageCanaryProblems(found));
     // (a commit from before WebGPU was profiled names no renderer: an A/B runs this module there too)
-    const onWebGPU = (found.renderer ?? 'WebGL').startsWith('WebGPU');
+    // (the Rust engine's are WebGPU's pipelines too: a part that draws its fields into the depth first makes theirs)
+    const onWebGPU = /^WebGPU|Rust engine/.test(found.renderer ?? 'WebGL');
     const most = onWebGPU ? PIPELINES_MOST : COMPILED_MOST;
     const compiled = compiledByFrameParts(found);
     if (compiled > most) {
