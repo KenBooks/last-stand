@@ -26,6 +26,13 @@ declare const __DEV_TOOLS__: boolean;
  */
 export const MOST_A_DAY = typeof __DEV_TOOLS__ !== 'undefined' && __DEV_TOOLS__ ? 100 : 10;
 const DAY_MS = 24 * 60 * 60_000;
+declare const __DEV_TOOLS__: boolean;
+/**
+ * A PR preview's and a dev build's reports sent by a press (a profile, a fault) aren't held to the day's count:
+ * a tester's tenth report of a day was refused while chasing a phone's fault. The automatic ones still are, and
+ * production holds every one.
+ */
+const PRESSED_UNCAPPED = import.meta.env.DEV || (typeof __DEV_TOOLS__ !== 'undefined' && __DEV_TOOLS__);
 const SENT_APART_MS = 10 * 60_000;
 /** how often a waiting stretch looks for its moment (ms), how long after a moment starts it's shown (ms) */
 const LOOK_EVERY_MS = 1000;
@@ -198,7 +205,7 @@ export async function askNow(): Promise<void> {
 export async function sendFault(lines: string[]): Promise<Sent> {
   if (!canSend()) return { error: 'this browser can\'t send reports' };
   const k = kept();
-  if (k.sent.length >= MOST_A_DAY) return { error: `${MOST_A_DAY} reports were sent in the last day` };
+  if (!PRESSED_UNCAPPED && k.sent.length >= MOST_A_DAY) return { error: `${MOST_A_DAY} reports were sent in the last day` };
   keep({ ...k, sent: [...k.sent, Date.now()] });
   const slow: Slow = {
     scene: 'profile', verdict: null, tookMs: 0, at: performance.now(), snapshot: recorder.snapshot(), fault: lines,
@@ -217,7 +224,7 @@ export function putAway(): void { letGo(); }
 export async function sendProfile(lines: string[]): Promise<Sent> {
   if (!canSend()) return { error: 'this browser can\'t send reports' };
   const k = kept();
-  if (k.sent.length >= MOST_A_DAY) return { error: `${MOST_A_DAY} reports were sent in the last day` };
+  if (!PRESSED_UNCAPPED && k.sent.length >= MOST_A_DAY) return { error: `${MOST_A_DAY} reports were sent in the last day` };
   keep({ ...k, sent: [...k.sent, Date.now()] });
   const slow: Slow = {
     scene: 'profile', verdict: null, tookMs: 0, at: performance.now(), snapshot: recorder.snapshot(), profile: lines,
