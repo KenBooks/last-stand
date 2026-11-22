@@ -187,16 +187,25 @@ export class LightCache {
       if (still.inside) sheltered = share;
       else open = share;
     }
-    // (what's no lamp: as bright as those shown are now against as they were baked, as one)
+    // (what's no lamp: as bright as those shown are now against as they were baked. The one that reaches
+    // furthest by a strength of its own within its reach, the rest as one: a fire's light swells with its
+    // flames and dims by the hour, a portal's pulses, and read as one each took on the other's)
     let apart = 0, apartOf = 0;
     const shown = this.own.size ? new Set(shownPointLights()) : null;
-    for (const light of this.own) {
-      const still = stillOf(light);
-      if (!still || still.side !== 'apart') continue;
+    const now = (light: THREE.PointLight): number => (shown?.has(light) ? light.intensity / stillOf(light)!.full : 0);
+    const apartLights = [...this.own].filter((light) => stillOf(light)?.side === 'apart');
+    const furthest = apartLights.reduce<THREE.PointLight | null>(
+      (best, light) => (!best || light.distance > best.distance ? light : best), null);
+    for (const light of apartLights) {
+      if (light === furthest) continue;
       apartOf++;
-      if (shown?.has(light)) apart += light.intensity / still.full;
+      apart += now(light);
     }
     this.told = { open, sheltered };
     this.core.engine.set_light_strength(open, sheltered, apartOf ? apart / apartOf : 0);
+    if (furthest) {
+      const { x, y, z } = this.placeOf(furthest);
+      this.core.engine.set_light_of_its_own(x, y, z, furthest.distance, now(furthest));
+    } else this.core.engine.set_light_of_its_own(0, 0, 0, 0, 0);
   }
 }

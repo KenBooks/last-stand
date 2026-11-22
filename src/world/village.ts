@@ -803,6 +803,9 @@ export function* villageSteps(scene: THREE.Group): Generator<void, Village, unde
   scene.add(campfireGroup);
   const campfire = buildBonfire(campfireGroup, CAMPFIRE[0], CAMPFIRE[1], M.ashlar, M.logs, updaters, false);
   campfire.light.decay = 2 + CAMPFIRE_LIGHT.soft;
+  // (a renderer that bakes its still lights reads it by a strength of its own, its flames' swell and its hour:
+  // engine/lightCache.ts `StillLight`)
+  campfire.light.userData.still = { side: 'apart', full: BONFIRE_LIGHT * CAMPFIRE_LIGHT.by };
   obstacles.push({ x: CAMPFIRE[0], z: CAMPFIRE[1], r: 1.0, h: 0.5 });
   const seats = [fireSeat(obstacles[obstacles.length - 1], [{ root: campfireGroup }])];
   seats.push(...stillBuilt(scene, () => buildBenches(scene, M, obstacles)));
