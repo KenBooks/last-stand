@@ -188,6 +188,10 @@ export function initTouch(v: TouchVillage): void {
   const angle = (t: TouchList) => Math.atan2(t[1].clientY - t[0].clientY, t[1].clientX - t[0].clientX);
   window.addEventListener('touchstart', (e) => {
     if (e.touches.length !== 2 || presses.size) return;
+    // (in the close views a finger beside the stick's thumb looks round, `lookByDrag`: taken as a pinch, it stopped
+    // the hero and turned nothing, the two thumbs a player moves and looks with. From play on a phone: "cannot use
+    // right finger to turn the camera... otherwise 3rd and 1st person pretty much unplayable", #812)
+    if (stick && viewMode() !== 'top') return;
     pinch = { d: dist(e.touches), a: angle(e.touches), twist: 0 };
     // (a second finger makes it a gesture: the first, on the stick's pad, walks the hero no further)
     if (stick) { stick = null; input.stick.x = input.stick.y = 0; base.classList.remove('on'); dropOverlays(); }
