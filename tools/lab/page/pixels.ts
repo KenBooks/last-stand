@@ -6,6 +6,13 @@ import { G } from '../../../src/state';
 import { frameRect } from '../../../src/core/renderer';
 import { WEBGPU } from '../../../src/core/webgpu';
 
+/** The canvas the frame is drawn on: the Rust engine's own where it runs (`src/engine`: three's stays blank under
+ *  it, and read there every measure of the frame's light read black), else the game's. */
+export function drawnCanvas(): HTMLCanvasElement {
+  const engines = document.getElementById('rust-canvas') as HTMLCanvasElement | null;
+  return engines ?? G.renderer.domElement;
+}
+
 /** An area of the canvas, css px from its top left. */
 export interface Area {
   left: number;
@@ -50,7 +57,7 @@ export function webGpuPixels(box: Area): ImageData {
   copy.width = width;
   copy.height = height;
   const context = copy.getContext('2d', { willReadFrequently: true })!;
-  context.drawImage(G.renderer.domElement, left, top, width, height, 0, 0, width, height);
+  context.drawImage(drawnCanvas(), left, top, width, height, 0, 0, width, height);
   return context.getImageData(0, 0, width, height);
 }
 

@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { lampList, LAMPS_MOST } from '../core/lamps';
 import type { Core } from './core';
-import { GLOBALS, projectionOf } from './globals';
+import { GLOBALS, projectionOf, TUNE } from './globals';
 
 /** what's nearer a lamp than this casts nothing (m): `NEAR` in world/lampAtlas.ts, `LAMP_NEAR` in the engine's lit.wgsl */
 const LAMP_NEAR = 0.3;
@@ -94,7 +94,11 @@ export class LampShadows {
       // angles, his gear in the air)
       core.frame++;
       for (const mover of movers) {
-        mover.traverseVisible((part) => { if ((part as THREE.Mesh).isMesh) record(part as THREE.Mesh); });
+        // (what casts the sun's shadow, by the bridge's own rule: a piece the quality cuts from casting casts none here)
+        mover.traverseVisible((part) => {
+          const mesh = part as THREE.Mesh;
+          if (mesh.isMesh && (mesh.castShadow || (TUNE.castAll > 0 && mesh.receiveShadow))) record(mesh);
+        });
       }
       camera.far = reach;
       camera.updateProjectionMatrix();
