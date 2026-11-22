@@ -2,7 +2,7 @@
 // the scene and the engine's own work by the browser's clock, the GPU's time by the engine's timestamps, its draw
 // calls, objects and triangles, what it couldn't draw by its kind, and its boot. three's figures for the same stand
 // come from a tree on main (`lab passes --renderer webgpu`, `lab draws`).
-import type { Lab, Report } from './lab';
+import type { Fixture, Lab, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { ViewMode } from '../../../src/core/renderer';
 import { G } from '../../../src/state';
@@ -43,6 +43,9 @@ export interface RustCommand {
   three: boolean;
   /** the frame written down as a tape for the engine's own harness, its maps no larger than this a side (0: none) */
   capture: number;
+  /** the armour he wears, and the rarity of every item on him (Rare and up glow), as `Fixture` has them */
+  wear?: Fixture['wear'];
+  rarity?: Fixture['rarity'];
 }
 
 /** what a material may carry that the engine doesn't read: three's nodes, a shader patched as it compiles */
@@ -147,6 +150,7 @@ interface TimestampPool {
 async function stand(lab: Lab, command: RustCommand): Promise<string> {
   for (const [path, values] of Object.entries(command.tune)) window.__tune?.(path, values);
   await standAt(lab, command);
+  lab.wield({ wear: command.wear, rarity: command.rarity });
   if (command.foes > 0 && !command.village) {
     const spots: THREE.Vector3[] = crowdPlaces(command.foes, G.player.pos, G.player.facing);
     await foesAt(lab, spots, spots.map(() => 1));

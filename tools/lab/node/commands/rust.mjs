@@ -55,6 +55,8 @@ export default {
       usage: 'side',
       help: 'the frame written down as a tape for the engine\'s own harness, its maps no larger than this a side',
     },
+    wear: SETUP_OPTIONS.wear,
+    rarity: SETUP_OPTIONS.rarity,
     tune: SETUP_OPTIONS.tune,
     ...COMMON_OPTIONS,
   },
@@ -82,6 +84,8 @@ export default {
       census: Boolean(options.census),
       three: Boolean(options.three),
       capture: Math.round(options.capture ?? 0),
+      wear: options.wear?.filter((part) => part !== 'none'),
+      rarity: options.rarity,
       tune: options.tune === undefined ? {} : tunesFrom(options.tune),
     };
     const report = await side.command('rustHere', command);

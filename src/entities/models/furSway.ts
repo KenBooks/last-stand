@@ -44,6 +44,8 @@ export class FurSway {
     mesh.userData.drawsAlone = true;
     mesh.material = m;
     mesh.userData.furLag = this.lag;   // (read by probes)
+    // (what the Rust engine's kit look sways it by: engine/looks/kit.ts)
+    m.userData.fur = { lag: this.lag, time: this.time };
     mesh.geometry.computeBoundingSphere();
     this.centre.copy(mesh.geometry.boundingSphere!.center);
   }
