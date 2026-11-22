@@ -132,7 +132,10 @@ export class Bridge {
     const r = core.records, at = core.count * RECORD;
     r[at] = geometryId; r[at + 1] = materialId; r[at + 2] = first; r[at + 3] = count; r[at + 4] = set; r[at + 5] = bones;
     // (a material that writes no colour is in the frame for its shadow or its depth alone: the game's merged casters)
-    const casts = cast !== 'none' && (mesh.castShadow || (TUNE.castAll && mesh.receiveShadow));
+    // (a body moved by its bones casts only where the game says: a level keeps the heroes and the foes from
+    // casting, and taken for the village's still things they cast at every level, 260 thousand triangles a frame)
+    const still = !(mesh as THREE.SkinnedMesh).isSkinnedMesh;
+    const casts = cast !== 'none' && (mesh.castShadow || (TUNE.castAll && mesh.receiveShadow && still));
     r[at + 6] = (casts ? CASTS_SHADOW : 0) | (mesh.frustumCulled ? 0 : NEVER_CULLED)
       | (material.colorWrite === false || cast === 'only' ? SHADOW_ONLY : 0)
       | (this.materials.solidNow(material) ? SOLID : 0)
