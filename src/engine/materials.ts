@@ -5,6 +5,7 @@ import type { SeeThrough } from '../core/seeThrough';
 import type { Core } from './core';
 import { lookOf, LOOK_FLOATS, type RustLook } from './custom';
 import { TUNE } from './globals';
+import { NEAR_GLOW } from '../core/materials';
 import { kitLookOf } from './looks/kit';
 import type { Maps } from './maps';
 import type { SeeKinds } from './seeKinds';
@@ -25,6 +26,8 @@ interface MaterialEntry {
 }
 
 export type AnyMaterial = THREE.Material & Partial<{
+  /** lit on both sides as its front (a hair card's: `bothSidesOut` in entities/models/head.ts) */
+  litBothSides: boolean;
   color: THREE.Color; map: THREE.Texture | null; roughness: number; metalness: number; emissive: THREE.Color;
   emissiveIntensity: number; emissiveMap: THREE.Texture | null; normalMap: THREE.Texture | null;
   normalScale: THREE.Vector2; roughnessMap: THREE.Texture | null; metalnessMap: THREE.Texture | null;
@@ -40,7 +43,7 @@ export class Materials {
   private shared = new Map<string, number>();
   private shaders = new Map<string, number>();
   private volumes = new WeakMap<THREE.Data3DTexture, { id: number; version: number; cells: number }>();
-  private scratchParams = new Float32Array(20);
+  private scratchParams = new Float32Array(24);
   private scratchMaps = new Uint32Array(4);
   private scratchLook = new Float32Array(LOOK_FLOATS);
   /** a look's two maps, then its volume */
@@ -94,7 +97,12 @@ export class Materials {
     // (2: light added or laid over, shown only where the hero sees: no surface for the sight's fog to grey)
     const light = material.blending === THREE.AdditiveBlending
       || (material.blending === THREE.CustomBlending && material.blendSrc === THREE.OneFactor);
-    p[16] = (unlit ? 1 : 0) + (light ? 2 : 0);
+    // (4: lit on both sides as its front, a hair card's: `bothSidesOut` in entities/models/head.ts)
+    p[16] = (unlit ? 1 : 0) + (light ? 2 : 0) + (material.litBothSides ? 4 : 0);
+    // (the most light it gives back, a painted sign's under the bloom; and an effect's light dimmed near the eye)
+    const near = material.userData?.nearGlow ? NEAR_GLOW : null;
+    p[20] = material.userData?.litMost ?? 0;
+    p[21] = near ? near.ref : 0; p[22] = near ? near.pow : 0; p[23] = near ? near.min : 0;
     p[17] = material.vertexColors ? 1 : 0;
     p[18] = maps[1] ? 1 : 0;
     p[19] = (maps[2] ? 1 : 0) + (alphaAlone && maps[0] ? 2 : 0);
