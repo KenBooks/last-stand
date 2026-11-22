@@ -1250,7 +1250,7 @@ function beaconFlameMat(updaters: Updater[]): THREE.ShaderMaterial {
 /** A brazier on two stepped slabs, its fire's light casting the still shadows; `y0` the floor it stands on (the hall
  *  of heroes' stage: world/heroHall.ts), `slabs` how wide its slabs are against the crypt's (the village's hall's dais
  *  leaves less room). */
-export function buildBrazier(scene: THREE.Object3D, x: number, z: number, a: number, iron: THREE.Material, stone: THREE.Material, updaters: Updater[], y0 = 0, glow = 15, flames = 1, slabs = 1): void {
+export function buildBrazier(scene: THREE.Object3D, x: number, z: number, a: number, iron: THREE.Material, stone: THREE.Material, updaters: Updater[], y0 = 0, glow = 15, flames = 1, slabs = 1): THREE.PointLight {
   // two stepped slabs lift the fire
   for (const [w, y] of [[2.4 * slabs, 0.14], [1.7 * slabs, 0.4]]) {
     const step = new THREE.Mesh(boxWithUV(w, 0.28, w, 0.5), stone);
@@ -1274,6 +1274,7 @@ export function buildBrazier(scene: THREE.Object3D, x: number, z: number, a: num
     bowl: [[-0.16, 0.25], [0.04, 0.6], [0.19, 0.65]],
     smoke: 2.5, smokeColour: 0x2c2a28, embers: 8, glow: flames,
   }, updaters);
+  return light;
 }
 
 /** Clusters of candles of different heights, their flames swaying, now and then giving off a spark. */

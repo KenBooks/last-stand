@@ -392,9 +392,10 @@ export class Engine {
      * How bright the baked lights are read, out in the open and under the shelter (`Gpu::set_light_strength`).
      * @param {number} open
      * @param {number} sheltered
+     * @param {number} apart
      */
-    set_light_strength(open, sheltered) {
-        wasm.engine_set_light_strength(this.__wbg_ptr, open, sheltered);
+    set_light_strength(open, sheltered, apart) {
+        wasm.engine_set_light_strength(this.__wbg_ptr, open, sheltered, apart);
     }
     /**
      * @param {number} id

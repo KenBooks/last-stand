@@ -1506,8 +1506,10 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   const daisTop = y0 + HALL.daisHigh;
   for (const s of [-1, 1]) {
     const x = X + s * BRAZIERS.x;
-    buildBrazier(scene, x, BRAZIERS.z, Math.PI / 2, M.iron, M.granite, updaters, daisTop, BRAZIERS.glow, BRAZIERS.flames,
-      BRAZIERS.slabs);
+    const brazier = buildBrazier(scene, x, BRAZIERS.z, Math.PI / 2, M.iron, M.granite, updaters, daisTop, BRAZIERS.glow,
+      BRAZIERS.flames, BRAZIERS.slabs);
+    // (a renderer that bakes its still lights takes it with the hall's torches: src/engine/lightCache.ts `StillLight`)
+    brazier.userData.still = { side: 'inside', full: BRAZIERS.glow };
     obstacles.push({ x, z: BRAZIERS.z, r: 0.75, h: daisTop + 1.8 });
   }
   // the torches either side of the door, on the front wall's face (cut away with it over the hero inside)

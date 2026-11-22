@@ -7,12 +7,34 @@
 // by the hour, the hall's torches whole, each on its side of the shelter, which the volume's cells keep apart. Within
 // `NEAR` m of itself a baked lamp is still the frame's own (`reachOf`): a cell is too coarse there. A lamp the game
 // didn't say the fullest of, or that's neither the street's nor the hall's, stays whole in the frame's loop.
+//
+// A light of the scene's own that never moves is baked with them where the game says so (`StillLight`, on the
+// light's `userData.still`): the hall's braziers with its torches, steady; a portal's glow by a strength of its
+// own, its pulse (the engine's third: what's no lamp). In the frame's loop each reached the whole hall, worked
+// out at every pixel: the point lights were 5.8 ms of a phone's 25 ms frame by the braziers at Very low (a
+// report from play, QJ5A-BD6Q). The campfire isn't: it dims by the hour on its own, and one strength reads all
+// that's no lamp.
 import * as THREE from 'three';
 import { lampList, lampStill, LAMPS_MOST } from '../core/lamps';
 import { perfClock } from '../core/perfClock';
 import type { Core } from './core';
 import { TUNE } from './globals';
 import { shelterBox } from './lights';
+import { shownPointLights } from '../core/webgpu';
+
+/** What a game says of a point light that never moves, for its light to be baked (`light.userData.still`): the
+ *  side whose lamps it's read with ('inside': the shelter's, steady with them) or 'apart' (by its own strength,
+ *  the mean of all such), and its intensity as baked. */
+export interface StillLight { side: 'inside' | 'apart'; full: number }
+
+/** `light`'s word that it's still, if the game gave one. */
+const stillOf = (light: THREE.PointLight): StillLight | undefined => light.userData.still as StillLight | undefined;
+
+/** a baked light's decay as the bake reads it: a lamp of the shelter's side falling as a light that's no lamp
+ *  (the engine's bake.wgsl: a code of 4 or more), or its own decay, what's no lamp's */
+const INSIDE_PLAIN = -6;
+/** how far a still light may stray from where it was baked before it's baked again, m */
+const SWAY = 0.25;
 
 /** how near a baked lamp its light is the frame's own to work out, m (six cells) */
 const NEAR = 3;
@@ -35,6 +57,8 @@ export class LightCache {
   private key = '';
   /** the lamps in the volume */
   private baked = new Set<number>();
+  /** the scene's own lights in it */
+  private own = new Set<THREE.PointLight>();
   /** the last bake: its cells, a cell's side (m), and what it took on the page (ms) */
   private last = { cells: 0, cell: 0, ms: 0, bakes: 0 };
   /** how bright the volume was last told to be read: out in the open, and under the shelter */
@@ -53,9 +77,33 @@ export class LightCache {
     return this.baked.has(lamp) ? Math.min(reach, NEAR) : reach;
   }
 
+  /** where each of the scene's own still lights was first met */
+  private places = new WeakMap<THREE.PointLight, THREE.Vector3>();
+
+  /** Where a still light of the scene's own is baked: where it was first met, while it stays within `SWAY` of
+   *  there. A fire's light sways with its flame, a third of a millimetre a frame, and baked where it is now the
+   *  volume was made again every frame (367 bakes over one stand in the hall). */
+  private placeOf(light: THREE.PointLight): THREE.Vector3 {
+    light.getWorldPosition(at);
+    const met = this.places.get(light);
+    if (met && met.distanceTo(at) < SWAY) return met;
+    const now = at.clone();
+    this.places.set(light, now);
+    return now;
+  }
+
+  /** How far a light of the scene's own reaches in the frame's loop: its own reach, or `NEAR` once it's in the
+   *  volume. */
+  ownReach(light: THREE.PointLight): number {
+    return this.own.has(light) ? Math.min(light.distance || NEAR, NEAR) : light.distance;
+  }
+
+  /** A harness's: how many of the scene's own lights are in the volume. */
+  ownNow(): number { return this.own.size; }
+
   /** A harness's: the lamps in the volume and its last bake. */
-  now(): { lamps: number; cells: number; cell: number; ms: number; bakes: number; open: number; sheltered: number } {
-    return { lamps: this.baked.size, ...this.last, ...this.told };
+  now(): { lamps: number; own: number; cells: number; cell: number; ms: number; bakes: number; open: number; sheltered: number } {
+    return { lamps: this.baked.size, own: this.own.size, ...this.last, ...this.told };
   }
 
   /**
@@ -76,12 +124,24 @@ export class LightCache {
         lamps.push(lamp);
       }
     }
+    // (the scene's own, with the lamps alone: a place with none has none of this volume's casters either)
+    const own: THREE.PointLight[] = [];
+    for (const light of lamps.length && TUNE.cacheOwn > 0 ? shownPointLights() : []) {
+      const still = stillOf(light);
+      if (!still || !(light.distance > NEAR)) continue;
+      const c = light.color, by = still.full;
+      const { x, y, z } = this.placeOf(light);
+      lights.push(x, y, z, light.distance, c.r * by, c.g * by, c.b * by,
+        still.side === 'inside' ? INSIDE_PLAIN : light.decay);
+      own.push(light);
+    }
     const shadowed = TUNE.cacheShadows > 0;
     const key = `${shadowed}:${lights.join(',')}`;
     if (key === this.key) return false;
     this.key = key;
     const before = this.baked.size;
     this.baked = new Set(lamps);
+    this.own = new Set(own);
     if (!lamps.length) {
       core.engine.drop_lights();
       return before > 0;
@@ -98,7 +158,11 @@ export class LightCache {
     }
     // (cells no finer than the budget holds)
     const room = (high[0] - low[0]) * (high[1] - low[1]) * (high[2] - low[2]);
-    const cell = Math.max(CELL, Math.cbrt(room / MOST_CELLS));
+    let cell = Math.max(CELL, Math.cbrt(room / MOST_CELLS));
+    // (each way's cells are whole: counted so, a volume the scene's own lights had widened came to 763,840 cells,
+    // 12.2 MB against the 12 it's held to)
+    const cellsAt = (side: number): number => [0, 1, 2].reduce((all, axis) => all * Math.ceil((high[axis] - low[axis]) / side), 1);
+    while (cellsAt(cell) > MOST_CELLS) cell *= 1.01;
     core.count = core.boneFloats = 0;
     for (const mesh of this.casters) record(mesh);
     core.freshViews();
@@ -123,7 +187,16 @@ export class LightCache {
       if (still.inside) sheltered = share;
       else open = share;
     }
+    // (what's no lamp: as bright as those shown are now against as they were baked, as one)
+    let apart = 0, apartOf = 0;
+    const shown = this.own.size ? new Set(shownPointLights()) : null;
+    for (const light of this.own) {
+      const still = stillOf(light);
+      if (!still || still.side !== 'apart') continue;
+      apartOf++;
+      if (shown?.has(light)) apart += light.intensity / still.full;
+    }
     this.told = { open, sheltered };
-    this.core.engine.set_light_strength(open, sheltered);
+    this.core.engine.set_light_strength(open, sheltered, apartOf ? apart / apartOf : 0);
   }
 }

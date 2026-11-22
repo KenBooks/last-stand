@@ -160,8 +160,24 @@ function lightCache(bridge: Bridge): Checked {
   const megabytes = cache.cells * CACHE_CELL_BYTES / 1e6;
   if (cache.lamps < LAMPS_SHADOWED_LEAST) return failed(`the light cache: ${cache.lamps} lamps baked`);
   if (megabytes > CACHE_MOST_MB) return failed(`the light cache: ${megabytes.toFixed(1)} MB, ${CACHE_MOST_MB} at the most`);
-  return passed(`the light cache: ${cache.lamps} lamps baked in ${megabytes.toFixed(1)} MB (cells of ${cache.cell.toFixed(2)} m)`);
+  // (and the scene's own still lights with them, the hall's braziers and the portals: left to the frame's loop each
+  // reached its whole place at every pixel, 5.8 ms of a phone's 25 ms frame in the hall)
+  if (cache.own < OWN_BAKED_LEAST) {
+    return failed(`the light cache: ${cache.own} of the scene's own still lights baked, ${OWN_BAKED_LEAST} at the least`);
+  }
+  const wide = bridge.pointLines().filter((line) => /the scene's own/.test(line) && Number(/reaching ([\d.]+)/.exec(line)?.[1]) > OWN_NEAR);
+  if (wide.length > OWN_WIDE_MOST) {
+    return failed(`the frame's loop: ${wide.length} lights of the scene's own reach past ${OWN_NEAR} m (${wide.join('; ')})`);
+  }
+  return passed(`the light cache: ${cache.lamps} lamps and ${cache.own} of the scene's own lights baked in `
+    + `${megabytes.toFixed(1)} MB (cells of ${cache.cell.toFixed(2)} m)`);
 }
+/** the least of the scene's own still lights the village's volume holds (two braziers, the portals), how far one of
+ *  them reaches in the frame's loop once baked (m), and the most lights of the scene's own left whole there (the
+ *  campfire, which dims by the hour on its own) */
+const OWN_BAKED_LEAST = 4;
+const OWN_NEAR = 3;
+const OWN_WIDE_MOST = 1;
 /** a cell of the light cache on the GPU, bytes, and the most its volume may take, MB */
 const CACHE_CELL_BYTES = 16;
 const CACHE_MOST_MB = 12;

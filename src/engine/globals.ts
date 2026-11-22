@@ -36,6 +36,8 @@ export const TUNE = tunable('rust', {
   /** the village's still lamps baked into the engine's light cache (`lightCache.ts`; 0: every lamp whole in the
    *  frame's own loop, to compare) */
   lightCache: 1,
+  /** the scene's own still lights baked with them (`lightCache.ts` `StillLight`; 0: whole in the frame's loop) */
+  cacheOwn: 1,
   /** the baked lamps hidden by what stands still (0: their light through every wall, a profile's) */
   cacheShadows: 1,
   bloom: 1,

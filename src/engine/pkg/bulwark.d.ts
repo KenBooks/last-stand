@@ -103,7 +103,7 @@ export class Engine {
     /**
      * How bright the baked lights are read, out in the open and under the shelter (`Gpu::set_light_strength`).
      */
-    set_light_strength(open: number, sheltered: number): void;
+    set_light_strength(open: number, sheltered: number, apart: number): void;
     set_material_custom(id: number, custom: Float32Array | number[]): void;
     set_material_params(id: number, params: Float32Array | number[]): void;
     /**
@@ -163,7 +163,7 @@ export interface InitOutput {
     readonly engine_set_bloom_share: (a: number, b: number) => void;
     readonly engine_set_depth_first: (a: number, b: number) => void;
     readonly engine_set_instances: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
-    readonly engine_set_light_strength: (a: number, b: number, c: number) => void;
+    readonly engine_set_light_strength: (a: number, b: number, c: number, d: number) => void;
     readonly engine_set_material_custom: (a: number, b: number, c: number, d: number) => void;
     readonly engine_set_material_params: (a: number, b: number, c: number, d: number) => void;
     readonly engine_set_mesh_vertices: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => number;

@@ -83,6 +83,7 @@ export class Bridge {
     this.lit.lampTaking = () => this.lampShadows.taking;
     this.lightCache = new LightCache(core);
     this.lit.lampReach = this.lampShadows.reachOf = (lamp, reach) => this.lightCache.reachOf(lamp, reach);
+    this.lit.ownReach = (light) => this.lightCache.ownReach(light);
     this.particles = new Sprites(core);
     this.stats = core.stats;
     this.skipped = core.skipped;

@@ -40,6 +40,9 @@ export class Lights implements Lit {
   lampReach: (lamp: number, reach: number) => number = (_lamp, reach) => reach;
   /** the lamps a mover stands by, each with its map of the movers (`lampShadows.ts` `taking`; set by the bridge) */
   lampTaking: () => readonly Taking[] = () => [];
+  /** how far a light of the scene's own reaches in the frame's loop: its own reach, or as near as its baked light
+   *  leaves it (`lightCache.ts`; set by the bridge) */
+  ownReach: (light: THREE.PointLight) => number = (light) => light.distance;
 
   constructor(private core: Core) {}
 
@@ -69,7 +72,7 @@ export class Lights implements Lit {
       // (asked of the light itself: one the game hides from three, `shownPointLights`, has its matrices left as
       // they stood when it was hidden)
       point.getWorldPosition(v3);
-      g[at] = v3.x; g[at + 1] = v3.y; g[at + 2] = v3.z; g[at + 3] = point.distance;
+      g[at] = v3.x; g[at + 1] = v3.y; g[at + 2] = v3.z; g[at + 3] = this.ownReach(point);
       g[at + 4] = c.r * by; g[at + 5] = c.g * by; g[at + 6] = c.b * by; g[at + 7] = point.decay;
       this.points++;
     } else {

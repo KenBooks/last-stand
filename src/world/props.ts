@@ -638,6 +638,8 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
   const glow = new THREE.PointLight(new THREE.Color(...colors.b).lerp(new THREE.Color(...colors.core), 0.5),
     PORTAL_LIGHT.intensity, PORTAL_LIGHT.reach, 2);
   glow.position.set(0, PORTAL_LIGHT.up, PORTAL_LIGHT.out);
+  // (a renderer that bakes its still lights reads it by a strength of its own, its pulse: lightCache.ts `StillLight`)
+  glow.userData.still = { side: 'apart', full: PORTAL_LIGHT.intensity };
   parent.add(glow);
 
   const pos = new THREE.Vector3(Math.cos(angle) * (WALL_R - 2.5), 0, Math.sin(angle) * (WALL_R - 2.5));
