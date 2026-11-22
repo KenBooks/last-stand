@@ -295,6 +295,8 @@ export interface Frame {
   sight?: THREE.Vector3;
   /** the touch stick pushed this far (x right, y down the screen, its length up to 1); left as it was when not given */
   stick?: [number, number];
+  /** the pointer resting on the page's UI this frame, not on the world (a slot of the skill bar, a panel) */
+  overUI?: boolean;
 }
 
 /** The state a measure or a picture starts from. */
@@ -622,6 +624,7 @@ export class Lab {
 
   private applyInput(frame: Frame): void {
     this.pointAt(frame.aim ?? this.aim);
+    if (frame.overUI) input.mouse.overUI = true;
     if (frame.look) renderer.lookBy(frame.look[0], frame.look[1]);
     if (frame.sight) lookToward(frame.sight);
     const keys = frame.keys ?? [];

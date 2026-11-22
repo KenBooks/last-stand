@@ -739,11 +739,12 @@ export class Player {
       return;
     }
     this.holdAim();
-    if ((input.mouse.overUI && !input.touchMode) || this.dashShut() || this.staggered) return;
+    if (this.dashShut() || this.staggered) return;
     // the shot remembered from a press while busy: drawn now, and loosed at once if its key is up again (a tap)
     if (this.queued && !this.casting && !this.channel) this.castQueued();
     const busy = !!(this.casting || this.channel);
     for (const key of SKILL_KEYS) {
+      if (this.heldOffByUI(key)) continue;
       const pressed = wasPressed(key);
       if (!isDown(key) && !pressed) continue;
       const skill = this.skillAt(key);
@@ -758,6 +759,14 @@ export class Player {
       // (a press refused is heard; a key held on is tried every frame, and isn't: it casts once the skill is ready)
       if (pressed && this.refused) this.denied(this.refused);
     }
+  }
+
+  /** Whether `key` casts nothing because the pointer is over the page's UI: the mouse's buttons alone, whose press
+   *  there is the UI's (a button clicked, an item picked up). The keyboard's keys cast on: with all of them held
+   *  off, the pointer resting on the skill bar in a fight made 1 to 4 and Q do nothing (from play: "mouse was
+   *  hovering over skill, in that case they dont do anything", #816). */
+  private heldOffByUI(key: SkillKey): boolean {
+    return input.mouse.overUI && !input.touchMode && (key === 'mouse0' || key === 'mouse2');
   }
 
   /** An aimed skill's key held: aimed from now on (another being aimed is given up). */
@@ -1094,9 +1103,8 @@ export class Player {
   /** A held block comes back in the same update that a swing finishes, never during it or a dash. */
   private resumeHeldBlock(): void {
     if (this.idle || !this.active || this.casting || this.channel || this.dash || this.staggered) return;
-    if (input.mouse.overUI && !input.touchMode) return;
     for (const key of SKILL_KEYS) {
-      if (!isDown(key)) continue;
+      if (!isDown(key) || this.heldOffByUI(key)) continue;
       const skill = this.skillAt(key);
       if (skill?.def.block) { this.startChannel(skill, key); return; }
     }
