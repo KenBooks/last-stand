@@ -69,6 +69,10 @@ interface Refused {
 const SIGNED = 'in: VertexOut, @builtin(front_facing) front: bool';
 const SEEN_THROUGH = 'if (see_left(in.world, in.clip.xy, vec3f(0.5)) < 0.0) { discard; }';
 const MAPPED = 'let sampled = textureSample(t_base, samp, in.uv); if ((m.base * in.color * sampled).a < m.emissive.w) { discard; }';
+const FACED = 'if (!front) { s.normal = -s.normal; }';
+const SURFACE = 'var s: Surface; s.base = m.base * in.color * textureSample(t_base, samp, in.uv); '
+  + `s.normal = normalize(in.normal); ${FACED} s.roughness = m.params.x; s.metalness = m.params.y; `
+  + 's.emissive = m.emissive.rgb; s.specular = 1.0; s.sun_through = 0.0; s.fog = 1.0; s.shade = 1.0;';
 /**
  * The engine's own `fs_depth` (Bulwark's lit.wgsl) written again a part at a time: each its name, its signature
  * and its body. The tiny probes above were all made on the phones that refuse the real one, so what they refuse
@@ -81,6 +85,11 @@ const BODIES: [name: string, signed: string, body: string][] = [
   ['seen through, then a return inside an if', SIGNED, `if (m.emissive.w <= 0.0) { ${SEEN_THROUGH} return; }`],
   ['its map and its alpha alone', SIGNED, MAPPED],
   ['seen through and its map, no return', SIGNED, `${SEEN_THROUGH} ${MAPPED}`],
+  // (all six above were made by the phones that refuse the whole: what's left of it is the surface and its hook)
+  ['a surface made, no hook run', SIGNED, `${SURFACE} if (s.base.a < m.emissive.w) { discard; }`],
+  ['a surface made, the face not read', SIGNED, `${SURFACE.replace(FACED, '')} if (!surface_hook(&s, in)) { discard; }`],
+  ['a surface made and its hook run', SIGNED, `${SURFACE} if (!surface_hook(&s, in)) { discard; }`],
+  ['the hook run, then what is seen through', SIGNED, `${SURFACE} if (!surface_hook(&s, in)) { discard; } ${SEEN_THROUGH}`],
 ];
 
 /** `code` with its `fs_depth` given `signed` and `body` (null: the code has none). */
