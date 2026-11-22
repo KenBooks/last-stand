@@ -15,7 +15,7 @@ import { cobblestone, soil, ashlar, granite, limestone, marble, slate, bark, ban
 import { particles, col } from '../fx/particles';
 import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
-import { seeThrough, seeThroughFade } from '../core/seeThrough';
+import { seeThrough, seeThroughFade, seeValue } from '../core/seeThrough';
 import { floorRelief, reliefContext } from '../core/parallax';
 import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, asTree, asGrass, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type GatePlace, type Portal, type Updater } from './props';
 
@@ -169,7 +169,7 @@ function dampGround<M extends THREE.MeshStandardMaterial>(m: M, earth: THREE.Vec
       tile: EARTH.tile, soil: litter,
     };
     const nodes = dampNodes(m, laid);
-    if (RUNNING.rust) rustLook(m, dampLook(laid, outside, OUTSIDE));
+    if (RUNNING.rust) rustLook(m, dampLook(laid, outside, OUTSIDE, COBBLE_RELIEF));
     Object.assign(m, {
       colorNode: nodes.color, roughnessNode: nodes.roughness, normalNode: nodes.normal,
       outputNode: outsideOutputNode(outside, OUTSIDE),
@@ -1243,7 +1243,7 @@ function beaconFlameMat(updaters: Updater[]): THREE.ShaderMaterial {
     };
   });
   updaters.push((_dt, t) => { mat.uniforms.uTime.value = t; });
-  if (RUNNING.rust) rustLook(mat, beaconLook(mat.uniforms.uTime));
+  if (RUNNING.rust) rustLook(mat, { ...beaconLook(mat.uniforms.uTime), fades: seeValue('prop') });
   return mat;
 }
 

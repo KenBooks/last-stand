@@ -10,7 +10,7 @@
 import { WEBGPU } from '../core/webgpu';
 import { RUNNING } from '../core/rendererChoice';
 import { rustLook } from '../engine/custom';
-import { causticsLook, waterLook } from '../engine/looks/water';
+import { causticsLook, fallingLook, waterLook } from '../engine/looks/water';
 import type { OwnLooks } from '../core/shaderPorts';
 import { causticNodes, fallingNodes, waterLooks, waterNodes } from './villageNodes';
 import * as THREE from 'three';
@@ -360,7 +360,11 @@ function waterMaterial(time: { value: number }, colour: number): THREE.MeshStand
   const m = new THREE.MeshStandardMaterial({
     color: colour, roughness: 0.1, metalness: 0.1, transparent: true, depthWrite: false,
   });
-  if (RUNNING.rust) rustLook(m, waterLook(time));
+  if (RUNNING.rust) {
+    rustLook(m, waterLook(time, skyLight, { rough: WATER_LIT_ROUGH, shine: WATER_LIT_SHINE }));
+    // (each glint held under the bloom's threshold: the engine holds a material's light to it)
+    m.userData.litMost = GLINT_MOST;
+  }
   if (WEBGPU) {
     waterNodes(m, time);
     const sky = skyLight;
@@ -455,6 +459,7 @@ function fallingWater(streaks: THREE.Texture, around: number, opacity: number): 
     color: 0xdfeef2, emissive: FALLING_GLOW, roughness: 0.85, alphaMap: map, transparent: true, opacity, depthWrite: false,
     side: THREE.DoubleSide,
   });
+  if (RUNNING.rust) rustLook(m, fallingLook(skyLight));
   if (WEBGPU) {
     const sky = skyLight;
     (m as typeof m & OwnLooks).webgpuLooks = (converted) => fallingNodes(converted, sky);

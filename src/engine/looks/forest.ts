@@ -1,8 +1,11 @@
 // The Thornwood's floor, grass and light under the Rust engine: `world/forestNodes.ts`'s nodes as WGSL for the
-// engine's hooks: the moss tinted over the floor, the grass's tufts swaying in the wind, the shafts of light.
+// engine's hooks: the moss tinted over the floor (its pebbles and leaves stood up out of the soil:
+// looks/relief.ts), the grass's tufts swaying in the wind, the shafts of light.
 import type * as THREE from 'three';
 import type { Sway } from '../../world/forestNodes';
+import type { FloorRelief } from '../../core/parallax';
 import type { RustLook, RustShader } from '../custom';
+import { RELIEF, reliefNumbers } from './relief';
 
 const MOSS_NOISE = /* wgsl */ `
 fn moss_hash(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
@@ -17,10 +20,11 @@ fn moss_noise(p: vec2f) -> f32 {
 
 const MOSS: RustShader = {
   name: 'forest-moss',
-  hooks: MOSS_NOISE + /* wgsl */ `
+  hooks: MOSS_NOISE + RELIEF + /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {}
 
 fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  relief_at(s, in, m.c[0]);
   let xz = in.world.xz;
   let patches = moss_noise(xz * 0.11) * 0.6 + moss_noise(xz * 0.37 + 7.0) * 0.3 + moss_noise(xz * 1.3) * 0.1;
   let moss = smoothstep(0.4, 0.7, patches);
@@ -69,7 +73,11 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 };
 
 /** The floor's moss, over the material's own colour. */
-export const mossLook = (): RustLook => ({ shader: MOSS, casts: true, numbers() {} });
+export const mossLook = (relief: FloorRelief): RustLook => ({
+  shader: MOSS,
+  casts: true,
+  numbers(out) { reliefNumbers(out, 0, relief); },
+});
 
 /** The grass in the wind (`windInGrass`'s numbers); the engine's own clock is the game's. */
 export const grassWindLook = ({ rate, reach }: Sway): RustLook => ({

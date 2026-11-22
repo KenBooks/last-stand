@@ -29,6 +29,9 @@ export function setReliefSteps(n: number): void {
   steps.value = n;
 }
 
+/** The steps a ray takes now (the Rust engine's looks are told them: engine/looks/relief.ts). */
+export const reliefStepsNow = (): number => steps.value;
+
 const RELIEF_GLSL = /* glsl */`
 varying vec3 vReliefWorld;
 uniform int uReliefSteps;

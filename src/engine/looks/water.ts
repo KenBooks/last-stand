@@ -1,7 +1,8 @@
 // The fountain's water under the Rust engine (`world/villageNodes.ts` `waterNodes` and `causticNodes`): its normal
 // bent by rings out from its middle, two slow swells and wavelets crossing three ways, clearer looked down into; and
-// the basin floor's web of light. (Not ported: what it takes of the sky by the hour, and its highlights held under
-// the bloom's threshold, `waterLooks`: both reach into three's lighting.)
+// the basin floor's web of light; what it mirrors of the sky by the hour, and how the lights round it see it
+// (`waterLooks`: rougher, a share of their highlights; its glints' most is the material's `litMost`). The falling
+// water mirrors the sky by the hour alone (`fallingLook`).
 import type { RustLook, RustShader } from '../custom';
 
 const WATER: RustShader = {
@@ -28,6 +29,20 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   (*s).normal = normal;
   let facing = clamp(dot(normal, normalize(g.cam_pos.xyz - in.world)), 0.0, 1.0);
   (*s).base = vec4f((*s).base.rgb, mix(0.45, 0.92, pow(1.0 - facing, 3.0)));
+  (*s).mirror = m.c[0].y;
+  (*s).lights = m.c[0].zw;
+  return true;
+}
+`,
+};
+
+const FALLING: RustShader = {
+  name: 'fountain-falling',
+  hooks: /* wgsl */ `
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {}
+
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  (*s).mirror = m.c[0].x;
   return true;
 }
 `,
@@ -57,10 +72,19 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 `,
 };
 
-/** A pool's water, on the game's clock (`{ value }`). */
-export const waterLook = (time: { value: number }): RustLook => ({
+/** How the lights round the water see it (`WaterLit` in world/villageNodes.ts). */
+interface Lit { rough: number; shine: number }
+
+/** A pool's water, on the game's clock (`{ value }`), mirroring `sky` of the sky, lit as `lit` says. */
+export const waterLook = (time: { value: number }, sky: { value: number }, lit: Lit): RustLook => ({
   shader: WATER,
-  numbers(out) { out[0] = time.value; },
+  numbers(out) { out[0] = time.value; out[1] = sky.value; out[2] = lit.rough; out[3] = lit.shine; },
+});
+
+/** The falling water and its foam, mirroring `sky` of the sky. */
+export const fallingLook = (sky: { value: number }): RustLook => ({
+  shader: FALLING,
+  numbers(out) { out[0] = sky.value; },
 });
 
 /** The basin's floor under the water: its web of light on `time`, by how much of the sky's light there is. */

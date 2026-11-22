@@ -1,5 +1,5 @@
 // A fire's flames under the Rust engine: `world/fireNodes.ts`'s ray march, its WGSL as it is there (`flameWgsl`), in
-// the engine's surface hook; the baked loop is the look's volume. (Not ported: the flames fading as the prop under
+// the engine's surface hook; the baked loop is the look's volume. (The flames fade as the prop under
 // them dissolves, and the embers' own look on the bed and the logs.)
 import type * as THREE from 'three';
 import { emberWgsl, flameWgsl, type EmberLooks, type FlameShape, type FlameUniforms } from '../../world/fireNodes';

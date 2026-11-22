@@ -3,6 +3,7 @@
 // bridge does for its meshes. A material with a look is drawn by it; one moved or cut by three's nodes and with no
 // look isn't drawn (`Bridge.skipped`). Each look's shader is in `looks/`, beside the game's code it ports.
 import type * as THREE from 'three';
+import type { SeeThrough } from '../core/seeThrough';
 
 /** how many floats a shader has to itself (`m.c`, 48 vec4s: `CUSTOM_FLOATS` in the engine's gpu.rs) */
 export const LOOK_FLOATS = 192;
@@ -36,6 +37,9 @@ export interface RustLook {
   /** its draw's list, as it is this frame: floats its vertex hook reads by `bones[(*v).list + row]`, 16 a row
    *  (a field's tiles, any number of them: its numbers hold 80 at most). For a mesh that isn't skinned */
   list?(): Float32Array;
+  /** what it fades with, where that's seen through (core/seeThrough.ts `seeValue`): a glow or a veil over a prop
+   *  fades out by its alpha as the prop dissolves, not left burning in the air */
+  fades?: SeeThrough;
 }
 
 const looks = new WeakMap<THREE.Material, RustLook>();

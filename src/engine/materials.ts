@@ -6,6 +6,7 @@ import type { Core } from './core';
 import { lookOf, LOOK_FLOATS, type RustLook } from './custom';
 import { TUNE } from './globals';
 import { NEAR_GLOW } from '../core/materials';
+import { isDualQuaternionSkinned } from '../entities/models/dualQuaternion';
 import { kitLookOf } from './looks/kit';
 import type { Maps } from './maps';
 import type { SeeKinds } from './seeKinds';
@@ -33,6 +34,9 @@ export type AnyMaterial = THREE.Material & Partial<{
   normalScale: THREE.Vector2; roughnessMap: THREE.Texture | null; metalnessMap: THREE.Texture | null;
   isMeshBasicMaterial: boolean; isMeshBasicNodeMaterial: boolean; isShaderMaterial: boolean;
   isMeshPhongMaterial: boolean; alphaMap: THREE.Texture | null;
+  flatShading: boolean; bumpMap: THREE.Texture | null; bumpScale: number;
+  clearcoat: number; clearcoatRoughness: number;
+  sheen: number; sheenColor: THREE.Color; sheenRoughness: number; sheenColorMap: THREE.Texture | null;
   positionNode: unknown; colorNode: unknown; fragmentNode: unknown; vertexNode: unknown; seeThrough: unknown;
 }>;
 
@@ -43,7 +47,7 @@ export class Materials {
   private shared = new Map<string, number>();
   private shaders = new Map<string, number>();
   private volumes = new WeakMap<THREE.Data3DTexture, { id: number; version: number; cells: number }>();
-  private scratchParams = new Float32Array(24);
+  private scratchParams = new Float32Array(32);
   private scratchMaps = new Uint32Array(4);
   private scratchLook = new Float32Array(LOOK_FLOATS);
   /** a look's two maps, then its volume */
@@ -81,7 +85,8 @@ export class Materials {
     p[9] = material.metalness ?? 0;
     p[10] = material.normalScale?.x ?? 1;
     // (what the game dissolves where it hides the hero: core/seeThrough.ts marks it)
-    p[11] = this.seeKinds.kindOf(material.seeThrough as SeeThrough | undefined);
+    // (or what its look fades with: a flame over a brazier, a gate's membrane)
+    p[11] = this.seeKinds.kindOf((material.seeThrough as SeeThrough | undefined) ?? look?.fades);
     const placed = map ?? material.alphaMap ?? material.normalMap ?? null;
     p[12] = placed ? placed.repeat.x : 1; p[13] = placed ? placed.repeat.y : 1;
     p[14] = placed ? placed.offset.x : 0; p[15] = placed ? placed.offset.y : 0;
@@ -91,14 +96,33 @@ export class Materials {
     const alphaAlone = !!material.alphaMap && !map;
     if (alphaAlone) maps[0] = held.textureId(material.alphaMap);
     else maps[0] = material.alphaMap ? held.cutOutId(map, material.alphaMap) : held.textureId(map);
-    maps[1] = held.textureId(material.normalMap);
+    // (a height map in the normal's slot where there's no normal map: fx/rubble.ts's stones, the hoard's pile)
+    const bumped = !material.normalMap && !!material.bumpMap;
+    maps[1] = held.textureId(material.normalMap ?? material.bumpMap ?? null);
     maps[2] = held.textureId(rough);
     maps[3] = held.textureId(material.emissiveMap);
     // (2: light added or laid over, shown only where the hero sees: no surface for the sight's fog to grey)
     const light = material.blending === THREE.AdditiveBlending
       || (material.blending === THREE.CustomBlending && material.blendSrc === THREE.OneFactor);
     // (4: lit on both sides as its front, a hair card's: `bothSidesOut` in entities/models/head.ts)
-    p[16] = (unlit ? 1 : 0) + (light ? 2 : 0) + (material.litBothSides ? 4 : 0);
+    // (8: skinned by dual quaternions, a hand's: entities/models/dualQuaternion.ts)
+    p[16] = (unlit ? 1 : 0) + (light ? 2 : 0) + (material.litBothSides ? 4 : 0)
+      + (isDualQuaternionSkinned(material) ? 8 : 0)
+      // (16: shaded flat; 32: drawn a hair nearer, a mark laid on a floor, three's `polygonOffset` towards the
+      // eye; 64: its sheen tinted by its base map; 128: the normal's slot holds a height map)
+      + (material.flatShading ? 16 : 0)
+      + (material.polygonOffset && material.polygonOffsetFactor < 0 ? 32 : 0)
+      + (material.sheenColorMap && material.sheenColorMap === map ? 64 : 0)
+      + (bumped ? 128 : 0)
+      // (256: fades by its alpha where its kind is seen through; 512: its colour already multiplied by its alpha)
+      + (look?.fades ? 256 : 0)
+      + (material.blending === THREE.CustomBlending && material.blendSrc === THREE.OneFactor ? 512 : 0);
+    // (a clear coat and its roughness, how much a height map bumps it; a cloth's sheen and its roughness)
+    p[24] = material.clearcoat ?? 0; p[25] = material.clearcoatRoughness ?? 0;
+    p[26] = bumped ? material.bumpScale ?? 1 : 0; p[27] = 0;
+    const sheen = material.sheen ?? 0, sheenColor = material.sheenColor;
+    p[28] = sheenColor ? sheenColor.r * sheen : 0; p[29] = sheenColor ? sheenColor.g * sheen : 0;
+    p[30] = sheenColor ? sheenColor.b * sheen : 0; p[31] = material.sheenRoughness ?? 1;
     // (the most light it gives back, a painted sign's under the bloom; and an effect's light dimmed near the eye)
     const near = material.userData?.nearGlow ? NEAR_GLOW : null;
     p[20] = material.userData?.litMost ?? 0;

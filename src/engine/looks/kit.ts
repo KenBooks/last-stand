@@ -2,8 +2,8 @@
 // dissolve (its pixels dropped by the noise, an edge glowing round the hole), frost and char over its colour, its
 // glow dimmed near the camera, a rim of light at glancing angles, the char's embers and a hit's flash. Found on a
 // material by its `kitLooks`, and shared by what it holds, so a kind's bodies still batch; a painted face's hair in
-// another colour, a worn item's glow in its rarity's colour, the hood's shade, and the fur's sway
-// (entities/models/furSway.ts). (Not ported: the shine's cap, a held blade's highlights through the eyes.)
+// another colour, a worn item's glow in its rarity's colour, the hood's shade, the fur's sway
+// (entities/models/furSway.ts), and a hand's maps read triplanar (entities/models/triplanar.ts). A held blade's highlights through the eyes are held to a most (`kit.u.uShine`).
 import type * as THREE from 'three';
 import { NEAR_GLOW, itemGlowUniforms, type KitLooks } from '../../core/materials';
 import { rustLook, type RustLook, type RustShader } from '../custom';
@@ -11,7 +11,7 @@ import { rustLook, type RustLook, type RustShader } from '../custom';
 /** how many of the look's numbers tell two materials apart (past them: the clocks, and the glow's shape) */
 const NUMBERS = 32;
 /** where the look's numbers are, in floats (`m.c`, four to a vec4) */
-const AT = { shade: 16, aura: 20, hairTinted: 23, hair: 24, fur: 27, lag: 28, auraClock: 32, furTime: 33, shape: 36,
+const AT = { shade: 16, aura: 20, hairTinted: 23, hair: 24, fur: 27, lag: 28, triplanar: 31, auraClock: 32, furTime: 33, shape: 36,
   loop: 40 };
 /** the fur's sway on a material (entities/models/furSway.ts): its lag and its clock */
 interface Fur { lag: { value: THREE.Vector3 }; time: { value: number } }
@@ -77,6 +77,7 @@ fn aura_tendrils(at: vec3f, c: f32, shape: vec4f, looping: vec4f) -> f32 {
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   // (the noise stays on the body as it bends: read where each point is at rest)
   (*v).c0 = vec4f((*v).rest, 0.0);
+  (*v).c1 = vec4f((*v).rest_normal, 0.0);
   // (fur: a tuft lags the joint it rides and flutters, by the square of how far along it a point is, its uv's v)
   if (m.c[6].w > 0.5) {
     let along = (*v).uv.y / 3.0;
@@ -90,6 +91,31 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
 fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   // (read before anything is left out: the share of hair a painted face's roughness map's blue holds)
   let hair_share = textureSample(t_orm, samp, in.uv).b * 4.0;
+  // (a sculpt with no unwrapping of its own, a hand: its colour, roughness and normal maps each read flat along
+  // each axis of the space it was sculpted in, blended by how squarely it faced each there; m.c[7].w tiles a
+  // metre, 0 for none)
+  if (m.c[7].w > 0.0) {
+    var share = pow(abs(normalize(in.c1.xyz)), vec3f(4.0));
+    share = share / (share.x + share.y + share.z);
+    let along_x = in.c0.zy * m.c[7].w;
+    let along_y = in.c0.xz * m.c[7].w;
+    let along_z = in.c0.xy * m.c[7].w;
+    let tinted = textureSample(t_base, samp, along_x) * share.x + textureSample(t_base, samp, along_y) * share.y
+      + textureSample(t_base, samp, along_z) * share.z;
+    (*s).base = m.base * in.color * tinted;
+    if (m.flags.w % 2.0 > 0.5) {
+      (*s).roughness = m.params.x * (textureSample(t_orm, samp, along_x).g * share.x
+        + textureSample(t_orm, samp, along_y).g * share.y + textureSample(t_orm, samp, along_z).g * share.z);
+    }
+    if (m.flags.z > 0.5) {
+      var face = normalize(in.normal);
+      if (dot(face, g.cam_pos.xyz - in.world) < 0.0) { face = -face; }
+      (*s).normal = normalize(
+        mapped_normal(face, in.world, along_x, textureSample(t_normal, samp, along_x).xyz) * share.x
+        + mapped_normal(face, in.world, along_y, textureSample(t_normal, samp, along_y).xyz) * share.y
+        + mapped_normal(face, in.world, along_z, textureSample(t_normal, samp, along_z).xyz) * share.z);
+    }
+  }
   let dissolve = m.c[0].x;
   let frozen = m.c[0].y;
   let char = m.c[0].z;
@@ -114,6 +140,8 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
       + vec3f(0.25, 0.55, 0.9) * frozen * 0.35) * (1.0 - 0.7 * char)
     + vec3f(1.0, 0.32, 0.06) * char * smoothstep(0.6, 0.78, dn) * 1.6 * near
     + vec3f(1.0, 0.9, 0.85) * hit * 0.45 * near;
+  // (the most a highlight on it gives: a blade held before the eyes)
+  (*s).shine_most = m.c[1].y;
   // (a worn item's glow in its rarity's colour, black for none)
   let aura = m.c[5].xyz;
   if (aura.r + aura.g + aura.b > 0.0) {
@@ -133,8 +161,8 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 function kitLook(kit: KitLooks, material: THREE.MeshStandardMaterial): RustLook {
   // (what the material showed by when it was last described: the kit's numbers, and what the game changes on a
   // foe's material itself)
-  const was = new Float64Array(34).fill(NaN);
-  const now = new Float64Array(34);
+  const was = new Float64Array(35).fill(NaN);
+  const now = new Float64Array(35);
   // (a copy of a fur's material holds a copy of its numbers, which nothing moves: three copies `userData` as JSON)
   const fur = (): Fur | undefined => {
     const sway = material.userData.fur as Fur | undefined;
@@ -163,8 +191,9 @@ function kitLook(kit: KitLooks, material: THREE.MeshStandardMaterial): RustLook 
       now[29] = sway ? sway.time.value : 0;
       if (sway) sway.lag.value.toArray(now, 30);
       now[33] = itemGlowUniforms.loop.value.w;
+      now[34] = u.uShine.value;
       let moved = false;
-      for (let at = 0; at < 34; at++) {
+      for (let at = 0; at < 35; at++) {
         if (now[at] !== was[at]) { was[at] = now[at]; moved = true; }
       }
       return moved;
@@ -173,6 +202,7 @@ function kitLook(kit: KitLooks, material: THREE.MeshStandardMaterial): RustLook 
       const u = kit.u;
       out[0] = u.uDissolve.value; out[1] = u.uFrozen.value; out[2] = u.uChar.value; out[3] = u.uHit.value;
       out[4] = kit.near.value;
+      out[5] = u.uShine.value;
       kit.rim.value.toArray(out, 8);
       u.uEdge.value.toArray(out, 12);
       kit.shade.value.toArray(out, AT.shade);
@@ -183,6 +213,8 @@ function kitLook(kit: KitLooks, material: THREE.MeshStandardMaterial): RustLook 
       out[AT.fur] = sway ? 1 : 0;
       if (sway) sway.lag.value.toArray(out, AT.lag);
       else out.fill(0, AT.lag, AT.lag + 3);
+      const tile = material.userData.triplanar as number | undefined;
+      out[AT.triplanar] = tile ? 1 / tile : 0;
       out[AT.auraClock] = glows() ? itemGlowUniforms.clock.value : 0;
       out[AT.furTime] = sway ? sway.time.value : 0;
       itemGlowUniforms.shape.value.toArray(out, AT.shape);

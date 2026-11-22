@@ -11,6 +11,7 @@ import { RUNNING } from '../core/rendererChoice';
 import { rustLook } from '../engine/custom';
 import { flameLook } from '../engine/looks/fire';
 import type { FLAME_LOOK, KEPT, KEPT_SIZE } from './fireBake';
+import { seeValue } from '../core/seeThrough';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -472,6 +473,6 @@ export function flameMaterial(uniforms: FlameUniforms, shape: FlameShape): THREE
   // along the view through their middle, as fire.ts has it)
   const see = uniforms as unknown as Record<string, { value: unknown }>;
   material.fragmentNode = see.uSeeK ? light.mul(evenFade(seeUniforms(see), read)) : light;
-  if (RUNNING.rust) rustLook(material, flameLook(uniforms, shape));
+  if (RUNNING.rust) rustLook(material, { ...flameLook(uniforms, shape), fades: seeValue('prop') });
   return material;
 }

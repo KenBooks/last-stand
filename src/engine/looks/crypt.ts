@@ -1,12 +1,15 @@
 // The crypt's floor and what stands beyond its wall under the Rust engine: `world/cryptNodes.ts`'s nodes as WGSL for
 // the engine's hooks: the cobbles' damp, drift and moss, the earth round the small dead trees' feet, and the world
-// past the wall darkened in the top-down view. (Not ported: the cobbles' relief.)
+// past the wall darkened in the top-down view; the cobbles' relief is looks/relief.ts.
 import type * as THREE from 'three';
 import type { Damp, Outside } from '../../world/cryptNodes';
+import type { FloorRelief } from '../../core/parallax';
 import type { RustLook, RustShader } from '../custom';
+import { RELIEF, reliefNumbers } from './relief';
 
 /** where the looks' numbers are in `m.c`, in floats, and how many spots of earth the floor's shader reads at most */
-const AT = { span: 0, tile: 1, ragged: 2, stones: 3, spots: 4, amount: 5, washed: 6, from: 8, to: 9, most: 10, earth: 16 };
+const AT = { span: 0, tile: 1, ragged: 2, stones: 3, spots: 4, amount: 5, washed: 6, from: 8, to: 9, most: 10,
+  relief: 12, earth: 16 };
 const SPOTS_MOST = 16;
 
 /** the dimming past the wall, of whatever was lit: `m.c[1].y` how far in (0 to 1), `m.c[2]` from, to, the most */
@@ -30,13 +33,15 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 
 const DAMP: RustShader = {
   name: 'crypt-damp',
-  hooks: DIM + /* wgsl */ `
+  hooks: DIM + RELIEF + /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {}
 
 fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  // (the cobbles stood up out of their grout: their maps read where the view's ray meets them)
+  let cobbles_at = relief_at(s, in, m.c[3]);
   let xz = in.world.xz;
   let damp = textureSample(t_extra0, samp, xz / m.c[0].x).rgb;
-  let stone_top = textureSample(t_orm, samp, in.uv).r;
+  let stone_top = textureSampleGrad(t_orm, samp, cobbles_at, dpdx(in.uv), dpdy(in.uv)).r;
   let soil_at = xz / m.c[0].y;
   let soil = textureSample(t_extra1, samp, soil_at).rgb;
   let soil_bump = textureSample(t_extra2, samp, soil_at).xyz * 2.0 - 1.0;
@@ -84,7 +89,7 @@ export const outsideLook = (amount: { value: number }, outside: Outside): RustLo
 });
 
 /** The cobbles with the damp, the moss and the earth laid over them, and the dimming past the wall. */
-export function dampLook(damp: Damp, amount: { value: number }, outside: Outside): RustLook {
+export function dampLook(damp: Damp, amount: { value: number }, outside: Outside, relief: FloorRelief): RustLook {
   const maps: (THREE.Texture | null)[] = [damp.map, damp.soil.map, damp.soil.normalMap, damp.soil.roughnessMap];
   return {
     shader: DAMP,
@@ -96,6 +101,7 @@ export function dampLook(damp: Damp, amount: { value: number }, outside: Outside
       out[AT.spots] = spots;
       out[AT.washed] = damp.washed[0]; out[AT.washed + 1] = damp.washed[1];
       dim(out, amount, outside);
+      reliefNumbers(out, AT.relief, relief);
       for (let spot = 0; spot < spots; spot++) damp.earth[spot].toArray(out, AT.earth + spot * 4);
     },
   };

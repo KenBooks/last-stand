@@ -8,6 +8,7 @@ import { seeKept, seeUniforms } from '../core/shaderPorts';
 import { RUNNING } from '../core/rendererChoice';
 import { rustLook } from '../engine/custom';
 import { membraneLook, spillLook } from '../engine/looks/portal';
+import { seeValue } from '../core/seeThrough';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -110,7 +111,7 @@ export function membraneMaterial(uniforms: PortalUniforms): THREE.Material {
   // (seeThroughFade's uniforms, bound before the membrane's material was made: props.ts)
   const see = uniforms as unknown as Record<string, { value: unknown }>;
   material.fragmentNode = see.uSeeK ? shown.mul(tsl.vec4(1, 1, 1, seeKept(seeUniforms(see)))) : shown;
-  if (RUNNING.rust) rustLook(material, membraneLook(uniforms));
+  if (RUNNING.rust) rustLook(material, { ...membraneLook(uniforms), fades: seeValue('prop') });
   return material;
 }
 

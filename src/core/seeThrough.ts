@@ -537,12 +537,18 @@ const kindOfSeen = new Map<SeeThrough, keyof typeof kinds>();
 /** `m`'s dissolve given it for WebGPU (`seeThrough`, a property of its own: not copied to a clone, as its
  *  `onBeforeCompile` isn't). */
 function markSeeThrough(m: THREE.Material, kind: keyof typeof kinds): void {
+  Object.defineProperty(m, 'seeThrough', { value: seeValue(kind), configurable: true });
+}
+
+/** A kind's numbers as a material of it carries them (`material.seeThrough`): one object a kind. For a renderer
+ *  with no hook of three's, which fades a glow by them (the Rust engine's `RustLook.fades`). */
+export function seeValue(kind: keyof typeof kinds): SeeThrough {
   let value = seen.get(kind);
   if (!value) {
     seen.set(kind, value = { focus, ...kinds[kind] });
     kindOfSeen.set(value, kind);
   }
-  Object.defineProperty(m, 'seeThrough', { value, configurable: true });
+  return value;
 }
 
 /** The hole that keeps the hero in sight as it stands now, for a renderer of our own (src/engine): the point

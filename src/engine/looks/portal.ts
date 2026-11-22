@@ -1,5 +1,5 @@
 // The gates' portals under the Rust engine: `world/portalNodes.ts`'s membrane and the light it spills over the
-// floor, their WGSL as it is there. (Not ported: the membrane fading as the gate round it dissolves.)
+// floor, their WGSL as it is there. (The membrane fades as the gate round it dissolves: `RustLook.fades`, set where the look is.)
 import type { PortalUniforms } from '../../world/portalNodes';
 import type { RustLook, RustShader } from '../custom';
 

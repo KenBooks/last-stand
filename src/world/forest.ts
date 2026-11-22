@@ -131,7 +131,7 @@ function windInGrass(m: THREE.MeshStandardMaterial, updaters: Updater[]): THREE.
 function mossyGround<M extends THREE.Material>(m: M): M {
   if (WEBGPU) {
     (m as M & { colorNode: unknown }).colorNode = mossColorNode();
-    if (RUNNING.rust) rustLook(m, mossLook());
+    if (RUNNING.rust) rustLook(m, mossLook(FLOOR_RELIEF));
     reliefContext(m as unknown as THREE.MeshStandardMaterial, FLOOR_RELIEF);
     return m;
   }
