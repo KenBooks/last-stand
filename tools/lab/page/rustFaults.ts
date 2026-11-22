@@ -6,7 +6,7 @@
 // packed and read back as `lab trace` reads one. Before any plant, nothing may have been heard: that is the
 // check that this device drew the game with no failure.
 import { TUNE } from '../../../src/engine/globals';
-import { asideOn } from '../../../src/engine/pipelinesAside';
+import { asideOn, PIPELINES } from '../../../src/engine/pipelinesAside';
 import { clearFaults, faultsSoFar, frameChecked, watchDevice } from '../../../src/engine/said';
 import { recorder, type Slow } from '../../../src/perf/recorder';
 import { decodeTrace } from '../../../src/perf/traceFormat';
@@ -100,6 +100,15 @@ export async function plantedFaults(lab: Lab): Promise<{ line: string; problems:
       plant: () => { device.createRenderPipeline({ label: 'scene', layout: 'auto', vertex: { module: broken(), entryPoint: 'vs' } }); },
     },
     {
+      // (what a phone's GPU did: the pipelines of the depth drawn first refused, the rest made)
+      name: 'a pipeline of the depth drawn first refused',
+      heard: 'fragment planted.fs_depth',
+      plant: () => {
+        const fragment = { module: broken(), entryPoint: 'fs_depth', targets: [] };
+        device.createRenderPipeline({ label: 'scene', layout: 'auto', vertex: { module: broken(), entryPoint: 'vs' }, fragment });
+      },
+    },
+    {
       name: 'a call the GPU rejects',
       heard: 'the GPU (',
       plant: async () => {
@@ -126,6 +135,15 @@ export async function plantedFaults(lab: Lab): Promise<{ line: string; problems:
   if (!reportHolds(['the device: planted', '1. the pipeline "scene" was refused (validation): planted'])) {
     problems.push('a report of the faults, packed and read back, doesn\'t hold them');
   }
+  // (the depth's refusal must have taken the frame back to one pass, and that frame must draw: not black)
+  if (!PIPELINES.depthRefused) problems.push('a refused pipeline of the depth drawn first left the pass on');
+  clearFaults();
+  for (let check = 0; check < BLACK_CHECKS; check++) {
+    await lab.step(1);
+    frameChecked();
+  }
+  if (faultsSoFar().length) problems.push(`drawn in one pass after the depth's refusal: ${faultsSoFar().join(' || ').slice(0, 300)}`);
+  PIPELINES.depthRefused = false;
   clearFaults();
   const line = `the self-check heard no fault of this device's, and caught ${caught.length} of ${layers.length} planted: ${caught.join('; ')}`;
   return { line, problems };

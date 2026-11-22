@@ -21,7 +21,8 @@ export const AHEAD = {
 };
 
 /** the engine's scene pipelines: how many were asked for, and how many are still compiling */
-export const PIPELINES = { made: 0, compiling: 0, refused: 0 };
+/** `depthRefused`: a pipeline of the depth drawn first was refused, so the frame is drawn without that pass */
+export const PIPELINES = { made: 0, compiling: 0, refused: 0, depthRefused: false };
 
 /** the labels of the pipelines stood in for (Bulwark's gpu/pipelines.rs) */
 const ASIDE = new Set(['scene', 'shadow', 'sprites']);
@@ -71,6 +72,10 @@ class StandIn {
       // frame invalid: a phone's village all black)
       PIPELINES.compiling--;
       PIPELINES.refused++;
+      // (a pipeline of the depth drawn first, which shades nothing: the pass after it draws only where that
+      // depth is, so with it left out nothing opaque was drawn at all. A phone's Adreno refuses every one of
+      // them, VK_ERROR_UNKNOWN, on some loads: the frame goes back to one pass, `bridge.ts`)
+      if (descriptor.fragment && !descriptor.fragment.targets?.length) PIPELINES.depthRefused = true;
       fault(`the pipeline "${descriptor.label ?? ''}" was refused (${refused?.reason ?? 'no reason'})`,
         `${refused?.message || 'the GPU said nothing'} | ${described(descriptor)}`);
     });
