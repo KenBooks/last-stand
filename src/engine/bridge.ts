@@ -17,6 +17,7 @@ import { casterGeometry } from '../entities/models/farDetail';
 import { lookOf } from './custom';
 import { Geometries } from './geometry';
 import { LampShadows } from './lampShadows';
+import { G } from '../state';
 import { LightCache } from './lightCache';
 import { GLOBALS, PLAIN_GRADE, TUNE, shadowSizeOf, writeGlobals, type Grade } from './globals';
 import { Lights } from './lights';
@@ -78,6 +79,7 @@ export class Bridge {
     this.lit = new Lights(core);
     this.lampShadows = new LampShadows(core);
     this.lit.lampSlot = (lamp) => this.lampShadows.slot(lamp);
+    this.lit.lampTaking = () => this.lampShadows.taking;
     this.lightCache = new LightCache(core);
     this.lit.lampReach = this.lampShadows.reachOf = (lamp, reach) => this.lightCache.reachOf(lamp, reach);
     this.particles = new Sprites(core);
@@ -381,6 +383,7 @@ export class Bridge {
     // (a lamp's shadow drawn ahead of the frame, whose own records are written over its casters')
     if (this.lightCache.step((mesh) => this.addMesh(mesh))) this.lampShadows.again();
     this.lampShadows.step((mesh) => this.addMesh(mesh));
+    this.lampShadows.moved((mesh) => this.addMesh(mesh), TUNE.lampShadows > 0 ? G.players.map((player) => player.obj) : []);
     core.skipped.clear();
     stats.newMeshes = stats.movedMeshes = stats.newTextures = stats.newMaterials = stats.arms = stats.solid = stats.casters = 0;
     if (scene.matrixWorldAutoUpdate) {

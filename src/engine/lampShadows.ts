@@ -21,6 +21,10 @@ const FACES: { axis: THREE.Vector3; up: THREE.Vector3 }[] = [
   { axis: new THREE.Vector3(0, 0, -1), up: new THREE.Vector3(0, 1, 0) },
 ];
 
+/** the lamps whose shadows of what moves are drawn each frame (Bulwark's `LAMP_MOVERS`), their maps after the still
+ *  lamps' */
+const MOVER_LAMPS = 2;
+
 const at = new THREE.Vector3(), ahead = new THREE.Vector3(), centre = new THREE.Vector3();
 const projection = new THREE.Matrix4(), faceView = new THREE.Matrix4();
 const sphere = new THREE.Sphere();
@@ -54,6 +58,54 @@ export class LampShadows {
   again(): void {
     this.drawn.clear();
     this.waiting = Array.from({ length: this.asked }, (_, lamp) => lamp);
+  }
+
+  /** the lamps the movers stand by this frame, each with its map of them: `lights.ts` adds a light for each that
+   *  takes away what the lamp lit where a mover stands between */
+  taking: Taking[] = [];
+
+  /**
+   * The shadows of what moves, at the head of a frame: for the `MOVER_LAMPS` lit lamps nearest a mover and reaching
+   * it, the movers alone drawn into six faces of their own, as far as the lamp's light reaches whole. The still
+   * maps hold what stands still and are drawn once: a hero by a lamp cast no shadow from it (from play: "no shadows
+   * from lights.... only shadow from moon"). `record` writes a mesh's record as a frame's walk would.
+   */
+  moved(record: (mesh: THREE.Mesh) => void, movers: readonly THREE.Object3D[]): void {
+    this.taking.length = 0;
+    const by: { lamp: number; off: number }[] = [];
+    for (let lamp = 0; lamp < this.asked && movers.length; lamp++) {
+      const place = (1 + lamp * 2) * 4;
+      if (lampList[place + 7] === 0 || !this.drawn.has(lamp)) continue;
+      at.fromArray(lampList, place);
+      const off = Math.min(...movers.map((mover) => mover.getWorldPosition(centre).distanceTo(at)));
+      if (off < lampList[place + 3]) by.push({ lamp, off });
+    }
+    by.sort((a, b) => a.off - b.off);
+    const core = this.core, camera = this.camera;
+    for (const [k, { lamp }] of by.slice(0, MOVER_LAMPS).entries()) {
+      const place = (1 + lamp * 2) * 4, reach = lampList[place + 3];
+      at.fromArray(lampList, place);
+      core.count = core.boneFloats = 0;
+      for (const mover of movers) {
+        mover.traverseVisible((part) => { if ((part as THREE.Mesh).isMesh) record(part as THREE.Mesh); });
+      }
+      camera.far = reach;
+      camera.updateProjectionMatrix();
+      camera.position.copy(at);
+      for (const [face, { axis, up }] of FACES.entries()) {
+        camera.up.copy(up);
+        camera.lookAt(ahead.copy(at).add(axis));
+        camera.updateMatrixWorld();
+        core.freshViews();
+        faceView.multiplyMatrices(projectionOf(camera, projection), camera.matrixWorldInverse)
+          .toArray(core.globals, GLOBALS.shadowView);
+        at.toArray(core.globals, GLOBALS.camPos);
+        core.engine.bake_lamp_face((LAMPS_MOST + k) * FACES.length + face, core.count, core.boneFloats);
+      }
+      this.taking.push({ lamp, slot: LAMPS_MOST + k });
+    }
+    core.freshViews();
+    core.count = core.boneFloats = 0;
   }
 
   /** A lamp's place among the maps (its own number), or -1 while its faces aren't drawn. */
@@ -96,13 +148,16 @@ export class LampShadows {
       faceView.multiplyMatrices(projectionOf(camera, projection), camera.matrixWorldInverse)
         .toArray(core.globals, GLOBALS.shadowView);
       at.toArray(core.globals, GLOBALS.camPos);
-      core.engine.bake_lamp_face(lamp * FACES.length + k, core.count);
+      core.engine.bake_lamp_face(lamp * FACES.length + k, core.count, 0);
     }
     core.freshViews();
     core.count = core.boneFloats = 0;
     this.drawn.add(lamp);
   }
 }
+
+/** A lamp a mover stands by, and its place among the movers' maps. */
+export interface Taking { lamp: number; slot: number }
 
 /** Whether `mesh` may stand within `reach` of the lamp at `at`: by its geometry's sphere where it stands; a mesh of
  *  instances (the posts, the trunks) is left to the engine, which culls each. */

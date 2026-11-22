@@ -93,6 +93,8 @@ const BODIES: [name: string, signed: string, body: string][] = [
   // (those too were made, and the whole was still refused: what none of them held)
   ['its map written again as an alpha map', SIGNED, 'var sampled = textureSample(t_base, samp, in.uv); '
     + 'if (m.flags.w > 1.5) { sampled = vec4f(1.0, 1.0, 1.0, sampled.g); } if (sampled.a < m.emissive.w) { discard; }'],
+  ['seen through by the colour of its map', SIGNED, 'let sampled = textureSample(t_base, samp, in.uv); '
+    + 'if (see_left(in.world, in.clip.xy, sampled.rgb) < 0.0) { discard; }'],
   ['its map read inside an if', SIGNED, 'if (m.emissive.w > 0.0) { let sampled = textureSample(t_base, samp, in.uv); '
     + 'if (sampled.a < m.emissive.w) { discard; } }'],
 ];

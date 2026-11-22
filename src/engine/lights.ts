@@ -2,6 +2,7 @@
 // light of the scene and of the shown place, and the village's lamps with the shelter they light their own side of.
 import * as THREE from 'three';
 import { lampList, lampShadowsAllowed, LAMPS_MOST } from '../core/lamps';
+import type { Taking } from './lampShadows';
 import { HALL, TERRACE } from '../data/village';
 import type { Core } from './core';
 import { GLOBALS, TUNE, type Lit } from './globals';
@@ -35,6 +36,8 @@ export class Lights implements Lit {
   /** how far a lamp reaches in the frame's own loop: all its reach, or as near as its baked light leaves it
    *  (`lightCache.ts`; set by the bridge) */
   lampReach: (lamp: number, reach: number) => number = (_lamp, reach) => reach;
+  /** the lamps a mover stands by, each with its map of the movers (`lampShadows.ts` `taking`; set by the bridge) */
+  lampTaking: () => readonly Taking[] = () => [];
 
   constructor(private core: Core) {}
 
@@ -99,6 +102,17 @@ export class Lights implements Lit {
       g[at + 7] = -((lampList[light + 3] > 0 ? 2 : 1) + 4 * (slot + 1));
       this.points++;
       lit++;
+    }
+    // (and for each lamp a mover stands by, a light that lights nothing: where a mover stands between it takes away
+    // what the lamp lit, the loop's light or the baked. Its lamp whole: its place, its full reach, its colour now)
+    for (const { lamp, slot } of shadowed && TUNE.points ? this.lampTaking() : []) {
+      if (this.points >= MAX_POINTS) break;
+      const place = (1 + lamp * 2) * 4, light = place + 4;
+      const at = GLOBALS.points + this.points * 8;
+      g.set(lampList.subarray(place, place + 4), at);
+      g.set(lampList.subarray(light, light + 3), at + 4);
+      g[at + 7] = -((lampList[light + 3] > 0 ? 2 : 1) + 4 * (slot + 1));
+      this.points++;
     }
     // (the village's lamps are lit while it's shown and out in a run: left set there, the hall's box of ground lay
     // sunless on the battleground's floor, a dark rectangle. From play: "also weird shadow")
