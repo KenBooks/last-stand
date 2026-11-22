@@ -72,6 +72,8 @@ export const TUNE = tunable('rust', {
   still: 1,
   /** the hole that keeps the hero in sight under what hides him (0: none dropped) */
   see: 1,
+  /** the scene's meshes drawn (0: none, a profile's: the frame's floor, its target cleared, graded and shown) */
+  scene: 1,
 });
 
 const scratchMatrix = new THREE.Matrix4(), viewProj = new THREE.Matrix4(), projection = new THREE.Matrix4();

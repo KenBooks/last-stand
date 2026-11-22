@@ -421,7 +421,7 @@ export class Bridge {
     const walked = perfClock.now();
     core.tape?.frame(core.records.subarray(0, core.count * RECORD), core.bones.subarray(0, core.boneFloats), core.globals,
       clear);
-    core.engine.render(core.count, core.boneFloats, clear[0], clear[1], clear[2]);
+    core.engine.render(TUNE.scene > 0 ? core.count : 0, core.boneFloats, clear[0], clear[1], clear[2]);
     const drawn = perfClock.now();
     const [draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy, shadowTriangles, shadowsKept,
       lowDraws]

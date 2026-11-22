@@ -137,7 +137,7 @@ function pixelsPart(): ScenePart {
 
 /** the engine's tuned numbers a profile switches */
 type EngineSwitch = 'points' | 'ownPoints' | 'nearLamps' | 'lampShadows' | 'bloom' | 'shadows' | 'see' | 'debug' | 'nearFirst' | 'shine' | 'solidSee' | 'shadowTurns' | 'lowRes'
-  | 'depthFirst';
+  | 'depthFirst' | 'scene';
 
 /** A part of the Rust engine's frame, switched by one of its tuned numbers (`TUNE` in engine/globals.ts). */
 function tunedPart(name: string, key: EngineSwitch, off: number,
@@ -159,6 +159,7 @@ function engineParts(): ScenePart[] {
     tunedPart('the sun\'s shadow: its map drawn and read', 'shadows', 0),
     tunedPart('the lit shading, against a plain colour', 'debug', 3, 0),
     tunedPart('what hides the hero seen through', 'see', 0),
+    tunedPart('every mesh of the scene (without: the frame cleared, graded and shown, with its particles)', 'scene', 0),
     tunedPart('the bloom\'s passes', 'bloom', 0),
     tunedPart('what the camera stands inside drawn last', 'nearFirst', 0),
     tunedPart('the point lights\' shine (their diffuse light kept)', 'shine', 0),
