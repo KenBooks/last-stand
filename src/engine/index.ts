@@ -77,7 +77,7 @@ export async function bootRust(under: HTMLCanvasElement): Promise<void> {
     const bridge = new Bridge(engine, wasm);
     RUST.bridge = bridge;
     if (samplesWanted !== null) bridge.levels.samplesAhead(samplesWanted);
-    AHEAD.prepare = (objects) => bridge.prepare(objects);
+    AHEAD.prepare = (objects) => bridge.ahead.prepare(objects);
     AHEAD.bakeLamps = (casters, lamps) => bridge.bakeLamps(casters, lamps);
     resize = (width, height) => engine.resize(width, height);
     RUST.boot.wasmMs = loaded - began;
@@ -130,7 +130,7 @@ export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, ti
   } else {
     bridge.draw(scene, camera, time, renderer, grade);
     const budget = RUST.loaded ? TUNE.ahead : TUNE.aheadLoading;
-    if (budget > 0) bridge.prepareAhead(scene, budget);
+    if (budget > 0) bridge.ahead.walk(scene, budget);
   }
   if (RUST.hooks) (scene.onAfterRender as unknown as Hook)(renderer, scene, camera, null);
   if (RUST.frames++ === 0) RUST.boot.firstFrameMs = perfClock.now() - began;

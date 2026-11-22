@@ -15,6 +15,7 @@ import { Core, MAX_MAP, RECORD } from './core';
 import { casterGeometry } from '../entities/models/farDetail';
 import { lookOf } from './custom';
 import { Geometries } from './geometry';
+import { Ahead } from './ahead';
 import { LampShadows } from './lampShadows';
 import { AHEAD } from './pipelinesAside';
 import { G } from '../state';
@@ -41,8 +42,6 @@ const CASTS_SHADOW = 1, NEVER_CULLED = 2, SHADOW_ONLY = 4, ARMS = 8, SOLID = 16,
 const RAW_INSTANCES = 7;
 /** how far under the scene a hidden object is a place left as it stands (the biomes' roots, the village's) */
 const HIDDEN_PLACES = 2;
-/** the frames `prepareAhead` rests after a walk of the whole scene before it looks again */
-const AHEAD_REST = 600;
 /** three's own update of an object's matrices: a kind with another is left to its own */
 const PLAIN_UPDATE = THREE.Object3D.prototype.updateMatrixWorld;
 
@@ -69,8 +68,8 @@ export class Bridge {
   readonly held: Core['held'];
 
   private stack: THREE.Object3D[] = [];
-  private ahead: THREE.Object3D[] = [];
-  private aheadRest = 0;
+  /** what's handed over ahead of its first frame (`ahead.ts`) */
+  readonly ahead: Ahead;
   private grade: Grade = PLAIN_GRADE;
   private renderer: THREE.WebGLRenderer | null = null;
   private scene: THREE.Scene | null = null;
@@ -89,6 +88,7 @@ export class Bridge {
     this.lightCache = new LightCache(core);
     this.levels = new Levels(core);
     this.frameLook = new FrameLook(core, this.maps);
+    this.ahead = new Ahead(core, this.geometries, this.materials);
     this.lit.lampReach = this.lampShadows.reachOf = (lamp, reach) => this.lightCache.reachOf(lamp, reach);
     this.lit.ownReach = this.lampShadows.ownReachOf = (light) => this.lightCache.ownReach(light);
     this.lit.ownSlot = (light) => this.lampShadows.ownSlot(light);
@@ -242,31 +242,6 @@ export class Bridge {
     for (let i = 0; i < children.length; i++) this.placeShown(children[i], moved, depth + 1);
   }
 
-  /**
-   * What the scene holds that the engine hasn't met handed over ahead of its first frame, hidden or not, for up to
-   * `budget` ms a call: each mesh's geometry, its materials with their maps, and the pipeline each will draw with.
-   * A place first shown handed everything over in its first frame, and the browser compiled each pipeline as it was
-   * first drawn with: the village's first frame after the hero was picked waited 1.3 s on the GPU with no script
-   * running, and the loading screen 5.7 s (a report from play, Q8CV-74H0). Walks the whole scene a part a call, then
-   * rests `AHEAD_REST` frames before looking again (the battlegrounds are built later, at Start).
-   */
-  prepareAhead(scene: THREE.Scene, budget: number): void {
-    if (this.aheadRest > 0) { this.aheadRest--; return; }
-    const stack = this.ahead;
-    if (!stack.length) stack.push(scene);
-    const until = perfClock.now() + budget;
-    let visited = 0;
-    while (stack.length) {
-      // (the clock read once every few objects: most are met already, and cost less than reading it)
-      if (++visited % 16 === 0 && perfClock.now() >= until) return;
-      const object = stack.pop()!;
-      if ((object as THREE.Mesh).isMesh) this.prepareMesh(object as THREE.Mesh);
-      const children = object.children;
-      for (let i = 0; i < children.length; i++) stack.push(children[i]);
-    }
-    this.aheadRest = AHEAD_REST;
-  }
-
   /** the mesh being recorded is the hero's arms through his eyes */
   private armsNow = false;
   /** The first `lamps` lamps' shadows asked for, of `casters` (`lampShadows.ts`): drawn a lamp a frame. */
@@ -280,33 +255,6 @@ export class Bridge {
   lampShadowsNow(): ReturnType<LampShadows['now']> { return this.lampShadows.now(); }
   /** A harness's: the last frame's point lights, a line each (`Lights.pointLines`). */
   pointLines(): string[] { return this.lit.pointLines(); }
-
-  /** `objects` and all under them handed over ahead with the pipelines they'll draw with, shown or not and in
-   *  the scene or not: a warm-up's samples (core/shaders.ts), which the scene's walk never meets. A skill's
-   *  effect first met as it was cast compiled its pipeline in that frame, 2 to 4 s from play. */
-  prepare(objects: readonly THREE.Object3D[]): void {
-    for (const object of objects) {
-      object.traverse((part) => { if ((part as THREE.Mesh).isMesh) this.prepareMesh(part as THREE.Mesh); });
-    }
-  }
-
-  /** A mesh's geometry, materials and pipelines made ready, as `addMesh` would meet them. */
-  private prepareMesh(mesh: THREE.Mesh): void {
-    if (mesh.userData.particles || mesh.name === 'dazed stars') return;
-    const geometry = mesh.geometry;
-    const single = Array.isArray(mesh.material) ? undefined : mesh.material;
-    const look = single ? lookOf(single) : undefined;
-    const counted = (geometry as THREE.InstancedBufferGeometry).isInstancedBufferGeometry;
-    if (counted && !look) return;
-    if (!this.geometries.geometryId(geometry, look?.position)) return;
-    const skinned = !!(mesh as THREE.SkinnedMesh).isSkinnedMesh;
-    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    for (const material of materials) {
-      if (!material) continue;
-      const id = this.materials.materialId(material as AnyMaterial);
-      if (id) this.core.engine.ready_material(id, skinned, counted);
-    }
-  }
 
   /** A harness's: how many kinds of see-through the engine holds, and how many of them thin anything this frame (a
    *  hole, a share of the whole, a door open). */
