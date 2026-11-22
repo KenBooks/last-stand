@@ -10,6 +10,7 @@
 // next frame has been sent, its work on the CPU done while the GPU finishes this one's (read at once, the page waited
 // for the GPU to finish the frame, about 9 ms of every frame of a cast).
 import { G } from '../../../src/state';
+import { frameRect } from '../../../src/core/renderer';
 
 /** What a grid sums over the canvas: the pixels each of its cells takes, and what each pixel adds. */
 export interface Grid {
@@ -185,8 +186,9 @@ function drawSums(gl: WebGL2RenderingContext, grid: Grid): void {
   const own = summer;
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   bindNearest(gl, 0, own.canvasCopy);
+  const { left, bottom, width, height } = frameRect();
   // (its colour alone: the canvas has no alpha of its own, and a copy asking for one is refused)
-  gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGB8, 0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, 0);
+  gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGB8, left, bottom, width, height, 0);
   uploadLights(gl, own, grid);
   sizeSums(gl, own, grid);
   gl.bindFramebuffer(gl.FRAMEBUFFER, own.target);

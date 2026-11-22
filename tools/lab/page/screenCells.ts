@@ -5,6 +5,7 @@
 // draws in SDR unless a command puts HDR on. Every second pixel each way is summed, over the fine grid's cells on the
 // GPU (page/gridSums.ts); each cell of the coarse grid is a block of fine ones.
 import { G } from '../../../src/state';
+import { frameRect } from '../../../src/core/renderer';
 import { gridSums, sumGrid, type Grid, type Summing } from './gridSums';
 
 /** the cells across and down the frame: each a sixteenth of it, about the area a flash is judged over */
@@ -66,10 +67,9 @@ let sumsChecked = false;
 function readCanvas(): { pixels: Uint8Array; width: number; height: number } {
   const gl = G.renderer.getContext();
   G.renderer.setRenderTarget(null);
-  const width = gl.drawingBufferWidth;
-  const height = gl.drawingBufferHeight;
+  const { left, bottom, width, height } = frameRect();
   const pixels = new Uint8Array(width * height * 4);
-  gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  gl.readPixels(left, bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
   return { pixels, width, height };
 }
 

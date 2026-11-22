@@ -5,7 +5,7 @@
 // moved every frame by a transform, Chrome repainted the page round them, and froze for seconds on Windows.)
 import * as THREE from 'three';
 import { G } from '../../state';
-import { overFrame } from '../../core/renderer';
+import { frameRect, overFrame } from '../../core/renderer';
 import { WEBGPU, drawOverFrame, labelsMaterial } from '../../core/webgpu';
 import { uiScales } from '../scale';
 import { drawOutline } from './outline';
@@ -254,7 +254,8 @@ function drawLabels(): void {
   }
   warmed = true;
   const gl = G.renderer;
-  gl.getDrawingBufferSize(view);
+  const f = frameRect();
+  view.set(f.width, f.height);
   // (the atlas is made again, larger, as labels take more canvas pixels: a higher ratio, a larger UI)
   setAtlas(atlasTexture());
   if (WEBGPU) drawOverFrame(gl, () => gl.render(scene, camera));

@@ -9,7 +9,7 @@ import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { G } from '../../state';
 import { uiScales } from '../scale';
 import { CROWD_LAYER } from '../../core/layers';
-import { passCamera, passTriangle } from '../../core/renderer';
+import { frameRect, passCamera, passTriangle } from '../../core/renderer';
 import { portShader } from '../../core/shaderPorts';
 import { WEBGPU, drawOverFrame } from '../../core/webgpu';
 
@@ -245,7 +245,8 @@ function drawTarget(gl: THREE.WebGLRenderer, target: OutlineTarget): void {
 
 /** Draws `targets`' mask into the mask's target, at the canvas's size. */
 function drawMask(gl: THREE.WebGLRenderer, targets: readonly OutlineTarget[]): THREE.WebGLRenderTarget {
-  gl.getDrawingBufferSize(canvasSize);
+  const f = frameRect();
+  canvasSize.set(f.width, f.height);
   const target = maskOfSize(canvasSize.x, canvasSize.y);
   const clear = gl.getClearColor(new THREE.Color());
   const clearAlpha = gl.getClearAlpha();
@@ -332,6 +333,12 @@ function drawEdge(gl: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget, look
   if (within) {
     // (WebGPU's scissor is from the canvas's top, WebGL's from its bottom)
     if (WEBGPU) within.y = canvasSize.y - within.y - within.w;
+    else {
+      const f = frameRect();
+      within.x += f.left;
+      within.y += f.bottom;
+      within.addScalar(0.25);
+    }
     // (in css px: the renderer scales the scissor by its pixel ratio)
     gl.setScissor(within.divideScalar(gl.getPixelRatio()));
     gl.setScissorTest(true);
@@ -410,7 +417,8 @@ export function compileOutline(roots: readonly Outlinable[], { edge = true } = {
   const gl = G.renderer;
   const prev = gl.getRenderTarget();
   const compiled = new Set<THREE.Material>();
-  gl.getDrawingBufferSize(canvasSize);
+  const f = frameRect();
+  canvasSize.set(f.width, f.height);
   gl.setRenderTarget(maskOfSize(canvasSize.x, canvasSize.y));
   for (const root of roots) compileMasks(gl, targetOf(root), compiled);
   if (edge) {

@@ -124,6 +124,8 @@ async function start(): Promise<void> {
     return;
   }
   glCanvas.after(canvas);
+  canvas.style.width = glCanvas.style.width;
+  canvas.style.height = glCanvas.style.height;
   presenter = { device, canvas, context };
   void device.lost.then((info) => {
     if (presenter?.device !== device) return;
@@ -241,7 +243,7 @@ export async function forceHdr(on: boolean | null): Promise<void> {
 }
 
 /** The frame drawn into the WebGL canvas, copied onto the HDR canvas to be shown (once the frame is finished). */
-export function presentHdr(): void {
+export function presentHdr(copyW?: number, copyH?: number): void {
   if (!hdrActive() || !presenter || !gl || !glCanvas) return;
   const width = gl.drawingBufferWidth;
   const height = gl.drawingBufferHeight;
@@ -250,11 +252,15 @@ export function presentHdr(): void {
     canvas.width = width;
     canvas.height = height;
   }
+  if (canvas.style.width !== glCanvas.style.width) canvas.style.width = glCanvas.style.width;
+  if (canvas.style.height !== glCanvas.style.height) canvas.style.height = glCanvas.style.height;
+  const w = Math.min(copyW ?? width, width), h = Math.min(copyH ?? height, height);
+  if (w < 1 || h < 1) return;
   const texture = context.getCurrentTexture();
   // (taken as it is, premultiplied: the grade writes the frame's alpha as 1, and the copy would divide the colour by
   // any other)
-  const destination = { texture, premultipliedAlpha: true };
-  device.queue.copyExternalImageToTexture({ source: glCanvas }, destination, [width, height]);
+  const destination = { texture, origin: [0, 0, 0], premultipliedAlpha: true };
+  device.queue.copyExternalImageToTexture({ source: glCanvas, origin: [0, 0] }, destination, [w, h]);
 }
 
 /** The HDR canvas's current texture, as shown this frame (the lab reads it back), or null when HDR is off. */

@@ -23,10 +23,10 @@
 // do; the world's labels, painted on a canvas, take its lining twin: ui/overlay/paint.ts)
 html, body { margin: 0; height: 100%; overflow: hidden; background: #030307; color: var(--ink); font-family: var(--font-body); user-select: none;
   font-variant-numeric: lining-nums; }
-#game { position: fixed; inset: 0; }
+#game { position: fixed; inset: 0; overflow: hidden; }
 #game canvas { display: block; }
 /* HDR output (core/hdr.ts): the frame shown over the game's canvas, which still takes the pointer under it */
-#game #hdr-canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+#game #hdr-canvas { position: absolute; left: 0; top: 0; pointer-events: none; }
 #game #hdr-canvas[hidden] { display: none; }
 .hidden { display: none !important; }
 button { font-family: inherit; }

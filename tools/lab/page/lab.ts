@@ -1539,8 +1539,17 @@ function cropOf(source: HTMLCanvasElement, area: Area): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = area.width;
   canvas.height = area.height;
+  const frame = renderer.frameRect();
+  const ratio = frame.width / innerWidth;
   const { left, top, width, height } = area;
-  canvas.getContext('2d')!.drawImage(source, left, top, width, height, 0, 0, width, height);
+  canvas.getContext('2d')!.drawImage(
+    source,
+    frame.left + Math.round(left * ratio),
+    frame.top + Math.round(top * ratio),
+    Math.round(width * ratio),
+    Math.round(height * ratio),
+    0, 0, width, height,
+  );
   return canvas;
 }
 

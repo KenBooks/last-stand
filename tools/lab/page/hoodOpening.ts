@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
+import { frameRect } from '../../../src/core/renderer';
 
 export type OpeningView = 'front' | 'left';
 
@@ -322,11 +323,12 @@ export function maskOf(lab: Lab, scene: THREE.Scene, camera: THREE.Camera, white
 /** The canvas's middle at the tile's shape (as `shoot` reads it), its white pixels covered. */
 function readMask(): Mask {
   const gl = G.renderer.getContext();
-  const height = gl.drawingBufferHeight;
+  const frame = frameRect();
+  const height = frame.height;
   const width = Math.round((height * 340) / 560);
-  const left = Math.round((gl.drawingBufferWidth - width) / 2);
+  const left = frame.left + Math.round((frame.width - width) / 2);
   const pixels = new Uint8Array(width * height * 4);
-  gl.readPixels(left, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  gl.readPixels(left, frame.bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
   // (read bottom up)
   const covered = (x: number, y: number) => {
     if (x < 0 || y < 0 || x >= width || y >= height) return false;

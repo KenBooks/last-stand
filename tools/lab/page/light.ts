@@ -157,11 +157,10 @@ export function topLight(canvas: Canvas, at: number): number {
   return Math.max(decoded(pixels[at], hdr), decoded(pixels[at + 1], hdr), decoded(pixels[at + 2], hdr));
 }
 
-/** The canvas's size in its own pixels. */
+/** The canvas's active frame size in its own pixels. */
 export function canvasSize(): { width: number; height: number } {
-  if (WEBGPU) return { width: G.renderer.domElement.width, height: G.renderer.domElement.height };
-  const gl = G.renderer.getContext();
-  return { width: gl.drawingBufferWidth, height: gl.drawingBufferHeight };
+  const { width, height } = renderer.frameRect();
+  return { width, height };
 }
 
 /** Bytes as encoded channels (a byte loop: `Float32Array.from` with a mapping took most of a measure's time). */
@@ -174,16 +173,17 @@ function channelsOf(bytes: Uint8Array): Float32Array {
 /** The canvas's pixels as last drawn: all of them, or those of `box`. */
 function readCanvas(box?: CanvasBox): Canvas {
   G.renderer.setRenderTarget(null);
-  const { left, bottom, width, height } = box ?? { left: 0, bottom: 0, ...canvasSize() };
+  const frame = renderer.frameRect();
+  const { left, bottom, width, height } = box ?? { left: 0, bottom: 0, width: frame.width, height: frame.height };
   if (WEBGPU) return readWebGpuCanvas({ left, bottom, width, height });
   const gl = G.renderer.getContext() as WebGL2RenderingContext & { drawingBufferFormat: number };
   if (gl.drawingBufferFormat === gl.RGBA16F) {
     const pixels = new Float32Array(width * height * 4);
-    gl.readPixels(left, bottom, width, height, gl.RGBA, gl.FLOAT, pixels);
+    gl.readPixels(frame.left + left, frame.bottom + bottom, width, height, gl.RGBA, gl.FLOAT, pixels);
     return { pixels, width, height, hdr: true };
   }
   const bytes = new Uint8Array(width * height * 4);
-  gl.readPixels(left, bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+  gl.readPixels(frame.left + left, frame.bottom + bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
   return { pixels: channelsOf(bytes), width, height, hdr: false };
 }
 
@@ -216,9 +216,10 @@ export function drawRaw(lab: Lab): RawFrame {
     return { bytes: null, pixels, width, height };
   }
   G.renderer.setRenderTarget(null);
-  const { width, height } = canvasSize();
+  const frame = renderer.frameRect();
+  const { width, height } = frame;
   const bytes = new Uint8Array(width * height * 4);
-  gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+  gl.readPixels(frame.left, frame.bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
   return { bytes, pixels: null, width, height };
 }
 
@@ -233,8 +234,9 @@ export function canvasOf(raw: RawFrame): Canvas {
  *  read so: SDR only. */
 function readWebGpuCanvas(box: CanvasBox): Canvas {
   const { left, bottom, width, height } = box;
-  const top = G.renderer.domElement.height - bottom - height;
-  const rows = webGpuPixels({ left, top, width, height }).data;
+  const frame = renderer.frameRect();
+  const top = frame.top + frame.height - bottom - height;
+  const rows = webGpuPixels({ left: frame.left + left, top, width, height }).data;
   const bytes = new Uint8Array(width * height * 4);
   const rowBytes = width * 4;
   for (let row = 0; row < height; row++) {

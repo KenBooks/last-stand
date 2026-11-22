@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import type { Lab, Tile } from './lab';
 import { G } from '../../../src/state';
+import { frameRect } from '../../../src/core/renderer';
 import { opaqueRows } from './pixels';
 
 /** A picture to take in the studio: its name and the camera it's taken with. */
@@ -62,8 +63,8 @@ function lightFrom(scene: THREE.Scene, camera: THREE.Camera): void {
  */
 export function cameraOn(part: THREE.Box3, from: THREE.Vector3Tuple, up: THREE.Vector3Tuple = [0, 1, 0],
   fov = STUDIO_FOV): THREE.PerspectiveCamera {
-  const canvas = G.renderer.domElement;
-  const camera = new THREE.PerspectiveCamera(fov, canvas.width / canvas.height, 0.01, 50);
+  const frame = frameRect();
+  const camera = new THREE.PerspectiveCamera(fov, frame.width / frame.height, 0.01, 50);
   const centre = part.getCenter(new THREE.Vector3());
   const size = part.getSize(new THREE.Vector3());
   const tall = Math.tan(THREE.MathUtils.degToRad(fov / 2));
@@ -89,11 +90,12 @@ export function cameraOn(part: THREE.Box3, from: THREE.Vector3Tuple, up: THREE.V
  */
 function readTile(name: string): { tile: Tile; drawn: number } {
   const gl = G.renderer.getContext();
-  const height = gl.drawingBufferHeight;
+  const frame = frameRect();
+  const height = frame.height;
   const width = Math.round(height * TILE_SHAPE);
-  const left = Math.round((gl.drawingBufferWidth - width) / 2);
+  const left = frame.left + Math.round((frame.width - width) / 2);
   const pixels = new Uint8Array(width * height * 4);
-  gl.readPixels(left, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  gl.readPixels(left, frame.bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -133,11 +135,12 @@ export function drawnPixels(lab: Lab, scene: THREE.Scene, shot: Shot):
     renderer.setRenderTarget(null);
     renderer.render(scene, shot.camera);
     const gl = renderer.getContext();
-    const height = gl.drawingBufferHeight;
+    const frame = frameRect();
+    const height = frame.height;
     const width = Math.round(height * TILE_SHAPE);
-    const left = Math.round((gl.drawingBufferWidth - width) / 2);
+    const left = frame.left + Math.round((frame.width - width) / 2);
     const pixels = new Uint8Array(width * height * 4);
-    gl.readPixels(left, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    gl.readPixels(left, frame.bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
     return { pixels, width, height };
   } finally {
     lab.drawing = drawing;

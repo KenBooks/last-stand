@@ -867,8 +867,11 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
     if (VILLAGE) lightTheLampsOnWebGPU();
     if (!/[?&]envShadow=0/.test(location.search)) shadeEnvironmentNodes({ environment: ENV_IN_SHADOW, ambient: AMBIENT_IN_SHADOW });
   }
-  renderer.setPixelRatio(canvasRatio());
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  const cr = canvasRatio();
+  const { cw, ch } = canvasTargetCss(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(cr);
+  renderer.setSize(cw, ch);
+  canvasFitted.w = cw; canvasFitted.h = ch; canvasFitted.pr = cr;
   if (VILLAGE) renderer.setTransparentSort(blendedBuiltFirst as never);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -971,8 +974,66 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   return { scene, camera, renderer };
 }
 
-/** the window size and device pixel ratio the canvas was last fitted to */
-const fitted = { w: 0, h: 0, dpr: 0 };
+/** The active portion of the drawing buffer filled by this frame (physical pixels). On a screen-sized touch canvas the
+ *  window sits at the top-left while the buffer covers the whole screen (`bottom > 0`), so WebGL bottom-up reads and
+ *  scissors start at `bottom`, whereas DOM/2D copies crop from (`left`, `top`) = `(0, 0)`. */
+export interface FrameRect { left: number; top: number; bottom: number; width: number; height: number }
+
+/** whether the lab forces the screen-sized canvas on/off (`null` follows `(pointer: coarse)`) */
+let screenCanvasHeld: boolean | null = null;
+/**
+ * Whether the WebGL canvas holds the whole screen's pixels from boot so entering full screen on a phone never
+ * reallocates the drawing buffer (WebGL only: WebGPU's swap chain is managed separately).
+ */
+const usesScreenCanvas = (): boolean =>
+  !WEBGPU && (screenCanvasHeld ?? (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches));
+
+/** Target CSS dimensions for the canvas: the whole screen (oriented like the window) on touch, or the window itself. */
+function canvasTargetCss(w: number, h: number): { cw: number; ch: number } {
+  if (!usesScreenCanvas()) return { cw: w, ch: h };
+  const sw = window.screen?.width || 0;
+  const sh = window.screen?.height || 0;
+  // iOS Safari keeps `screen.width/height` in portrait after rotating to landscape, so align long/short sides to the window.
+  const long = Math.max(sw, sh), short = Math.min(sw, sh);
+  const land = w >= h;
+  return { cw: Math.max(w, land ? long : short), ch: Math.max(h, land ? short : long) };
+}
+
+/** the window size, device pixel ratio, and target canvas CSS size last fitted */
+const fitted = { w: 0, h: 0, dpr: 0, cw: 0, ch: 0 };
+/** the CSS size and pixel ratio the backing canvas was last allocated at */
+const canvasFitted = { w: 0, h: 0, pr: 0 };
+
+/** The active frame's box within the WebGL canvas, in physical pixels. */
+export function frameRect(): FrameRect {
+  const dom = gl.domElement;
+  const pr = gl.getPixelRatio();
+  const w = fitted.w || window.innerWidth;
+  const h = fitted.h || window.innerHeight;
+  const width = Math.min(dom.width, Math.floor(w * pr));
+  const height = Math.min(dom.height, Math.floor(h * pr));
+  return { left: 0, top: 0, bottom: dom.height - height, width, height };
+}
+
+/** Restricts default-framebuffer draws to the window's top-left slice of a screen-sized canvas. */
+function applyScreenViewport(): void {
+  if (WEBGPU) return;
+  const dom = gl.domElement;
+  const { width: vw, height: vh, bottom } = frameRect();
+  const pr = gl.getPixelRatio();
+  if (bottom === 0 && vw === dom.width && vh === dom.height) {
+    gl.setViewport(0, 0, fitted.w, fitted.h);
+  } else {
+    // +0.25 px keeps Three's round() in setViewport and floor() in setRenderTarget(null) on the exact integer pixel.
+    gl.setViewport(0, (bottom + 0.25) / pr, (vw + 0.25) / pr, (vh + 0.25) / pr);
+  }
+}
+
+/** Overrides `(pointer: coarse)` for `lab resize`, immediately refitting the canvas and viewport (`null` restores auto). */
+export function holdScreenCanvas(on: boolean | null): void {
+  screenCanvasHeld = on;
+  fitViewport();
+}
 /** the most pixels the scene renders: the quality's, and Auto's budget (core/quality.ts) */
 let pixelCap = Infinity;
 /** the MSAA samples the quality level asks for, at one pixel per css px (`samplesOn` divides them by the screen's) */
@@ -1054,13 +1115,19 @@ export function sceneSize(out: THREE.Vector2): THREE.Vector2 {
  */
 function fitViewport(): boolean {
   const w = window.innerWidth, h = window.innerHeight, dpr = window.devicePixelRatio || 1;
-  if (w < 1 || h < 1 || (w === fitted.w && h === fitted.h && dpr === fitted.dpr)) return false;
-  fitted.w = w; fitted.h = h; fitted.dpr = dpr;
+  if (w < 1 || h < 1) return false;
+  const cr = canvasRatio();
+  const { cw, ch } = canvasTargetCss(w, h);
+  if (w === fitted.w && h === fitted.h && dpr === fitted.dpr && cw === fitted.cw && ch === fitted.ch) return false;
+  fitted.w = w; fitted.h = h; fitted.dpr = dpr; fitted.cw = cw; fitted.ch = ch;
   G.camera.aspect = w / h;
   G.camera.updateProjectionMatrix();
-  const cr = canvasRatio();
-  if (cr !== gl.getPixelRatio()) gl.setPixelRatio(cr);
-  gl.setSize(w, h);
+  if (cw !== canvasFitted.w || ch !== canvasFitted.h || cr !== canvasFitted.pr) {
+    if (cr !== gl.getPixelRatio()) gl.setPixelRatio(cr);
+    gl.setSize(cw, ch);
+    canvasFitted.w = cw; canvasFitted.h = ch; canvasFitted.pr = cr;
+  }
+  applyScreenViewport();
   applySceneRatio();
   composer.setSize(w, h);
   fitSceneTarget();
@@ -1688,7 +1755,8 @@ export function render(): void {
   // (the grade's, WebGPU's too: core/webgpu.ts `graded`)
   grade.uniforms.uTime.value = G.time;
   grade.uniforms.uHurt.value = rig.hurt;
-  fitBloodMask(gl.domElement.width, gl.domElement.height);
+  const frame = frameRect();
+  fitBloodMask(frame.width, frame.height);
   // the adaptation targets glide with the view
   const target = (v: ViewMode, i: 0 | 1): number => v !== 'top' ? ADAPT[v][i]
     : (ADAPT.lobby[i] + (ADAPT.top[i] - ADAPT.lobby[i]) * clamp((rig.zoom - CAMERA.lobbyZoom) / (1 - CAMERA.lobbyZoom), 0, 1)) * (i === 1 ? adaptScale : 1);
@@ -1748,6 +1816,6 @@ export function render(): void {
   shotTaken();
   gpuMarks.mark('overlay');
   if (overlaysShown) overFrame.draw();
-  presentHdr();
+  presentHdr(frame.width, frame.height);
   framePart('render: overlays');
 }
