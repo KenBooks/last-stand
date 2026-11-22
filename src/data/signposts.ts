@@ -10,17 +10,20 @@ export interface SignArm { name: string; to: Spot }
 /** A signpost: where its post stands (x, z) and its arms, the top one first. */
 export interface Signpost { at: Spot; arms: readonly SignArm[] }
 
-/** An arm pointing at house `id`'s door, named as its sign over the door is. */
+/** A name as an arm bears it: without a leading "The" (from the owner: "lets remove "the" from all names"). */
+const armName = (name: string): string => name.replace(/^The /, '');
+
+/** An arm pointing at house `id`'s door, named as its sign over the door is, less its "The". */
 const toHouse = (id: RoomId): SignArm => {
   const door = houseDoor(id);
-  return { name: HOUSES[id].name, to: [door.x, door.z] };
+  return { name: armName(HOUSES[id].name), to: [door.x, door.z] };
 };
 
 /** the ways out and the places a road leads to, as an arm names them */
-const CRYPT: SignArm = { name: 'The Crypt', to: [24.7, -14.1] };
-const THORNWOOD: SignArm = { name: 'The Thornwood', to: [-24.4, 13.3] };
+const CRYPT: SignArm = { name: 'Crypt', to: [24.7, -14.1] };
+const THORNWOOD: SignArm = { name: 'Thornwood', to: [-24.4, 13.3] };
 const HALL_OF_HEROES: SignArm = { name: 'Hall of Heroes', to: [-1.5, -9.4] };
-const SQUARE: SignArm = { name: 'The Square', to: [0, 0] };
+const SQUARE: SignArm = { name: 'Square', to: [0, 0] };
 const YARD_GATE: SignArm = { name: 'Training Yard', to: yardToWorld(YARD.gateAt, -YARD.halfZ) };
 
 export const SIGNPOSTS: readonly Signpost[] = [
