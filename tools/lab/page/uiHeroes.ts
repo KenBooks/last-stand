@@ -58,18 +58,11 @@ const shown = (element: Element | null): boolean => !!element?.checkVisibility({
 const changeHero = (): (() => void) | undefined => (menus as { changeHero?: () => void }).changeHero;
 
 /**
- * The hero selection screen asked for from the lobby: the panels' Change hero clicked with the mouse where it shows;
- * in the village, which has no such link (its way in is the hall's dais, used by E there in `lab village`), what the
- * dais asks, with the hero left where he stands, so the screen opens on his own class; a pause menu left up is
- * resumed first, as the game asks nothing while paused (the link that stood in it resumed too). Whether anything was
- * asked.
+ * The hero selection screen asked for from the lobby: what the hall's dais asks (its way in, used by E there in
+ * `lab village`), with the hero left where he stands, so the screen opens on his own class; a pause menu left up is
+ * resumed first, as the game asks nothing while paused. Whether anything was asked.
  */
-export async function askForHeroes(lab: Lab): Promise<boolean> {
-  const button = document.getElementById('btn-hero');
-  if (button && shown(button)) {
-    await lab.clickOn(button);
-    return true;
-  }
+export async function askForHeroes(_lab: Lab): Promise<boolean> {
   const ask = changeHero();
   if (!ask) return false;
   if (shown(document.getElementById('pause'))) document.getElementById('btn-resume')!.click();

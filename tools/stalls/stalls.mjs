@@ -2,9 +2,9 @@
 // browser traced, for the stalls the lab's Chromium never shows (Chrome on Windows holding up its GPU process, and
 // the game's canvas with it, for seconds while Skia builds a program). See tools/stalls/README.md.
 //
-// npm run stalls -- [--url a,b] [--scenario fight|lobby|storm|hover|sweep|stow|heroes|choosing] [--seconds 45]
+// npm run stalls -- [--url a,b] [--scenario fight|lobby|storm|hover|sweep|heroes|choosing] [--seconds 45]
 //   [--listed 300] [--variants base,cpuCanvas] [--rounds 3] [--view top] [--biome forest] [--hero warrior]
-//   [--stash 40] [--item-ms 100] [--press-ms 200] [--scale 1.25] [--window 1536x695] [--perf] [--js] [--headed]
+//   [--stash 40] [--item-ms 100] [--scale 1.25] [--window 1536x695] [--perf] [--js] [--headed]
 //   [--links] [--passes] [--paints] (--help: what each does)
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -18,7 +18,7 @@ import { AUTOPLAY, measureAutoplay } from './autoplay.mjs';
 import { measureBoots } from './boot.mjs';
 import { BOOT, readOptions, usage, VIEWS } from './options.mjs';
 import {
-  chooseIfAsked, equipmentShown, fightWarm, loaded, menuStowed, recordFromNow, seededProfile, seedStash, startRecording,
+  chooseIfAsked, equipmentShown, fightWarm, loaded, recordFromNow, seededProfile, seedStash, startRecording,
   stopRecording, useStyle,
 } from './page.mjs';
 import {
@@ -31,7 +31,7 @@ import { startTrace, TraceLost } from './trace.mjs';
 import { within } from './within.mjs';
 import { liveCss, partsOf, VARIANTS } from './variants.mjs';
 import { stepClock } from './steps.mjs';
-import { WALKS_QUERY } from './villageWalks.mjs';
+import { goTo, WALKS_QUERY } from './villageWalks.mjs';
 
 const REPO = resolve(import.meta.dirname, '../..');
 const OUT = join(REPO, 'tools/stalls/out');
@@ -97,10 +97,13 @@ async function waitLoaded(page) {
 }
 
 /**
- * Fills the hero's stash with `count` items (`seedStash`) as a player's long kept one is: an item moved off him so
- * his profile is saved, copies of his own kept for the next load, and the page loaded again. Throws if it couldn't.
+ * Fills the hero's stash with `count` items (`seedStash`) as a player's long kept one is: the village's chest walked
+ * to and opened (its panels hold his gear), an item moved off him so his profile is saved, copies of his own kept for
+ * the next load, and the page loaded again. Throws if it couldn't.
  */
 async function fillStash(page, count) {
+  const why = await goTo(page, 'stash');
+  if (why) throw new Error(`stalls: --stash: ${why}`);
   await page.click('#equip .eslot:not(.empty)');
   await page.waitForTimeout(ITEM_MOVED_MS);
   const filled = await page.evaluate(seedStash, count);
@@ -123,14 +126,12 @@ async function setUpLobby(page, options) {
   await chooseView(page, options.view);
 }
 
-/** Puts the lobby in `view` as a player does: V pressed until it's there (a close view stows the panels), then
- *  Space to show them again. */
+/** Puts the lobby in `view` as a player does: V pressed until it's there. */
 async function chooseView(page, view) {
   for (let press = 0; press < VIEWS.indexOf(view); press++) {
     await page.keyboard.press('v', { delay: KEY_HOLD_MS });
     await page.waitForTimeout(VIEW_SETTLE_MS);
   }
-  if (await page.evaluate(menuStowed)) await page.keyboard.press('Space', { delay: KEY_HOLD_MS });
   await page.waitForTimeout(VIEW_SETTLE_MS);
 }
 

@@ -25,7 +25,7 @@ const TAP_MS = 90;
  * each walk took to arrive by the page's clock, and a place never reached.
  */
 export async function walks(page, ms, options = {}) {
-  if (!(await page.$('#vmap'))) return ['no village in this tree: walked nothing'];
+  if (!(await hasVillage(page))) return [`${NO_VILLAGE}: walked nothing`];
   await skipTraining(page);
   await page.evaluate(markPhase, 'away');
   await page.waitForTimeout(Math.min(ms / 10, 3000));
@@ -34,10 +34,45 @@ export async function walks(page, ms, options = {}) {
   return notes;
 }
 
+/** what a scenario says of a page with no village on it: a `ref:` side from before the village was the only lobby,
+ *  which showed it only when asked (`?village=1`) */
+export const NO_VILLAGE = 'no village on this page (a tree from before it was the only lobby needs ?village=1)';
+
+/** Whether the page's lobby is the village (its map is on the page). */
+export const hasVillage = async (page) => Boolean(await page.$('#vmap'));
+
 /** The training skipped where it's offered (its tracker's Skip), so the portals open. */
-async function skipTraining(page) {
+export async function skipTraining(page) {
   const skip = await page.$('.tr-skip');
   if (skip && (await skip.isVisible())) await skip.click();
+}
+
+/** The name on the map of what `use` names (`biome`'s portal, where given). */
+const nameOnMap = (use, biome) => {
+  const place = `.vm-name[data-use="${use}"]`;
+  return biome ? `${place}[data-biome="${biome}"]` : place;
+};
+
+/**
+ * The hero sent to `stop` by the map, as `walks` sends him, and what it opens left open for the scenario that asked
+ * (the chest's panels, a portal's card, the hero selection screen): why he never got there, or nothing. The yard
+ * opens nothing: he's given `yardMs` to walk into it.
+ */
+export async function goTo(page, stop, yardMs = YARD_MS) {
+  const [use, biome] = stop.split(':');
+  if (!(await hasVillage(page))) return NO_VILLAGE;
+  if (await page.evaluate(arrived, use)) return '';
+  await declineReport(page);
+  const why = await openMap(page);
+  if (why) return `never walked to ${stop}: ${why}`;
+  await clickPastReport(page, nameOnMap(use, biome));
+  if (use === 'yard') {
+    await page.waitForTimeout(yardMs);
+    return '';
+  }
+  const reached = await page.waitForFunction(arrived, use, { timeout: ARRIVE_MS, polling: 100 })
+    .then(() => true, () => false);
+  return reached ? '' : `never reached ${stop} in ${ARRIVE_MS / 1000} s`;
 }
 
 /** Walks to `stop` (a map name's `data-use`, `portal:<biome>` for a portal) and back out of what it opens. */
@@ -46,7 +81,7 @@ async function walkTo(page, stop) {
   let asked = await declineReport(page);
   const why = await openMap(page);
   if (why) return `never walked to ${stop}: ${why}`;
-  const name = biome ? `.vm-name[data-use="${use}"][data-biome="${biome}"]` : `.vm-name[data-use="${use}"]`;
+  const name = nameOnMap(use, biome);
   if (await page.evaluate(arrived, use)) {
     return `never walked to ${stop}: open already (${await page.evaluate(openNow)})`;
   }

@@ -335,7 +335,7 @@ const STACKED = 'stacked over the cursor';
 const named = (element: Element): string => `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''}`;
 
 /**
- * The page's layers that would be drawn over the cursor (from play, of the beta's notice: "mouse appears under it,
+ * The page's layers that would be drawn over the cursor (from play, of a notice at the window's top: "mouse appears under it,
  * need to be on top, otherwise cannot click"): every element whose z-index is the cursor's or more, shown now or
  * not, the covers aside. With the canary, a layer planted over it, which must be found.
  */

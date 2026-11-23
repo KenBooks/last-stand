@@ -24,7 +24,7 @@ which only the address asked for: on a phone the hero stood stuck mid pose under
 - **The village's sight is worked out in the final pass** (`seenOnly` in `webgpu.ts`, WebGL's `SIGHT_GLSL` in
   `core/sight.ts`): two rows of nine lookups a pixel across the rays, two `atan`s, the roofs' map, at the scene's
   full size. Its port worked all of it out with the fog off too (a fight's, a whole view's) and weighed it by nothing,
-  where WebGL's returns at once: the lab's crypt at a phone's pixels, the village on, its final pass 4.4 ms to 0.15
+  where WebGL's returns at once: the lab's crypt at a phone's pixels, its final pass 4.4 ms to 0.15
   (`lab passes --screen 832x384@3.75 --boot verylow --ab`, the pictures the same). It's a `select`
   on the fog's being on now, as the doorway's row is on a door seen through; and built plain (`plainAtBoot`, Low
   and Very low at the boot) it takes 3 taps across the rays where 9 (`PLAIN_SIGHT_TAPS`): in the village at Very low

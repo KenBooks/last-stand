@@ -191,7 +191,7 @@ export async function longPress(lab: Lab, options: LongPressOptions): Promise<Re
   const problems: string[] = [];
   const places: string[] = [];
   if (await inTheYard(lab)) places.push('the village\'s training yard');
-  else lines.push('  (no village lobby: --panels; the run alone)');
+  else lines.push('  (not in the village: the run alone)');
   const yard = places.length ? await holdEach(lab, places[0], options.canary) : { lines: [], problems: [] };
   await lab.setup(options.fixture);
   await showTouchControls(lab);

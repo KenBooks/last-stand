@@ -30,7 +30,6 @@ let hooks: DevHooks;
 let panel: HTMLElement, fly: HTMLElement, tab: HTMLButtonElement;
 /** what the panel last said, so it's written again only when it changes */
 let shown = '';
-let tabs: HTMLElement;
 
 const SPEEDS = [0.1, 0.25, 0.5, 1, 2];
 const COUNTS = [1, 5, 20];
@@ -44,15 +43,9 @@ const options = (list: [string, string][]): string => list.map(([v, t]) => `<opt
 
 export const panelOpen = (): boolean => !panel.classList.contains('hidden');
 export function togglePanel(open = !panelOpen()): void {
-  dockPanel();
   panel.classList.toggle('hidden', !open);
   observePerfHud(open);
   document.body.classList.toggle('dev-open', open);
-  tabs.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
-    const selected = (b.dataset.devTab === 'dev') === open;
-    b.classList.toggle('on', selected);
-    b.setAttribute('aria-selected', String(selected));
-  });
   if (open) { renderGear(); refreshPanel(); }
 }
 export function toggleFly(): void { flyFree(!freeCamOn(), hooks); }
@@ -101,38 +94,6 @@ export function initPanel(h: DevHooks): void {
       <div class="dv-note dv-prof-note"></div>
     </details><div class="dv-scroll-cue" aria-hidden="true">Scroll for more ↓</div>`;
   document.body.append(panel);
-  tabs = document.createElement('div');
-  tabs.className = 'dv-tabs';
-  tabs.setAttribute('role', 'tablist');
-  tabs.setAttribute('aria-label', 'Lobby panel');
-  tabs.innerHTML = '<button role="tab" data-dev-tab="hero" aria-selected="true" class="on">Hero</button><button role="tab" data-dev-tab="dev" aria-selected="false">Dev</button>';
-  // (the hero panel it shares is the panels' lobby's: the village beta's lobby has none, core/beta.ts, and the panel
-  // floats there as it does in a run, by F8 or its DEV tab)
-  const heroPanel = document.querySelector('.menu-left');
-  const heroFold = document.getElementById('hero-fold');
-  if (heroPanel && heroFold) {
-    heroPanel.prepend(tabs);
-    const folds = document.createElement('div');
-    folds.className = 'fold-tabs fold-left';
-    heroFold.before(folds);
-    folds.append(heroFold);
-    const devFold = document.createElement('button');
-    devFold.id = 'dev-fold';
-    devFold.className = 'fold-tab fold-extra';
-    devFold.title = 'Show developer panel';
-    devFold.setAttribute('aria-label', devFold.title);
-    devFold.innerHTML = heroFold.innerHTML.replace('Hero', 'Dev');
-    folds.append(devFold);
-    heroFold.addEventListener('click', () => { if (heroFold.getAttribute('aria-expanded') === 'true') togglePanel(false); });
-    devFold.onclick = () => {
-      if (heroFold.getAttribute('aria-expanded') === 'false') heroFold.click();
-      togglePanel(true);
-    };
-  }
-  tabs.addEventListener('click', (e) => {
-    const name = (e.target as HTMLElement).closest<HTMLElement>('[data-dev-tab]')?.dataset.devTab;
-    if (name) togglePanel(name === 'dev');
-  });
 
   tab = document.createElement('button');
   tab.id = 'dev-tab';
@@ -155,7 +116,6 @@ export function initPanel(h: DevHooks): void {
     document.body.style.setProperty('--dev-opacity', String(value / 100));
     $('[data-out=opacity]').textContent = `${value}%`;
   });
-  dockPanel();
   $<HTMLSelectElement>('[data-in=biome]').value = G.arena.biome;
   setFreeCamLabels(true);
   renderParts();
@@ -164,19 +124,6 @@ export function initPanel(h: DevHooks): void {
 function refreshScrollCue(): void {
   if (!panelOpen()) return;
   panel.classList.toggle('more-below', panel.scrollHeight - panel.scrollTop - panel.clientHeight > 2);
-}
-
-/** Share the hero panel in the lobby; keep F8 available on the left during play or flight. */
-export function dockPanel(): void {
-  const menu = document.getElementById('menu')!;
-  const heroPanel = document.querySelector('.menu-left');
-  const docked = !!heroPanel && G.mode === 'menu' && !freeCamOn() && !menu.classList.contains('hidden')
-    && !menu.classList.contains('stowed');
-  if (panel.classList.contains('docked') === docked && document.body.classList.contains('dev-docked') === docked) return;
-  const parent = docked ? heroPanel! : document.body;
-  if (panel.parentElement !== parent) parent.append(panel);
-  panel.classList.toggle('docked', docked);
-  document.body.classList.toggle('dev-docked', docked);
 }
 
 // --- the free camera's overlay: drags look, the wheel steps the speed; on touch, buttons fly it -------------------
@@ -456,7 +403,6 @@ async function profileSpot(): Promise<void> {
 /** The panel's buttons lit as things stand, and its numbers. */
 export function refreshPanel(): void {
   if (!panel) return;
-  dockPanel();
   const info = G.renderer.info;
   const programs = info.programs?.length ?? 0;
   const state = [

@@ -289,9 +289,8 @@ export function startIfCold() {
 export function changeHero() {
   window.__stalls.startPressed = performance.now();
   window.__stalls.pressedWhat = 'Change hero';
-  // (the panels' link; the village has none, and its hall of heroes is picked on the map, walked to and used)
-  const link = document.getElementById('btn-hero') ?? document.querySelector('.vm-name[data-use="heroes"]');
-  link.click();
+  // (the village's hall of heroes is picked on the map, walked to and used)
+  document.querySelector('.vm-name[data-use="heroes"]').click();
 }
 
 /** Records when the hall of heroes showed after Change hero (`heroesShownAt`, the page's clock): its loading bar's end. */
@@ -420,17 +419,6 @@ export function loaded() {
   if (document.readyState === 'loading') return false;
   const loading = document.getElementById('loading');
   return !loading || loading.classList.contains('done');
-}
-
-/** Whether the lobby's panels are stowed (`ui/menus.ts` `toggleMenuStowed`). */
-export function menuStowed() {
-  return Boolean(document.getElementById('menu')?.classList.contains('stowed'));
-}
-
-/** How many times the recording saw the lobby's panels stowed or shown again (a change of the menu's class). */
-export function stowsRecorded() {
-  const onMenu = (change) => change.what === 'attr class' && /^div#menu(\.|$)/.test(change.where);
-  return window.__stalls.changes.filter(onMenu).length;
 }
 
 /** Whether the bank-or-continue choice is up. */

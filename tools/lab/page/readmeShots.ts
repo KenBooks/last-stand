@@ -70,9 +70,9 @@ const PARTNERS: Partner[] = [
   { cls: 'mage', tag: 'Dunya', colour: 'gold', rarity: 'ascendant' },
 ];
 
-/** what is no part of the game as a player in it meets it: the dev build's tab, the beta's notice, and the close
+/** what is no part of the game as a player in it meets it: the dev build's tab, and the close
  *  views' hint to click, which a player looking round has clicked away */
-const NOT_SHOWN = '#dev-tab, #beta-notice, #look-hint { display: none !important; }';
+const NOT_SHOWN = '#dev-tab, #look-hint { display: none !important; }';
 
 /** `NOT_SHOWN` kept off the page from here on. */
 function hideWhatPlayersDontSee(): void {

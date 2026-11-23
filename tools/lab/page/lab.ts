@@ -672,7 +672,7 @@ export class Lab {
     this.player.place(spot, facing);
     // (the camera too, for a hero built afresh: a commit from before it has none, and its camera glides)
     if (fixture.fresh) renderer.settleCamera?.(spot);
-    // (from above, turned as the panels' lobby leaves it where the fixture names no turn: the village opens at one of
+    // (from above, turned to 0 where the fixture names no turn: the village opens at one of
     // its starts, at random, its camera turned to face it, and a run's view kept that turn; once the rooms took random
     // numbers at boot, W walked `sheet`'s hero into the wall and `tap`'s drags pointed out at it)
     if (fixture.yaw !== undefined) turnTopDown(fixture.yaw, spot);

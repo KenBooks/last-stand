@@ -26,11 +26,6 @@ export const ARENA = {
   daisHeight: 0.35,
 };
 
-export const LOBBY = {
-  /** training dummy positions (x, z), in front of the spawn point */
-  dummies: [[-2.8, -4], [0, -4.6], [2.8, -4]] as const,
-};
-
 // Damage type colors used by VFX and floating numbers.
 export const DAMAGE_COLORS: Record<DamageType, number> = {
   arcane: 0x5dffa8,

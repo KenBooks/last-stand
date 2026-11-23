@@ -11,8 +11,8 @@
 // text 16 css px at least (a phone zooms the page into a smaller one), and the report saying the run and its wave.
 // Nothing leaves for anywhere else: the clipboard is stood in for, a new tab is caught, and every report's POST must go
 // to the lab's own service, or it's turned away here (never production's).
-// In the village the beta's notice is up as the menu opens, as in the 20 s after a game opens (its timer runs on the
-// browser's clock, so the lab met it in some runs alone): the form must put it away, and nothing may lie over the form.
+// Nothing of the page's may lie over the form (a notice at the window's top once lay over its title on a phone held
+// sideways).
 // Its canaries: the form's box twice the window's height, which must be found here; a panel laid over the touch
 // state's form, found too; and the report's picture taken out on its way to the service, which the node side's
 // read-back must find.
@@ -24,7 +24,6 @@ import { BUG_REPORT, REPORT_KINDS } from '../../../src/data/bugReport';
 import { input } from '../../../src/core/input';
 import { bugReportOpen, bugReportServer, bugReportShot, closeBugReport } from '../../../src/ui/bugReport';
 import { showPause } from '../../../src/ui/menus';
-import { showBetaNotice } from '../../../src/ui/beta';
 import { touchMode } from './uiTouch';
 
 /** What a state found besides its boxes: lines for its report, and its problems. */
@@ -38,7 +37,7 @@ type State = 'bugReport' | 'bugReportTouch';
 /** the planted panel's id */
 const COVER_ID = 'lab-bug-report-cover';
 /** the points across the form's box looked at for what lies over it, this far apart (css px): a grid of 8 a side
- *  passed between the beta's notice's 30 px on a phone held sideways */
+ *  passed between the 30 px of a notice laid over it on a phone held sideways */
 const COVER_STEP = 10;
 
 /** what of the form a player must reach, by its selector and what it's called in a report (each kind besides) */
@@ -176,8 +175,6 @@ async function openForm(lab: Lab, state: State): Promise<void> {
 export async function openBugReport(lab: Lab, canary: boolean): Promise<void> {
   pictures = [];
   standIn();
-  // (the notice up as a game opens: the pause menu leaves it, and on a phone held sideways it lay over the form's title)
-  showBetaNotice();
   showPause(true);
   await lab.step(1);
   pictures.push(await lab.screen('bugReport-entry', ['the pause menu: Report a bug at its foot'], '#pause .pause-box'));
@@ -196,7 +193,7 @@ export async function openBugReportTouch(lab: Lab, canary: boolean): Promise<voi
   if (canary) plantCover();
 }
 
-/** The touch canary's plant: a panel of the page's own laid over the form's middle, as the beta's notice lay. */
+/** The touch canary's plant: a panel of the page's own laid over the form's middle. */
 function plantCover(): void {
   const cover = document.createElement('div');
   cover.id = COVER_ID;
@@ -254,7 +251,7 @@ function coversOf(box: DOMRect): string[] {
   return [...covers];
 }
 
-/** What lies over the form's box now, as problems (the beta's notice came up over it after it opened). */
+/** What lies over the form's box now, as problems (what comes up over it after it opened too). */
 function coveredForm(state: State): string[] {
   const covers = coversOf(part('.br-box').getBoundingClientRect());
   return covers.length ? [`${state}: ${covers.join(', ')} ${BUG_REPORT_COVER_CANARY.name}`] : [];

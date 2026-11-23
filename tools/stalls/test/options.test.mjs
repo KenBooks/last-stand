@@ -13,7 +13,6 @@ test('fills in the defaults', () => {
     variants: ['base'],
     rounds: 1,
     itemMs: 250,
-    pressMs: 200,
     view: 'top',
     biome: 'forest',
     hero: null,

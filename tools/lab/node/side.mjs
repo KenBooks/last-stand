@@ -77,20 +77,19 @@ async function warmAll(mostMs) {
  * not (`warmAll`), and as a `first` visit or not. The lab's own boot asks for everything the game warms after the
  * lobby shows and waits for it. A first visit has no saved hero (no class cookie): the game boots its default hero and
  * opens on the hero selection screen, its other heroes warmed after the loading screen leaves, and it's cold too.
- * Its lobby is the village, the beta a player opts into (`src/core/beta.ts`, by its cookie), or with `panels` the
- * lobby as it is without it. Every page is at the game's plain address, as a player's is: the game has one
+ * Every page is at the game's plain address, as a player's is: the game has one
  * renderer (the Rust engine, `src/engine`), and no address asks for another.
  */
-export const LAB_BOOT = Object.freeze({ quality: null, cold: false, first: false, panels: false });
+export const LAB_BOOT = Object.freeze({ quality: null, cold: false, first: false });
 
-/** the cookie that keeps the village beta's choice (`src/core/beta.ts`) */
+/** the cookie that chose the village while it was a beta a player opted into: the game reads none now, and it is set
+ *  for an `--ab` side from before the village was the only lobby, whose page boots the village by it */
 const VILLAGE_COOKIE = 'last-stand-beta-village';
 
-/** The boot a command's `options` ask for (`--boot`, `--cold`, `--first`, `--panels`). */
+/** The boot a command's `options` ask for (`--boot`, `--cold`, `--first`). */
 export function bootOf(options) {
   const first = Boolean(options.first);
-  const panels = Boolean(options.panels);
-  return { quality: options.boot ?? null, cold: first || Boolean(options.cold), first, panels };
+  return { quality: options.boot ?? null, cold: first || Boolean(options.cold), first };
 }
 
 /** How `boot` is said after the hero it booted: ` at low@518400`, `, cold`, `, a first visit`, or nothing for the
@@ -103,8 +102,7 @@ export function bootText(boot) {
 
 /** Whether two boots are the same. */
 function sameBoot(a, b) {
-  const sameLobby = Boolean(a.panels) === Boolean(b.panels);
-  return a.quality === b.quality && a.cold === b.cold && Boolean(a.first) === Boolean(b.first) && sameLobby;
+  return a.quality === b.quality && a.cold === b.cold && Boolean(a.first) === Boolean(b.first);
 }
 /** how much of a failed script's answer is said (Vite's message of what wouldn't compile, the start of it) */
 const FAILED_ANSWER_CHARS = 600;
@@ -618,7 +616,7 @@ export class Side {
    * Opens another page of this side's game in a context of its own, booted for `heroClass` and with the lab installed
    * as `boot` does: a co-op partner (`coop`; a party of more opens one for each). Its errors count as this side's,
    * said to be the partner's. Returns the page; `closePartner` closes every partner's. `how`: booted another way than
-   * this side's page (the other lobby, `beta`).
+   * this side's page.
    */
   async openPartner(heroClass, how = this.bootedAs ?? LAB_BOOT) {
     const context = await this.newContext();
@@ -660,7 +658,7 @@ export class Side {
    * side's (each after `prefix`), booted as `how` asks: at its `quality`, set as the player's setting.
    */
   async openPageIn(context, heroClass, prefix, how = LAB_BOOT) {
-    const { quality, cold, first, panels } = how;
+    const { quality, cold, first } = how;
     // (nothing kept from the last boot: the game writes cookies of its own, the skill loadout's among them, and a boot
     // after them ended its set-up a frame apart from the first; storage is cleared as the page starts, browser.mjs)
     await context.clearCookies();
@@ -669,7 +667,7 @@ export class Side {
     const settled = quality ? { 'last-stand-quality': quality.split('@')[0] } : {};
     // (a first visit's has no saved hero: the game boots its default one, and opens on the hero selection screen)
     const hero = first ? {} : { 'last-stand-class': heroClass };
-    const cookies = { ...BOOT_COOKIES, [VILLAGE_COOKIE]: panels ? '0' : '1', ...settled, ...hero };
+    const cookies = { ...BOOT_COOKIES, [VILLAGE_COOKIE]: '1',...settled, ...hero };
     await context.addCookies(Object.entries(cookies).map(([name, value]) => ({ name, value, url: this.url })));
     const page = await context.newPage();
     // (the maps made once kept in the context's store, under a name for their code: src/core/kept.ts `keepAs`)
@@ -708,8 +706,8 @@ export class Side {
   }
 
   /**
-   * `page` loaded by `load` (its first address gone to, or a control of the game's that loads it again: the Beta
-   * tab's Reload, `beta`) and its loading screen waited out, `cold` or with all it warms; a boot that fails throws,
+   * `page` loaded by `load` (its first address gone to, or a control of the game's that loads it again:
+   * `lobbystart`'s reload) and its loading screen waited out, `cold` or with all it warms; a boot that fails throws,
    * saying at which stage, and closes the page.
    */
   async bootBy(page, load, prefix, cold) {

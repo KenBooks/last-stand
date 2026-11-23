@@ -48,9 +48,8 @@ export function openPause(tab: PauseTab, canary: boolean): void {
   showPause(true);
   pauseTab(tab);
   if (!canary) return;
-  // (the Beta tab's page has no row of options: its lead stands for one)
   const page = `#pause [data-pause-page="${tab}"]`;
-  const ownRow = document.querySelector<HTMLElement>(`${page} .opt-row, ${page} .beta-lead`);
+  const ownRow = document.querySelector<HTMLElement>(`${page} .opt-row`);
   planted = ownRow ?? document.querySelector<HTMLElement>('#pause .pb-opts .opt-row');
   if (planted) planted.style.minHeight = `${(CANARY_WINDOWS * innerHeight) / boxScale()}px`;
 }

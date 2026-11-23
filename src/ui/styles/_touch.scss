@@ -34,7 +34,7 @@ body.unarmed #touch-skills { visibility: hidden; }
 #btn-pause { position: absolute; top: 10px; right: $touch-edge; width: 44px; height: 44px; align-items: center; justify-content: center; z-index: 9;
   border-radius: 50%; border: 1px solid rgba($frame, .6); background: rgba(10,9,11,.75); color: var(--accent); pointer-events: auto; scale: var(--touch, 1); transform-origin: right top; }
 #btn-pause svg { width: 20px; height: 20px; fill: currentColor; }
-#hud:not(.lobby) #btn-pause, #{$village} #btn-pause { right: calc(#{hud(12px)} + var(--mm-room) * var(--hud, 1) + 8px); }
+#hud:not(.lobby) #btn-pause, #btn-pause { right: calc(#{hud(12px)} + var(--mm-room) * var(--hud, 1) + 8px); }
 /* the view (top-down, over the shoulder, through the eyes), in the top left corner: the village's alone */
 #btn-view { position: absolute; top: 10px; left: $touch-edge; width: 44px; height: 44px;
   align-items: center; justify-content: center; z-index: 9; border-radius: 50%; border: 1px solid rgba($frame, .6);
@@ -47,7 +47,7 @@ body.unarmed #touch-skills { visibility: hidden; }
   justify-content: center; z-index: 9; border-radius: 50%; border: 1px solid rgba($frame, .6);
   background: rgba(10,9,11,.75); color: var(--accent); pointer-events: auto; scale: var(--touch, 1);
   transform-origin: right top; touch-action: manipulation; }
-#hud:not(.lobby) #btn-full, #{$village} #btn-full {
+#hud:not(.lobby) #btn-full, #btn-full {
   right: calc(#{hud(12px)} + var(--mm-room) * var(--hud, 1) + 8px + #{$touch-next}); }
 #btn-full svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round;
   stroke-linejoin: round; }
@@ -95,7 +95,7 @@ body:has(#touch-village:not(.hidden)) #touch-village {
   right: calc(var(--minimap-room, 224px) * var(--hud, 1) + 8px + 2 * #{$touch-next}); }
 // (the village's panels open lie over the touch HUD's corner and have a Close of their own: its buttons are hidden
 // till they're put away; under them they took no tap, and beside a tablet's, pause put the panels away instead)
-#{$village} body.touch:has(#menu:not(.hidden):not(.stowed)) :is(#btn-pause, #btn-full, #btn-view) { display: none !important; }
+body.touch:has(#menu:not(.hidden):not(.stowed)) :is(#btn-pause, #btn-full, #btn-view) { display: none !important; }
 #touch-village button { pointer-events: auto; touch-action: manipulation; height: 48px; min-width: 56px; padding: 0 14px;
   border-radius: 24px; border: 1px solid rgba($accent, .55); background: rgba(8, 7, 9, .78); color: #f3e1b0;
   font: 600 15px var(--font-display); letter-spacing: .04em; cursor: $cursor-hand; }

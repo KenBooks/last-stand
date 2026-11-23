@@ -21,8 +21,8 @@ Nearly everything is made by code as the game runs: the models, their animation,
 ## How to play
 
 - Pick a hero: the **Mage**, the **Warrior** or the **Ranger**. Each keeps their own gear, stash and records.
-- Pick a battleground, the **Crypt** or the **Thornwood** (or the dice for a random one each run). Each has its own enemies.
-- Start a run at any wave up to the best one you cleared **and banked** in that battleground; a run you died in doesn't count. On Random, the range is the waves banked in any battleground, and the dice roll among those the wave you pick is unlocked in.
+- Pick a battleground, the **Crypt** or the **Thornwood**, each through a portal of its own. Each has its own enemies.
+- Start a run at any wave up to the best one you cleared **and banked** in that battleground; a run you died in doesn't count.
 - Survive each wave inside the arena. Every fifth wave, a boss arrives: the **Hollow Colossus** in the Crypt, the **Elder Thornheart** in the Thornwood.
 - After every wave, choose:
   - **Bank** — leave the arena and move everything you found into your stash, or
@@ -40,28 +40,22 @@ Nearly everything is made by code as the game runs: the models, their animation,
 
 ### The lobby
 
-Between runs you are in the lobby: your hero on the battleground with panels round them for the equipment, the stash, the attributes and the skills. Walk around and try every skill for free on the training dummies, and fold the panels away by the tabs on their edges to make room.
-
-**Training grounds** (the lobby's button): pick a battleground and any wave that hero has reached there, including waves lost. The enemies are projections: skills cost and cool down as in a run, but you take no damage and earn no loot, score or progress. After a wave, repeat it or leave.
-
-### Beta: the village lobby
-
 ![The village of Wardenhollow: the fountain, and the hall of heroes beyond it](docs/screenshots/village.jpg)
 
-A new lobby to try: Wardenhollow, a village you walk around, in place of the panels. Switch it on in the pause menu (**Esc**), under **Beta**, and press **Reload**; the game remembers the choice, and a notice as it opens (or the same tab) takes you back to the old lobby. Your heroes and saves are the same either way.
+Between runs you are in the lobby: Wardenhollow, a village you walk around.
 
 - Walk up to something and press **E** (or click it, or tap it) to use it: the portals to the **Crypt** and the **Thornwood**, the chest for your stash, the hall of heroes to change hero, the campfire to play together, the chronicle for save slots, the notice board for how to play and the tutorial (a walk round the village that teaches one thing at a time: your bag, throwing gear on the ground and picking it up, the stash, attacking, your skills, blocking and a broken guard, dazing a foe, your draught, your keys, the hall of heroes and the save slots, a first run banked, playing together), the ghost by the training yard for the training grounds.
 - **I** opens the inventory (equipment, attributes, skills) anywhere and **M** the village's map. On touch, **Use**, **Bag** and **Map** stand beside the minimap, and a camera button changes the view.
 - Skills work in the training yard, on its dummies: free while the inventory is open, with a run's costs and cooldowns once it's put away. A first visit starts with a short training round the village, which you can skip.
+- **Training grounds** (the ghost's): pick a battleground and any wave that hero has reached there, including waves lost. The enemies are projections: skills cost and cool down as in a run, but you take no damage and earn no loot, score or progress. After a wave, repeat it or leave.
 - The village keeps your clock's hours: day and night, with lamps lit after dusk.
-- In co-op a room is in its host's lobby: joining one in the other lobby offers to switch and join.
 - **Duels:** in the village, a party can fight each other. The room's host sets a duel up at the weapons rack before the training yard (battleground, 1 v 1 or 2 v 2, first to 1, 3 or 5 rounds, own gear or none, who is on which side or watches), each fighter readies up there, and the host begins. No foes, no rewards, nothing lost or saved.
 
 ### Play together
 
 ![Four players round the village's campfire at night](docs/screenshots/campfire.jpg)
 
-Up to four players can hold the arena together over the internet, each under a name tag of their own (asked for once, and unique in a room) and in a colour of their own. In the lobby, **Play together** (the campfire, in the village) → **Open a room** gives a short code and an invite link to send friends; opening the link (or entering the code) joins the room. The games talk through a small relay server of ours (`server/relay`), over a WebSocket that gets through any network a web page does.
+Up to four players can hold the arena together over the internet, each under a name tag of their own (asked for once, and unique in a room) and in a colour of their own. At the village's campfire, **Play together** → **Open a room** gives a short code and an invite link to send friends; opening the link (or entering the code) joins the room. The games talk through a small relay server of ours (`server/relay`), over a WebSocket that gets through any network a web page does.
 
 - Each player brings their own hero, gear and loadout, and keeps their own spoils: loot goes to whoever lands the kill (a boss pays everyone), and each bag stays hidden until its owner banks.
 - The host picks the battleground and starting wave and starts the run. A party faces more foes, each with more life.
@@ -73,7 +67,7 @@ Up to four players can hold the arena together over the internet, each under a n
 
 ### Saves
 
-There are **three save slots** (the lobby's *Save slot* link; the chronicle, in the village), each a separate save with its own heroes, skill loadouts and stash filters. The save slots screen shows what each one holds, and from there you play a slot or delete one (typing DELETE to confirm). An empty slot is a fresh start, for instance to play from the beginning with a friend.
+There are **three save slots** (the chronicle, in the village), each a separate save with its own heroes, skill loadouts and stash filters. The save slots screen shows what each one holds, and from there you play a slot or delete one (typing DELETE to confirm). An empty slot is a fresh start, for instance to play from the beginning with a friend.
 
 **Cloud saves** (optional): sign in on the save slots screen with a passkey, with Google, or with a sign-in code from a device already signed in, choose which save goes to the cloud, and it keeps the same heroes on every device you sign in on. It keeps playing offline and syncs when back online; a hero played on two devices while out of sync asks which copy to keep. No account is needed to play. What is kept, and how to delete it: [privacy](public/privacy.html).
 
@@ -83,7 +77,7 @@ There are **three save slots** (the lobby's *Save slot* link; the chronicle, in 
 
 ### Install and play offline
 
-Last Stand is an installable web app. Use the **Install** link in the lobby (Chrome, Edge, Android), or *Add to Home Screen* on iOS. Once it has loaded, it also plays without a connection. A new version downloads in the background, and the lobby offers a reload when it's ready.
+Last Stand is an installable web app. Use the **Install** link at the foot of the pause menu in the lobby (Chrome, Edge, Android), or *Add to Home Screen* on iOS. Once it has loaded, it also plays without a connection. A new version downloads in the background, and the lobby offers a reload when it's ready.
 
 ## Controls
 
@@ -103,7 +97,7 @@ Plays with a keyboard and mouse, or by touch on phones and tablets (hold a phone
 | `I` / `M` | The village: inventory / map |
 | `Left Shift` (hold, let go) | Ping the party (co-op) |
 | `Enter` | Chat with the party (co-op) |
-| `Esc` | Pause: controls, settings, performance, beta |
+| `Esc` | Pause: controls, settings, performance, guide |
 
 On touch:
 

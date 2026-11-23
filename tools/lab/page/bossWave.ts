@@ -1,19 +1,21 @@
 // A boss readied at its wave (src/game/bossReady.ts; from the owner: "if its not boss wave, why load the boss info"):
-// booted cold in the panels' lobby, no boss's code is loaded and none is warm. A run in the Crypt cleared at wave 4,
+// booted cold, no boss's code is loaded and none is warm. A run in the Crypt (its portal used in the village, Enter
+// clicked on its card) cleared at wave 4,
 // Continue shows the fight's bar readying the Colossus, then the wave begins with him loaded and warm, and he rises
 // with no program compiled from the wave's start until after he rises; the same from wave 14 into the Ossuary Twins
 // at 15 (two bosses in one chunk). Every other need is warmed first (the lab's own boot would ready the bosses too), so
 // no warm-up behind the run compiles meanwhile.
 // A canary: the Twins loaded and one spawned in wave 14 without their warm-up, which must be found loaded before
 // their wave, and a material of its own drawn as wave 15 begins, which must be found compiled.
+import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
-import { VILLAGE } from '../../../src/core/beta';
 import type { EnemyId } from '../../../src/data/enemies';
-import { biomeSetting } from '../../../src/game/biome';
 import { updateRun } from '../../../src/game/run';
 import { foeWarm } from '../../../src/game/warmup';
 import { hurry, isAllWarm, isReadying, readyingLabel, readyingShare } from '../../../src/game/warm';
+import { goUse, villageObject } from '../../../src/game/village';
+import { groundHeight } from '../../../src/world/ground';
 import { clearEnemies } from '../../../src/entities/enemy';
 import { spawnEnemy } from '../../../src/entities/spawner';
 import { foeLoaded, loadFoe } from '../../../src/entities/bosses';
@@ -40,6 +42,8 @@ const PATIENCE_MS = 60_000;
 const RISE_PATIENCE_S = 120;
 /** the most the browser's clock may run while the game's waits for a boss (ms), so a page that stalls still ends */
 const RISE_MOST_MS = 600_000;
+/** frames for the hero to settle at the portal, and for its card to show once it's used */
+const CARD_FRAMES = 30;
 
 const element = (selector: string): HTMLElement => {
   const found = document.querySelector<HTMLElement>(selector);
@@ -158,6 +162,19 @@ async function drawUnwarmed(lab: Lab): Promise<void> {
   }
 }
 
+/** The Crypt's portal used where the hero stands for it: its card shown, the Crypt the run's battleground. */
+async function useCryptPortal(lab: Lab): Promise<void> {
+  const portal = villageObject('crypt');
+  if (!portal) throw new Error('lab: bosswave: the village has no portal to the Crypt');
+  const [x, z] = portal.stand;
+  G.player.walkTo = null;
+  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  await lab.step(CARD_FRAMES);
+  goUse(portal);
+  await stepUntil(lab, () => G.arena.biome === 'crypt', 'the Crypt as the portal\'s battleground');
+  await lab.step(CARD_FRAMES);
+}
+
 /** Bosses readied at their wave: the bar at Continue, and no program compiled late as they rise; every frame drawn
  *  (the lab skips its draws by default, and a program is compiled only as it's drawn). */
 export async function bossWave(lab: Lab, options: BossWaveOptions): Promise<Report> {
@@ -175,7 +192,6 @@ async function readiedAtTheirWave(lab: Lab, options: BossWaveOptions): Promise<R
   const problems: string[] = [];
   const lines: string[] = [];
   if (G.mode !== 'menu') throw new Error('lab: bosswave: the fresh page must begin in the lobby');
-  if (VILLAGE) throw new Error('lab: bosswave: the Crypt is picked in the panels\' lobby (the command boots it: --panels)');
 
   hearErrors();
   const everyBoss = WAVES.flatMap((w) => w.bosses);
@@ -183,11 +199,10 @@ async function readiedAtTheirWave(lab: Lab, options: BossWaveOptions): Promise<R
   if (loadedAtBoot.length) problems.push(`at boot ${loadedAtBoot.join(', ')} already loaded`);
   lines.push(`at boot: ${loadedAtBoot.length ? loadedAtBoot.join(', ') : 'no boss'} loaded`);
 
-  await lab.clickOn(element('#opt-biome [data-b="crypt"]'));
-  await stepUntil(lab, () => biomeSetting() === 'crypt', 'the Crypt picked');
   // (every need warmed but the bosses, so no warm-up compiles behind the run: `__dev.hurry` readies the bosses too)
   hurry();
   await stepUntil(lab, isAllWarm, 'every need warm');
+  await useCryptPortal(lab);
   await lab.clickOn(element('#btn-start'));
   await stepUntil(lab, () => G.mode === 'run' && G.run !== null, 'the run');
 

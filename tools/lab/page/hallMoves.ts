@@ -121,7 +121,7 @@ async function holdDown(lab: Lab, element: Element, ms: number): Promise<void> {
   await lab.mouseUp(at);
 }
 
-/** The hall opened from the lobby (`askForHeroes` in uiHeroes.ts: the panels' Change hero, or what the village's dais
+/** The hall opened from the lobby (`askForHeroes` in uiHeroes.ts: what the village's dais
  *  asks), waited for until it's up. */
 export async function openHall(lab: Lab): Promise<boolean> {
   if (!(await heroesUi.askForHeroes(lab))) return false;

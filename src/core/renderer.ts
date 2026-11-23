@@ -4,7 +4,6 @@
 import * as THREE from 'three';
 import { lightTheLamps } from './lamps';
 import { aimSight } from './sight';
-import { VILLAGE } from './beta';
 import { clearOverFrame, countOverPass, holdSceneTarget, makeWebGPURenderer, overFrameUncleared } from './webgpu';
 import { G } from '../state';
 import { bootRust, drawRust, rustFrame, rustSamples, RUST } from '../engine';
@@ -425,8 +424,8 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   loopPointLights();
   pointShadowInReach();
   shadeEnvironment();
-  // (the village's lamps in every lit shader, and its lights' soft falloff: the village's alone, core/beta.ts)
-  if (VILLAGE) lightTheLamps();
+  // (the village's lamps in every lit shader, and its lights' soft falloff)
+  lightTheLamps();
   const renderer = gl = await makeWebGPURenderer(hdrAllowed);
   takePorts(renderer as unknown as WebGPURenderer);
   const cr = canvasRatio();
@@ -434,7 +433,7 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   renderer.setPixelRatio(cr);
   renderer.setSize(cw, ch);
   canvasFitted.w = cw; canvasFitted.h = ch; canvasFitted.pr = cr;
-  if (VILLAGE) renderer.setTransparentSort(blendedBuiltFirst as never);
+  renderer.setTransparentSort(blendedBuiltFirst as never);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -893,8 +892,6 @@ function shoulderClear(pivot: THREE.Vector3, x: number, z: number): void {
 /** The boom back from `pivot` along the view, short of the first wall or elevated floor the line to the camera meets. */
 function boomClear(pivot: THREE.Vector3, x: number, chest: number, z: number, dt: number): number {
   const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
-  // (the village's alone: elsewhere the boom is at its length at once)
-  if (!VILLAGE) return (boomNow = rig.boom);
   let most = rig.boom;
   if (wall && wall.cast(pivot, _boomAt.copy(pivot).addScaledVector(_fwd, -rig.boom), _boomHit)) {
     most = Math.max(BOOM_LEAST, _boomHit.point.distanceTo(pivot) - BOOM_OFF);
@@ -1112,12 +1109,10 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
   const e = ease(rig.blend);
   const share = (view: ViewMode) => (rig.view === view ? e : 0) + (rig.fromView === view ? 1 - e : 0);
   const props = (1 - share('first')) * (1 - share('third') * overHead());
-  if (VILLAGE) {
-    holeOpening(cam.position, focus.x, floor, focus.z, height, props, dt);
-    updateSeeThrough(focus.x, floor + height * 0.6, focus.z, props, share('top'), floor, propsOpening(),
-      builtOpening(), fenceOpened(), propsHideHim());
-    sortBlendedFrom(cam.position, cam.getWorldDirection(_sortToward));
-  } else updateSeeThrough(focus.x, floor + height * 0.6, focus.z, props, share('top'));
+  holeOpening(cam.position, focus.x, floor, focus.z, height, props, dt);
+  updateSeeThrough(focus.x, floor + height * 0.6, focus.z, props, share('top'), floor, propsOpening(),
+    builtOpening(), fenceOpened(), propsHideHim());
+  sortBlendedFrom(cam.position, cam.getWorldDirection(_sortToward));
   rig.kick = damp(rig.kick, rig.kickTo, rig.kickTo > rig.kick ? 14 : 6, dt); rig.kickTo = 0;
   if (rig.view !== 'top') fov += rig.kick * e;
   if (cam.fov !== fov || cam.near !== near) { cam.fov = fov; cam.near = near; cam.updateProjectionMatrix(); }

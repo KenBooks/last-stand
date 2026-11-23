@@ -7,9 +7,9 @@ import { SCREENS } from './screenKit';
 // (every screen's modules, loaded for what they register)
 import.meta.glob('./screens/*/*.ts', { eager: true });
 
-/** Every screen started, as the game boots (`village`: the village's lobby, the beta on). */
-export function initScreens(village: boolean): void {
-  for (const s of SCREENS) if (village || !s.village) s.init();
+/** Every screen started, as the game boots. */
+export function initScreens(): void {
+  for (const s of SCREENS) s.init();
 }
 
 /** Every screen's step for this frame. */

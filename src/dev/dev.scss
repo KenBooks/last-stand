@@ -15,7 +15,6 @@
   overflow-anchor: none;
   font: 15px $font-body; color: $ink; pointer-events: auto; cursor: $cursor;
   &.hidden { display: none; }
-  &.docked { position: static; width: 100%; zoom: 1; max-height: none; min-height: 0; border: 0; flex: 1; background: transparent; opacity: 1; }
   details { border-top: 1px solid rgba($frame, .3); padding: 4px 0; }
   summary { font: 700 12px $font-display; letter-spacing: 2px; text-transform: uppercase; color: $accent; cursor: $cursor-hand; padding: 3px 0; }
   button, select, input { font: inherit; color: $ink; background: $well; border: 1px solid rgba($frame, .55); border-radius: 3px; }
@@ -30,20 +29,11 @@
   label { display: inline-flex; align-items: center; gap: 4px; }
   input[type=range] { width: 100px; accent-color: $accent; }
 }
-.dv-tabs {
-  display: flex; flex: 0 0 auto; gap: 4px; padding: 8px; position: relative; z-index: 1;
-  button { flex: 1; min-height: 32px; font: 700 13px $font-display; color: $ink-dim; background: $well; border: 1px solid rgba($frame, .6); cursor: $cursor-hand; }
-  button.on { color: $highlight; background: $well-lit; border-color: $highlight; }
-}
-body.dev-docked #dev-tab { display: none; }
-body.dev-open.dev-docked .menu-left > .ml-body { display: none; }
-body.dev-open.dev-docked .menu-left { background: rgba($panel, var(--dev-opacity, .95)); }
 // Fade independent controls so the hovered item can become opaque without brightening its neighbours.
 #dev-panel :is(button, select, label, summary, .dv-head > b, .dv-note, .dv-perf-info > span, .dv-scroll-cue) { opacity: var(--dev-opacity, .95); will-change: opacity; }
 #dev-panel label :is(select, input) { opacity: 1; will-change: auto; }
 #dev-panel :is(button, select, label, summary, .dv-head > b, .dv-note, .dv-perf-info > span):is(:hover, .alt-hover) { opacity: 1; }
 #dev-panel button:disabled { opacity: .4; }
-body.dev-open.dev-docked .dv-tabs button { opacity: var(--dev-opacity, .95); &:hover { opacity: 1; } }
 .dv-head {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-bottom: 4px;
   b { font: 700 14px $font-display; letter-spacing: 2px; color: $accent; }

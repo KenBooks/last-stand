@@ -25,7 +25,6 @@ import { uiScales } from './scale';
 import { fullScreenChosen, leaveFullScreen } from './autoFullScreen';
 import { copyPerfReportAt, perfHudAt } from './perfHud';
 import { dragOverlays, dropOverlays, grabOverlays } from './overlayPlace';
-import { VILLAGE } from '../core/beta';
 import type { SkillDef, SkillKey } from '../types';
 import type { VillageObject } from '../data/village';
 
@@ -112,24 +111,21 @@ export function initTouch(v: TouchVillage): void {
   village = v;
   // (a finger held on a control is play: never the browser's menu)
   holdWithoutMenu();
-  // (the village's row and the view's button are the village's: the panels' lobby's touch play stays top-down)
-  if (VILLAGE) {
-    const use = $('#touch-village .tv-use');
-    use.addEventListener('click', () => {
-      const o = village.near();
-      // (a house's door is held, not tapped: game/village.ts `holdAt`)
-      if (o && !village.holds(o)) village.use(o);
-    });
-    // (held on its own pointer, as the hold buttons are: a finger drifting off it doesn't let go)
-    use.addEventListener('pointerdown', (e) => {
-      use.setPointerCapture(e.pointerId);
-      village.hold(true);
-    });
-    for (const end of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) use.addEventListener(end, () => village.hold(false));
-    use.addEventListener('contextmenu', (e) => e.preventDefault());
-    $('#touch-village .tv-bag').addEventListener('click', () => village.inventory());
-    $('#touch-village .tv-map').addEventListener('click', () => village.map());
-  }
+  const use = $('#touch-village .tv-use');
+  use.addEventListener('click', () => {
+    const o = village.near();
+    // (a house's door is held, not tapped: game/village.ts `holdAt`)
+    if (o && !village.holds(o)) village.use(o);
+  });
+  // (held on its own pointer, as the hold buttons are: a finger drifting off it doesn't let go)
+  use.addEventListener('pointerdown', (e) => {
+    use.setPointerCapture(e.pointerId);
+    village.hold(true);
+  });
+  for (const end of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) use.addEventListener(end, () => village.hold(false));
+  use.addEventListener('contextmenu', (e) => e.preventDefault());
+  $('#touch-village .tv-bag').addEventListener('click', () => village.inventory());
+  $('#touch-village .tv-map').addEventListener('click', () => village.map());
   // start in touch mode on a device whose main pointer is a finger
   setTouchMode(matchMedia('(pointer: coarse)').matches);
   window.addEventListener('pointerdown', (e) => setTouchMode(e.pointerType !== 'mouse'), true);
@@ -218,10 +214,8 @@ export function initTouch(v: TouchVillage): void {
 
   $('#btn-pause').addEventListener('click', () => input.pressed.add('escape'));
   // (the view as V changes it: top-down, over the shoulder, through the eyes)
-  if (VILLAGE) {
-    $('#btn-view').addEventListener('click', () => input.pressed.add('v'));
-    lookByDrag();
-  }
+  $('#btn-view').addEventListener('click', () => input.pressed.add('v'));
+  lookByDrag();
   initFullScreen();
 
   ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.8, 40).rotateX(-Math.PI / 2), additive(0xffe0a0, 1.6, 0.9));
@@ -382,7 +376,6 @@ function giveUp(p: Press): void {
 /** The village's row shown (`on`), Use naming what it would do, or hidden with nothing near; the page touched only
  *  when either changes. */
 function updateVillageRow(on: boolean): void {
-  if (!VILLAGE) return;
   if (on !== villageShown) {
     villageShown = on;
     $('#touch-village').classList.toggle('hidden', !on);

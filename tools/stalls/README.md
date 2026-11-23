@@ -27,7 +27,6 @@ npm run stalls -- --scenario hover --stash 40 --variants base,stillGlow  # hover
 npm run stalls -- --scenario sweep --stash 60 --view top --window 1536x695 --seconds 12  # moving between items
 npm run stalls -- --scenario sweep --stash 60 --item-ms 100 --seconds 8 --rounds 3  # the owner's pace, fast
 npm run stalls -- --scenario hover --stash 60 --listed 40   # every frame of 40 ms+ listed with what was busy
-npm run stalls -- --scenario stow --view top --perf --press-ms 100 --rounds 4  # Space pressed 10 times a second
 npm run stalls -- --scenario heroes --seconds 20 --listed 50  # the hero screen opened and left three times
 npm run stalls -- --scenario resolution --seconds 12 --js --listed 50  # twelve resolution changes, Escape resumes after each
 npm run stalls -- --scenario hall --seconds 12 --listed 60 --js --return  # into the hall of heroes, a hero chosen there
@@ -75,14 +74,18 @@ The report is printed and written to `tools/stalls/out/report.txt`.
   whatever else uses the GPU meanwhile. The pages not playing are paused in the debugger, so they draw nothing; the
   report says what other pages' renderers did through a measure if it was anything (20 ms or more).
 - **The lobby set up as a player's is:** the hero chosen (`--hero`); his stash filled with `--stash` items (copies of
-  his own in each rarity: an item moved off him so his profile is saved, the copies kept in the session and put back
-  over the next load's fresh storage, `page.mjs` `seededProfile`); the view stepped to with V (`--view`), the panels
-  shown again with Space. A report says which: its `Mode`, `view`, `devicePixelRatio`, and the weapon in its shaders.
+  his own in each rarity: the chest walked to and opened, an item moved off him so his profile is saved, the copies kept in the session and put back
+  over the next load's fresh storage, `page.mjs` `seededProfile`); the view stepped to with V (`--view`).
+  A report says which: its `Mode`, `view`, `devicePixelRatio`, and the weapon in its shaders.
 - **The scenario** is played with the page's own controls: real key presses (each held 90 ms, as a finger does), mouse
   moves and clicks, as a production build has no dev hooks. Each ends with the hero's kills and damage, read off the
   scores held up on Tab, and a picture of the screen (`out/end-N.png`): a scenario that fought nothing measured
   nothing.
-  - `fight`: the warrior through a wave and its choice into the next. Steel Tempest is held with the mouse circling
+  The lobby is the village: a scenario reaches a place in it as a player does, by its map (M, the place's name
+  clicked, the hero walking there: `villageWalks.mjs` `goTo`). A `ref:<commit>` side from before the village was the
+  only lobby shows it only when asked: give it `?village=1` (`--url "this,ref:<commit>?village=1"`).
+  - `fight`: the warrior through a wave and its choice into the next, the run started by the battleground's portal
+    (`--biome`: a first visit's training skipped, the portal walked to, Enter clicked on its card). Steel Tempest is held with the mouse circling
     and the left button down, now and then another skill, and Continue after a few seconds.
   - `lobby`: standing, then walking round the lobby.
   - `walks` (`villageWalks.mjs`): the village walked from place to place as a player goes about it, on a first
@@ -101,9 +104,11 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     found the map's first opening held Chrome's GPU process
     4 s, the chest's panels 1.3 s, the practice bar's cooldowns 1.1 s and the prompt 0.8 s, each a first raster
     (`src/ui/AGENTS.md`).
-  - `firing`: shooting at the lobby's dummies with the left button, a shot about every half a second (`--hero ranger`).
-  - `firingPast`: the same shots away from the dummies: what `firing` costs over it is what striking them costs.
-  - `hover`: the lobby's items hovered, a quarter of the time each: the mouse gliding over the world (the frames to
+  - `firing`: shooting up the screen in the village's training yard (walked into first: the village lets him shoot
+    there alone) with the left button, a shot about every half a second (`--hero ranger`).
+  - `firingPast`: the same shots down the screen: what `firing` costs over it is what its shots strike.
+  - `hover`: the items in the chest's panels hovered (the chest walked to and opened first), a quarter of the time
+    each: the mouse gliding over the world (the frames to
     beat); over each equipment slot and the stash's first ten items in turn, its tooltip following; swept along the
     stash's items in view, a new one every 250 ms (`--item-ms`), as a player runs a row down looking for one; then
     held still on a
@@ -111,13 +116,10 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     nothing lights.
   - `sweep`: `hover`'s sweep alone, three quarters of the time, after a quarter over the world: the same run's
     frames to beat, as a machine busy with something else slows both.
-  - `stow`: the lobby's panels stowed and shown again with Space, as the owner pressed it "rapidly": a quarter of
-    the time with them shown (the frames to beat), a quarter stowed (practice: the run's bar at the bottom), then
-    Space pressed every 200 ms for the rest (`--press-ms`), the mouse over the world throughout.
   - `pause`: the pause menu opened and closed with Esc twice, the screen pictured every 150 ms for 1.5 s after each
     press (`out/end-N-pause-<press>-<n>.png`), and how long the menu took to show or go said for each.
   - `choosing`: a hero chosen on the hero selection screen three times, each opening and each choice a phase of its own.
-  - `heroes`: the hero selection screen opened by the lobby's Change hero and left by Back, three times, after a
+  - `heroes`: the hero selection screen opened by the hall's name on the village's map and left by Back, three times, after a
     fifth of the time in the lobby (the frames to beat): each trip's way in and way out a phase of its own, so the
     first opening is read apart from the ones after ("brief lag when reentering hero selection room").
   - `switch`: another hero chosen from the hero selection screen, the warrior, the ranger and the mage in turn, each
@@ -343,17 +345,6 @@ glow and size alone and the rest dimmed by opacity, at once, the item under the 
 (`compositorFocus+snapFocus+focalFade`), 125 to 138 a second resting on each item against 78 to 90; fading in alone
 (`snapOut`), no better than all the fades. `--js` showed why so little is left to the page: the game's lobby frame is
 4.7 to 4.9 ms of JS of the 6.9 a frame has at 144 Hz.
-
-**Stowing the lobby with Space** (the owner: pressed rapidly, 144 frames a second fell to about 70 in the perf
-overlay): the warrior in the top view, 1536x695 at 1.25, 60 items, the overlay shown, Space pressed 10 times a second
-(`--scenario stow --press-ms 100`). Headless, production held 118 a second pressing (6% missed) against 143
-standing. A press cost a refresh: about 2 ms more of the game's JS, 1.5 to 2.4 of style and 1 of paint over a
-frame's 5. By kind, two changes paid for nothing: the hotbar built again each time the lobby's practice started (22
-to 55 ms of work after each), and the overlays down the left moved by `left` on every frame the panels slid (300 to
-326 moves a measure, each laid out and painted again, the fold tab's box read every frame). Neither is left
-(`src/ui/AGENTS.md`): this tree read 128 a second (10% missed), and over 4 rounds in turns the browser's work was
-no different (407 ms a second against 383): the rest is the panels' own fade and slide. The owner's 70 isn't seen
-headless.
 
 **A 60 s storm** (the mage's Maelstrom, after a report of lag with 7 or 8 bodies in it), on #221's tree and on
 production (no ragdolls): 14 and 21 kills, the median frame 16.7 ms on both. Each had one frame over 100 ms (167 and

@@ -203,11 +203,9 @@ async function pressesFound(lab: Lab): Promise<void> {
 /** the problem the canary must raise */
 export const COOP_CANARY = { name: 'Open the room lies past', what: 'Open the room moved off the window\'s foot' };
 
-/** The dialog opened from the lobby: the panels' link clicked, or as the village's campfire opens it. */
+/** The dialog opened from the lobby, as the village's campfire opens it. */
 export function openFromLobby(): void {
-  const link = document.getElementById('btn-coop');
-  if (link) link.click();
-  else openCoop(true);
+  openCoop(true);
 }
 
 /** The dialog opened as the lobby opens it, the co-op server found up (the lab's link: `?net=local`). */

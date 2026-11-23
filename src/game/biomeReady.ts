@@ -1,8 +1,7 @@
-// A fight's biome readied as a run first needs it, where the lobby is the village: built (world/arena.ts
-// `buildBiome`) and its programs warmed (game/warmup.ts `warmBiome`) under the fight's loading bar, so the boot builds
-// none of the battlegrounds a lobby in the village never shows (on a phone their builds and seals were tasks of 2 to
-// 5 s each before the lobby showed, traces S307-J274, HHKG-FKD9). A run in it waits for it (`beginRun` in main.ts), a
-// co-op guest's too before it joins; without the village the boot builds them all, as before.
+// A fight's biome readied as a run first needs it: built (world/arena.ts `buildBiome`) and its programs warmed
+// (game/warmup.ts `warmBiome`) under the fight's loading bar, so the boot builds none of the battlegrounds the
+// village never shows (on a phone their builds and seals were tasks of 2 to 5 s each before the lobby showed, traces
+// S307-J274, HHKG-FKD9). A run in it waits for it (`beginRun` in main.ts), a co-op guest's too before it joins.
 import { G } from '../state';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { biomeWarm, warmBiome } from './warmup';
@@ -11,7 +10,6 @@ import { isWarm, needShare, readyingWhile, want } from './warm';
 /** the next frame (the fight's warm-up's share read once a frame meanwhile) */
 const nextFrame = (): Promise<void> => new Promise((resolve) => { requestAnimationFrame(() => resolve()); });
 import { READYING } from '../ui/readying';
-import { VILLAGE } from '../core/beta';
 
 /** how much of the bar the fight's own warm-up takes, where it's cold as the run's biome is first needed (a first
  *  visit's Start): one bar from the press to the run, where the fight's filled and then the biome's began again */
@@ -19,9 +17,8 @@ const FIGHT_SHARE = 0.4;
 /** how far along the rest building a biome takes its readying (0 to 1): its warm-up the rest */
 const BUILT_SHARE = 0.6;
 
-/** Whether a run can begin in biome `id` with nothing of it to build or warm (without the village the boot built
- *  every biome, and the fight's need warms them). */
-export const biomeReady = (id: BiomeId): boolean => !VILLAGE || (G.arena.biomeBuilt(id) && biomeWarm(id));
+/** Whether a run can begin in biome `id` with nothing of it to build or warm. */
+export const biomeReady = (id: BiomeId): boolean => G.arena.biomeBuilt(id) && biomeWarm(id);
 
 /** the readyings under way, by biome */
 const readying = new Map<BiomeId, Promise<void>>();

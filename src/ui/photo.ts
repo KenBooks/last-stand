@@ -8,7 +8,6 @@
 // of the developer mode's (`src/dev` never ships).
 import * as THREE from 'three';
 import { G } from '../state';
-import { VILLAGE } from '../core/beta';
 import { ARENA } from '../data/balance';
 import { HOUSES } from '../data/houses';
 import { isCoop } from '../net/role';
@@ -130,7 +129,7 @@ const fighting = (): boolean => G.mode === 'run' && G.run?.phase === 'fighting';
 export const photoAllowed = (): boolean => G.mode === 'menu' || (G.mode === 'run' && G.player.inRun && !fighting());
 
 /** Whether the time of day can be set where he is: the village's hour (a battleground keeps its own light). */
-const hourSettable = (): boolean => VILLAGE && G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown
+const hourSettable = (): boolean => G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown
   && !G.arena.room;
 
 /** Why the time of day can't be set here (null: it can). */
@@ -203,7 +202,7 @@ export function leavePhoto(): void {
   state.look = { ...NEUTRAL_LOOK };
   applyPhotoLook(state.look, false);
   holdHour(kept.hour);
-  if (VILLAGE) relightHour(0);
+  relightHour(0);
   holdSightOff(false);
   SIGHT.uSightOn.value = kept.sight;
   showOverlays(true);
@@ -327,11 +326,11 @@ function placeCamera(): void {
   }
   cam.updateMatrixWorld();
   // (in a house, the walls this camera stands beyond cut away, as the game's own camera has them: game/rooms.ts)
-  if (G.arena.room) G.arena.rooms![G.arena.room].cutAway(cam.position);
+  if (G.arena.room) G.arena.rooms[G.arena.room].cutAway(cam.position);
   // (nothing stands thinned between the camera and him: a photo shows the place whole)
   const p = G.player.pos;
   updateSeeThrough(p.x, G.player.obj.position.y + G.player.model.height * 0.6, p.z, 0, 0);
-  if (VILLAGE) sortBlendedFrom(cam.position, cam.getWorldDirection(_dir));
+  sortBlendedFrom(cam.position, cam.getWorldDirection(_dir));
 }
 
 /** A frame of photo mode, after the game's own (`dt`: the browser's, as the game may stand frozen). */

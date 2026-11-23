@@ -15,7 +15,6 @@
       <button class="tab active" data-pause-tab="controls" role="tab" aria-selected="true">Controls</button>
       <button class="tab" data-pause-tab="settings" role="tab" aria-selected="false">Settings</button>
       <button class="tab" data-pause-tab="performance" role="tab" aria-selected="false">Performance</button>
-      <button class="tab" data-pause-tab="beta" role="tab" aria-selected="false">Beta</button>
       <button class="tab" data-pause-tab="guide" role="tab" aria-selected="false">Guide</button>
     </div>
     <div class="pb-pages">
@@ -111,7 +110,6 @@
         <div class="opt-row hour-row"><label class="opt-level" title="The hour the village is lit for: Auto follows your clock"><span>Time of day</span><input type="range" id="opt-hour" min="-0.5" max="23.5" step="0.5"><output id="opt-hour-value"></output></label></div>
         </div>
       </section>
-      <!-- features to try before they're the game's (ui/beta.ts, core/beta.ts): switched here, taken up by a reload -->
       <!-- the guide's doors (ui/guide/): a section each, opened over the menu -->
       <section class="pb-page off pb-guide" data-pause-page="guide" role="tabpanel">
         <p class="pbg-intro">Every foe and boss, how each hero plays, and what helps you survive, with the game's own figures. <span class="pbg-key">Press <kbd>G</kbd> to open it anywhere.</span></p>
@@ -122,24 +120,11 @@
           <button class="pbg-door" data-guide-open="tips"><b>Tips</b><span>Banking, loot, blocking, co-op and more</span></button>
         </div>
       </section>
-      <section class="pb-page pb-opts off" data-pause-page="beta" role="tabpanel">
-        <div class="pb-opt-col beta-col">
-          <div class="beta-lead">Features still being worked on. Try one, and switch it off again here at any time.</div>
-          <div class="opt-row quality-row"><span>Village lobby</span>
-            <div class="seg" id="opt-village"><button data-v="on">On</button><button data-v="off">Off</button></div>
-            <small id="beta-state"></small>
-          </div>
-          <div class="beta-note">The lobby as a village to walk: portals to the battlegrounds, the stash's chest, the hall
-            of heroes, a training yard. Off, the lobby is its panels over the battleground, as before. Your heroes and
-            saves are the same either way.</div>
-          <div id="beta-apply" class="hidden"><span></span><button class="btn primary" id="btn-beta-reload">Reload</button></div>
-        </div>
-      </section>
     </div>
-    <!-- the village's Install alone (the panels' is on their own row): what its places open has no link here, the hall
+    <!-- Install alone: what the village's places open has no link here, the hall
          of heroes, the campfire and the notice board walked to or picked on the map ("pls remove these links, they are
          not supposed to be there") -->
-    <div class="pb-links menu-links" data-lobby="village">
+    <div class="pb-links menu-links">
       <button class="link hidden" id="btn-install">Install</button>
     </div>
     <!-- the build and whether it's the newest: a line each, one line on a short screen -->

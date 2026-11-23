@@ -1,10 +1,8 @@
 // Short screens (phones held sideways), upright tablets and upright phones.
 @use 'theme' as *;
 
-/* ---------- short screens (phones held sideways) and upright tablets: one lobby panel at a time (the village's: one of the
-   inventory's) ---------- */
+/* ---------- short screens (phones held sideways) and upright tablets: one panel of the inventory at a time ---------- */
 #lobby-rail { display: none; }
-body.touch .stow-hint kbd { display: none; }
 @media (max-height: 520px), (orientation: portrait) and (max-width: 1000px) {
   #menu { grid-template-columns: auto auto minmax(0, 1fr); gap: 8px; padding: 8px calc(8px + env(safe-area-inset-right, 0px)) 8px calc(8px + env(safe-area-inset-left, 0px)); }
   #lobby-rail { display: flex; grid-column: 1; flex-direction: column; gap: 6px; padding: 8px 6px; }
@@ -12,31 +10,15 @@ body.touch .stow-hint kbd { display: none; }
     background: $well; border: 1px solid rgba($frame, .35); border-radius: 4px; cursor: $cursor-hand; }
   #lobby-rail button .ri { font-size: 22px; line-height: 1; }
   #lobby-rail button.active { color: var(--accent); background: $well-lit; box-shadow: inset 2px 0 0 var(--accent); }
-  #lobby-rail .play { margin-top: auto; color: #ffe7b0; background: linear-gradient(#6a4a1c, #2a1c0a); border-color: var(--accent); }
-  #menu:not(.stowed) #rail-practice .sh-show, #menu.stowed #rail-practice .sh-hide { display: none; }
-  // (stowed, the rail is gone from sight but for its Practice button, and lets every other tap through: it took the
-  // pause and full screen buttons' under it, which did nothing on a phone)
-  #{$panels} #menu.stowed #lobby-rail { opacity: 1; pointer-events: none; transform: none; background: none; border-color: transparent; box-shadow: none; }
-  // (and its Practice, Back now, stands in the touch HUD's left corner a button down, where the run has its
-  // scores: half way down the rail, the overlays down the left lay over it, and stood aside for it they left the
-  // edge. Its panel's zoom, `--ui`, scales its offsets too, so they're the screen's divided by it: as they were, on
-  // a phone of a high ratio it lay half over the pause button, then in that corner, `lab ui --states buttonsTouch`)
-  #{$panels} #menu.stowed #rail-practice { position: fixed; left: calc(#{$touch-edge} / var(--ui, 1));
-    top: calc((10px + 52px * var(--touch, 1)) / var(--ui, 1)); pointer-events: auto; }
-  #{$panels} #menu.stowed #lobby-rail button:not(#rail-practice) { visibility: hidden; }
   #rail-close { margin-top: auto; }
-  #menu .menu-left, #menu .menu-right, #menu .menu-center { display: none; grid-column: 2; align-self: auto; min-height: 0; overflow-y: auto; }
-  #menu[data-tab="hero"] .menu-left, #menu[data-tab="skills"] .menu-center { display: flex; }
+  #menu .menu-right, #menu .menu-center { display: none; grid-column: 2; align-self: auto; min-height: 0; overflow-y: auto; }
+  #menu[data-tab="skills"] .menu-center { display: flex; }
   #menu[data-tab="gear"] .menu-right { display: grid; }
-  .menu-left { width: 460px; }
-  .ml-body { flex: 1 1 auto; gap: 10px; padding: 14px 20px; }
-  .menu-left .logo, .cc-strip { display: none; }
   /* (the crest gives the panel the screen: the room is a short screen's) */
   #menu:not(.stowed) .menu-crest { display: none; }
   .records { grid-template-columns: repeat(4, 1fr); }
   .rec { grid-template-columns: 1fr; text-align: center; padding: 6px 4px; } .rec-icon { display: none; }
   .menu-center { justify-content: flex-start; }
-  .menu-center .stow-hint { display: none; }
   #vcard { bottom: 12px; padding: 12px 18px 10px; gap: 8px; }
   #spellbook .slot { width: 56px; height: 56px; } #spellbook .slot .icon { font-size: 29px; }
   #loadout-bar .slot { width: 60px; height: 60px; } #loadout-bar .slot .icon { font-size: 31px; }
@@ -45,25 +27,20 @@ body.touch .stow-hint kbd { display: none; }
   #loadout:not(.open) .lo-book { display: flex; }
   #lo-toggle { display: none; }
   .menu-right { width: auto; }
-  .menu-left { flex: 1; max-width: 520px; }
   /* the stash's width is capped so its six rows fit the height (its items would size the panel to the screen) */
   .menu-right .tab-page[data-page="gear"] { display: grid; grid-template-columns: auto minmax(360px, 600px); grid-template-rows: auto auto 1fr; column-gap: 18px; }
-  /* the panel spans the screen: ten to a row, the filter as wide as the stash, nothing to fold away */
+  /* the panel spans the screen: ten to a row, the filter as wide as the stash */
   #stash { grid-template-columns: repeat(10, 1fr); }
   #stash-filter { width: 100%; }
-  .fold-tab, .fold-tabs { display: none; }
   .menu-right #equip { grid-row: 1 / 4; align-self: start; margin-top: 18px; }
   .menu-right .stash-head { margin-top: 0; }
 }
 /* phones held sideways: a small minimap, no objectives or spoils list; the stash's title is at the
    top of the panel, so its filter opens downwards, over the stash */
 @media (max-height: 520px) {
-  /* the hero panel's links as main had them, touch too, their rows together: the panel has room for two such rows
-     and no more (main's own, with Install shown); a finger's height scrolled it 53 px on a 832x384 phone */
+  /* the pause menu's links, touch too, no taller than their text: the box has no room for a finger's height */
   .menu-links { row-gap: 0; }
   .menu-links .link, body.touch .menu-links .link { min-height: 0; padding-block: 4px; line-height: normal; }
-  /* (and its sections 7 px apart, as their second row scrolled the panel 21 px at 10) */
-  .ml-body { gap: 7px; padding-block: 12px; }
   /* the duel's menu holds more than a phone's height in one column: its choices beside its sides, its last line
      and its button under both */
   #vcard[data-page="pvp"] { width: 720px; }
@@ -102,8 +79,8 @@ body.touch .stow-hint kbd { display: none; }
 /* upright tablets: the panel spans the width, equipment above the stash */
 @media (orientation: portrait) and (max-width: 1000px) and (min-height: 521px) {
   #menu { grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto; align-items: start; }
-  #menu .menu-left, #menu .menu-right, #menu .menu-center { max-height: calc(100vh / var(--ui, 1) - 40px); }
-  .menu-left, .menu-right { width: auto; max-width: none; }
+  #menu .menu-right, #menu .menu-center { max-height: calc(100vh / var(--ui, 1) - 40px); }
+  .menu-right { width: auto; max-width: none; }
   .menu-right .tab-page[data-page="gear"] { display: flex; }
   .menu-right #equip { margin-top: 0; align-self: auto; }
   .menu-center { align-items: stretch; }

@@ -6,11 +6,11 @@ import { G } from '../state';
 import { Player } from '../entities/player';
 import { updateFloaters } from '../ui/floaters';
 import { applyFreeCam, freeCamOn, freeCamToHero, setFreeCam } from './freeCam';
-import { dockPanel, initPanel, refreshPanel, toggleFly, togglePanel } from './panel';
+import { initPanel, refreshPanel, toggleFly, togglePanel } from './panel';
 import type { BiomeId } from '../data/biomes';
 import { offerStartsUpTo } from '../ui/menus';
 
-/** the last starting wave the lobbies' pickers offer in the developer mode */
+/** the last starting wave the village's cards offer in the developer mode */
 const DEV_STARTS = 20;
 
 /** What main.ts does for the developer mode: the game's own flows, so a wave or a class switch is set up as play
@@ -76,8 +76,8 @@ export function flyFree(on: boolean, hooks: DevHooks): void {
 export function initDev(hooks: DevHooks): DevApi {
   patchGodMode();
   initPanel(hooks);
-  // (any starting wave up to the 20th in either lobby's picker, banked or not: from the owner, "allow selecting any wave
-  // of enemies up to 20")
+  // (any starting wave up to the 20th on a portal's card or the ghost's, banked or not: from the owner, "allow
+  // selecting any wave of enemies up to 20")
   offerStartsUpTo(DEV_STARTS);
   window.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLElement && e.target.matches('input, textarea, select')) return;
@@ -100,7 +100,6 @@ export function initDev(hooks: DevHooks): DevApi {
       return STEP;
     },
     frame(dt) {
-      dockPanel();
       if (cheats.free) {
         G.player.energy = G.player.stats.maxEnergy;
         G.player.cooldowns.clear();

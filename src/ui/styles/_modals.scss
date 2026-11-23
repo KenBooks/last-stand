@@ -30,12 +30,10 @@
 .controls-help .k { font-family: var(--font-display); color: var(--accent); text-align: right; }
 .controls-help.diagrams { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 /* keyboard: the left of a real one, staggered rows; lit keys show what they do (ui/menus.ts keyboardDiagram) */
-.kb { --u: 52px; display: flex; flex-direction: column; gap: 4px; align-self: stretch;
-  -webkit-mask-image: linear-gradient(90deg, #000 90%, transparent); mask-image: linear-gradient(90deg, #000 90%, transparent); }
-/* (the village's has more of each row, I and M in their places: keys as narrow as I in its place needs, within its
+/* (each row as far as I and M in their places: keys as narrow as I in its place needs, within its
    column (the pause menu's: a container), 9.5 keys and their gaps to it and the faded edge after; the rows cut by
    the box there) */
-#{$village} .kb { --u: min(46px, (100cqw - 58px) / 9.5); overflow: hidden;
+.kb { --u: min(46px, (100cqw - 58px) / 9.5); display: flex; flex-direction: column; gap: 4px; align-self: stretch; overflow: hidden;
   -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
   mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); }
 .kb-row { display: flex; gap: 4px; }
@@ -124,9 +122,8 @@ body.touch #item-sheet .dc-buttons .btn { min-height: calc(32px / var(--ui, 1));
 .pb-tabs { width: min(520px, 100%); margin: 0 auto 4px; }
 /* both pages share one cell, so the box keeps the taller page's height on either tab */
 .pb-pages { display: grid; text-align: left; min-height: 0; }
-.pb-page { grid-area: 1 / 1; min-width: 0; padding: 2px 12px; }
-/* (the village's keyboard is sized by its column) */
-#{$village} .pb-page { container-type: inline-size; }
+/* (a container: the keyboard is sized by its column) */
+.pb-page { grid-area: 1 / 1; min-width: 0; padding: 2px 12px; container-type: inline-size; }
 .pb-page.off { visibility: hidden; }
 .pause-box .controls-help { gap: 4px 14px; font-size: 14px; width: fit-content; margin: 0 auto; }
 .pb-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; align-content: start; }
@@ -189,10 +186,9 @@ body.touch .recording-controls .btn { min-height: calc(36px / var(--ui, 1)); }
 .ht-station b { font-family: var(--font-display); color: var(--accent); }
 .ht-station i { font-style: normal; color: #8fae7c; }
 
-/* the village's: its Got it at the box's right, where a dialog's way on is read ("lets move got it button to the
-   right"); the panels' lobby keeps it in the box's middle */
-#{$village} .help-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
-#{$village} #btn-help-close { display: block; }
+/* its Got it at the box's right, where a dialog's way on is read ("lets move got it button to the right") */
+.help-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
+#btn-help-close { display: block; }
 /* short screens (phones held sideways): everything tighter so it fits without scrolling */
 @media (max-height: 520px) {
   .pause-box { padding: 10px 22px 10px; gap: 6px; }
@@ -203,7 +199,7 @@ body.touch .recording-controls .btn { min-height: calc(36px / var(--ui, 1)); }
   .pb-opts .opt-row { margin: 1px 0 5px; gap: 4px; }
   .pb-top .btn { padding-top: 7px; padding-bottom: 7px; }
   /* the build's status beside the build: a line of its own, it pushed the pages' cell 10 px under the box's foot on a
-     phone held sideways, and the Controls and Beta tabs scrolled (lab ui pause) */
+     phone held sideways, and the Controls tab scrolled (lab ui pause) */
   .pb-build { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 0 12px; }
 }
 /* narrow: the settings in one column */

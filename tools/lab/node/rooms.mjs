@@ -108,7 +108,7 @@ async function relayList(relayUrl, origin) {
 
 /** Pictures of a game's screen, as the player sees it, kept under `dir`. */
 async function picture(game, dir, name) {
-  // (a few of the game's frames first: what it puts away by its frames, the beta's notice under a dialog, is gone)
+  // (a few of the game's frames first: what it puts away by its frames under a dialog is gone)
   await game.call('roomsStep', { frames: 3 });
   // (and the dialog's own fade in let end: it runs on the browser's clock, and the create page was caught half see-through)
   await new Promise((resolve) => setTimeout(resolve, FADE_MS));
