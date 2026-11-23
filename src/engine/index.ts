@@ -6,6 +6,7 @@
 import type * as THREE from 'three';
 import { Bridge, TUNE, type Grade } from './bridge';
 import { perfClock } from '../core/perfClock';
+import { cullForEngine } from '../world/doorways';
 import { AHEAD, PIPELINES, pipelinesAside } from './pipelinesAside';
 import { deviceSaid, fault, keepWhatsSaid, watchFrame } from './said';
 
@@ -125,6 +126,8 @@ export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, ti
   // (what the game hangs on three's render of the scene: the world's culling, the crowds' rows)
   type Hook = (renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: null) => void;
   if (RUST.hooks) (scene.onBeforeRender as unknown as Hook)(renderer, scene, camera, null);
+  // (of those hooks the doorways' cull alone, which leaves nothing between its two halves: `world/doorways.ts`)
+  const shown = !RUST.hooks && TUNE.doorways ? cullForEngine(camera) : null;
   if (RUST.captureNext) {
     RUST.tape = bridge.capture(width, height, RUST.captureNext, scene, camera, time, renderer, grade);
     RUST.captureNext = 0;
@@ -133,6 +136,7 @@ export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, ti
     const budget = RUST.loaded ? TUNE.ahead : TUNE.aheadLoading;
     if (budget > 0) bridge.ahead.walk(scene, budget);
   }
+  shown?.();
   if (RUST.hooks) (scene.onAfterRender as unknown as Hook)(renderer, scene, camera, null);
   if (RUST.frames++ === 0) RUST.boot.firstFrameMs = perfClock.now() - began;
   // (the frame itself checked for black a few times after the load: `said.ts`)

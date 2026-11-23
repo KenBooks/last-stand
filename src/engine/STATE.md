@@ -312,3 +312,24 @@ not intend to support the old way of rendering".
   left out `draw` and `drawIndexed`, not the indirect draws, and the GPU refused the whole frame ("No pipeline
   set"), every frame until the pipeline was ready. Found by the check above; on main it's met where a level
   switch changes the samples. `pipelinesAside.ts` leaves the indirect draws out too.
+
+## 2026-11-23, a scene the engine keeps (first form: what stands still)
+
+- [x] Bulwark 369ff75: `keep`, `set_kept_flags`, `show_kept`, `drop_kept` (kept.rs). Kept records are taken into
+  a frame's plan by 16 m ground cells, a cell out of both views passed by whole. Its own lab (`lab kept`): 262,144
+  still posts, the engine's frame on the CPU 8.6 ms as records, 0.44 kept.
+- [x] Here (`kept.ts`, `TUNE.kept`, on): what the game declares still (`standStill`, `mergeStill`) is handed over
+  once. `lab rustcheck` 40 of 40: the frame the walk draws to the pixel, hidden meshes gone and back, the audit's
+  canary found.
+- [x] The doorways' cull run under the engine (`cullForEngine`, `TUNE.doorways`): in the hall 579 records to 503.
+- **It doesn't move this game's frame yet**, and the phone's reports of the day say why it couldn't by much
+  (G82F-ZNNE, TPRV-JMH7: the GPU 14.7 ms a frame, the render's CPU 2.3 to 4): from above at Very low 106 of 555
+  records stand still as declared. The render here is 2.0 to 2.2 ms either way, of it the walk 44% (a material
+  asked a mesh 24%), the engine 24%, the matrices 14% (`lab rust --village --hour 12 --boot verylow --frames 600
+  --profile=draw`).
+- [ ] What's left of the walk, largest first: the heroes' pieces, some 70 records each with a material of its own
+  (the kit's look asked `moved` a piece a frame), three heroes in the scene from above (the two on the hall's
+  dais, 133 records, off screen behind its roof thinned); the ghost 46; the dummies 33; the parts that hold a
+  light and so aren't frozen (the gates, the chest, the fountain, the candles: about 100). A character as one
+  record with its pieces' rows the engine's is the next piece (this file's "Next", and animation with it); a
+  character's bounds stated so the bridge passes it by whole out of both views is the cheap half.

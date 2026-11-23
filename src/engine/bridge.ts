@@ -25,6 +25,7 @@ import { GLOBALS, PLAIN_GRADE, TUNE, shadowSizeOf, writeGlobals, type Grade } fr
 import { Levels } from './levels';
 import { FrameLook } from './frameLook';
 import { Lights } from './lights';
+import { Kept } from './kept';
 import { Maps } from './maps';
 import { Materials, type AnyMaterial } from './materials';
 import { SeeKinds } from './seeKinds';
@@ -78,6 +79,8 @@ export class Bridge {
   readonly levels: Levels;
   private readonly frameLook: FrameLook;
   private particles: Sprites;
+  /** what stands still, kept by the engine (`kept.ts`) */
+  readonly kept: Kept;
   /** what a frame handed over and drew */
   readonly stats: Core['stats'];
   /** what wasn't handed over, by its kind, on the last frame */
@@ -111,6 +114,7 @@ export class Bridge {
     this.lit.ownReach = this.lampShadows.ownReachOf = (light) => this.lightCache.ownReach(light);
     this.lit.ownSlot = (light) => this.lampShadows.ownSlot(light);
     this.particles = new Sprites(core);
+    this.kept = new Kept(core, this.materials, (mesh) => this.addMesh(mesh), (object) => this.visit(object));
     this.stats = core.stats;
     this.skipped = core.skipped;
     this.held = core.held;
@@ -118,6 +122,8 @@ export class Bridge {
 
   /** What's kept of what was handed over forgotten: the next frame hands everything over again. */
   private forget(): void {
+    // (what's kept is written by the ids forgotten here)
+    this.kept.forget();
     this.geometries.forget();
     this.maps.forget();
     this.materials.forget();
@@ -134,12 +140,15 @@ export class Bridge {
     core.tape = tape;
     core.mostMap = mostMap;
     this.forget();
+    // (a tape's frame is its records alone: nothing kept while it's written)
+    this.kept.off = true;
     try {
       this.draw(...frame);
     } finally {
       core.engine = engine;
       core.tape = null;
       core.mostMap = MAX_MAP;
+      this.kept.off = false;
       this.forget();
     }
     return tape.blob();
@@ -293,30 +302,37 @@ export class Bridge {
   /** The lights the last frame was drawn under, as the globals hold them: for a report. */
   lights(): string { return this.lit.report(); }
 
-  private walk(scene: THREE.Scene, camera: THREE.Camera): void {
-    const arms = this.grade.arms ?? null;
+  /** One object of the scene taken into the frame: a mesh's records, a light, what isn't drawn counted. */
+  private visit(object: THREE.Object3D): void {
+    const camera = this.camera!, arms = this.grade.arms ?? null;
+    if ((object as THREE.Mesh).isMesh) {
+      if (object.layers.test(camera.layers)) this.addMesh(object as THREE.Mesh);
+      else if (arms && object.layers.test(arms.layers)) {
+        // (on the arms' layer alone, seen through his eyes: the game draws them in a pass of their own, with
+        // a camera of their own, which the engine's frame has in it. Left out, he held nothing: from play,
+        // "no warrior weapon in first person")
+        this.armsNow = true;
+        this.addMesh(object as THREE.Mesh);
+        this.armsNow = false;
+      }
+    } else if ((object as THREE.Light).isLight) {
+      // (the rig's copies of the shown place's lights are three's: the place's own are added after the walk)
+      if (!object.userData.rigged) this.lit.add(object as THREE.Light);
+    } else if ((object as THREE.Points).isPoints || (object as THREE.Line).isLine || (object as THREE.Sprite).isSprite) {
+      if (object.layers.test(camera.layers)) this.core.skip(object.type);
+    }
+  }
+
+  private walk(scene: THREE.Scene): void {
     const stack = this.stack;
     stack.length = 0;
     stack.push(scene);
     while (stack.length) {
       const object = stack.pop()!;
       if (!object.visible) continue;
-      if ((object as THREE.Mesh).isMesh) {
-        if (object.layers.test(camera.layers)) this.addMesh(object as THREE.Mesh);
-        else if (arms && object.layers.test(arms.layers)) {
-          // (on the arms' layer alone, seen through his eyes: the game draws them in a pass of their own, with
-          // a camera of their own, which the engine's frame has in it. Left out, he held nothing: from play,
-          // "no warrior weapon in first person")
-          this.armsNow = true;
-          this.addMesh(object as THREE.Mesh);
-          this.armsNow = false;
-        }
-      } else if ((object as THREE.Light).isLight) {
-        // (the rig's copies of the shown place's lights are three's: the place's own are added after the walk)
-        if (!object.userData.rigged) this.lit.add(object as THREE.Light);
-      } else if ((object as THREE.Points).isPoints || (object as THREE.Line).isLine || (object as THREE.Sprite).isSprite) {
-        if (object.layers.test(camera.layers)) this.core.skip(object.type);
-      }
+      // (a part that stands still is the engine's to draw, handed over once: `kept.ts`)
+      if (this.kept.takes(object)) continue;
+      this.visit(object);
       const children = object.children;
       for (let i = 0; i < children.length; i++) stack.push(children[i]);
     }
@@ -353,7 +369,10 @@ export class Bridge {
     const placed = perfClock.now();
     core.freshViews();
     core.globals.fill(0, GLOBALS.camPos, GLOBALS.floats);
-    this.walk(scene, camera);
+    this.kept.begin(camera, grade);
+    this.walk(scene);
+    this.kept.finish();
+    if (this.watched) this.kept.eachDrawn((mesh) => this.watched!.add(mesh));
     for (const light of shownPointLights()) this.lit.add(light);
     this.lit.addLamps();
     this.lightCache.tell();
@@ -372,7 +391,7 @@ export class Bridge {
       lowDraws, lightsLeftOut, fieldKept, fieldCounted]
       = core.engine.stats();
     Object.assign(stats, {
-      records: core.count, draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy, shadowTriangles, shadowsKept,
+      records: core.count + this.kept.now.records, draws, shadowDraws, objects, culled, triangles, gpuMs, gpuReads, gpuBusy, shadowTriangles, shadowsKept,
       lowDraws, lightsLeftOut, fieldKept, fieldCounted,
       placeMs: placed - began, walkMs: walked - placed, engineMs: drawn - walked,
     });
