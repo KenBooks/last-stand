@@ -7,6 +7,7 @@ import { plantedFaults } from './rustFaults';
 import { blankCanvas, lookTakesItsMapAgain, mapPaintedLate } from './rustMaps';
 import { grassPlacedOnce } from './rustFields';
 import { goneWholeLeftOut } from './rustGone';
+import { houseRuleHolds } from './rustHouseRule';
 import { doorwaysLeaveTheFrame, keptSameFrame } from './rustKept';
 import { brokenDownSameFrame } from './rustPartsCheck';
 import { levelSwitchLeavesNothingOut, plainShaderSameFrame } from './rustPlain';
@@ -159,10 +160,14 @@ async function solidAndCoarse(lab: Lab, bridge: Bridge): Promise<Checked> {
     await lab.step(1);
     casters = bridge.stats.casters;
   }
+  // (the houses' rule set aside with it: a house's part is drawn solid whatever the switch says, `rust.houseRule`)
+  const rule = RUST.tune.houseRule;
   RUST.tune.solidSee = 0;
+  RUST.tune.houseRule = 0;
   await lab.step(2);
   const blended = bridge.stats.solid;
   RUST.tune.solidSee = 1;
+  RUST.tune.houseRule = rule;
   await lab.step(2);
   if (!solid) return failed('nothing see-through is drawn solid: the village\'s walls blended, after everything');
   if (blended) return failed(`with the switch off ${blended} see-through records are still drawn solid`);
@@ -331,6 +336,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(await brokenDownSameFrame(lab, bridge));
       checks.push(await doorwaysLeaveTheFrame(lab, bridge));
       checks.push(await goneWholeLeftOut(lab, bridge));
+      checks.push(await houseRuleHolds(lab));
       await standIn(lab, { biome: command.biome, view: 'third', facing: 0, fresh: true });
       lab.drawing = true;
       await lab.step(5);

@@ -103,9 +103,22 @@ export const TUNE = tunable('rust', {
   /** whether what's thinned to nothing whole (a roof seen from over it, `SeeKinds.gone`) is left out of the
    *  frame's draws, kept for its shadow; off, drawn and every pixel of it dropped, as it was */
   goneWhole: 1,
-  /** whether a house's walls thin with its roof where they hide ground he sees (0: its roof alone does, and the
-   *  house's own far wall stands in the ground's place behind it) */
-  houseGhost: 1,
+  /** the houses' rule (Bulwark's `cover_kept`, its `lab houses`): from above, a house's wall, roof or gable is
+   *  dropped whole where it hides ground he sees, and stands whole everywhere else, by his sight alone, however
+   *  many of them lie along the line (0: each thinned by the game's own shares, as it was, a check's canary).
+   *  From play: "he needs to see the ground, so we thin"; "he only sees the ground he sees, so if the wall hides
+   *  anything extra, we dont thin it"; "we should thin enough regardless of how many walls between camera and
+   *  ground" */
+  houseRule: 1,
+  /** the share of a house's part left where the rule opens it, as a fine pattern of its pixels: near a third (at an
+   *  eighth its shape didn't read: the porch gone, its columns holding up nothing), the same
+   *  pixels of every part along a line, so three layers leave what one does. With none left the building was gone
+   *  from over ground he saw, from play: "the building geometry should not completely disappear, it should be
+   *  possible to tell what the original building looked like" */
+  houseLeft: 0.3125,
+  /** a harness's: every part of a house drawn whole, nothing of it thinned by the rule or by the game's shares
+   *  (`lab houserule`'s frame to set the played one against) */
+  housesWhole: 0,
   /** the hole that keeps the hero in sight under what hides him (0: none dropped) */
   see: 1,
   /** a counted draw (the meadow's blades) in the depth drawn first too: shaded once a pixel, placed twice (a
