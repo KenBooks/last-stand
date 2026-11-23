@@ -10,15 +10,16 @@
 // pinning programs, nothing compiles mid-fight. Compiling a program took ANGLE a third of a second on a first visit,
 // and a third of the boot's are the fight's alone (`lab programs`).
 import { painted } from '../world/arena';
+import { AHEAD } from '../engine/pipelinesAside';
 import { isLazyFoe, loadFoe } from '../entities/bosses';
 import { lampsLetGo } from './village';
 import * as THREE from 'three';
 import { VILLAGE } from '../core/beta';
 import { G } from '../state';
-import { behindTheLobby, compileAhead, warmUp, type Swap, type WarmedUp } from '../core/shaders';
+import { behindTheLobby, warmUp, type Swap, type WarmedUp } from '../core/shaders';
 import { compilePasses, sceneTarget } from '../core/renderer';
-import { COMPILE_SLICE, compileSlice, WEBGPU } from '../core/webgpu';
-import { mapsArrived, mapsMadeAfresh } from '../core/textures';
+import { COMPILE_SLICE, compileSlice } from '../core/webgpu';
+import { mapsArrived } from '../core/textures';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { SKILL_IMPLS } from '../combat/skills/index';
@@ -48,7 +49,7 @@ import { labelsScene } from '../ui/overlay/layer';
 import { pingSamples } from '../ui/ping';
 import { buildHallAhead, hallOpen, prepareSpareHero } from './hall';
 import {
-  approached, heroWarming, isAsked, isReadying, isWarm, markWarm, onReadying, want, wanted, warming, warmingRuns, type Need,
+  approached, heroWarming, isReadying, isWarm, markWarm, onReadying, want, wanted, warming, warmingRuns, type Need,
 } from './warm';
 import type { Model } from '../types';
 
@@ -143,7 +144,8 @@ const shownNow = (): THREE.Object3D => G.arena.shownGroup();
 export async function compileTheBiome(): Promise<void> {
   const { staff, hand } = heroLights();
   G.scene.add(staff, hand);
-  await compileAhead(G.renderer, G.scene, G.camera, sceneTarget(), otherBiomes().map((id) => G.arena.groupOf(id)));
+  // (nothing of the scene is three's to compile ahead: the engine takes each mesh as it's first shown; the page let go)
+  await nextTask();
   compilePasses([labelsScene()]);
 }
 
@@ -195,7 +197,7 @@ export async function compileTheLobby(): Promise<void> {
     ...skillSamples(G.player.cls.model), ...named('ping', pingSamples()),
   ];
   lobbyExtras = extra;
-  await compileAhead(G.renderer, G.scene, G.camera, sceneTarget(), otherBiomes().map((id) => G.arena.groupOf(id)), extra);
+  await nextTask();
   // (the outline's edge: the dummies' masks are the lobby's warm-up's, as they spawn when the lobby is entered)
   compileOutline([]);
 }
@@ -205,11 +207,15 @@ export async function compileTheLobby(): Promise<void> {
 const dummies = (): THREE.Object3D[] => G.enemies.map((e) => e.obj);
 const outlined = (): (THREE.Object3D | OutlineTarget)[] => [...dummies(), ...G.arena.allSeats().flatMap((s) => s.outline)];
 
+/** A step of a warm-up told before it's taken: its name, and how far along the loading screen's bar it stands. */
+export type WarmStep = (label: string, progress: number) => Promise<void>;
+
 /** What the lobby shows and can do, warmed before it shows (the lobby's dummies already stand in it, its effects,
  *  loot and skills made with its hero: `compileTheLobby`); the fight's foes built meanwhile (`buildAhead`). With
  *  `hall` (a first visit, which opens on the hero selection screen), the hall of heroes' room too, drawn in the
- *  village's place; its other heroes are warmed after the reveal, a hero at a time (`warmTheRest`). */
-export async function warmLobby(hall = false): Promise<void> {
+ *  village's place; its other heroes are warmed after the reveal, a hero at a time (`warmTheRest`). Each of its
+ *  long stretches is told to `step` first (the loading screen's: a name and how far along the bar). */
+export async function warmLobby(hall = false, step: WarmStep = async () => undefined): Promise<void> {
   // (the hero's class with all it can wear: equipping anything in the lobby compiles nothing)
   await painted();
   const hero = heroAllWorn(G.player.cls.model);
@@ -231,12 +237,14 @@ export async function warmLobby(hall = false): Promise<void> {
   // (a first visit opens on the hall of heroes: its room warmed with the lobby, its other heroes after the reveal, a
   // hero at a time, each shown as he's warm: warmed with the lobby, the two held a low-end laptop's loading screen)
   if (hall) {
+    await step('Raising the hall of heroes', 0.64);
     await warmBuilt([hallPart().build()]);
     hallWarm = true;
   }
   // (the outline a held skill draws round a foe: the dummies' meshes drawn into its mask)
   warmOutline(outlined());
   clearEffects(); clearLights(); particles.clear();
+  await step('Mustering the foes', 0.67);
   await ahead;
 }
 
@@ -482,6 +490,22 @@ async function heroBuiltInSlices(model: string, step: () => Promise<void>): Prom
   heroesAhead.set(model, await builtInSlices(heroAllWornSteps(model, AWAY), step, behindSlice));
 }
 
+/**
+ * The other heroes' skills' own shaders handed to the Rust engine under the loading screen (nothing where it isn't
+ * drawing): each is a shader module of the whole lit shader, made on the GPU process's main thread, and the five of
+ * them (a slash's arc, a bellow's face, the aim's line and dot, the glint's motes) came together behind the lobby a
+ * few seconds after it showed, the frames at 77 to 80 a second for one as the hero set off (`npm run stalls --
+ * --scenario walks`: a task of 309 ms there, 1.4 s of compiles; from play, "when I start moving on desktop, it drops
+ * to 70, then recovers back to 144"). The heroes themselves still warm behind the lobby.
+ */
+export async function otherHeroesSkillsAhead(): Promise<void> {
+  if (!AHEAD.prepare) return;
+  for (const model of otherHeroModels()) {
+    await painted();
+    AHEAD.prepare(skillSamples(model));
+  }
+}
+
 /** Each other class's hero, with all he can wear, away from the arena, and his skills' samples. */
 function heroModelParts(): Part[] {
   return otherHeroModels().map((model): Part => ({
@@ -572,23 +596,6 @@ async function aheadOf(part: Part, next: () => Promise<void>): Promise<void> {
   await next();
   part.ahead();
   part.ahead = undefined;
-}
-
-/** `part` warmed on its own behind the lobby, a step a frame (`step`): whether it was cold (kept built for the
- *  warm-up at once). Timed as a user timing measure, `warm <part>`, its detail what its steps took (the stalls' boot
- *  lists them; its build only where it wasn't built ahead). */
-async function warmPart(part: Part, step: () => Promise<void>): Promise<boolean> {
-  if (!part.before) await aheadOf(part, step);
-  if (!part.built) await part.before?.(step);
-  await step();
-  const start = performance.now();
-  const ahead = part.built !== undefined;
-  const built = part.built ??= part.build();
-  const builds = ahead ? {} : { buildMs: performance.now() - start };
-  const took = await warmBuilt([built], { step });
-  if (!took.cold) part.built = undefined;
-  performance.measure(`warm ${part.name}`, { start, duration: performance.now() - start, detail: { ...builds, ...took } });
-  return took.cold;
 }
 
 /** `parts` built (where they weren't ahead) and warmed at once, `progress` told how far along: timed as `warm the
@@ -778,69 +785,27 @@ function timedSteps(need: Need): { part: string; wrap: (wait: () => Promise<void
 }
 
 /**
- * `need`'s `parts` warmed: a part at a time behind the lobby, a step a frame, where `behind` says so once it's time
- * and while they come from a cache and hold no frame of the lobby long (a part found cold, or a frame held past
- * `WARM_BEHIND.heldMost` or another need given up, leaves the rest for later), the rest at once when something needs them
- * (game/warm.ts `wanted`; what's left of a part then goes on without waiting for frames); then what waited for them
- * goes ahead.
+ * `need`'s `parts` warmed at once when something needs them (game/warm.ts `wanted`), never behind the lobby: the
+ * engine's pipelines come from no cache a return could count on. `behind` is waited for first, and a frame of the
+ * lobby held past `WARM_BEHIND.heldMost` meanwhile (or another need given up) gives up every warm-up not yet warm.
+ * Then what waited for them goes ahead.
  */
-async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean>): Promise<void> {
+async function warmNeed(need: Need, parts: Part[], behind: () => Promise<void>): Promise<void> {
   if (isWarm(need)) return;
   let hurried = false;
   void wanted(need).then(() => { hurried = true; });
   const timed = timedSteps(need);
   const held = framesHeld();
   const heldLong = (): boolean => held.worst() > WARM_BEHIND.heldMost || WARM_BEHIND.givenUp.size > 0;
-  const waitStep = timed.wrap(() => (hurried ? nextTask() : nextFrame()));
-  // (a part stopped at its next step once a frame was held: what it built stays its `built`, for its warm-up after)
-  const step = async (): Promise<void> => {
-    await waitStep();
-    if (!hurried && heldLong()) throw GIVEN_UP;
-  };
-  let cold = !(await behind()) || heldLong();
-  let next = 0;
-  while (next < parts.length && !cold && !hurried) {
-    timed.part = parts[next].name;
-    const partCold = await inTurn(async () => {
-      const cold = await warmPart(parts[next], step);
-      if (!cold) await parts[next].ready?.(step);
-      return cold;
-    }).catch((error: unknown) => {
-      if (error !== GIVEN_UP) throw error;
-      return true;
-    });
-    if (!partCold && need === 'heroes') heroWarming(parts[next].name, 1);
-    if (!partCold) warming(need, ++next / parts.length);
-    cold = partCold || heldLong();
-  }
+  await behind();
   held.stop();
   // (and every warm-up not warm yet with it: each waits for what needs it)
-  if (next < parts.length && !hurried && heldLong()) {
+  if (parts.length && !hurried && heldLong()) {
     for (const any of BEHIND_NEEDS) if (!isWarm(any)) WARM_BEHIND.givenUp.add(any);
   }
-  // (the heroes a hero at a time, each shown in the hall as he's warm)
-  const lot = need === 'heroes' ? 1 : PARTS_AT_ONCE;
-  const toldFrom = (from: number) => (s: number): void => {
-    const done = from / parts.length;
-    warming(need, done + (1 - done) * s);
-  };
-  // (come near where it's needed, warmed while no frame is held, as behind the lobby: asked for at once as the hero
-  // neared the hall, a phone's village held frames of 280 to 320 ms walking on its square, every one in the scene's
-  // draw behind the heroes' compile, trace 476Y-88D5)
-  if (next < parts.length && !WEBGPU) {
-    await approached(need);
-    if (!isAsked(need) && !WARM_BEHIND.givenUp.has(need)) {
-      const nearHeld = framesHeld();
-      const stop = (): boolean => !isAsked(need) && nearHeld.worst() > WARM_BEHIND.heldMost;
-      next += await inTurn(() => warmInTasks(need, parts.slice(next), toldFrom(next), lot, stop));
-      nearHeld.stop();
-    }
-  }
-  if (next < parts.length) {
+  if (parts.length) {
     await wanted(need);
-    const left = parts.slice(next);
-    const told = toldFrom(next);
-    await inTurn(async () => { await (WEBGPU ? warmAtOnce(need, left, told) : warmInTasks(need, left, told, lot)); });
+    await inTurn(async () => { await warmAtOnce(need, parts, (s) => warming(need, s)); });
   }
   // (the hall's heroes built while the bar is still up, a task each: built as it opened, the three held its first
   // frame 290 to 400 ms, trace FD2V-NB48)
@@ -851,47 +816,41 @@ async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean
 }
 
 /**
- * The programs the lobby doesn't use warmed (game/warm.ts): the fight's behind it once the loading screen has `left`
- * (its logo's exit draws over the lobby till then), where this build warmed them here before and the maps were kept
- * (`rememberWarmed`: else, a first visit or a new build's, its programs are new to the GPU's cache), and the other
- * heroes' behind the fight's. On WebGPU the fight's are all compiled at once,
- * every visit (under the loading screen, which waits for them up to `FIGHT_UNDER_LOADING` in main.ts: compiled as it
- * left, the lobby held 66 to 108 frames a second for 8 s, where WebGL's starts at the screen's rate): three's async compile makes its pipelines on the GPU's threads and builds its nodes a slice a frame,
- * so the lobby never waits for one, and Chrome's cache never served them on a return (the bar was 2.4 s on every
- * visit). A part at a time there compiled a few at once, and was slower still. Their programs are the boot's (`inTurn`): from the lobby on, one compiled but
- * by a warm-up is counted as compiled late (main.ts `markLoaded`).
+ * The programs the lobby doesn't use warmed (game/warm.ts): the fight's all compiled at once, every visit (under the
+ * loading screen, which waits for them up to `FIGHT_UNDER_LOADING` in main.ts: compiled as it left, the lobby held 66
+ * to 108 frames a second for 8 s): three's async compile makes its pipelines on the GPU's threads and builds its
+ * nodes a slice a frame, so the lobby never waits for one, and Chrome's cache never served them on a return (the bar
+ * was 2.4 s on every visit). A part at a time compiled a few at once, and was slower still. The other heroes' once
+ * something asks for them. Their programs are the boot's (`inTurn`): from the lobby on, one compiled but by a
+ * warm-up is counted as compiled late (main.ts `markLoaded`).
  */
 export function warmTheRest(left: Promise<void>): { fight: Promise<void>; all: Promise<void> } {
-  const behind = async (): Promise<boolean> => {
+  const behind = async (): Promise<void> => {
     await Promise.race([left, wanted('fight')]);
-    return !WEBGPU && !mapsMadeAfresh() && warmedBuilds().includes(BUILD);
   };
   const fightWarm = warmNeed('fight', theFight(), behind).then(() => {
     rememberWarmed();
     performance.mark('fight warm');
   });
   // (begun under the loading screen, in its long slices: main.ts waits for it there, as long as `FIGHT_UNDER_LOADING`)
-  if (WEBGPU) want('fight');
-  if (WEBGPU) void left.then(() => {
+  want('fight');
+  void left.then(() => {
     fitSlices(fightWarm);
     // (once it's warm, a compile's slices long while the fight's loading bar is up, nothing played under it)
     onReadying(() => compileSlice(isReadying() ? COMPILE_SLICE.loading : COMPILE_SLICE.playing));
   });
   // (the heroes' behind the fight's: they stand in the hall of heroes, which the hero walks to after)
-  const heroesBehind = async (): Promise<boolean> => {
+  const heroesBehind = async (): Promise<void> => {
     // (with no village the hall is a screen opened from the lobby: its heroes are warmed once something needs them)
-    if (!VILLAGE) return false;
-    const cached = await behind();
+    if (!VILLAGE) return;
+    await behind();
     await Promise.race([fightWarm, approached('heroes')]);
-    return cached;
   };
   const heroes = warmNeed('heroes', heroParts(), heroesBehind);
-  // (the houses' rooms behind the heroes': walked into after; with no village there are none)
-  const rooms = VILLAGE ? warmNeed('rooms', roomParts(), async () => {
-    const cached = await behind();
-    await Promise.race([heroes, wanted('rooms')]);
-    return cached;
-  }) : Promise.resolve(markWarm('rooms'));
+  // (a house's room has nothing to warm: no program of three's is compiled for it, and the engine is handed it
+  // ahead, src/engine `prepareAhead`. Warmed in its turn behind the fight's and the heroes' builds, a house
+  // walked to straight from the hall waited 15 s under its bar, from play "this still took 15sec or so")
+  const rooms = Promise.resolve(markWarm('rooms'));
   return { fight: fightWarm, all: Promise.all([fightWarm, heroes, rooms]).then(() => {}) };
 }
 

@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { addEffect } from './effects';
 import { portShader } from '../core/shaderPorts';
+import { effectLook, num, rgb } from '../engine/effects';
 import type { Player } from '../entities/player';
 
 /** (a deep gold: paler, tone mapping washed it to white) */
@@ -32,7 +33,7 @@ const quad = new THREE.PlaneGeometry(2, 2);
 quad.userData.shared = true;
 
 function motesMaterial(): THREE.ShaderMaterial {
-  return portShader(new THREE.ShaderMaterial({
+  return effectLook(portShader(new THREE.ShaderMaterial({
     uniforms: {
       uStrength: { value: 0 }, uTime: { value: 0 }, uColor: { value: new THREE.Color(COLOR) },
     },
@@ -136,8 +137,70 @@ function motesMaterial(): THREE.ShaderMaterial {
         time: u.uTime, color: u.uColor,
       }),
     };
+  }), 'glint-motes', MOTES_HOOKS, {
+    numbers(u, out) {
+      out[0] = num(u, 'uStrength'); out[1] = num(u, 'uTime');
+      rgb(u, 'uColor', out, 4);
+    },
   });
 }
+
+/** the motes for the Rust engine (src/engine/effects.ts): the port's WGSL above. The quad faces the camera in the
+ *  world: its middle drawn towards the camera, its corners out along the camera's own axes (the vertex's `shift`). */
+const MOTES_HOOKS = /* wgsl */ `
+fn glint_hash(n: f32) -> f32 {
+  return fract(sin(n * 12.9898) * 43758.5453);
+}
+fn glint_at(life: f32, start: f32, turn: f32) -> vec2f {
+  let r = 0.08 + 0.84 * pow(1.0 - clamp(life, 0.0, 1.0), 1.4);
+  let ang = start + life * turn;
+  return vec2f(cos(ang), sin(ang)) * r;
+}
+
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+  let p = (*v).rest.xy;
+  let right = g.cam_right.xyz;
+  let up = g.cam_up.xyz;
+  // (the middle from the camera, as the port's is in the view's space)
+  let away = (*v).origin - g.cam_pos.xyz;
+  let centre = away * (1.0 - ${LIFT.toFixed(3)} / max(length(away), ${(LIFT * 2).toFixed(3)}));
+  let depth = max(dot(centre, cross(up, right)), 0.05);
+  // (the projection's [1][1]: what a step up the view comes to on the screen)
+  let tall = 2.0 * depth / abs((g.view_proj * vec4f(up, 0.0)).y);
+  let reach = min(${REACH.toFixed(3)}, ${REACH_SHARE.toFixed(3)} * tall);
+  (*v).position = vec3f(0.0);
+  (*v).shift = centre - away + (right * p.x + up * p.y) * reach;
+  (*v).c0 = vec4f(p, ${DOT.toFixed(4)} * tall / reach, 0.0);
+}
+
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let strength = m.c[0].x;
+  let time = m.c[0].y;
+  let color = m.c[1].rgb;
+  let at = in.c0.xy;
+  let dotWidth = in.c0.z;
+  var light = 0.0;
+  for (var i = 0; i < ${MOTES}; i++) {
+    let fi = f32(i);
+    let speed = 0.8 + 0.6 * glint_hash(fi + 1.0);
+    let phase = glint_hash(fi + 31.0);
+    let start = glint_hash(fi + 57.0) * 6.2831853;
+    let turn = 1.8 + 1.2 * glint_hash(fi + 83.0);
+    let life = fract(time * speed + phase);
+    let head = glint_at(life, start, turn);
+    let tail = glint_at(life - ${TRAIL.toFixed(2)}, start, turn);
+    let along = head - tail;
+    let u = clamp(dot(at - tail, along) / max(dot(along, along), 1e-6), 0.0, 1.0);
+    let d = length(at - tail - along * u);
+    let fade = smoothstep(0.0, 0.25, life) * smoothstep(${NEAR.toFixed(2)}, ${DIM_FROM.toFixed(2)}, length(head));
+    light += exp(-d * d / (dotWidth * dotWidth)) * (0.15 + 0.85 * u * u) * fade;
+  }
+  let k = light * ${BRIGHT.toFixed(2)} * strength;
+  (*s).base = vec4f(color * k, k);
+  (*s).fog = 0.0;
+  return true;
+}
+`;
 
 /** One of each of its materials, for the warm-up (core/shaders.ts). */
 export function warmGlintMotes(): THREE.Mesh[] {

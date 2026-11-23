@@ -20,9 +20,11 @@ import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, 
 import { bend, rag, taperTube } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import { buildFire, emberMat, type FireLog, type FireSpec } from './fire';
-import { floorRelief, reliefContext } from '../core/parallax';
-import { tsl, WEBGPU, stillNodes } from '../core/webgpu';
+import { reliefContext } from '../core/parallax';
+import { tsl, stillNodes } from '../core/webgpu';
 import { grassWindNode, mossColorNode } from './forestNodes';
+import { rustLook } from '../engine/custom';
+import { grassWindLook, mossLook } from '../engine/looks/forest';
 import { valueNoise3 } from '../core/patterns';
 import { tubesRelief } from './ground';
 import type { Obstacle } from '../types';
@@ -93,60 +95,21 @@ function clearOfFires(x: number, z: number, reach: number): [number, number] {
  * along a wave that crosses the clearing, on the game's clock (an updater keeps the time).
  */
 function windInGrass(m: THREE.MeshStandardMaterial, updaters: Updater[]): THREE.MeshStandardMaterial {
-  if (WEBGPU) {
-    // (in the render's group: the grass stands still, and a still material's refresh sends nothing of the object's)
-    const clock = tsl.uniform(0).setGroup(tsl.renderGroup);
-    updaters.push((_dt, t) => { clock.value = t; });
-    m.positionNode = grassWindNode(clock, { rate: SWAY_RATE, reach: SWAY });
-    stillNodes.add(m);
-    return m;
-  }
-  const time = { value: 0 };
-  updaters.push((_dt, t) => { time.value = t; });
-  m.onBeforeCompile = (shader) => {
-    shader.uniforms.uWind = time;
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uWind;')
-      .replace('#include <begin_vertex>', `#include <begin_vertex>
-        #ifdef USE_INSTANCING
-          vec2 tuftAt = instanceMatrix[3].xz;
-        #else
-          vec2 tuftAt = vec2(0.0);
-        #endif
-        float bend = transformed.y * transformed.y * 4.0;
-        float gust = sin(uWind * ${SWAY_RATE.toFixed(2)} + tuftAt.x * 0.35 + tuftAt.y * 0.22) * 0.75
-          + sin(uWind * ${(SWAY_RATE * 2.3).toFixed(2)} + tuftAt.x * 0.9 - tuftAt.y * 0.6) * 0.25;
-        transformed.xz += vec2(0.8, 0.6) * gust * ${SWAY.toFixed(3)} * bend;`);
-  };
-  m.customProgramCacheKey = () => 'windgrass';
+  // (in the render's group: the grass stands still, and a still material's refresh sends nothing of the object's)
+  const clock = tsl.uniform(0).setGroup(tsl.renderGroup);
+  updaters.push((_dt, t) => { clock.value = t; });
+  m.positionNode = grassWindNode(clock, { rate: SWAY_RATE, reach: SWAY });
+  rustLook(m, grassWindLook({ rate: SWAY_RATE, reach: SWAY }));
+  stillNodes.add(m);
   return m;
 }
 
 /** Large moss patches tinted over the floor in world space (a texture this big would tile visibly). The pebbles and
  *  leaves stand up out of the soil (core/parallax.ts). */
 function mossyGround<M extends THREE.Material>(m: M): M {
-  if (WEBGPU) {
-    (m as M & { colorNode: unknown }).colorNode = mossColorNode();
-    reliefContext(m as unknown as THREE.MeshStandardMaterial, FLOOR_RELIEF);
-    return m;
-  }
-  m.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vMossXZ;')
-      .replace('#include <project_vertex>', '#include <project_vertex>\nvMossXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>
-        varying vec2 vMossXZ;
-        float mossH(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-        float mossN(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
-          return mix(mix(mossH(i), mossH(i+vec2(1,0)), f.x), mix(mossH(i+vec2(0,1)), mossH(i+vec2(1,1)), f.x), f.y); }`)
-      .replace('#include <map_fragment>', `#include <map_fragment>
-        float mossV = mossN(vMossXZ * 0.11) * 0.6 + mossN(vMossXZ * 0.37 + 7.0) * 0.3 + mossN(vMossXZ * 1.3) * 0.1;
-        float moss = smoothstep(0.4, 0.7, mossV);
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.045, 0.09, 0.025) * (0.7 + mossN(vMossXZ * 3.1) * 0.6), moss * 0.75);`);
-    floorRelief(shader, FLOOR_RELIEF);
-  };
-  m.customProgramCacheKey = () => 'mossyground';
+  (m as M & { colorNode: unknown }).colorNode = mossColorNode();
+  rustLook(m, mossLook(FLOOR_RELIEF));
+  reliefContext(m as unknown as THREE.MeshStandardMaterial, FLOOR_RELIEF);
   return m;
 }
 

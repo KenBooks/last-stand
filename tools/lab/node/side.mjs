@@ -76,33 +76,21 @@ async function warmAll(mostMs) {
  * How a page boots: at `quality` (`low@518400`, the pixels let go; null: the lab's own, High), `cold` or
  * not (`warmAll`), and as a `first` visit or not. The lab's own boot asks for everything the game warms after the
  * lobby shows and waits for it. A first visit has no saved hero (no class cookie): the game boots its default hero and
- * opens on the hero selection screen, its other heroes warmed after the loading screen leaves, and it's cold too. It
- * draws with `renderer`: WebGL, WebGPU or WebGPU with its GPU-driven drawing (`RENDERER_QUERIES`). Its lobby is the
- * village, the beta a player opts into (`src/core/beta.ts`, by its cookie), or with `panels` the lobby as it is
- * without it.
+ * opens on the hero selection screen, its other heroes warmed after the loading screen leaves, and it's cold too.
+ * Its lobby is the village, the beta a player opts into (`src/core/beta.ts`, by its cookie), or with `panels` the
+ * lobby as it is without it. Every page is at the game's plain address, as a player's is: the game has one
+ * renderer (the Rust engine, `src/engine`), and no address asks for another.
  */
-export const LAB_BOOT = Object.freeze({ quality: null, cold: false, first: false, renderer: 'webgl', panels: false });
+export const LAB_BOOT = Object.freeze({ quality: null, cold: false, first: false, panels: false });
 
 /** the cookie that keeps the village beta's choice (`src/core/beta.ts`) */
 const VILLAGE_COOKIE = 'last-stand-beta-village';
 
-/** each renderer's query on the game's address (src/core/rendererChoice.ts), as the pause menu's switch opens it */
-const RENDERER_QUERIES = { webgl: '', webgpu: '?renderer=webgpu', meshlets: '?renderer=webgpu&meshlets=1' };
-
-/** The boot a command's `options` ask for (`--boot`, `--cold`, `--first`, `--renderer`, `--panels`). */
+/** The boot a command's `options` ask for (`--boot`, `--cold`, `--first`, `--panels`). */
 export function bootOf(options) {
   const first = Boolean(options.first);
-  const renderer = options.renderer ?? 'webgl';
   const panels = Boolean(options.panels);
-  return { quality: options.boot ?? null, cold: first || Boolean(options.cold), first, renderer, panels };
-}
-
-/** The renderer `boot` draws with (a boot from before `--renderer`: WebGL). */
-const rendererOf = (boot) => boot.renderer ?? 'webgl';
-
-/** The game's address at `url` for `boot`: with its renderer's query, as the pause menu's switch opens it. */
-export function bootAddress(url, boot) {
-  return url + RENDERER_QUERIES[rendererOf(boot)];
+  return { quality: options.boot ?? null, cold: first || Boolean(options.cold), first, panels };
 }
 
 /** How `boot` is said after the hero it booted: ` at low@518400`, `, cold`, `, a first visit`, or nothing for the
@@ -110,16 +98,13 @@ export function bootAddress(url, boot) {
 export function bootText(boot) {
   const at = boot.quality ? ` at ${boot.quality}` : '';
   const kind = boot.first ? ', a first visit' : boot.cold ? ', cold' : '';
-  const on = rendererOf(boot) === 'webgl' ? '' : ` on ${rendererOf(boot)}`;
-  return `${at}${kind}${on}`;
+  return `${at}${kind}`;
 }
 
 /** Whether two boots are the same. */
 function sameBoot(a, b) {
-  const sameRenderer = rendererOf(a) === rendererOf(b);
   const sameLobby = Boolean(a.panels) === Boolean(b.panels);
-  return a.quality === b.quality && a.cold === b.cold && Boolean(a.first) === Boolean(b.first) && sameRenderer
-    && sameLobby;
+  return a.quality === b.quality && a.cold === b.cold && Boolean(a.first) === Boolean(b.first) && sameLobby;
 }
 /** how much of a failed script's answer is said (Vite's message of what wouldn't compile, the start of it) */
 const FAILED_ANSWER_CHARS = 600;
@@ -675,7 +660,7 @@ export class Side {
    * side's (each after `prefix`), booted as `how` asks: at its `quality`, set as the player's setting.
    */
   async openPageIn(context, heroClass, prefix, how = LAB_BOOT) {
-    const { quality, cold, first, renderer, panels } = how;
+    const { quality, cold, first, panels } = how;
     // (nothing kept from the last boot: the game writes cookies of its own, the skill loadout's among them, and a boot
     // after them ended its set-up a frame apart from the first; storage is cleared as the page starts, browser.mjs)
     await context.clearCookies();
@@ -718,7 +703,7 @@ export class Side {
     // (the boot's time for the page's load too: Playwright's own 30 s ran out on the first page after the server
     // started, a cold dev server sending every module on a machine busy with other agents)
     const loading = { timeout: BOOT_TIMEOUT_MS, waitUntil: 'domcontentloaded' };
-    await this.bootBy(page, () => page.goto(bootAddress(this.url, how), loading), prefix, cold);
+    await this.bootBy(page, () => page.goto(this.url, loading), prefix, cold);
     return page;
   }
 

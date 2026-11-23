@@ -5,11 +5,12 @@ import { VILLAGE } from '../core/beta';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { HERO_SHADOW_LAYER } from '../core/layers';
 import { keepMiddle, seeThroughFade, thinsByMiddle } from '../core/seeThrough';
-import { WEBGPU, gpu, pipelinesAtOnce, webgpuSceneTarget } from '../core/webgpu';
+import { gpu, pipelinesAtOnce } from '../core/webgpu';
 import { portShader } from '../core/shaderPorts';
+import { effectLook, rgb } from '../engine/effects';
 import { membraneMaterial, spillMaterial } from './portalNodes';
 import { daySkyMaterial, nightSkyMaterial } from './skyNodes';
-import { ALL_STILL, drawingStill, inShadowsOnly, type StillDrawn } from './culling';
+import { ALL_STILL, inShadowsOnly, type StillDrawn } from './culling';
 import { bySide, casterMaterial, piecesOf, type Piece } from './breakableShadows';
 import { rand, TAU } from '../util';
 import { valueNoise3 } from '../core/patterns';
@@ -166,10 +167,9 @@ export const shadowMovers = (): readonly THREE.Object3D[] => movers;
  * was both lamps' twelve faces of the village in one frame, 142 to 167 draws and 3.5M triangles on Very low, at every
  * lamp he walked past by night (#593; from play, "FPS is not stable, even on high end hardware").
  */
-export function drawLampShadows(light?: THREE.PointLight): void {
-  // (WebGPU keeps no cube and draws no face alone)
-  if (light && !WEBGPU) lampFaces.set(light, 0);
-  else lampsAsked++;
+export function drawLampShadows(_light?: THREE.PointLight): void {
+  // (no cube is kept and no face drawn alone)
+  lampsAsked++;
 }
 
 /** Whether `light`'s cube is whole at the lamp it stands at, not being drawn a face a frame. */
@@ -193,103 +193,15 @@ export const lampShadowLights = (): ReadonlySet<THREE.PointLight> => lampShadows
 /** How often the lamps' still shadows have been asked to be drawn again (`drawLampShadows`). */
 export const lampShadowsAsked = (): number => lampsAsked;
 
-/** what the still shadows are drawn into: nothing seen, a pixel (`drawStillShadows`) */
-let stillTarget: THREE.WebGLRenderTarget | null = null;
-
-/** Whether `object` draws (a mesh, points, a line, a sprite). */
-const draws = (object: THREE.Object3D): boolean => (object as THREE.Mesh).isMesh || (object as THREE.Points).isPoints
-  || (object as THREE.Line).isLine || (object as THREE.Sprite).isSprite;
-
-/** Whether a light stands in `object` or under it. */
-function holdsLight(object: THREE.Object3D): boolean {
-  let found = false;
-  object.traverse((part) => { if ((part as THREE.Light).isLight) found = true; });
-  return found;
-}
-
-/** What draws under `parent` outside `shown` hidden, into `hidden`: never a light, nor what holds one (each hidden
- *  light changes the count every lit program is made for, and the still shadows' render compiled 26 of them anew),
- *  which casts nothing meanwhile instead, into `uncast`. */
-function hideBodies(parent: THREE.Object3D, shown: THREE.Object3D, hidden: THREE.Object3D[], uncast: THREE.Object3D[]): void {
-  for (const child of parent.children) {
-    if (child === shown || !child.visible) continue;
-    if (draws(child) && !holdsLight(child)) {
-      child.visible = false;
-      hidden.push(child);
-      continue;
-    }
-    if (draws(child) && child.castShadow) {
-      child.castShadow = false;
-      uncast.push(child);
-    }
-    hideBodies(child, shown, hidden, uncast);
-  }
-}
-
 /**
- * The shadow maps of `shown`'s still-shadow lights drawn again, of what stands in it alone: every other part of the
- * scene (the heroes, the foes, the arrows, the rubble) hidden meanwhile, as a shadow drawn once of a body would stay
- * where it stood. By a render of their own, into a pixel, `kept`'s shadow map left as it is (the moon's: drawn again
- * by the frame's own render): three's shadow pass reads the render's state, and called alone it threw.
+ * Where the shadow maps of `shown`'s still-shadow lights were drawn again, of what stands in it alone. Nothing is
+ * drawn now:
  */
-export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera,
-  shown: THREE.Group, kept: THREE.LightShadow, drawn: StillDrawn = ALL_STILL): void {
-  const lights = drawn.lights === true
-    ? [...stillShadows].filter((light) => shown.getObjectById(light.id)).concat([...lampShadows])
-    : drawn.lights || [];
-  // (every cube drawn whole here: none is left a face at a time)
-  if (drawn.lights === true) lampFaces.clear();
-  const sunToo = drawn.sun && (!kept.autoUpdate || sunStill);
-  if (!lights.length && !sunToo) return;
-  // (on WebGPU the scene pass's own target, which the frame draws over: a pipeline is made for its target's format
-  // and samples, and in a pixel of its own each prop in view had one made at the draw, a breaking prop's frame held
-  // up 260 to 300 ms)
-  const into = WEBGPU ? webgpuSceneTarget() as THREE.WebGLRenderTarget : stillTarget ??= new THREE.WebGLRenderTarget(1, 1);
-  const hidden: THREE.Object3D[] = [];
-  const uncast: THREE.Object3D[] = [];
-  hideBodies(scene, shown, hidden, uncast);
-  for (const mover of movers) {
-    if (mover.visible) {
-      mover.visible = false;
-      hidden.push(mover);
-    }
-  }
-  const keptAuto = kept.autoUpdate;
-  const target = renderer.getRenderTarget();
-  for (const light of lights) light.shadow.needsUpdate = true;
-  // (held, the moon's is drawn here of what stands still too, and kept: `moonShadow.ts`)
-  // (the sun's too where it's the still world's alone: drawn here, the bodies hidden, and by no frame after)
-  if (sunToo) kept.needsUpdate = true;
-  kept.autoUpdate = false;
-  renderer.setRenderTarget(into);
-  // (the shadow maps alone: three draws them only within a render of the scene, and that render's own draws, into a
-  // pixel, were the scene's every draw a second time in the frame, 140 to 450 of them, each three's work for a draw)
-  // (and of a cube drawn a face a frame, that face alone: three's pass goes through all six, the others neither
-  // cleared nor drawn into)
-  const offFace = (): boolean => drawn.face !== undefined && renderer.getActiveCubeFace() !== drawn.face
-    && lights.some((light) => light.shadow.map === renderer.getRenderTarget());
-  const drawScene = renderer.renderBufferDirect;
-  const clear = renderer.clear;
-  if (!WEBGPU) {
-    renderer.renderBufferDirect = (by, of, ...rest) => {
-      if (of !== scene && !offFace()) drawScene.call(renderer, by, of, ...rest);
-    };
-    renderer.clear = (...buffers) => {
-      if (!offFace()) clear.apply(renderer, buffers);
-    };
-  }
-  try {
-    drawingStill(shown, () => pipelinesAtOnce(() => renderer.render(scene, camera)), drawn);
-  } finally {
-    if (!WEBGPU) {
-      renderer.renderBufferDirect = drawScene;
-      renderer.clear = clear;
-    }
-    renderer.setRenderTarget(target);
-    kept.autoUpdate = keptAuto;
-    for (const child of hidden) child.visible = true;
-    for (const child of uncast) child.castShadow = true;
-  }
+export function drawStillShadows(_renderer: THREE.WebGLRenderer, _scene: THREE.Scene, _camera: THREE.Camera,
+  _shown: THREE.Group, _kept: THREE.LightShadow, _drawn: StillDrawn = ALL_STILL): void {
+  // (under the Rust engine none of three's shadow maps is read: the engine casts the sun's own. Drawn all the same,
+  // three built its shaders for every still thing in view at each change of place, 4 s on a warm page and 20 s on
+  // a cold one, the game stopped meanwhile. From play: "it cannot freeze 20sec")
 }
 
 /** how far a prop's contact shadow reaches past its circle (a share of its radius), and how dark its middle is */
@@ -607,24 +519,12 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
   });
   // (it hides what's behind the gate, the hero too: it fades as the gate round it dissolves)
   seeThroughFade(mat, 'prop');
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W, 4.4), WEBGPU ? membraneMaterial(uniforms) : mat);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W, 4.4), membraneMaterial(uniforms));
   mesh.position.set(0, 2.2, 0.1);
   parent.add(mesh);
   // light spilling across the floor in front of the gate
-  const spillMat = new THREE.ShaderMaterial({
-    uniforms, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-    fragmentShader: `
-      varying vec2 vUv; uniform float uTime; uniform float uPower; uniform vec3 uB; uniform vec3 uCore;
-      ${noise}
-      void main(){
-        vec2 p = vec2((vUv.x - 0.5) * 1.6, vUv.y);
-        float g = exp(-dot(p, p) * 3.5) * (0.75 + 0.5 * n(vec2(vUv.x * 5.0, vUv.y * 3.0 - uTime * 0.8)));
-        gl_FragColor = vec4(mix(uB, uCore, 0.3) * g * uPower * 0.55, 1.0);
-      }`,
-  });
   const spill = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W + 2.5, 4).rotateX(-Math.PI / 2).rotateY(Math.PI),
-    WEBGPU ? spillMaterial(uniforms) : spillMat);
+    spillMaterial(uniforms));
   spill.position.set(0, 0.04, 2.0);
   parent.add(spill);
   // its light on what stands round it: the arch, the wall, the floor, a body coming through (a glow on the floor alone,
@@ -632,6 +532,8 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
   const glow = new THREE.PointLight(new THREE.Color(...colors.b).lerp(new THREE.Color(...colors.core), 0.5),
     PORTAL_LIGHT.intensity, PORTAL_LIGHT.reach, 2);
   glow.position.set(0, PORTAL_LIGHT.up, PORTAL_LIGHT.out);
+  // (a renderer that bakes its still lights reads it by a strength of its own, its pulse: lightCache.ts `StillLight`)
+  glow.userData.still = { side: 'apart', full: PORTAL_LIGHT.intensity };
   parent.add(glow);
 
   const pos = new THREE.Vector3(Math.cos(angle) * (WALL_R - 2.5), 0, Math.sin(angle) * (WALL_R - 2.5));
@@ -707,7 +609,7 @@ export function buildSky(fogColor: number, moonDir: THREE.Vector3, zenith: RGB =
         gl_FragColor = vec4(c, 1.0);
       }`,
   });
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), WEBGPU ? nightSkyMaterial(mat.uniforms) : mat);
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), nightSkyMaterial(mat.uniforms));
   sky.renderOrder = 100;
   sky.frustumCulled = false;
   return sky;
@@ -741,7 +643,7 @@ export function buildDaySky(horizon: number, zenith: RGB, sunDir: THREE.Vector3)
         gl_FragColor = vec4(c, 1.0);
       }`,
   });
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), WEBGPU ? daySkyMaterial(mat.uniforms) : mat);
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), daySkyMaterial(mat.uniforms));
   mesh.renderOrder = 100;
   mesh.frustumCulled = false;
   return { mesh, update: (t) => { mat.uniforms.uTime.value = t; } };
@@ -801,8 +703,7 @@ export function compileEnvMaps(renderer: THREE.WebGLRenderer, colours: EnvColour
 /** An environment's generator: WebGPU's own there (WebGL's draws with shaders WebGPU can't run: its maps were left
  *  dark, the dais's reflection of the sky with them) */
 function generator(renderer: THREE.WebGLRenderer): THREE.PMREMGenerator {
-  return WEBGPU ? new gpu.PMREMGenerator(renderer as never) as unknown as THREE.PMREMGenerator
-    : new THREE.PMREMGenerator(renderer);
+  return new gpu.PMREMGenerator(renderer as never) as unknown as THREE.PMREMGenerator;
 }
 
 /** three's generator's private parts: what `compileGenerator` reaches for, each checked to be there */
@@ -889,7 +790,7 @@ function disposeScene(root: THREE.Object3D): void {
 // Dim environment for subtle reflections on metal / wet surfaces: a sky gradient and one soft panel.
 function envScene({ sky, panel }: EnvColours): THREE.Scene {
   const envScene = new THREE.Scene();
-  const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), portShader(new THREE.ShaderMaterial({
+  const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), effectLook(portShader(new THREE.ShaderMaterial({
     side: THREE.BackSide,
     uniforms: { uSky: { value: new THREE.Vector3(...sky) } },
     vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
@@ -900,13 +801,28 @@ function envScene({ sky, panel }: EnvColours): THREE.Scene {
     fragment: wgslFn(`fn envSky(p: vec3f, sky: vec3f) -> vec4f {
       return vec4f(mix(vec3f(0.02, 0.02, 0.03), sky, smoothstep(-0.2, 1.0, normalize(p).y)), 1.0);
     }`)({ p: varying(positionGeometry), sky: u.uSky }),
-  })));
+  })), 'env-sky', ENV_SKY_HOOKS, { numbers(u, out) { rgb(u, 'uSky', out, 0); } }));
   envScene.add(skyMesh);
   const panelMesh = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial({ color: new THREE.Color(...panel).multiplyScalar(2), side: THREE.DoubleSide }));
   panelMesh.position.set(-5, 7, 3); panelMesh.lookAt(0, 0, 0);
   envScene.add(panelMesh);
   return envScene;
 }
+
+/** the environment's sky for the Rust engine (src/engine/effects.ts): the port's WGSL above, the vertex's own place
+ *  handed on */
+const ENV_SKY_HOOKS = /* wgsl */ `
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+  (*v).c0 = vec4f((*v).position, 0.0);
+}
+
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let sky = m.c[0].rgb;
+  (*s).base = vec4f(mix(vec3f(0.02, 0.02, 0.03), sky, smoothstep(-0.2, 1.0, normalize(in.c0.xyz).y)), 1.0);
+  (*s).fog = 0.0;
+  return true;
+}
+`;
 
 /**
  * A biome's shadow casters never move, but each one cost a draw call in the shadow pass

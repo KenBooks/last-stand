@@ -11,7 +11,7 @@ import { uiScales } from '../scale';
 import { CROWD_LAYER } from '../../core/layers';
 import { frameRect, passCamera, passTriangle } from '../../core/renderer';
 import { portShader } from '../../core/shaderPorts';
-import { WEBGPU, drawOverFrame } from '../../core/webgpu';
+import { drawOverFrame } from '../../core/webgpu';
 
 /** the outline's width, and its soft glow's past it (px of the UI's reference layout, at the HUD's scale) */
 const WIDTH = 2.5;
@@ -328,17 +328,11 @@ function drawEdge(gl: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget, look
   u.uStrength.value = look.strength;
   const within = boxOnCanvas(look.targets, glow + BOX_MARGIN);
   const autoClear = gl.autoClear;
-  gl.autoClear = false;
+  // (kept as `drawOverFrame` set it: this pass may be the one that clears the canvas)
   gl.setRenderTarget(null);
   if (within) {
-    // (WebGPU's scissor is from the canvas's top, WebGL's from its bottom)
-    if (WEBGPU) within.y = canvasSize.y - within.y - within.w;
-    else {
-      const f = frameRect();
-      within.x += f.left;
-      within.y += f.bottom;
-      within.addScalar(0.25);
-    }
+    // (WebGPU's scissor is from the canvas's top)
+    within.y = canvasSize.y - within.y - within.w;
     // (in css px: the renderer scales the scissor by its pixel ratio)
     gl.setScissor(within.divideScalar(gl.getPixelRatio()));
     gl.setScissorTest(true);
@@ -348,14 +342,18 @@ function drawEdge(gl: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget, look
   gl.autoClear = autoClear;
 }
 
+/** Whether anything is outlined now: `drawOutline` draws. */
+export function outlineShown(): boolean {
+  return !!current && !current.targets.some((target) => !target.root.parent);
+}
+
 /** Draws the outline over the finished frame, if anything is outlined (under the world's labels, `layer.ts`). */
 export function drawOutline(): void {
   const look = current;
   if (!look || look.targets.some((target) => !target.root.parent)) return;
   const gl = G.renderer;
   const mask = drawMask(gl, look.targets);
-  if (WEBGPU) drawOverFrame(gl, () => drawEdge(gl, mask, look));
-  else drawEdge(gl, mask, look);
+  drawOverFrame(gl, () => drawEdge(gl, mask, look));
 }
 
 /**
@@ -363,11 +361,18 @@ export function drawOutline(): void {
  * its meshes unculled, and the edge drawn once, at no strength, unless `edge` is false (its program is the lobby's:
  * behind it, a part's outline draws its masks alone, as the edge's pass is the whole canvas's).
  */
-export function warmOutline(roots: readonly Outlinable[], { edge = true } = {}): void {
+export async function warmOutline(roots: readonly Outlinable[],
+  { edge = true, pause, sliceMs = 24 }: { edge?: boolean; pause?: () => Promise<void>; sliceMs?: number } = {}): Promise<void> {
   const gl = G.renderer;
   let target: THREE.WebGLRenderTarget | null = null;
   const targets = roots.map(targetOf);
+  let since = performance.now();
   for (const each of targets) {
+    // (the page let go once a slice has gone, `pause`: a fight's foes' masks drawn in one task were 100 to 150 ms)
+    if (pause && performance.now() - since >= sliceMs) {
+      await pause();
+      since = performance.now();
+    }
     const culled: THREE.Object3D[] = [];
     each.root.traverse((object) => {
       if (!object.frustumCulled) return;
@@ -376,12 +381,14 @@ export function warmOutline(roots: readonly Outlinable[], { edge = true } = {}):
     });
     target = drawMask(gl, [each]);
     for (const object of culled) object.frustumCulled = true;
+    // (its box read now, which makes its skinned meshes' own, kept from then on: all first read in the edge's draw
+    // below, a fight's foes' were 57 ms of its task)
+    if (edge) boxOf([each]);
   }
   if (!edge || !target || !targets[0]) return;
   const look = { targets, given: targets, color: new THREE.Color(), strength: 0 };
   const mask = target;
-  if (WEBGPU) drawOverFrame(gl, () => drawEdge(gl, mask, look));
-  else drawEdge(gl, mask, look);
+  drawOverFrame(gl, () => drawEdge(gl, mask, look));
 }
 
 /** `root`'s masks compiled into the mask's target, alone (no lights, no fog, as `drawMask` draws it), what draws no

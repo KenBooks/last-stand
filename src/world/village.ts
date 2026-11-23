@@ -13,7 +13,8 @@
 // light follows the hour (`daylight`, a uniform's change: nothing compiles), and as a biome it has 10 point lights, two
 // casting the still shadows (the hall's braziers).
 import { unrepeatedNodes } from './villageNodes';
-import { WEBGPU } from '../core/webgpu';
+import { rustLook } from '../engine/custom';
+import { pavingLook } from '../engine/looks/paving';
 import { villageSkyMaterial } from './skyNodes';
 import * as THREE from 'three';
 import type { SightDoor, SightRoof, SightWall } from '../core/sight';
@@ -321,20 +322,6 @@ const WINDOW_GLOW = 1.3;
  *  sky's colour) */
 const SKY_PANE = { day: 1.3, night: 0.15, color: 0xdce6ff };
 
-/** the maps' chunks whose one read of their map `unrepeated` reads shifted instead, each its map and its uv */
-const UNREPEATED_READS = [
-  ['map_fragment', 'map', 'vMapUv'],
-  ['roughnessmap_fragment', 'roughnessMap', 'vRoughnessMapUv'],
-  ['metalnessmap_fragment', 'metalnessMap', 'vMetalnessMapUv'],
-  ['normal_fragment_maps', 'normalMap', 'vNormalMapUv'],
-  ['aomap_fragment', 'aoMap', 'vAoMapUv'],
-] as const;
-
-/** `chunk` of three's with each read of `map` at `uv` read shifted (`unrep`). */
-function shiftedReads(chunk: keyof typeof THREE.ShaderChunk, map: string, uv: string): string {
-  return THREE.ShaderChunk[chunk].split(`texture2D( ${map}, ${uv} )`).join(`unrep( ${map}, ${uv} )`);
-}
-
 /**
  * `m`, a paving's, shaded in broad patches over the world, some stones darker and some paler, worn and stained, so its
  * tile's own patches don't line up across the square: a tile a metre and a half, repeated, read as a grid of the same
@@ -344,44 +331,8 @@ function shiftedReads(chunk: keyof typeof THREE.ShaderChunk, map: string, uv: st
  * obvious"). Its own program, made at the village's warm-up.
  */
 function unrepeated<M extends THREE.MeshStandardMaterial>(m: M): M {
-  if (WEBGPU) {
-    unrepeatedNodes(m);
-    return m;
-  }
-  m.onBeforeCompile = (shader) => {
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vPaveXZ;')
-      .replace('#include <project_vertex>',
-        '#include <project_vertex>\nvPaveXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>
-        varying vec2 vPaveXZ;
-        float paveH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-        float paveN(vec2 p) {
-          vec2 i = floor(p), f = fract(p);
-          f = f * f * (3.0 - 2.0 * f);
-          return mix(mix(paveH(i), paveH(i + vec2(1, 0)), f.x), mix(paveH(i + vec2(0, 1)), paveH(i + vec2(1, 1)), f.x), f.y);
-        }
-        vec4 unrep(sampler2D s, vec2 uv) {
-          float pick = paveN(vPaveXZ * 0.12) * 6.0;
-          float k = floor(pick);
-          vec2 a = sin(vec2(3.0, 7.0) * k), b = sin(vec2(3.0, 7.0) * (k + 1.0));
-          vec2 dx = dFdx(uv), dy = dFdy(uv);
-          // (blended over a narrow band: the stones lie over each other only there. Led by which of the two stones
-          // stood taller, the two were picked pixel by pixel, and the paving was mush)
-          return mix(textureGrad(s, uv + a, dx, dy), textureGrad(s, uv + b, dx, dy), smoothstep(0.35, 0.65, fract(pick)));
-        }`);
-    for (const [chunk, map, uv] of UNREPEATED_READS) {
-      shader.fragmentShader = shader.fragmentShader.replace(`#include <${chunk}>`, shiftedReads(chunk, map, uv));
-    }
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <color_fragment>', `#include <color_fragment>
-        float broad = paveN(vPaveXZ * 0.11) * 0.55 + paveN(vPaveXZ * 0.37 + 4.0) * 0.3 + paveN(vPaveXZ * 1.3 + 9.0) * 0.15;
-        float stained = smoothstep(0.55, 0.85, paveN(vPaveXZ * 0.21 + 17.0));
-        diffuseColor.rgb *= mix(0.72, 1.18, broad);
-        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.74, 0.66), stained * 0.6);`);
-  };
-  m.customProgramCacheKey = () => 'paving-unrepeated';
+  unrepeatedNodes(m);
+  rustLook(m, pavingLook());
   return m;
 }
 
@@ -803,6 +754,9 @@ export function* villageSteps(scene: THREE.Group): Generator<void, Village, unde
   scene.add(campfireGroup);
   const campfire = buildBonfire(campfireGroup, CAMPFIRE[0], CAMPFIRE[1], M.ashlar, M.logs, updaters, false);
   campfire.light.decay = 2 + CAMPFIRE_LIGHT.soft;
+  // (a renderer that bakes its still lights reads it by a strength of its own, its flames' swell and its hour:
+  // engine/lightCache.ts `StillLight`)
+  campfire.light.userData.still = { side: 'apart', full: BONFIRE_LIGHT * CAMPFIRE_LIGHT.by };
   obstacles.push({ x: CAMPFIRE[0], z: CAMPFIRE[1], r: 1.0, h: 0.5 });
   const seats = [fireSeat(obstacles[obstacles.length - 1], [{ root: campfireGroup }])];
   seats.push(...stillBuilt(scene, () => buildBenches(scene, M, obstacles)));
@@ -976,42 +930,7 @@ function buildDaySky(): { mesh: THREE.Mesh; update: Updater; set(hour: number): 
     uHorizon: { value: new THREE.Color() }, uZenith: { value: new THREE.Color() }, uSun: { value: new THREE.Vector3(0, 1, 0) },
     uDay: { value: 0 }, uTime: { value: 0 },
   };
-  const mat = new THREE.ShaderMaterial({
-    uniforms, side: THREE.BackSide, depthWrite: false, fog: false,
-    // on the far plane, drawn after everything opaque: the depth test skips every covered pixel
-    vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); gl_Position.z = gl_Position.w; }`,
-    fragmentShader: `
-      varying vec3 vDir; uniform vec3 uHorizon; uniform vec3 uZenith; uniform vec3 uSun; uniform float uDay; uniform float uTime;
-      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      // no sin(): its precision loss on big cell coordinates lines the stars up in rings round the zenith
-      float h3(vec3 p){ p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
-      float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
-        return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
-      void main(){
-        vec3 d = normalize(vDir);
-        float y = max(d.y, 0.0);
-        vec3 c = mix(uHorizon, uZenith, smoothstep(0.0, 0.55, y));
-        float m = max(dot(d, uSun), 0.0);
-        // the sun's glow and disc by day, warmer low; the moon's by night, small and pale
-        vec3 glow = mix(vec3(0.05, 0.06, 0.1), vec3(0.55, 0.38, 0.2), uDay);
-        c += glow * pow(m, 10.0) * 0.4;
-        float disc = smoothstep(mix(0.99988, 0.9993, uDay), mix(0.99993, 0.9996, uDay), m);
-        c += mix(vec3(0.5, 0.54, 0.64), vec3(1.0, 0.9, 0.72) * 2.4, uDay) * disc;
-        // stars, fading in as the day goes (cubic cells cut the sphere unevenly: scaled to even the density out)
-        vec3 ad = abs(d);
-        vec3 g = floor(d * 700.0);
-        float dens = 0.004 * 1.732 / (ad.x + ad.y + ad.z);
-        float b = h3(g + 1.0);
-        c += vec3(0.8, 0.82, 1.0) * 0.5 * step(1.0 - dens, h3(g)) * smoothstep(0.12, 0.4, y) * (0.25 + b * b * b) * (1.0 - uDay);
-        // clouds on a plane overhead, thinning towards the horizon, lit by the day and grey by night
-        vec2 p = d.xz / max(d.y, 0.08) * 1.6 + vec2(uTime * 0.01, uTime * 0.004);
-        float cl = n(p) * 0.55 + n(p * 2.3 + 5.0) * 0.3 + n(p * 5.1 + 9.0) * 0.15;
-        cl = smoothstep(0.52, 0.82, cl) * smoothstep(0.04, 0.3, y);
-        c = mix(c, uHorizon * mix(0.7, 1.25, uDay) + vec3(0.1, 0.06, 0.03) * pow(m, 4.0), cl * 0.6);
-        gl_FragColor = vec4(c, 1.0);
-      }`,
-  });
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), WEBGPU ? villageSkyMaterial(uniforms) : mat);
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), villageSkyMaterial(uniforms));
   mesh.renderOrder = 100;
   mesh.frustumCulled = false;
   return {
@@ -1506,8 +1425,10 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   const daisTop = y0 + HALL.daisHigh;
   for (const s of [-1, 1]) {
     const x = X + s * BRAZIERS.x;
-    buildBrazier(scene, x, BRAZIERS.z, Math.PI / 2, M.iron, M.granite, updaters, daisTop, BRAZIERS.glow, BRAZIERS.flames,
-      BRAZIERS.slabs);
+    const brazier = buildBrazier(scene, x, BRAZIERS.z, Math.PI / 2, M.iron, M.granite, updaters, daisTop, BRAZIERS.glow,
+      BRAZIERS.flames, BRAZIERS.slabs);
+    // (a renderer that bakes its still lights takes it with the hall's torches: src/engine/lightCache.ts `StillLight`)
+    brazier.userData.still = { side: 'inside', full: BRAZIERS.glow };
     obstacles.push({ x, z: BRAZIERS.z, r: 0.75, h: daisTop + 1.8 });
   }
   // the torches either side of the door, on the front wall's face (cut away with it over the hero inside)
@@ -1627,8 +1548,9 @@ function hallColumns(scene: THREE.Object3D, capital: THREE.Material, M: Mats, lo
       // (held by an iron band round the shaft: a flat plate on it stood off its curve at one edge and cut into it at
       // the other)
       // (proud of the tapering shaft all round: level with it there, it showed as a dash from some sides, a review)
-      const band = solid(scene, new THREE.CylinderGeometry(COLUMN_IN.radius * 1.01, COLUMN_IN.radius * 1.01, 0.1, 18),
-        M.iron);
+      // (open at its ends: with the shaft cut away above it from above, its lid stood as a black disc on the column)
+      const hoop = new THREE.CylinderGeometry(COLUMN_IN.radius * 1.01, COLUMN_IN.radius * 1.01, 0.1, 18, 1, true);
+      const band = solid(scene, hoop, M.iron);
       band.position.set(x, y0 + 2.4, z);
       band.castShadow = false;
     }

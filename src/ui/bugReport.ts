@@ -8,6 +8,7 @@
 // message), and after it the form offers the picture to copy or save, as the clipboard holds one or the other.
 // What's typed is kept while the page lives, till a report is sent.
 import { G } from '../state';
+import { rustFrame } from '../engine';
 import { frameRect } from '../core/renderer';
 import { BUG_REPORT, REPORT_KINDS, type ReportKind } from '../data/bugReport';
 import { sfx } from '../core/audio';
@@ -111,7 +112,9 @@ export function closeBugReport(): void {
 export function bugReportAfterRender(): void {
   if (!shotWanted) return;
   shotWanted = false;
-  const view = G.renderer.domElement;
+  // (under the Rust engine the frame is on its canvas, three's over it holding the world's overlays alone: read
+  // by three's, the picture was blank)
+  const view = rustFrame(G.renderer.domElement, true) ?? G.renderer.domElement;
   const { left, top, width, height } = frameRect();
   if (!width || !height) { shotState(NO_SHOT, false); return; }
   const k = Math.min(1, BUG_REPORT.shotSide / Math.max(width, height));

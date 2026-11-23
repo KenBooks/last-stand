@@ -3,8 +3,9 @@ import * as THREE from 'three';
 import { afterBiome, biomeReady, everyBiomeReady, readyBiome, readyEveryBiome } from './game/biomeReady';
 import { bossReady, everyBossWarm, readyEveryBoss, readyNextBoss } from './game/bossReady';
 import { G } from './state';
-import { pipelinesAtOnceFromNow, setPlainLitOnWebGPU, WEBGPU } from './core/webgpu';
-import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
+import { keepBootPaceHidden } from './core/hiddenBoot';
+import { pipelinesAtOnceFromNow } from './core/webgpu';
+import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
 import { CAMERA, LOBBY, COOP } from './data/balance';
 import { HALL, START_SPOTS, TERRACE, YARD_DUMMIES, biomeOfHour, inHall, type VillageObject } from './data/village';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, escapeSpentOnLock, releaseInput } from './core/input';
@@ -20,7 +21,7 @@ import { updateSpectate } from './game/spectate';
 import { particles } from './fx/particles';
 import { initLights, updateLights, clearLights } from './fx/lights';
 import { initEffects, updateEffects, clearEffects } from './fx/effects';
-import { buildArena, compileEnvMaps, painted } from './world/arena';
+import { buildArena, painted } from './world/arena';
 import { separateEnemies } from './world/collision';
 import { prepareWalks } from './world/walkPath';
 import { groundHeight } from './world/ground';
@@ -84,20 +85,22 @@ import { framePart, framePartsBegin, framePartsEnd, noteSlowFramesWith } from '.
 import { markPassesWith } from './core/renderer';
 import { traceNow } from './perf/upload';
 import { initBugReport, openBugReport, closeBugReport, bugReportOpen, bugReportAfterRender } from './ui/bugReport';
-import { initPerfHud, readGpuAhead, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfClock } from './ui/perfHud';
+import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfClock } from './ui/perfHud';
 import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
-import { compileTheBiome, compileTheLobby, queueHeroesBehind, warmLobby, warmTheRest } from './game/warmup';
+import {
+  compileTheBiome, compileTheLobby, otherHeroesSkillsAhead, queueHeroesBehind, warmLobby, warmTheRest,
+} from './game/warmup';
 import { hurry, isAllWarm, isReadying, isWarming, want, warmingNote, whenWarm } from './game/warm';
 import { initReadying, isJoining, joiningShare, layOutReadyingAhead, READYING, settleReadying, showJoining } from './ui/readying';
-import { hdrAllowedAtBoot, heroDetailAtBoot, holdQuality, initQuality, loadingFrame, plainLitAtBoot, sampleQuality } from './core/quality';
+import { hdrAllowedAtBoot, heroDetailAtBoot, holdQuality, initQuality, loadingFrame, sampleQuality } from './core/quality';
 /** the heroes' detail at or under which their hands are sculpted coarse (Very low's 0.2) */
 const COARSE_HANDS_UNDER = 0.2;
 import { framesUncapped, runFrames } from './core/frameLoop';
 import { pacedStep } from './core/framePace';
 import { updateLowLife } from './core/lowLife';
-import { checkPrograms, commandsDone, markLoaded, pinPrograms, programsCompiledInGame, steadyShadowPrograms, watchPrograms } from './core/shaders';
+import { markLoaded, pinPrograms, programsCompiledInGame } from './core/shaders';
 import { initBiome, rollBiome } from './game/biome';
 import { BIOMES, BIOME_IDS } from './data/biomes';
 import { CLASSES, CLASS_IDS } from './data/classes/index';
@@ -135,7 +138,7 @@ const timer = new THREE.Timer();
 let revealed = false;   // loading screen gone: the game may advance
 /** how long the loading screen waits for the fight's warm-up on WebGPU (ms) */
 const FIGHT_UNDER_LOADING = 6000;
-/** the frames painted either side of the GPU's process catching up, as `drawnBy` waits */
+/** the frames painted, twice over, as `drawn` waits */
 const DRAWN_FRAMES = 2;
 
 /** The next task once the browser has painted `frames` frames. */
@@ -147,17 +150,18 @@ async function paintedFrames(frames: number): Promise<void> {
  * What the boot rehearses for Chrome's programs waited on till Chrome has drawn it: its compositor draws on the GPU
  * process's main thread, behind the boot's own compiles there, so a look put back after a frame or two of the
  * page's was often never drawn (the chest's first opening still built its program in some walks and not others,
- * 0.12 to 0.5 s, and Play together's raster 0.2 s). A fence on the game's WebGL says when the GPU's process has
- * done what was sent before it, frames painted either side.
+ * 0.12 to 0.5 s, and Play together's raster 0.2 s). WebGPU's context has no fence to say when the GPU's process has
+ * done what was sent before it: its frames alone, painted twice over.
  */
-const drawnBy = (renderer: THREE.WebGLRenderer) => async (): Promise<void> => {
+const drawn = async (): Promise<void> => {
   await paintedFrames(DRAWN_FRAMES);
-  // (WebGPU's context has no fence of WebGL's: its frames alone)
-  if (!WEBGPU) await commandsDone(renderer, painted);
   await paintedFrames(DRAWN_FRAMES);
 };
 
 async function boot() {
+  // (a page hidden while it loads keeps the boot's pace: core/hiddenBoot.ts)
+  // (`?bootPace=0` the boot as it was, the canary of `npm run stalls -- --scenario boot --covered`)
+  if (!location.search.includes('bootPace=0')) keepBootPaceHidden(loadingLeft);
   // (full screen at the first gesture, the loading screen's too: armed after the hero, a click as it loaded did nothing)
   initAutoFullScreen();
   // the ground, wall and bark maps are made in workers meanwhile (they'd block the page for a second), the lobby's
@@ -172,26 +176,16 @@ async function boot() {
   preloadFlames();
   prepareWind();
   if (VILLAGE) prepareCrest();
-  await loadingStep('Forging the arena', 0.08);
+  // (each long stretch of the boot under a step of its own: under four names the bar stood at one for 3 to 9 s,
+  // from play, "desktop still stuck here for a bit", "can you we add more steps in loading ?")
+  await loadingStep('Forging the arena', 0.05);
   initUIScale();
   releaseClickedFocus();
   initItemIcons();
-  // (WebGPU's pipeline is made with the renderer: told first whether the boot's level is plain, as its sight is built
-  // by it)
-  if (WEBGPU) setPlainLitOnWebGPU(plainLitAtBoot());
   const { scene, renderer } = await initRenderer($('#game'), hdrAllowedAtBoot());
   // (a slow frame's mark names the render's pass that held it: perf/frameParts.ts)
   markPassesWith(framePart);
   noteSlowFramesWith(() => renderer.info.programs?.length ?? 0, warmingNote);
-  // (WebGL's programs: WebGPU's pipelines are none of them, core/webgpu.ts)
-  if (!WEBGPU) {
-    // (the GPU's name and timer asked before anything compiles: ui/perfHud.ts)
-    readGpuAhead(renderer);
-    steadyShadowPrograms(renderer);
-    watchPrograms(renderer);
-    // (the environments' programs linked as the arena is built, each made as its biome is first shown)
-    compileEnvMaps(renderer);
-  }
   let keyboardTarget = '';
   let lastDelayedKey = -Infinity;
   recorder.recordingBoundary = starting => {
@@ -224,6 +218,7 @@ async function boot() {
   initLights(scene);
   initEffects();
   initAudio();   // resumed by the first user gesture
+  await loadingStep('Raising the walls', 0.14);
   // (built on the maps' canvases as the workers paint them: nothing is drawn till all have come)
   G.arena = await buildArena(scene, renderer);
   if (VILLAGE) {
@@ -239,6 +234,7 @@ async function boot() {
   // the village shown (or, with no village, the lobby's biome), and its programs compiled while the hero is built
   // (game/warmup.ts)
   if (!VILLAGE) initBiome();
+  await loadingStep('Kindling the lamps', 0.24);
   await compileTheBiome();
   // (the lobby's panels rastered under the loading screen while the hero is built: ui/menus.ts)
   // (the loading screen seen through by a thousandth while the lobby's UI is rehearsed under it: opaque, Chrome
@@ -264,6 +260,7 @@ async function boot() {
   // (the houses' folk seated, the library's scholar and the merchant's Odo: their heads and hands are the heroes',
   // made by now)
   if (VILLAGE) {
+    await loadingStep('Gathering the villagers', 0.45);
     for (const room of Object.values(G.arena.rooms ?? {})) {
       if (!room.seatFolk) continue;
       await painted();
@@ -362,7 +359,6 @@ async function boot() {
   initBugReport(reportClosed);
   for (const link of document.querySelectorAll<HTMLElement>('.report-link')) link.onclick = () => { sfx.click(); openReport(); };
   // (each look held till it's drawn: replaced after a frame, checking's still held the campfire 0.2 s)
-  const drawn = drawnBy(renderer);
   if (VILLAGE) {
     layOutCoopAhead('checking');
     await drawn();
@@ -408,10 +404,10 @@ async function boot() {
   // once the loading screen has left, a hero at a time, each shown on his plinth as he's warm (from play, "we can only
   // load currently selected/default hero... and then load the two others": warmed under the loading screen, a low-end
   // laptop's froze; asked for before it left, they held its wait for smooth frames 4.1 s, a task of 2.5 s in it)
-  if (firstVisit) await loadingStep('Readying the hall', 0.6);
-  await warmLobby(firstVisit);
+  await loadingStep(firstVisit ? 'Readying the hall' : 'Warming the hearth', 0.6);
+  await warmLobby(firstVisit, loadingStep);
   if (VILLAGE) ghostsWarmed();
-  const { fight: fightWarmed, all: rest } = warmTheRest(loadingLeft);
+  const { fight: fightWarmed } = warmTheRest(loadingLeft);
   if (firstVisit) {
     void loadingLeft.then(() => want('heroes'));
     // (with no village, the biome's still shadows drawn now, under the loading screen: else the frame after the hero
@@ -423,11 +419,19 @@ async function boot() {
   }
   // (on WebGPU the lobby held 66 to 108 frames a second for the 8 s the fight warmed behind it, where under the loading
   // screen, in long slices, it takes a moment on a return; what a first visit hasn't done by then goes on behind)
-  if (WEBGPU) {
-    await loadingStep('Readying the fight', 0.7);
-    await Promise.race([fightWarmed, new Promise((done) => setTimeout(done, FIGHT_UNDER_LOADING))]);
-  }
+  await loadingStep('Readying the fight', 0.7);
+  await otherHeroesSkillsAhead();
+  await Promise.race([fightWarmed, new Promise((done) => setTimeout(done, FIGHT_UNDER_LOADING))]);
+  // (the other heroes begun here too, on a return: nothing of three's is compiled for them
+  // there, a hero's warm-up is his build and his meshes and maps handed to the engine. Readied as he neared their
+  // hall, a phone's frames as he set off across the square were 92 to 275 ms, four in a second: one task of 143 ms,
+  // and the GPU's process taking all they have at once, a report from play, TD5N-H10K. Asked for and not waited
+  // for: they're built beside the boot's last steps and behind the loading screen as it leaves, where waited for
+  // under it a return's boot was 1.4 s longer here. A first visit opens on the hall, and readies them as its
+  // screen leaves.)
+  if (VILLAGE && !firstVisit) want('heroes');
   if (VILLAGE) {
+    await loadingStep('Setting the square', 0.78);
     stillLoading(true);
     await rehearseChest(drawn);
     stillLoading(false);
@@ -453,9 +457,7 @@ async function boot() {
     oweBetaNotice();
     recorder.revealed(!navigator.serviceWorker?.controller);
     startHeartbeat();
-    if (WEBGPU) pipelinesAtOnceFromNow();
-    setTimeout(() => checkPrograms(renderer));
-    void rest.then(() => checkPrograms(renderer));
+    pipelinesAtOnceFromNow();
     // the overlays down the left (performance, network, the battle log) once the loading screen is gone (_perf.scss)
     void loadingLeft.then(() => $('#diag').classList.remove('booting'));
     // an invite link: straight into the friend's room (asked for a name tag first if none is kept)

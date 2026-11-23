@@ -340,6 +340,8 @@ export function ownAura(m: THREE.Material, from: THREE.Material = m): THREE.Colo
  * with distance, see NEAR_GLOW. Only for effects: the world's own glows keep their look.
  */
 export function nearGlow<T extends THREE.Material>(m: T): T {
+  // (for a renderer with no hook of three's: the Rust engine dims it by `NEAR_GLOW`, engine/materials.ts)
+  m.userData.nearGlow = true;
   m.onBeforeCompile = (sh) => {
     const f = sh.fragmentShader.replace(/void\s+main\s*\(\s*\)/, `${NEAR_GLOW_GLSL}
 void main()`);

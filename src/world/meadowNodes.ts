@@ -18,6 +18,8 @@ export interface BladeUniforms {
   uCombed: { value: number };
   uS: { value: number };
   uTiles: { value: THREE.Vector2[] };
+  /** the tiles drawn, a pair of floats each (WebGL's map; the Rust engine's list) */
+  uTileMap: { value: THREE.DataTexture };
   uFocus: { value: THREE.Vector2 };
   uEye: { value: THREE.Vector2 };
   uBand: { value: THREE.Vector4 };
@@ -74,7 +76,7 @@ function bladeFns(): NonNullable<typeof fns> {
   return fns;
 }
 
-/** The mask's grass at `xz` (0 to 1), its edges made ragged, as `MEADOW_AT_GLSL`'s `meadowAt` reads it. */
+/** The mask's grass at `xz` (0 to 1), its edges made ragged. */
 function meadowAtNode(mask: THREE.Texture, half: number, xz: N): N {
   const { clamp, texture, vec2, abs } = tsl as any;
   const { maskNoise } = bladeFns();

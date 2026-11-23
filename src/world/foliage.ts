@@ -2,7 +2,6 @@
 // leaf) cut out with alpha test, and the geometry that carries them: canopies and bushes of leaf cards
 // round a dark core, fern clumps, leaf litter, and shafts of sunlight slanting down through the canopy.
 import * as THREE from 'three';
-import { WEBGPU } from '../core/webgpu';
 import { shaftsMaterial } from './forestNodes';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ctx2d, textureFromCanvas } from '../core/textures';
@@ -190,7 +189,7 @@ export function lightShafts(spots: [number, number, number][], dir: THREE.Vector
         gl_FragColor = vec4(uColor * a, 1.0);
       }`,
   });
-  const drawnWith = WEBGPU ? shaftsMaterial(mat.uniforms.uTime, color) : mat;
+  const drawnWith = shaftsMaterial(mat.uniforms.uTime, color);
   const group = new THREE.Group();
   const d = dir.clone().normalize(), up = new THREE.Vector3(0, 1, 0);
   const L = 26, at = new THREE.Object3D(), shafts: THREE.BufferGeometry[] = [];

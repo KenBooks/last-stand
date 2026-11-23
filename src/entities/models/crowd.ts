@@ -12,10 +12,15 @@ import { QUALITY } from '../../data/quality';
 import { qualityLevel } from '../../core/quality';
 import type { Model } from '../../types';
 import { CROWD_LAYER, HERO_SHADOW_LAYER } from '../../core/layers';
-import { WEBGPU, refreshedInFull, uploadTexture } from '../../core/webgpu';
+import { refreshedInFull, uploadTexture } from '../../core/webgpu';
 import { crowdNodeMaterial } from './crowdNodes';
 
-const ON = typeof location === 'undefined' || !/[?&]crowd=0/.test(location.search);
+// (the Rust engine's trial draws each body on its own too: a crowd's rows are read by a shader of three's)
+// (this branch's plain address is the engine's: crowds only where the address asks for one of three's renderers. Read
+// as `renderer=rust` in the address alone, the preview's plain address drew every foe in a crowd the engine never
+// draws: from play, "in fight all enemies are hidden")
+const ON = typeof location === 'undefined'
+  || (/[?&]renderer=(webgl|webgpu)/.test(location.search) && !/[?&]crowd=0/.test(location.search));
 
 /** A body drawn in its kind's crowd. */
 export interface CrowdBody {
@@ -130,8 +135,7 @@ function kindOf(model: Model, pieces: THREE.Mesh[]): Kind | null {
   parts.forEach((list, slot) => {
     const base = baseOf(model, pieces[slotFrom[slot]].material as THREE.Material)!;
     const geometry = merged(list, rootInv, rootScale, base.vertexColors);
-    const material = WEBGPU ? crowdNodeMaterial(base, { texture, joints: inverses.length, looks: LOOKS, minCaster, eyeClear: EYE_CLEAR }, slot)
-      : crowdMaterial(base, kind, slot);
+    const material = crowdNodeMaterial(base, { texture, joints: inverses.length, looks: LOOKS, minCaster, eyeClear: EYE_CLEAR }, slot);
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = list.some((p) => castsOf(p.mesh));
     // (drawn over the kept shadows, as the heroes are: `world/moonShadow.ts`)
@@ -142,8 +146,7 @@ function kindOf(model: Model, pieces: THREE.Mesh[]): Kind | null {
     geometry.computeBoundingSphere();
     const sphere = geometry.boundingSphere!;
     kind.reach = Math.max(kind.reach, sphere.center.length() + sphere.radius);
-    // (on WebGPU the shadow is drawn by the slot's own material, skinned by its position node)
-    if (!WEBGPU) mesh.customDepthMaterial = depthMaterial(kind);
+    // (the shadow is drawn by the slot's own material, skinned by its position node)
     mesh.visible = false;
     mesh.name = `crowd ${model.root.userData.crowdKind}`;
     kind.slots.push(mesh);
@@ -236,92 +239,10 @@ function turnAll(from: THREE.BufferAttribute | THREE.InterleavedBufferAttribute,
   }
 }
 
-/** `text` with `from` replaced by `to`; throws when it isn't there (a three.js update moved the chunk). */
-function swap(text: string, from: string, to: string): string {
-  if (!text.includes(from)) throw new Error(`crowd: the shader has no ${from}`);
-  return text.replace(from, to);
-}
-
-/** what the vertex shaders read a body's row with: its joints' matrices, its looks and its skinning */
-const ROW_GLSL = /* glsl */ `
-uniform highp sampler2D uCrowd;
-uniform int uCrowdJoints;
-attribute vec2 crowdIndex;
-attribute vec2 crowdWeight;
-vec4 crowdTexel(int x) { return texelFetch(uCrowd, ivec2(x, gl_InstanceID), 0); }
-mat4 crowdJoint(float i) {
-  int x = int(i) * 4;
-  return mat4(crowdTexel(x), crowdTexel(x + 1), crowdTexel(x + 2), crowdTexel(x + 3));
-}
-vec4 crowdLook(int i) { return crowdTexel(uCrowdJoints * 4 + i); }
-mat4 crowdSkin() {
-  mat4 m = crowdJoint(crowdIndex.x);
-  if (crowdWeight.y > 0.0) m = m * crowdWeight.x + crowdJoint(crowdIndex.y) * crowdWeight.y;
-  return m;
-}`;
-
 /** how far from the camera (m, along its view) a body is drawn whole, and nearer than which none of it is, a screen
  *  door between: through the eyes a charge runs into the foe it throws ahead of it, and the camera stood inside a
  *  husk's glowing body, half the frame its glow (lab `cast bullRush --views first --what`); shadows stay whole */
 const EYE_CLEAR = { from: 0.2, to: 0.5 };
-
-/** A slot's material: its kind's own, drawn from the rows, every body's looks its own, dissolved at the camera. */
-function crowdMaterial(base: THREE.MeshStandardMaterial, kind: Kind, slot: number): THREE.MeshStandardMaterial {
-  const m = base.clone();
-  // (each body's glow is its own material's, from its row)
-  m.emissiveIntensity = 1;
-  const own = base.onBeforeCompile, key = base.customProgramCacheKey();
-  m.onBeforeCompile = (shader, renderer) => {
-    own.call(base, shader, renderer);
-    Object.assign(shader.uniforms, kind.uniforms, { uCrowdSlot: { value: slot } });
-    let v = swap(shader.vertexShader, '#include <common>', `#include <common>
-${ROW_GLSL}
-uniform int uCrowdSlot;
-flat varying vec4 vCrowdFx;
-flat varying vec4 vCrowdLook;`);
-    v = swap(v, '#include <beginnormal_vertex>', `#include <beginnormal_vertex>
-mat4 crowdMatrix = crowdSkin();
-objectNormal = mat3(crowdMatrix) * objectNormal;`);
-    shader.vertexShader = swap(v, '#include <begin_vertex>', `#include <begin_vertex>
-transformed = (crowdMatrix * vec4(transformed, 1.0)).xyz;
-vCrowdFx = crowdLook(0);
-vec4 crowdGlows = crowdLook(${LOOKS} + uCrowdSlot / 4);
-vCrowdLook = vec4(crowdLook(1).rgb, crowdGlows[uCrowdSlot % 4]);`);
-    let f = swap(shader.fragmentShader, 'uniform float uDissolve;', `flat varying vec4 vCrowdFx;
-flat varying vec4 vCrowdLook;
-#define uDissolve vCrowdFx.x`);
-    f = swap(f, 'uniform float uFrozen;', '#define uFrozen vCrowdFx.y');
-    f = swap(f, 'uniform float uChar;', '#define uChar vCrowdFx.z');
-    f = swap(f, 'uniform float uHit;', '#define uHit vCrowdFx.w');
-    f = swap(f, 'uniform vec3 uEdge;', '#define uEdge vCrowdLook.rgb');
-    f = swap(f, '#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
-float crowdDoor = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
-if (crowdDoor < 1.0 - smoothstep(${EYE_CLEAR.from.toFixed(2)}, ${EYE_CLEAR.to.toFixed(2)}, 1.0 / gl_FragCoord.w)) discard;`);
-    shader.fragmentShader = swap(f, 'vec3 totalEmissiveRadiance = emissive;', 'vec3 totalEmissiveRadiance = emissive * vCrowdLook.a;');
-  };
-  m.customProgramCacheKey = () => `${key}-crowd`;
-  return m;
-}
-
-/** A slot's shadow material: skinned from the rows, the pieces too small for the quality's shadows (and every piece
- *  of a body casting none) cut from the shadow map. */
-function depthMaterial(kind: Kind): THREE.MeshDepthMaterial {
-  const m = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
-  m.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, kind.uniforms, { uMinCaster: minCaster });
-    let v = swap(shader.vertexShader, '#include <common>', `#include <common>
-${ROW_GLSL}
-uniform float uMinCaster;
-attribute float crowdCaster;`);
-    v = swap(v, '#include <begin_vertex>', `#include <begin_vertex>
-transformed = (crowdSkin() * vec4(transformed, 1.0)).xyz;`);
-    shader.vertexShader = swap(v, '#include <project_vertex>', `#include <project_vertex>
-float crowdCast = crowdCaster * crowdLook(1).w;
-if (crowdCast <= 0.0 || crowdCast < uMinCaster) gl_Position = vec4(0.0, 0.0, 2.0, 1.0);`);
-  };
-  m.customProgramCacheKey = () => 'crowd-depth';
-  return m;
-}
 
 /**
  * `body` drawn in its kind's crowd from now on, its own meshes put on `CROWD_LAYER`: false when it isn't a creature
@@ -383,8 +304,8 @@ function hookScene(): void {
   const before = G.scene.onBeforeRender;
   G.scene.onBeforeRender = (...args) => {
     before.apply(G.scene, args);
-    // (on WebGPU a shadow is a render of the scene of its own, the arms too: the bodies stand as they did)
-    if (!WEBGPU || args[2] === G.camera) writeRows();
+    // (a shadow is a render of the scene of its own, the arms too: the bodies stand as they did)
+    if (args[2] === G.camera) writeRows();
   };
 }
 
@@ -413,7 +334,7 @@ function writeRows(): void {
     for (const slot of kind.slots) slot.geometry.boundingSphere!.copy(_sphere);
     kind.uniforms.uCrowd.value.needsUpdate = true;
     // (its materials are still: their refresh sends no texture, core/webgpu.ts)
-    if (WEBGPU) uploadTexture(kind.uniforms.uCrowd.value);
+    uploadTexture(kind.uniforms.uCrowd.value);
   }
 }
 
@@ -449,10 +370,8 @@ function grow(kind: Kind, n: number): void {
   texture.image = { data: kind.data, width: kind.row / 4, height: kind.rows };
   texture.needsUpdate = true;
   // (a new texture on the GPU: its slots' bindings told of it, by a full refresh for a frame)
-  if (WEBGPU) {
-    for (const mesh of kind.slots) {
-      refreshedInFull.add(mesh);
-      grown.push(mesh);
-    }
+  for (const mesh of kind.slots) {
+    refreshedInFull.add(mesh);
+    grown.push(mesh);
   }
 }

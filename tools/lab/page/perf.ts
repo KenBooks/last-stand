@@ -33,7 +33,7 @@ import { programSwitches } from './programSwitches';
 import { buffersChanged, uploadsBetween, uploadsSoFar, type UploadCount } from './uploads';
 import { materialSwitches } from './materialSwitches';
 import { reportRead } from './perfReport';
-import { WEBGPU, gpuDone } from '../../../src/core/webgpu';
+import { gpuDone } from '../../../src/core/webgpu';
 import { inVillage, VILLAGE_SPOT } from './draws';
 import { holdHour } from '../../../src/game/clock';
 import { goTo, villageObject } from '../../../src/game/village';
@@ -190,25 +190,12 @@ const timeable = () => ['perfClock', 'lastPerfFrame', 'takeGpuFrames'].every((na
  *  frames run in one task, and the GPU read as untimed). */
 const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-/** a pixel read back, which the GPU must have drawn first */
-const readBack = new Uint8Array(4);
-
 /**
  * Waits for the GPU to draw what the page sent it: what it draws runs behind the page, and the page's own time leaves
- * it out. A pixel is read back, as WebGL's `finish` returned at once under ANGLE's D3D11 (the frame read 7 ms with the
- * GPU's timer at 13 to 29). On WebGPU, its queue's work done (`gpuDone`): it has no pixel to read back that way.
+ * it out: its queue's work done (`gpuDone`).
  */
 async function waitForGpu(): Promise<void> {
-  if (WEBGPU) {
-    await gpuDone(G.renderer);
-    return;
-  }
-  // (the canvas bound through three, whose state keeps what's bound)
-  const target = G.renderer.getRenderTarget();
-  G.renderer.setRenderTarget(null);
-  const gl = G.renderer.getContext();
-  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, readBack);
-  G.renderer.setRenderTarget(target);
+  await gpuDone(G.renderer);
 }
 
 /** One frame run and timed by the browser's clock, waited out on the GPU, and what the perf overlay timed of it. */

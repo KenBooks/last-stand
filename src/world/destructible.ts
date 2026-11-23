@@ -17,6 +17,7 @@ import { G } from '../state';
 import { anchorLabel, removeLabel } from '../ui/floaters';
 import { ORDER, type Label } from '../ui/overlay/layer';
 import { gaugeArt } from '../ui/overlay/bars';
+import { AHEAD } from '../engine/pipelinesAside';
 
 export interface Prop {
   id: number;
@@ -194,7 +195,7 @@ export function breakProp(p: Prop): void {
   p.hide();
   hideBar(p);
   for (const o of p.parts) { const i = p.list.indexOf(o); if (i >= 0) p.list.splice(i, 1); }
-  state.rev++;
+  AHEAD.propsRev = ++state.rev;
   const c = centre(p, _p), size = Math.max(...p.parts.map((o) => o.r)) + p.parts.length * 0.25;
   // the prop comes apart: chunks that fly, bounce and lie a few seconds before they crumble away
   const reach = Math.max(...p.parts.map((o) => Math.hypot(o.x - c.x, o.z - c.z) + o.r));
@@ -216,5 +217,5 @@ export function restoreProps(props: Prop[]): void {
     if (p.broken) { p.broken = false; p.list.push(...p.parts); p.show(); }
     changed = true;
   }
-  if (changed) state.rev++;
+  if (changed) AHEAD.propsRev = ++state.rev;
 }

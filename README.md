@@ -138,7 +138,7 @@ A bow hunter in a trailcoat with a quiver; lighter armour, speed and physical da
 
 ## Tech
 
-- [Three.js](https://threejs.org/) 0.187 with an HDR post-processing chain (bloom, tone mapping, grading); WebGL by default, with a WebGPU renderer to try from the pause menu
+- A [Three.js](https://threejs.org/) 0.187 scene drawn by our own renderer in Rust and WebAssembly on WebGPU, with a post-processing chain (bloom, tone mapping, grading); it needs a browser with WebGPU
 - TypeScript (strict) + [Vite](https://vite.dev/)
 - Procedural models, humanoid rigs and animation, CPU particles, pooled dynamic lights, and procedural textures (a few take their colours from CC0 photos)
 - The Thornwood's trees are grown by [ez-tree](https://github.com/dgreenheck/ez-tree) (MIT), its geometry with our own procedural bark and leaves

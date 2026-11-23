@@ -4,7 +4,6 @@
 // passes its branch by (`uPhoto` 0) and every value is the game's own again.
 import * as THREE from 'three';
 import { BLOOM_STRENGTH, gradeUniforms, setBloomStrength } from './renderer';
-import { WEBGPU } from './webgpu';
 
 /** the colour filters, by name */
 export type PhotoFilter = 'none' | 'warm' | 'cool' | 'sepia' | 'mono' | 'cinematic';
@@ -64,8 +63,8 @@ const FILTERS: Record<PhotoFilter, { lo: Rows; hi: Rows }> = {
   cinematic: { lo: [0.82, 0.06, 0.04, 0, 1.0, 0.06, 0, 0.08, 1.14], hi: [1.14, 0.04, 0, 0.02, 1.0, 0, 0, 0, 0.8] },
 };
 
-/** What of the look the renderer in use can draw: the grade's branch is WebGL's (WebGPU's grade has no port of it). */
-export const GRADE_LOOK_DRAWN = !WEBGPU;
+/** Whether the grade's look is drawn by three's own grade: never (it has no port of it). */
+export const GRADE_LOOK_DRAWN = false;
 
 /** `look` put on the post chain, `on` (photo mode open) or not: off, the grade passes it by and bloom is the game's. */
 export function applyPhotoLook(look: Readonly<PhotoLook>, on: boolean): void {

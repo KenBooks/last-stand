@@ -4,12 +4,12 @@ import { COMMON_OPTIONS } from '../optionKit.mjs';
 
 /** `lab parity`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
 export default {
-  summary: 'the same scenes pictured as the player sees them, to compare what two renderers draw (`--renderers '
-    + 'webgl,webgpu`: each biome\'s arena, the village at noon and midnight from its places, from above and over the '
+  summary: 'the same scenes pictured as the player sees them, to compare what two commits draw (`--ab`: '
+    + 'each biome\'s arena, the village at noon and midnight from its places, from above and over the '
     + 'shoulder; the pictures are the page\'s own, as WebGPU\'s canvas can\'t be read back; what differs is the '
     + 'A/B\'s verdict and the pictures side by side)',
-  help: 'the same scenes pictured as the player sees them, to compare what two renderers draw (--renderers '
-    + 'webgl,webgpu): each biome\'s arena, then the village at noon and midnight from its places, from above and '
+  help: 'the same scenes pictured as the player sees them, to compare what two commits draw (--ab): '
+    + 'each biome\'s arena, then the village at noon and midnight from its places, from above and '
     + 'over the shoulder; the A/B\'s verdict and the pictures side by side say what differs (tools/lab/out/parity)',
   options: {
     scenes: {

@@ -11,7 +11,7 @@ import {
   BLEND_GONE, HOLE_UNDER, MIDDLE_ATTRIBUTE, PALE, PLACED_BY_MIDDLE, SIGHT_CONE, overShaft, type SeeThrough,
 } from './seeThrough';
 import { DOOR_ROW, DOOR_SOFT, HIS_ROW, SIGHT, SIGHT_LOOK } from './sight';
-import { WEBGPU, gpu, stillMaterialsGo, stillNodes, tsl } from './webgpu';
+import { gpu, stillNodes, tsl } from './webgpu';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -29,7 +29,7 @@ const made = new WeakMap<THREE.Material, THREE.Material>();
 
 /** `material` drawn on WebGPU as `port` has it (given the node language and its uniforms as nodes). */
 export function portShader<T extends THREE.ShaderMaterial>(material: T, port: (t: Tsl, u: Record<string, N>) => Port): T {
-  if (WEBGPU) ports.set(material, port);
+  ports.set(material, port);
   return material;
 }
 
@@ -203,14 +203,6 @@ function seeMask(of: SeeThrough): N {
   const two = mod(floor(screenCoordinate.xy.mul(0.5)), 2);
   const dither = abs(bit.x.sub(bit.y)).mul(8).add(bit.y.mul(4)).add(abs(two.x.sub(two.y)).mul(2)).add(two.y).add(0.5).div(16);
   return dither.greaterThanEqual(seeFade(positionWorld, seeOfKind(of), middleOf(of)));
-}
-
-/** `material`'s see-through mask given it as a property of its own, as the GPU-driven drawing makes its draws' materials
- *  from a material's own properties and never asks for it to be converted (the crypt's obelisks stood solid before the
- *  hero). */
-function maskOwn(material: THREE.Material): void {
-  const see = (material as { seeThrough?: SeeThrough }).seeThrough;
-  if (see) thinBy(material as N, see);
 }
 
 /** How `material` thins, as its kind does: by a blend (`opacityNode`), which drops what's nearly gone, or a pattern. */
@@ -558,7 +550,6 @@ export interface OwnLooks { webgpuLooks: (converted: N) => void }
 /** three's library made to take each ported material's node material in its place (its blending, sides and depth
  *  copied over every time three asks: the draw reads them off the game's material, the build off this one). */
 export function takePorts(renderer: WebGPURenderer): void {
-  stillMaterialsGo(maskOwn);
   const library = renderer.library as unknown as { fromMaterial(material: THREE.Material): THREE.Material | null };
   const fromMaterial = library.fromMaterial.bind(library);
   library.fromMaterial = (material) => {

@@ -15,7 +15,7 @@ npm run stalls -- --headed --links --seconds 30  # a window on the screen, every
 npm run stalls -- --variants base,cpuCanvas      # the page as it is, then every 2D canvas drawn on the CPU
 npm run stalls -- --scenario boot --variants base,noParallelCompile  # then WebGL without parallel shader links
 npm run stalls -- --scenario boot --variants qualityLow,qualityHigh  # one build booted at two levels the player chose
-npm run stalls -- --scenario lobby --js --variants seeded --url "this?renderer=webgpu,this?renderer=webgpu&x=0"
+npm run stalls -- --scenario lobby --js --variants seeded --url "this,this?x=0"
                                                  # two URLs' heroes in the same gear (every page's dice one seed)
 npm run stalls -- --scenario lobby               # standing, then walking round the lobby
 npm run stalls -- --scenario latency --url "this?vsync=1,this?vsync=0" --window 2560x1440 --scale 2  # input lag
@@ -40,15 +40,15 @@ npm run stalls -- --scenario boot --film --blink-exit 2   # the film's canary: t
 npm run stalls -- --scenario boot --film-boot --touch --window 799x384 --scale 3.75 --gpu-memory 64  # a phone's tiles
 npm run stalls -- --scenario boot --resize 1920x1080       # full screen and back 5 times: the exit follows the window
 npm run stalls -- --scenario boot --resize 1920x1080 --stale-wind  # its canary: an exit placed once is caught
-npm run stalls -- --scenario boot --url "this?renderer=webgpu&builds" --read "window.__builds"  # a page's own record
+npm run stalls -- --scenario boot --url "this?builds" --read "window.__builds"  # a page's own record
 npm run stalls -- --scenario lobby --before "window.__G.someMesh.visible = false"  # a change just before the picture
 npm run stalls -- --scenario sweep --stash 60 --seconds 8 --rounds 3 --variants base,iconFilter,stillGlow+noTooltip
                                                  # one page, the variants in turn three times over, by their medians
 npm run stalls -- --scenario sweep --stash 60 --seconds 6 --js   # and the page's JS, a frame's by function
-npm run stalls -- --scenario lobby --js-under _renderObjectDirect --url "this?renderer=webgpu"  # what one function spends on
-npm run stalls -- --scenario boot --builds --url "this?renderer=webgpu"  # each step's WebGPU node builds and new shaders
-npm run stalls -- --scenario boot --view third --biome crypt --url "this?renderer=webgpu,this"  # both renderers' ends
-npm run stalls -- --scenario boot --view third --cast 3@1500 --url "this?renderer=webgpu,this"  # a skill held for it
+npm run stalls -- --scenario lobby --js-under _renderObjectDirect  # what one function spends on
+npm run stalls -- --scenario boot --builds  # each step's WebGPU node builds and new shaders
+npm run stalls -- --scenario boot --view third --biome crypt --url "ref:origin/main,this"  # both builds' ends
+npm run stalls -- --scenario boot --view third --cast 3@1500 --url "ref:origin/main,this"  # a skill held for it
 npm run stalls -- --scenario sweep --stash 60 --seconds 2 --passes  # the compositor's render passes a frame, exact
 npm run stalls -- --help
 npm run stalls:test                              # the tool's own unit tests
@@ -101,8 +101,6 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     found the map's first opening held Chrome's GPU process
     4 s, the chest's panels 1.3 s, the practice bar's cooldowns 1.1 s and the prompt 0.8 s, each a first raster
     (`src/ui/AGENTS.md`).
-  - `renderer`: the pause menu's renderer switch, on a page of its own: the plain address on WebGL, its button loading
-    the WebGPU address, the plain address on WebGL again with an old cookie saying WebGPU. Its notes say `WRONG` where not.
   - `firing`: shooting at the lobby's dummies with the left button, a shot about every half a second (`--hero ranger`).
   - `firingPast`: the same shots away from the dummies: what `firing` costs over it is what striking them costs.
   - `hover`: the lobby's items hovered, a quarter of the time each: the mouse gliding over the world (the frames to

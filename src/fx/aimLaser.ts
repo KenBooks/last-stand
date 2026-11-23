@@ -8,6 +8,7 @@ import { G } from '../state';
 import { addEffect } from './effects';
 import { sceneRatio, sceneSize } from '../core/renderer';
 import { portShader, type Tsl } from '../core/shaderPorts';
+import { effectLook, num, rgb, type EffectLook } from '../engine/effects';
 
 /** the line's and the dot's width (css px), how bright and opaque, how quickly it eases in and out (s) */
 const WIDTH = 2, DOT = 7, GLOW = 1.6, ALPHA = 0.7, EASE_IN = 0.12, EASE_OUT = 0.18;
@@ -122,8 +123,83 @@ const uniforms = {
 // (the dot shares the line's uniforms but its width)
 const dotUniforms = { ...uniforms, uWidth: { value: DOT } };
 const shaderOpts = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide } as const;
-const lineMat = portShader(new THREE.ShaderMaterial({ vertexShader: lineVert, fragmentShader: lineFrag, uniforms, ...shaderOpts }), linePort);
-const dotMat = portShader(new THREE.ShaderMaterial({ vertexShader: dotVert, fragmentShader: dotFrag, uniforms: dotUniforms, ...shaderOpts }), dotPort);
+
+// The line and the dot for the Rust engine (src/engine/effects.ts), the ports' WGSL above. The engine hands a vertex
+// its position, normal, uv and colour alone, so there the line's next point rides as its normal and its side and how
+// far along as its uv (`lineGeometry`), and the dot's corner as its uv (`dotGeometry`). Both are widened on the
+// screen by the vertex's `screen`, in the scene's pixels (uRes).
+const LINE_HOOKS = /* wgsl */ `
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+  let res = m.c[0].xy;
+  let width = m.c[0].z;
+  let near0 = m.c[1].x;
+  let near1 = m.c[1].y;
+  let pos = (*v).position;
+  let ahead = (*v).normal;
+  let side = (*v).uv.x;
+  let along = (*v).uv.y;
+  let pw = (*v).origin + (*v).axis_x * pos.x + (*v).axis_y * pos.y + (*v).axis_z * pos.z;
+  let nw = (*v).origin + (*v).axis_x * ahead.x + (*v).axis_y * ahead.y + (*v).axis_z * ahead.z;
+  let a = g.view_proj * vec4f(pw, 1.0);
+  let b = g.view_proj * vec4f(nw, 1.0);
+  let d = (b.xy / max(b.w, 1e-4) - a.xy / max(a.w, 1e-4)) * res;
+  let l = length(d);
+  var n = vec2f(0.0, 1.0);
+  if (l > 1e-5) { n = vec2f(-d.y, d.x) / l; }
+  (*v).screen = n * side * width / res;
+  // (a.w is how far before the camera the point is: the port's -mv.z)
+  let fade = smoothstep(near0, near1, a.w) * (1.0 - smoothstep(0.8, 1.0, along));
+  (*v).c0 = vec4f(fade, side, 0.0, 0.0);
+  (*v).normal = vec3f(0.0, 1.0, 0.0);
+}
+
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let alpha = m.c[0].w;
+  let color = m.c[2].rgb;
+  let fade = in.c0.x;
+  let side = in.c0.y;
+  let k = 1.0 - side * side;
+  (*s).base = vec4f(color * (0.35 + 0.65 * k), alpha * clamp(fade, 0.0, 1.0) * (0.4 + 0.6 * k));
+  (*s).fog = 0.0;
+  return true;
+}
+`;
+const DOT_HOOKS = /* wgsl */ `
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+  let res = m.c[0].xy;
+  let width = m.c[0].z;
+  let corner = (*v).uv;
+  (*v).screen = corner * width / res;
+  (*v).c0 = vec4f(corner, 0.0, 0.0);
+}
+
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let alpha = m.c[0].w;
+  let color = m.c[2].rgb;
+  let r = length(in.c0.xy);
+  let core = 1.0 - smoothstep(0.25, 0.45, r);
+  let halo = 1.0 - smoothstep(0.3, 1.0, r);
+  (*s).base = vec4f(color * (0.5 + 1.2 * core), alpha * max(core, halo * 0.45));
+  (*s).fog = 0.0;
+  return true;
+}
+`;
+/** the line's and the dot's numbers alike: the scene's size, the width, the alpha; where the line fades in; the colour */
+const laserLook: EffectLook = {
+  numbers(u, out) {
+    const res = u.uRes.value as THREE.Vector2;
+    out[0] = res.x; out[1] = res.y; out[2] = num(u, 'uWidth'); out[3] = num(u, 'uAlpha');
+    out[4] = num(u, 'uNear0'); out[5] = num(u, 'uNear1');
+    rgb(u, 'uColor', out, 8);
+  },
+};
+
+const lineMat = effectLook(
+  portShader(new THREE.ShaderMaterial({ vertexShader: lineVert, fragmentShader: lineFrag, uniforms, ...shaderOpts }), linePort),
+  'aim-laser-line', LINE_HOOKS, laserLook);
+const dotMat = effectLook(
+  portShader(new THREE.ShaderMaterial({ vertexShader: dotVert, fragmentShader: dotFrag, uniforms: dotUniforms, ...shaderOpts }), dotPort),
+  'aim-laser-dot', DOT_HOOKS, laserLook);
 
 function lineGeometry(): THREE.BufferGeometry {
   const n = LASER_LINES * LASER_POINTS * 2, g = new THREE.BufferGeometry();
@@ -132,6 +208,12 @@ function lineGeometry(): THREE.BufferGeometry {
   }
   const side = g.getAttribute('side') as THREE.BufferAttribute;
   for (let i = 0; i < n; i++) side.setX(i, i % 2 ? 1 : -1);
+  // (the Rust engine's vertex has no attributes of the line's own: its next point as its normal, its side and how far
+  // along as its uv, `write`)
+  g.setAttribute('normal', g.getAttribute('next'));
+  const uv = new THREE.BufferAttribute(new Float32Array(n * 2), 2).setUsage(THREE.DynamicDrawUsage);
+  for (let i = 0; i < n; i++) uv.setX(i, side.getX(i));
+  g.setAttribute('uv', uv);
   const idx: number[] = [];
   for (let l = 0; l < LASER_LINES; l++) for (let i = 0; i < LASER_POINTS - 1; i++) {
     const v = (l * LASER_POINTS + i) * 2;
@@ -150,6 +232,8 @@ function dotGeometry(): THREE.BufferGeometry {
     idx.push(i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3);
   }
   g.setAttribute('corner', new THREE.BufferAttribute(corner, 2));
+  // (the Rust engine's vertex has no attribute of the dot's own: its corner as its uv)
+  g.setAttribute('uv', g.getAttribute('corner'));
   g.setIndex(idx);
   return g;
 }
@@ -209,6 +293,7 @@ function start(): void {
 function write(): void {
   const g = line!.geometry, pos = g.getAttribute('position') as THREE.BufferAttribute, nxt = g.getAttribute('next') as THREE.BufferAttribute;
   const along = g.getAttribute('along') as THREE.BufferAttribute;
+  const uv = g.getAttribute('uv') as THREE.BufferAttribute | undefined;
   const dp = dots!.geometry.getAttribute('position') as THREE.BufferAttribute;
   lines = asked.length;
   let tris = 0, nd = 0;
@@ -224,7 +309,7 @@ function write(): void {
       // (the last point looks on along the line from the one before it)
       const bx = b ? b.x : 2 * a.x - pts[i - 1].x, by = b ? b.y : 2 * a.y - pts[i - 1].y, bz = b ? b.z : 2 * a.z - pts[i - 1].z;
       const u = p.end ? 0 : s / Math.max(total, 1e-3);
-      for (let k = 0; k < 2; k++) { pos.setXYZ(v + k, a.x, a.y, a.z); nxt.setXYZ(v + k, bx, by, bz); along.setX(v + k, u); }
+      for (let k = 0; k < 2; k++) { pos.setXYZ(v + k, a.x, a.y, a.z); nxt.setXYZ(v + k, bx, by, bz); along.setX(v + k, u); uv?.setY(v + k, u); }
     }
     // (the unused rest of this line's points sit on its last one: no triangles show there)
     const last = pts[n - 1];
@@ -237,6 +322,7 @@ function write(): void {
   });
   g.setDrawRange(0, lines ? tris : 0);
   for (const a of [pos, nxt, along]) a.needsUpdate = true;
+  if (uv) uv.needsUpdate = true;
   dots!.geometry.setDrawRange(0, nd * 6);
   dp.needsUpdate = true;
 }

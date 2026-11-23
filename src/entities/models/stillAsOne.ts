@@ -12,13 +12,12 @@
 // (his far detail, his gear shown or hidden). WebGPU draws a hero as one its own way
 // (`drawAsOne.ts`). `?stillAsOne=0` draws each part on its own.
 import * as THREE from 'three';
-import { WEBGPU } from '../../core/webgpu';
 import { perfClock } from '../../core/perfClock';
 
-/** Whether a still hero is drawn as a few meshes (WebGL alone; `?stillAsOne=0`: each part on its own), read at each
- *  step. */
+/** Whether a still hero is drawn as a few meshes (it was WebGL's alone: off until something switches it on), read at
+ *  each step. */
 export const stillAsOne = {
-  on: !WEBGPU && (typeof location === 'undefined' || !/[?&]stillAsOne=0/.test(location.search)),
+  on: false,
   /** the lab's canary: normals laid as they were made, not turned as their parts are drawn (`lab village --only
    *  heroesStillAsOne`) */
   unturned: false,

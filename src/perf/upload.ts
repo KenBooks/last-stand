@@ -6,13 +6,11 @@ import { framesUncapped } from '../core/frameLoop';
 import { keyboardLockState } from '../ui/autoFullScreen';
 import * as THREE from 'three';
 import { G } from '../state';
-import { WEBGPU } from '../core/webgpu';
-import { RUNNING } from '../core/rendererChoice';
 import { qualityBudget, qualityLevel, qualitySetting } from '../core/quality';
 import { QUALITY } from '../data/quality';
 import { sceneRatio, sceneSamples, sceneSize, viewMode } from '../core/renderer';
 import { hdrActive } from '../core/hdr';
-import { auditPrograms, lateCompiles, shaderErrors } from '../core/shaders';
+import { lateCompiles, shaderErrors } from '../core/shaders';
 import { isCoop } from '../net/role';
 import { serverHttp } from '../net/transport';
 import { bootStallSummary } from './bootStalls';
@@ -68,18 +66,15 @@ export function settings(): Record<string, number | string | boolean> {
     pixelRatio: G.renderer.getPixelRatio(),
     view: viewMode(),
     vsync: framesUncapped() ? 'off' : 'on',
-    renderer: WEBGPU ? ['webgpu', RUNNING.meshlets && 'meshlets', RUNNING.lightsEach && 'lights each'].filter(Boolean).join(' ') : 'webgl',
+    renderer: 'webgpu',
     hdr: hdrActive(),
   };
 }
 
-/** the most a report's shader audit holds the page (ms): the rest is asked by the next */
-const AUDIT_MS = 40;
 /** the most programs that failed named in a report */
 const ERRORS_SENT = 6;
 
 function game(): Record<string, number | string | boolean> {
-  auditPrograms(G.renderer, AUDIT_MS);
   return {
     mode: G.mode,
     biome: G.arena.biome,
@@ -95,6 +90,16 @@ function game(): Record<string, number | string | boolean> {
 }
 
 /** The slow stretch's trace, packed. */
+/** The boot's steps with what the engine waited on among them, in time's order; after them the engine's device. */
+function bootStepsWithWaits(steps: [number, string][]): string {
+  // (read off the page, not imported: the engine's modules and the report's import each other round a cycle)
+  type Said = { pipelines: { notes: [number, string][] }; device: () => string };
+  const rust = (window as unknown as { __rust?: Said }).__rust;
+  const all = [...steps, ...(rust?.pipelines.notes ?? [])].sort((a, b) => a[0] - b[0]);
+  const device = rust?.device() ?? '';
+  return all.map(([t, label]) => `${t} ${label}`).join(' | ') + (device ? ` | ${device.split(' | features')[0]}` : '');
+}
+
 export function traceOf(slow: Slow): Uint8Array {
   const { snapshot } = slow;
   const columns: ColumnInfo[] = Object.keys(snapshot.columns).map((name) => ({ name, kind: snapshot.kinds[name] }));
@@ -107,7 +112,10 @@ export function traceOf(slow: Slow): Uint8Array {
   // (a slow boot's, the play after it judged beside it: recorder.ts `bootTail`)
   if (slow.manual) reason.why = 'manual';
   else if (slow.scene === 'boot') reason.why = 'boot';
-  else if (slow.profile) {
+  else if (slow.fault) {
+    reason.why = 'fault';
+    reason.fault = slow.fault.join('\n');
+  } else if (slow.profile) {
     reason.why = 'profile';
     reason.profile = slow.profile.join('\n');
   } else if (!slow.verdict) reason.why = 'readying';
@@ -122,7 +130,7 @@ export function traceOf(slow: Slow): Uint8Array {
     reason,
     device: device(),
     settings: settings(),
-    game: { ...game(), scene: snapshot.scene ?? '', bootSteps: b.steps.map(([t, label]) => `${t} ${label}`).join(' | '),
+    game: { ...game(), scene: snapshot.scene ?? '', bootSteps: bootStepsWithWaits(b.steps),
       bootStalls: bootStallSummary(b.stalls ?? []) },
     columns,
     longFrames: snapshot.longFrames,

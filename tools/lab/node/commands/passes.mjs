@@ -9,9 +9,8 @@ export default {
   summary: 'each of the frame\'s renders on WebGPU timed by three\'s timestamps (the scene, its shadows, each post '
     + 'pass, by name and size; `--features` the environment, shadows, point lights and fog taken off the scene\'s '
     + 'pass in turns; `--paused` the game paused as its menu pauses it; `--village` stood in the lobby\'s '
-    + 'village; the frame pictured, WebGL\'s too, for '
-    + '`--ab`)',
-  help: 'what each of the frame\'s renders takes of the GPU on WebGPU (--renderer webgpu), by three\'s timestamps: '
+    + 'village; the frame pictured for `--ab`)',
+  help: 'what each of the frame\'s renders takes of the GPU on WebGPU, by three\'s timestamps: '
     + 'the scene\'s pass, the shadow maps, each pass of the post chain and the canvas\'s, each named by what it '
     + 'draws and into what size',
   options: {

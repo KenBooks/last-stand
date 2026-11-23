@@ -1,0 +1,340 @@
+// `lab rust`: the Rust engine's frame (`src/engine`, Bulwark) where the hero stands, pictured and timed: the walk of
+// the scene and the engine's own work by the browser's clock, the GPU's time by the engine's timestamps, its draw
+// calls, objects and triangles, what it couldn't draw by its kind, and its boot.
+import type { Fixture, Lab, Report } from './lab';
+import { BIOMES, type BiomeId } from '../../../src/data/biomes';
+import { overCanvasLeftOut, type ViewMode } from '../../../src/core/renderer';
+import { outlinedLook } from '../../../src/ui/overlay/outline';
+import { drawnLabels } from '../../../src/ui/overlay/layer';
+import { lastFrameParts } from '../../../src/perf/webgpuPasses';
+import { G } from '../../../src/state';
+import { perfClock } from '../../../src/core/perfClock';
+import { RUST } from '../../../src/engine';
+import type { FrameStats } from '../../../src/engine/bridge';
+import { census, heaviest } from './rustCensus';
+import { standAt } from './draws';
+import { skyLightLines, turnToSkyLight } from './skyLight';
+import { foesAt } from './death';
+import { crowdPlaces } from './crowd';
+import * as THREE from 'three';
+import { setQuality } from '../../../src/core/quality';
+import type { QualityLevel } from '../../../src/data/quality';
+import { bindKnown, pressing, skillNamed } from './cast';
+import type { Frame } from './lab';
+import { enterRoom, leaveRoom, roomHere } from '../../../src/game/rooms';
+import type { RoomId } from '../../../src/data/houses';
+
+export interface RustCommand {
+  biome: BiomeId;
+  view: ViewMode;
+  at?: [number, number];
+  frames: number;
+  /** foes stood before the hero (not in the village) */
+  foes: number;
+  village: boolean;
+  /** a house's room he's stood in (the village's) */
+  room?: string;
+  /** a skill of his held through the frames timed and pictured */
+  cast?: string;
+  /** the quality levels switched to once he stands there, each in turn (Auto's steps, in play) */
+  levels: QualityLevel[];
+  /** the biome's boss stood before him */
+  boss?: boolean;
+  /** the foes killed, and the frames stepped after it (0: left standing) */
+  dying?: number;
+  hour?: number;
+  zoom?: number;
+  /** the camera turned to the sky's key light, the picture what's round it */
+  skylight: boolean;
+  /** the scene's materials listed by their kind and what they ask of a renderer */
+  census: boolean;
+  /** the game's tunable values set before the stand, by their paths (`rust.shadows`: src/engine/bridge.ts `TUNE`) */
+  tune: Record<string, number[]>;
+  /** the frame written down as a tape for the engine's own harness, its maps no larger than this a side (0: none) */
+  capture: number;
+  /** the armour he wears, and the rarity of every item on him (Rare and up glow), as `Fixture` has them */
+  wear?: Fixture['wear'];
+  rarity?: Fixture['rarity'];
+}
+
+
+/** what's read of each frame, and averaged */
+const TIMED: (keyof FrameStats)[] = [
+  'placeMs', 'walkMs', 'engineMs', 'gpuMs', 'records', 'draws', 'shadowDraws', 'shadowTriangles', 'shadowsKept', 'lowDraws', 'lightsLeftOut', 'objects', 'culled', 'triangles',
+  'fieldKept', 'fieldCounted',
+];
+
+const median = (values: number[]): number => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
+
+/** how far before him the boss stands (m), and the most frames it may take to rise */
+const BOSS_AHEAD = 7;
+const BOSS_RISE_FRAMES = 300;
+/** the frames a level switched to is given to settle in */
+const LEVEL_FRAMES = 30;
+
+/** What three draws over the engine's frame (the world's labels, the outline: core/renderer.ts `overFrame`): whether
+ *  its canvas is in the page's frame, what's outlined, and its passes' time on the GPU by three's own timestamps. */
+function overLine(): string {
+  if (overCanvasLeftOut()) return '  three\'s canvas over the engine\'s: left out, nothing to draw on it';
+  const outlined = outlinedLook();
+  const what = outlined ? `an outline round ${outlined.root.name || outlined.root.type}` : 'no outline';
+  const ms = lastFrameParts(G.renderer)?.['over frame'];
+  return `  three's canvas over the engine's: ${drawnLabels().length} labels, ${what}; its passes `
+    + `${ms === undefined ? 'not timed' : `${ms.toFixed(2)} ms on the GPU`}`;
+}
+
+/** the GPU's time for a frame before the command's levels were stepped through (ms; none with no level asked): the
+ *  frame after a trip through other levels is held to it */
+let levelsBefore: number | undefined;
+
+/** The GPU's median time for a frame over `frames` frames drawn (ms), the browser let go after each: its
+ *  timestamps come back on its own time. */
+async function gpuOver(lab: Lab, frames: number): Promise<number> {
+  const bridge = RUST.bridge!;
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  const times: number[] = [];
+  for (let frame = 0; frame < frames; frame++) {
+    await lab.step(1);
+    await window.__labClock.realFrame();
+    times.push(bridge.stats.gpuMs);
+  }
+  lab.drawing = drawing;
+  return median(times);
+}
+
+/** The hero stood where the command asks, its foes before him. */
+async function stand(lab: Lab, command: RustCommand): Promise<string> {
+  for (const [path, values] of Object.entries(command.tune)) window.__tune?.(path, values);
+  await standAt(lab, command);
+  lab.wield({ wear: command.wear, rarity: command.rarity });
+  levelsBefore = command.levels.length && RUST.bridge ? await gpuOver(lab, LEVEL_FRAMES) : undefined;
+  for (const level of command.levels) {
+    setQuality(level);
+    await lab.step(LEVEL_FRAMES);
+  }
+  if (command.foes > 0 && !command.village) {
+    const spots: THREE.Vector3[] = crowdPlaces(command.foes, G.player.pos, G.player.facing);
+    const foes = await foesAt(lab, spots, spots.map(() => 1));
+    if (command.dying) {
+      for (const foe of foes) foe.takeDamage(1e6, { by: G.player });
+      await lab.step(command.dying);
+    }
+  }
+  if (command.boss && !command.village) {
+    const ahead = new THREE.Vector3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing)).multiplyScalar(BOSS_AHEAD);
+    const boss = lab.spawnFoe(BIOMES[G.arena.biome].boss, G.player.pos.clone().add(ahead).setY(0));
+    await lab.until(() => boss.spawning <= 0, BOSS_RISE_FRAMES, 'the boss never rose');
+    boss.dazed = 999;
+  }
+  if (command.room) return `the ${command.room}'s room (${await inAndOut(lab, command.room as RoomId)})`;
+  return command.village ? 'the village' : `${G.arena.biome}${command.foes ? `, ${command.foes} foes` : ''}`;
+}
+
+/** how far ahead of the hero a held skill is aimed (m), and how long it's held before the frames are timed (frames) */
+const CAST_AHEAD = 8;
+const CAST_LEAD = 45;
+
+/** The frame's input holding the command's skill over a point ahead of the hero, his Energy and its cooldown kept
+ *  full; none with no skill asked. */
+function castHeld(command: RustCommand): ((frame: number) => Frame) | undefined {
+  if (!command.cast) return undefined;
+  const hero = G.player;
+  bindKnown(command.cast);
+  const { key } = skillNamed(command.cast);
+  const ahead = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing)).multiplyScalar(CAST_AHEAD);
+  const aim = hero.pos.clone().add(ahead);
+  return () => {
+    hero.cooldowns.clear();
+    hero.energy = hero.stats.maxEnergy;
+    return pressing(key, aim, true);
+  };
+}
+
+/** The longest of the next `frames` frames, by the browser's clock (ms). */
+async function longestFrame(lab: Lab, frames: number): Promise<number> {
+  const clock = (window as unknown as { __labClock: { realNow: () => number } }).__labClock;
+  let longest = 0;
+  for (let frame = 0; frame < frames; frame++) {
+    const began = clock.realNow();
+    await lab.step(1);
+    longest = Math.max(longest, clock.realNow() - began);
+  }
+  return longest;
+}
+
+/** Frames stepped until the hero is in `room` (the game's own wait for its rooms, at most a minute): how long it
+ *  took by the browser's clock (ms; 0 if he was in already). */
+async function untilInside(lab: Lab, room: RoomId): Promise<number> {
+  const clock = (window as unknown as { __labClock: { realNow: () => number; realFrame: () => Promise<void> } }).__labClock;
+  const began = clock.realNow();
+  if (roomHere() === room) return 0;
+  while (roomHere() !== room && clock.realNow() - began < 60000) {
+    await lab.step(1);
+    await clock.realFrame();
+  }
+  return clock.realNow() - began;
+}
+
+/** The hero gone into `room`, out again and in once more, drawn each time: the longest frame of each change of
+ *  place (a first visit hands the room over; a way out or a second visit should hand over nothing). He's left
+ *  inside. From play: each took 20 s. */
+async function inAndOut(lab: Lab, room: RoomId): Promise<string> {
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  const times: string[] = [];
+  try {
+    enterRoom(room);
+    times.push(`in ${(await longestFrame(lab, 5)).toFixed(0)} ms`);
+    // (on a page booted --cold the rooms aren't ready: the game shows its bar and goes in when they are)
+    const waited = await untilInside(lab, room);
+    if (waited > 0) times.push(`after ${(waited / 1000).toFixed(1)} s under the game's Opening bar`);
+    leaveRoom();
+    times.push(`out ${(await longestFrame(lab, 5)).toFixed(0)} ms`);
+    enterRoom(room);
+    times.push(`in again ${(await longestFrame(lab, 5)).toFixed(0)} ms`);
+  } finally {
+    lab.drawing = drawing;
+  }
+  return `the longest frame going ${times.join(', ')}`;
+}
+
+/** How many of `kept` (each frame's count of frames in a row that kept the sun's shadow map) drew it. */
+function shadowFrames(kept: number[]): string {
+  return `${kept.filter((frames) => frames === 0).length} of ${kept.length}`;
+}
+
+export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report> {
+  const bridge = RUST.bridge;
+  if (!bridge) {
+    const why = RUST.failed || 'not booted';
+    return { text: `the Rust engine isn't running: ${why}`, problems: ['the Rust engine is not running'], moments: [] };
+  }
+  const where = await stand(lab, command);
+  const sky = command.skylight ? await turnToSkyLight(lab) : undefined;
+  const hold = castHeld(command);
+  /** what a frame timed left undrawn, by its kind: the most of any frame */
+  const undrawn = new Map<string, number>();
+  const clock = (window as unknown as { __labClock: { realNow: () => number } }).__labClock;
+  const pageClock = perfClock.now;
+  perfClock.now = clock.realNow;
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  const read = new Map<keyof FrameStats, number[]>(TIMED.map((name) => [name, []]));
+  const renders: number[] = [];
+  // (a whole frame of the game by the browser's clock: its update and its render)
+  const frames: number[] = [];
+  const handedOver = { meshes: 0, textures: 0, materials: 0 };
+  // (what the engine or the GPU says while it draws: a refused pipeline or pass draws nothing, and says so here)
+  const said: string[] = [];
+  let madeBefore = 0;
+  const consoleError = console.error;
+  console.error = (...parts: unknown[]) => {
+    said.push(parts.map(String).join(' '));
+    consoleError(...parts);
+  };
+  try {
+    // (what's first met here is handed over before the frames timed)
+    await lab.step(hold ? CAST_LEAD : 10, hold);
+    await pipelinesCompiled(lab);
+    madeBefore = RUST.pipelines.made;
+    for (let frame = 0; frame < command.frames; frame++) {
+      const began = clock.realNow();
+      await lab.step(1, hold);
+      for (const [kind, count] of bridge.skipped) undrawn.set(kind, Math.max(undrawn.get(kind) ?? 0, count));
+      frames.push(clock.realNow() - began);
+      // (the browser let go: the engine's timestamps come back on its own time, and a step never yields)
+      await window.__labClock.realFrame();
+      for (const name of TIMED) read.get(name)!.push(bridge.stats[name]);
+      renders.push(RUST.renderMs);
+      handedOver.meshes += bridge.stats.newMeshes;
+      handedOver.textures += bridge.stats.newTextures;
+      handedOver.materials += bridge.stats.newMaterials;
+    }
+  } finally {
+    perfClock.now = pageClock;
+    lab.drawing = drawing;
+    console.error = consoleError;
+  }
+  await pipelinesCompiled(lab);
+  const pictured = await lab.screen('the Rust engine\'s frame', [], sky?.clip);
+  const of = (name: keyof FrameStats): number => median(read.get(name)!);
+  const skipped = [...undrawn].sort((a, b) => b[1] - a[1]).map(([kind, count]) => `${kind} ${count}`);
+  const canvas = document.getElementById('rust-canvas') as HTMLCanvasElement;
+  const { boot, bridge: { held } } = { boot: RUST.boot, bridge };
+  const leftOut = Math.max(...read.get('lightsLeftOut')!);
+  const lines = [
+    `${where} ${command.view}, ${canvas.width}x${canvas.height} drawn, medians of ${command.frames} frames`,
+    `  the render: ${median(renders).toFixed(2)} ms on the CPU (its matrices ${of('placeMs').toFixed(2)}, the scene walked ${of('walkMs').toFixed(2)}, `
+      + `the engine ${of('engineMs').toFixed(2)}); the GPU ${of('gpuMs').toFixed(2)} ms, at the least ${Math.min(...read.get('gpuMs')!).toFixed(2)} (shadow and scene passes)`,
+    `  a whole frame: ${median(frames).toFixed(2)} ms on the CPU, the game's update and the lab's step `
+      + `${(median(frames) - median(renders)).toFixed(2)} of it`,
+    `  ${of('records')} records from the page, ${of('culled')} things out of view, ${of('objects')} objects drawn `
+      + `in ${of('draws')} draw calls (+${of('shadowDraws')} for the sun's shadow), ${of('triangles')} triangles (+${of('shadowTriangles')})`,
+    `  ${of('lowDraws')} draws at a quarter of the scene's pixels, laid over it`,
+    `  fields placed ahead of their draws: ${of('fieldKept')} instances kept of ${of('fieldCounted')} counted `
+      + '(none: placed at every vertex)',
+    `  the sun's shadow drawn in ${shadowFrames(read.get('shadowsKept')!)} frames timed, kept as it was in the rest`,
+    `  point lights left out of a ground cell they reach: ${leftOut} (a cell holds 16)`,
+    `  held: ${held.meshes} meshes, ${held.textures} maps, ${held.materials} materials, ${held.sets} instance sets; `
+      + `handed over while timed: ${handedOver.meshes} meshes, ${handedOver.textures} maps, ${handedOver.materials} materials`,
+    `  not drawn (a frame): ${skipped.join(', ') || 'nothing'}`,
+    `  pipelines: ${RUST.pipelines.made} made, ${RUST.pipelines.made - madeBefore} of them while timed `
+      + `(each compiled aside, its draws left out till it's ready)`,
+    `  the engine's boot: the module ${boot.wasmMs.toFixed(0)} ms, the device and pipelines ${boot.deviceMs.toFixed(0)} ms, `
+      + `its first frame ${boot.firstFrameMs.toFixed(0)} ms`,
+  ];
+  const told = bridge.levels.now();
+  lines.push(`  the level as the engine was told it: ${told.samples} samples a pixel, the sun's map ${told.shadowSize}, `
+    + `the bloom at ${told.bloomShare} of the scene's pixels`);
+  lines.push(overLine());
+  if (levelsBefore !== undefined) {
+    lines.push(`  before its levels (${command.levels.join(', ')}): the GPU ${levelsBefore.toFixed(2)} ms a frame`);
+  }
+  lines.push(`  lit by: ${bridge.lights()}`);
+  const lamps = bridge.lampShadowsNow();
+  const own = `${lamps.own} of the place's own lights'`;
+  lines.push(`  the lamps' shadows: ${lamps.drawn} lamps' drawn and ${own}, ${lamps.waiting} waiting`);
+  const cache = bridge.lightCacheNow();
+  lines.push(`  the light cache: ${cache.lamps} lamps and ${cache.own} of the scene's own lights in ${cache.cells} cells of ${cache.cell.toFixed(2)} m, `
+    + `${(cache.cells * 16 / 1e6).toFixed(1)} MB on the GPU; baked ${cache.bakes} times, the last ${cache.ms.toFixed(0)} ms on the page; read ${cache.open.toFixed(2)} bright in the open, `
+    + `${cache.sheltered.toFixed(2)} under the shelter`);
+  if (command.census) lines.push(...census(G.scene, G.camera), ...heaviest(G.scene, G.camera));
+  if (command.census) lines.push('  the frame\'s point lights:', ...bridge.pointLines().map((line) => `    ${line}`));
+  lines.push(`  the hero at ${G.player.pos.x.toFixed(1)}, ${G.player.pos.z.toFixed(1)}; the camera's layers ${G.camera.layers.mask}`);
+  const problems: string[] = [];
+  const turned = sky === undefined ? undefined : skyLightLines(sky);
+  if (turned) lines.push(turned.line);
+  if (turned) problems.push(...turned.problems);
+  if (command.capture) {
+    // (the frame written down for the engine's own harness: the node side fetches `__rustTape` and saves it)
+    RUST.captureNext = command.capture;
+    lab.drawing = true;
+    await lab.step(1);
+    lab.drawing = drawing;
+    (window as unknown as { __rustTape: Blob | null }).__rustTape = RUST.tape;
+    RUST.tape = null;
+    if (!(window as unknown as { __rustTape: Blob | null }).__rustTape) problems.push('no tape was written');
+  }
+  if (!(of('draws') > 0)) problems.push('the engine drew nothing');
+  // (a cell lit by fewer lights than the one beside it shows as a square on the ground that follows the hero)
+  if (leftOut > 0) problems.push(`${leftOut} times a point light was left out of a ground cell it reaches`);
+  // (a skill's own look left out: from play, "no mage visual effects on spells when casting them")
+  if (command.cast && skipped.length) problems.push(`${command.cast} cast: not drawn by the engine: ${skipped.join(', ')}`);
+  for (const line of new Set(said)) problems.push(`said while drawing: ${line.slice(0, 1500)}`);
+  return { text: lines.join('\n'), problems, moments: [pictured] };
+}
+
+/** the most real frames the lab waits for the engine's pipelines to compile aside */
+const COMPILE_FRAMES_MOST = 1200;
+
+/**
+ * Waits, on the browser's own time, until none of the engine's pipelines is compiling aside
+ * (`src/engine/pipelinesAside.ts`), then draws a frame with them: a picture taken before would lack what they draw.
+ */
+export async function pipelinesCompiled(lab: Lab): Promise<void> {
+  for (let frame = 0; frame < COMPILE_FRAMES_MOST && RUST.pipelines.compiling > 0; frame++) {
+    await window.__labClock.realFrame();
+  }
+  await lab.step(1);
+}

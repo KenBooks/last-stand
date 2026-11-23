@@ -5,7 +5,6 @@ import { G } from '../state';
 import { nearGlow } from '../core/materials';
 import { pointScale } from '../core/renderer';
 import { dazedField } from './dazed';
-import { WEBGPU } from '../core/webgpu';
 import { particleQuads, type ParticleQuads } from './particleNodes';
 
 const VERT = /* glsl */`
@@ -53,12 +52,13 @@ class Pool {
   readonly vel: Float32Array; readonly life: Float32Array; readonly maxLife: Float32Array;
   readonly s0: Float32Array; readonly s1: Float32Array; readonly c0: Float32Array; readonly c1: Float32Array;
   readonly a0: Float32Array; readonly grav: Float32Array; readonly drag: Float32Array;
-  readonly aPos: THREE.BufferAttribute; readonly aCol: THREE.BufferAttribute; readonly aSize: THREE.BufferAttribute;
+  readonly aPos: THREE.InstancedBufferAttribute; readonly aCol: THREE.InstancedBufferAttribute;
+  readonly aSize: THREE.InstancedBufferAttribute;
   private readonly attrs: THREE.BufferAttribute[];
   readonly mat: THREE.ShaderMaterial;
-  readonly points: THREE.Points | THREE.Mesh;
-  /** on WebGPU, the pool as instanced quads (particleNodes.ts) */
-  private readonly quads: ParticleQuads | null = null;
+  readonly points: THREE.Mesh;
+  /** the pool as instanced quads (particleNodes.ts) */
+  private readonly quads: ParticleQuads;
 
   constructor(max: number, blending: THREE.Blending, soft: number) {
     this.max = max;
@@ -77,17 +77,11 @@ class Pool {
     this.grav = new Float32Array(max);
     this.drag = new Float32Array(max);
 
-    const geo = new THREE.BufferGeometry();
-    // (an instance's on WebGPU, a quad each; a vertex's for WebGL's points)
-    const Attribute = WEBGPU ? THREE.InstancedBufferAttribute : THREE.BufferAttribute;
-    this.aPos = new Attribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage);
-    this.aCol = new Attribute(this.col, 4).setUsage(THREE.DynamicDrawUsage);
-    this.aSize = new Attribute(this.size, 1).setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('position', this.aPos);
-    geo.setAttribute('aColor', this.aCol);
-    geo.setAttribute('aSize', this.aSize);
+    // (an instance's, a quad each)
+    this.aPos = new THREE.InstancedBufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage);
+    this.aCol = new THREE.InstancedBufferAttribute(this.col, 4).setUsage(THREE.DynamicDrawUsage);
+    this.aSize = new THREE.InstancedBufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage);
     this.attrs = [this.aPos, this.aCol, this.aSize];
-    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e4);
     this.mat = new THREE.ShaderMaterial({
       vertexShader: VERT, fragmentShader: FRAG,
       uniforms: { uScale: { value: 400 }, uSoft: { value: soft } },
@@ -95,12 +89,9 @@ class Pool {
     });
     // glowing (additive) particles dim with distance like every effect glow
     if (blending === THREE.AdditiveBlending) nearGlow(this.mat);
-    if (WEBGPU) {
-      const attrs = [this.aPos, this.aCol, this.aSize] as THREE.InstancedBufferAttribute[];
-      this.quads = particleQuads(attrs[0], attrs[1], attrs[2], blending, soft);
-    }
-    this.points = this.quads?.mesh ?? new THREE.Points(geo, this.mat);
-    // (the profiler's particles: WebGPU's are quads, a mesh, src/perf/sceneParts.ts)
+    this.quads = particleQuads(this.aPos, this.aCol, this.aSize, blending, soft);
+    this.points = this.quads.mesh;
+    // (the profiler's particles: quads, a mesh, src/perf/sceneParts.ts)
     this.points.userData.particles = true;
     this.points.frustumCulled = false;
     this.points.renderOrder = blending === THREE.AdditiveBlending ? 20 : 10;
@@ -142,14 +133,13 @@ class Pool {
       this.col[i4 + 3] = this.a0[i] * Math.min(1, t * 12) * (1 - t * t);
       i++;
     }
-    if (this.quads) this.quads.mesh.geometry.instanceCount = this.count;
-    else this.points.geometry.setDrawRange(0, this.count);
+    this.quads.mesh.geometry.instanceCount = this.count;
     // (not drawn while empty, a draw call of nothing; shown through the boot's warm-up, which runs no update)
     this.points.visible = this.count > 0;
     // upload only the live particles, not the whole pool (a zero-length range would upload all of it)
     if (this.count) for (const a of this.attrs) { a.clearUpdateRanges(); a.addUpdateRange(0, this.count * a.itemSize); a.needsUpdate = true; }
     this.mat.uniforms.uScale.value = pointScale();
-    if (this.quads) this.quads.scale.value = pointScale();
+    this.quads.scale.value = pointScale();
   }
 
   kill(i: number): void {

@@ -100,6 +100,8 @@ export function flatFace<M extends THREE.Material>(m: M): M {
 /** `m` lit no brighter than `FACE_MOST`: what it gives back scaled down to that luminance where it would be more (its
  *  hue kept), on WebGL by a line after its output (its program's key told), on WebGPU by its output node. */
 export function underBloom<M extends THREE.Material>(m: M): M {
+  // (for a renderer with no hook of three's: the Rust engine holds its light to it, engine/materials.ts)
+  m.userData.litMost = FACE_MOST;
   const prev = m.onBeforeCompile, key = m.customProgramCacheKey();
   const most = FACE_MOST.toFixed(3);
   m.onBeforeCompile = (shader, renderer) => {

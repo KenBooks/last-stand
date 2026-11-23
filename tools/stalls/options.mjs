@@ -11,7 +11,7 @@ import { MOST_GPU_WAIT_MS } from './gpuWaits.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
 const SWITCHES = new Set([
-  'headed', 'touch', 'perf', 'js', 'angle', 'dawn', 'builds', 'passes', 'paints', 'links', 'film', 'film-logo', 'film-boot', 'cold-return',
+  'headed', 'touch', 'perf', 'js', 'angle', 'dawn', 'builds', 'passes', 'paints', 'links', 'film', 'film-logo', 'film-boot', 'cold-return', 'restart', 'covered',
   'warm-behind', 'change-hero', 'return', 'stale-wind',
   'help',
 ]);
@@ -82,6 +82,10 @@ const HELP = {
     + 'canary of its frames a second (0 by default)'],
   'cold-return': ['', 'boot: the first visit leaves without pressing Start, so the return finds its maps kept and the '
     + 'fight\'s programs not in the GPU\'s cache (a visit that never fought, a deploy that changed a shader)'],
+  covered: ['', 'boot: the window minimised from the navigation till the lobby is revealed, as a player who looks '
+    + 'at another window while it loads: Chrome gives a hidden page no frames and slows its timers'],
+  restart: ['', 'boot: a third visit, in a Chrome closed and started again on the same profile: a return whose '
+    + 'caches come from the disk, as a player back the next day has them'],
   'warm-behind': ['', 'boot: Start never pressed, the lobby watched till the fight has warmed behind it and 5 s after, '
     + 'as a player who stays in the lobby meets it'],
   'change-hero': ['', 'boot: the return presses Change hero, not Start, and watches the other heroes warm under the '
@@ -112,7 +116,7 @@ const HELP = {
     + 'its functions named from its source maps)'],
   angle: ['', 'ANGLE\'s own work on the GPU process traced too: a shader compiled at a draw (D3DCompile), a program '
     + 'linked or read back from the cache'],
-  dawn: ['', 'Dawn\'s own work traced too (WebGPU, `?renderer=webgpu`): its shaders translated and compiled, its '
+  dawn: ['', 'Dawn\'s own work traced too (WebGPU): its shaders translated and compiled, its '
     + 'pipelines made, and what it read back from its cache'],
   builds: ['', `${BOOT}: the WebGPU node builds each step made (\`?builds\`, \`recordNodeBuilds\` in `
     + 'src/core/webgpu.ts): how many, the new shaders and their WGSL (each a compile of Chrome\'s on every visit), '
@@ -231,6 +235,8 @@ export function readOptions(argv) {
     before: beforeOf(written.before),
     read: written.read ?? null,
     coldReturn: written['cold-return'] === true,
+    restart: written.restart === true,
+    covered: written.covered === true,
     warmBehind: written['warm-behind'] === true,
     changeHero: written['change-hero'] === true,
     returning: written.return === true,

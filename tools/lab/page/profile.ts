@@ -14,7 +14,6 @@ import {
   CANARY_PART, PROFILE_TURNS, ProfileCancelled, profile, profileLines, type Profile, type ProfileOptions,
 } from '../../../src/perf/profiler';
 import { standAt } from './draws';
-import { WEBGPU } from '../../../src/core/webgpu';
 import { recorder, type Slow } from '../../../src/perf/recorder';
 import { packTrace, sendTrace } from '../../../src/perf/upload';
 import { clearSpent, SINK, stickAt } from '../../../src/fx/stuckArrows';
@@ -209,23 +208,16 @@ const NEVER = { requestAnimationFrame: () => 0, cancelAnimationFrame: () => unde
 /**
  * Whether the game's own frames draw the scene afresh on WebGPU with three's own animation loop held, which begins a
  * node frame at each of the browser's frames (a pass draws its scene once a node frame): `walk` run with it held, the
- * share of the screen's middle that changed (1 on WebGL, which has no node frames). A phone's game went on with the
+ * share of the screen's middle that changed. A phone's game went on with the
  * scene's picture stuck (from play: "everything stuck, but not frozen", the view moving once the profiler started),
  * as main's does here (9% changed); now each game frame begins a node frame of its own (`renderWebGPU`). After a
  * level's change the sun's shadow map resized left it stuck too, 0% changed (`apply` in core/quality.ts).
  */
-async function redrawnWithoutThreesLoop(lab: Lab, walk: () => Promise<unknown>, canary = false): Promise<number> {
-  if (!WEBGPU) {
-    await walk();
-    return 1;
-  }
-  const renderer = G.renderer as unknown as { _animation: ThreesLoop; _nodes: { nodeFrame: NodeFrame } };
+async function redrawnWithoutThreesLoop(lab: Lab, walk: () => Promise<unknown>): Promise<number> {
+  const renderer = G.renderer as unknown as { _animation: ThreesLoop };
   const loop = renderer._animation;
-  const nodeFrame = renderer._nodes.nodeFrame;
   const context = loop.getContext();
   loop.setContext(NEVER);
-  // (the canary: no node frame begun at all, the game's own neither, as main drew with three's loop held)
-  if (canary) nodeFrame.update = () => undefined;
   try {
     // (its frame asked before it was held comes once more, and asks the context that never answers)
     await lab.step(2);
@@ -233,25 +225,10 @@ async function redrawnWithoutThreesLoop(lab: Lab, walk: () => Promise<unknown>, 
     await walk();
     return changedShare(before, await middleShown());
   } finally {
-    delete (nodeFrame as Partial<NodeFrame>).update;
     loop.stop();
     loop.setContext(context);
     loop.start();
   }
-}
-
-/** three's node frame as the canary holds it */
-interface NodeFrame {
-  update(): void;
-}
-
-/** The redraw's canary (`--canary`): with no node frame begun, the walk must read the scene's picture stuck. */
-async function redrawCanaryProblems(lab: Lab): Promise<string[]> {
-  if (!WEBGPU) return [];
-  const redrawn = await redrawnWithoutThreesLoop(lab, () => lab.step(30, () => ({ keys: ['s'] })), true);
-  const share = Math.round(redrawn * 100);
-  if (redrawn < WALK_CHANGES) return [];
-  return [`canary: the scene's picture held with no node frame begun went unseen (${share}%)`];
 }
 
 /** `lines` sent to the traces service at `base` as the Performance tab's Send sends a profile (`sendProfile` in
@@ -264,6 +241,27 @@ async function sentProfile(lines: string[], base: string): Promise<Report> {
   const sent = await sendTrace(await packTrace(slow), base);
   if ('code' in sent) return { text: `  sent to the traces service: ${sent.code}`, problems: [] };
   return { text: '', problems: [`the profile couldn't be sent: ${sent.error}`] };
+}
+
+/** the most of the browser's frames an engine's profile may wait through with nothing drawn, and the least the
+ *  canary's must: a GPU left idle between timed frames clocks down, and a phone's same frame read 36 ms and 10 */
+const IDLE_MOST = 0.1;
+const IDLE_CANARY_LEAST = 0.3;
+
+/** The problems of a profile's idle frames on the Rust engine: too many, or, with the canary, a profile that draws
+ *  nothing between its timed frames (as it did) not read as idle. */
+async function idleProblems(found: Awaited<ReturnType<typeof profile>>,
+  options: Parameters<typeof profile>[0] & { canary?: boolean }): Promise<string[]> {
+  if (found.idle === undefined) return [];
+  const problems: string[] = [];
+  const share = (idle: number): string => `${(idle * 100).toFixed(0)}%`;
+  if (found.idle > IDLE_MOST) problems.push(`the GPU idle in ${share(found.idle)} of the profile's frames (most ${share(IDLE_MOST)})`);
+  if (!options?.canary) return problems;
+  const left = await profile({ ...options, canary: false, parts: [], idleBetween: true });
+  if (!((left.idle ?? 0) >= IDLE_CANARY_LEAST)) {
+    problems.push(`canary: nothing drawn between timed frames read idle in ${share(left.idle ?? 0)} of them`);
+  }
+  return problems;
 }
 
 /** `lab profile`, one place: the frame's parts timed as the pause menu's profiler times them. */
@@ -283,9 +281,11 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
     const found = await profile(options);
     const problems = command.canary ? canaryProblems(found) : [];
     if (!(found.frame > 0)) problems.push('the frame read 0 ms: nothing was timed');
+    problems.push(...(await idleProblems(found, options)));
     problems.push(...pageCanaryProblems(found));
     // (a commit from before WebGPU was profiled names no renderer: an A/B runs this module there too)
-    const onWebGPU = (found.renderer ?? 'WebGL').startsWith('WebGPU');
+    // (the Rust engine's are WebGPU's pipelines too: a part that draws its fields into the depth first makes theirs)
+    const onWebGPU = /^WebGPU|Rust engine/.test(found.renderer ?? 'WebGL');
     const most = onWebGPU ? PIPELINES_MOST : COMPILED_MOST;
     const compiled = compiledByFrameParts(found);
     if (compiled > most) {
@@ -293,7 +293,6 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
       problems.push(`${compiled} ${what}: a part changes the scene's programs (most ${most})`);
     }
     problems.push(...await cancelProblems(lab));
-    if (command.canary) problems.push(...await redrawCanaryProblems(lab));
     const hour = command.hour === undefined ? '' : ` at ${command.hour}:00`;
     const place = command.village ? `the village${hour}` : command.biome;
     const name = `${place} ${command.view}, ${quality.qualityLevel()}`;

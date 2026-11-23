@@ -3,6 +3,8 @@
 // GLSL set `gl_Position.z` to its `w` (drawn after everything opaque, the depth test skips every covered pixel).
 import * as THREE from 'three';
 import { gpu, tsl } from '../core/webgpu';
+import { rustLook } from '../engine/custom';
+import { daySkyLook, nightSkyLook, villageSkyLook } from '../engine/looks/sky';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -49,12 +51,13 @@ export function nightSkyMaterial(uniforms: Uniforms): THREE.Material {
     c += tint * 0.55 * step(1.0 - dens, skyStarHash(g)) * smoothstep(0.12, 0.4, y) * (0.25 + 1.1 * b * b * b);
     return vec4f(c, 1.0);
   }`, [hash]);
-  return domeMaterial((direction) => night({
+  const dome = domeMaterial((direction) => night({
     direction,
     fog: reference('value', 'vec3', uniforms.uFog),
     moon: reference('value', 'vec3', uniforms.uMoon),
     zenith: reference('value', 'vec3', uniforms.uZenith),
   }));
+  return rustLook(dome, nightSkyLook(uniforms));
 }
 
 /** The day sky (`buildDaySky`, its `uHorizon`, `uZenith`, `uSun` and `uTime`): the horizon rising into the zenith, a
@@ -84,13 +87,14 @@ export function daySkyMaterial(uniforms: Uniforms): THREE.Material {
     c = mix(c, horizon * 1.25 + vec3f(0.08, 0.07, 0.05) * pow(m, 4.0), cl * 0.7);
     return vec4f(c, 1.0);
   }`, [value]);
-  return domeMaterial((direction) => day({
+  const dome = domeMaterial((direction) => day({
     direction,
     horizon: reference('value', 'vec3', uniforms.uHorizon),
     zenith: reference('value', 'vec3', uniforms.uZenith),
     sun: reference('value', 'vec3', uniforms.uSun),
     time: reference('value', 'float', uniforms.uTime),
   }));
+  return rustLook(dome, daySkyLook(uniforms));
 }
 
 /** The village's sky (`buildDaySky` in `village.ts`, its `uHorizon`, `uZenith`, `uSun`, `uDay` and `uTime`): the sun's
@@ -133,7 +137,7 @@ export function villageSkyMaterial(uniforms: Uniforms): THREE.Material {
     c = mix(c, horizon * mix(0.7, 1.25, day) + vec3f(0.1, 0.06, 0.03) * pow(m, 4.0), cl * 0.6);
     return vec4f(c, 1.0);
   }`, [value, star]);
-  return domeMaterial((direction) => sky({
+  const dome = domeMaterial((direction) => sky({
     direction,
     horizon: reference('value', 'color', uniforms.uHorizon),
     zenith: reference('value', 'color', uniforms.uZenith),
@@ -141,4 +145,5 @@ export function villageSkyMaterial(uniforms: Uniforms): THREE.Material {
     day: reference('value', 'float', uniforms.uDay),
     time: reference('value', 'float', uniforms.uTime),
   }));
+  return rustLook(dome, villageSkyLook(uniforms));
 }

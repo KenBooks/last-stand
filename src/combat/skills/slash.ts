@@ -5,9 +5,10 @@
 import * as THREE from 'three';
 import { nearGlow } from '../../core/materials';
 import { portShader } from '../../core/shaderPorts';
+import { effectLook, num, rgb } from '../../engine/effects';
 
 function slashMaterial(color: THREE.ColorRepresentation): THREE.ShaderMaterial {
-  return portShader(nearGlow(new THREE.ShaderMaterial({
+  return effectLook(portShader(nearGlow(new THREE.ShaderMaterial({
     uniforms: {
       uColor: { value: new THREE.Color(color) }, uProg: { value: 0 }, uFade: { value: 1 }, uDir: { value: 1 },
       uStart: { value: 0 }, uLen: { value: 1 }, uInner: { value: 0.3 }, uEven: { value: 0 }, uTrail: { value: 5 },
@@ -52,8 +53,46 @@ function slashMaterial(color: THREE.ColorRepresentation): THREE.ShaderMaterial {
       p: varying(vec2(positionGeometry.x, positionGeometry.z.negate())), color: u.uColor, prog: u.uProg,
       fade: u.uFade, dir: u.uDir, start: u.uStart, len: u.uLen, inner: u.uInner, even: u.uEven, trailLen: u.uTrail,
     }),
-  }));
+  })), 'slash-arc', SLASH_HOOKS, {
+    numbers(u, out) {
+      out[0] = num(u, 'uProg'); out[1] = num(u, 'uFade'); out[2] = num(u, 'uDir'); out[3] = num(u, 'uStart');
+      out[4] = num(u, 'uLen'); out[5] = num(u, 'uInner'); out[6] = num(u, 'uEven'); out[7] = num(u, 'uTrail');
+      rgb(u, 'uColor', out, 8);
+    },
+  });
 }
+
+/** the arc for the Rust engine (src/engine/effects.ts): the port's WGSL above, the ring's own plane from the vertex */
+const SLASH_HOOKS = /* wgsl */ `
+fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
+  (*v).c0 = vec4f((*v).rest.x, -(*v).rest.z, 0.0, 0.0);
+}
+
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let prog = m.c[0].x;
+  let fade = m.c[0].y;
+  let dir = m.c[0].z;
+  let start = m.c[0].w;
+  let len = m.c[1].x;
+  let inner = m.c[1].y;
+  let even = m.c[1].z;
+  let trailLen = m.c[1].w;
+  let color = m.c[2].rgb;
+  let p = in.c0.xy;
+  var a = clamp((atan2(p.y, p.x) - start) / len, 0.0, 1.0);
+  if (dir < 0.0) { a = 1.0 - a; }
+  let r = clamp((length(p) - inner) / (1.0 - inner), 0.0, 1.0);
+  let behind = prog - a;
+  if (behind < 0.0) { return false; }
+  let trail = mix(exp(-behind * trailLen), 1.0, even);
+  let edge = pow(r, 3.0) * 1.4 + r * 0.25;
+  let tips = smoothstep(0.0, 0.08, a) * (1.0 - smoothstep(0.92, 1.0, a));
+  let i = trail * edge * tips * fade;
+  (*s).base = vec4f(mix(color, vec3f(1.0), trail * r * 0.3) * i * 1.3 * fx_near(in.depth), i);
+  (*s).fog = 0.0;
+  return true;
+}
+`;
 
 /** Ring segment of `arc` radians centred on local +Z after laying it flat, outer radius 1. */
 function arcGeometry(arc: number, inner: number): THREE.BufferGeometry {

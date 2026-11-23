@@ -3,9 +3,6 @@
 // material, so shadows stay whole.
 import * as THREE from 'three';
 import { HALL, TERRACE } from '../data/village';
-import { RUNNING } from './rendererChoice';
-import { VILLAGE } from './beta';
-import * as plain from './seeThroughPlain';
 import { DOOR_ROW, DOOR_SOFT, HIS_ROW, SIGHT, SIGHT_LOOK } from './sight';
 import { onWholeView, wholeView } from './wholeView';
 import { tunable } from './tuning';
@@ -62,11 +59,6 @@ const HALL_SIGHT_ASIDE = { value: 0 };
  *  floor he sees (from play, "black column should partially thin here too", "these should thin too, right ?") */
 const HALL_SIGHT_COLUMNS = { value: 0 };
 /** a reach under this is something's own, placed by its middle (`seeFade`'s `seeOn`) */
-/** whether the see-through is the plain one (`seeThroughPlain.ts`): no village, on WebGL (WebGPU's port reads the
- *  village's uniforms off each material, `shaderPorts.ts`) */
-const PLAIN = !VILLAGE && !RUNNING.webgpu;
-/** the kinds the plain see-through has: a biome's props are of these alone */
-type PlainKind = Parameters<typeof plain.seeThrough>[1];
 
 export const PLACED_BY_MIDDLE = 1e4;
 /** the attribute that keeps each part's middle (its object's place in the world) through a merge into one mesh: the
@@ -537,19 +529,29 @@ const kindOfSeen = new Map<SeeThrough, keyof typeof kinds>();
 /** `m`'s dissolve given it for WebGPU (`seeThrough`, a property of its own: not copied to a clone, as its
  *  `onBeforeCompile` isn't). */
 function markSeeThrough(m: THREE.Material, kind: keyof typeof kinds): void {
+  Object.defineProperty(m, 'seeThrough', { value: seeValue(kind), configurable: true });
+}
+
+/** A kind's numbers as a material of it carries them (`material.seeThrough`): one object a kind. For a renderer
+ *  with no hook of three's, which fades a glow by them (the Rust engine's `RustLook.fades`). */
+export function seeValue(kind: keyof typeof kinds): SeeThrough {
   let value = seen.get(kind);
   if (!value) {
     seen.set(kind, value = { focus, ...kinds[kind] });
     kindOfSeen.set(value, kind);
   }
-  Object.defineProperty(m, 'seeThrough', { value, configurable: true });
+  return value;
 }
+
+/** The hole that keeps the hero in sight as it stands now, for a renderer of our own (src/engine): the point
+ *  nothing may hide, the props' hole (`Kind.k`) and the height nothing lower dissolves at. */
+export const holeNow = (): { focus: THREE.Vector3; k: THREE.Vector4; minY: number } =>
+  ({ focus: focus.value, k: PROP_K.value, minY: PROP_MIN_Y.value });
 
 /** Dissolve `m` where it stands between the camera and the player. Keeps any patch the material already has. A roof and
  *  what the hall thins whole blend (from play, "Yes, real blending": a pattern of dots over a roof reads as a screen door,
  *  and the fog, reading the depth, stippled it too), with their depth kept, for the fog to read them as what they are. */
 export function seeThrough<M extends THREE.Material>(m: M, kind: keyof typeof kinds): M {
-  if (PLAIN) return plain.seeThrough(m, kind as PlainKind);
   markSeeThrough(m, kind);
   const blended = (kinds[kind] as Kind).blended === true;
   const pale = blended && (kinds[kind] as Kind).pale === true;
@@ -589,9 +591,9 @@ export function seeThrough<M extends THREE.Material>(m: M, kind: keyof typeof ki
     if (blended) thinByBlending(shader, pale);
     if (pale) shader.uniforms.uSeePaleAll = { value: overShaft(m) ? 1 : 0 };
   };
-  // the same code for every kind (they differ in uniforms only), so kinds share programs; on WebGPU a kind's uniforms are
-  // nodes of its build, and sharing the first's, the fountain's stone (`prop`) stood solid over him as a wall (`built`) does
-  m.customProgramCacheKey = () => (RUNNING.webgpu ? `${key}|seethrough|${kind}` : `${key}|seethrough${blended ? '|blended' : ''}${pale ? '|pale' : ''}${sight ? '|sight' : ''}`);
+  // (a key a kind: a kind's uniforms are nodes of its build, and sharing the first's, the fountain's stone (`prop`)
+  // stood solid over him as a wall (`built`) does)
+  m.customProgramCacheKey = () => `${key}|seethrough|${kind}`;
   return m;
 }
 
@@ -975,8 +977,7 @@ function wholeDepthMaterial(kind: FadesWhole, side: THREE.Side): THREE.Material 
         ${clipTest}`);
   };
   // (the columns' a program of their own: under one key, the walls' was compiled first and drawn for the columns too)
-  material.customProgramCacheKey = () => (RUNNING.webgpu ? `seethrough|wholeDepth|${kind}`
-    : `seethrough|wholeDepth${column ? '|column' : ''}`);
+  material.customProgramCacheKey = () => `seethrough|wholeDepth|${kind}`;
   return material;
 }
 
@@ -1191,7 +1192,6 @@ export const doorFadeShare = (): number => HALL_DOOR_ON.value;
  * glow reads as noise). Its vertex shader's world position is the mesh's own, before any displacement.
  */
 export function seeThroughFade<M extends THREE.ShaderMaterial>(m: M, kind: keyof typeof kinds): M {
-  if (PLAIN) return plain.seeThroughFade(m, kind as PlainKind);
   bindUniforms(m.uniforms, kind);
   const main = /void\s+main\s*\(\s*\)\s*\{/;
   m.vertexShader = `varying vec3 vSeeWp;\nvarying vec3 vSeeAt;\n${m.vertexShader.replace(main, (head) => `${head}
@@ -1202,7 +1202,7 @@ export function seeThroughFade<M extends THREE.ShaderMaterial>(m: M, kind: keyof
 }
 
 /** How far short of the followed character a prop's see-through hole ends (m). */
-export const seeHoleEnd = (): number => (PLAIN ? plain.seeHoleEnd() : kinds.prop.k.value.w);
+export const seeHoleEnd = (): number => kinds.prop.k.value.w;
 
 /**
  * Each frame: where the followed character is, how far props dissolve (0..1: none through the eyes), how far the view
@@ -1214,10 +1214,6 @@ export function updateSeeThrough(x: number, y: number, z: number, props: number,
   seeAsked = [x, y, z, props, top, floor, open, builtOpen, fenceOpen, propsOver];
   // (nothing dissolved in a whole view: every hole's strength and every ghost's share is a share of `props`)
   if (wholeView()) props = 0;
-  if (PLAIN) {
-    plain.updateSeeThrough(x, y, z, props, top);
-    return;
-  }
   focus.value.set(x, y, z);
   PROP_MIN_Y.value = floor + FLOOR_CLEAR;
   const from = PROP_HOLE_CLOSE.from + (PROP_HOLE_TOP.from - PROP_HOLE_CLOSE.from) * top;

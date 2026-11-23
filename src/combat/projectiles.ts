@@ -7,6 +7,7 @@ import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
 import { nearGlow } from '../core/materials';
 import { portShader } from '../core/shaderPorts';
+import { effectLook, rgb, FX_PLAIN_VERTEX } from '../engine/effects';
 import { hurtProp, PROP_DAMAGE } from '../world/destructible';
 import type { Obstacle } from '../types';
 import { entry, strikesBody, type Struck } from './strikes';
@@ -36,12 +37,24 @@ const orbPort: Parameters<typeof portShader>[1] = ({ wgslFn, normalView, positio
     return vec4f(color * (0.15 + 1.1 * f * f), 1.0);
   }`)({ n: normalView, v: positionViewDirection, color: u.uColor }),
 });
+/** the orb for the Rust engine (src/engine/effects.ts): the port's WGSL above, the view taken in the world */
+const ORB_HOOKS = FX_PLAIN_VERTEX + /* wgsl */ `
+fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
+  let color = m.c[0].rgb;
+  let f = max(dot(normalize(in.normal), normalize(g.cam_pos.xyz - in.world)), 0.0);
+  (*s).base = vec4f(color * (0.15 + 1.1 * f * f) * fx_near(in.depth), 1.0);
+  (*s).fog = 0.0;
+  return true;
+}
+`;
 function coreMat(color: THREE.ColorRepresentation, intensity: number, orb: boolean): THREE.Material {
   const key = `${color}:${intensity}:${orb}`;
   let m = matCache.get(key);
   if (!m) {
     const c = new THREE.Color(color).multiplyScalar(intensity);
-    m = orb ? portShader(nearGlow(new THREE.ShaderMaterial({ ...orbShader, uniforms: { uColor: { value: c } } })), orbPort)
+    m = orb ? effectLook(
+        portShader(nearGlow(new THREE.ShaderMaterial({ ...orbShader, uniforms: { uColor: { value: c } } })), orbPort),
+        'bolt-orb', ORB_HOOKS, { numbers(u, out) { rgb(u, 'uColor', out, 0); } })
       : nearGlow(new THREE.MeshBasicMaterial({ color: c }));
     matCache.set(key, m);
   }

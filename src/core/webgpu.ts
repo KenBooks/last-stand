@@ -1,23 +1,10 @@
-// The game on three's WebGPURenderer, behind `?renderer=webgpu` (docs/research/webgpu.md): the renderer made and
-// given what the WebGL code around it asks of a WebGLRenderer, and the post chain as a node pipeline.
+// three's WebGPURenderer, the host of our engine (`src/engine`, docs/research/webgpu.md): the renderer made and given
+// what the code around it asks of a WebGLRenderer. It draws what lies over the engine's frame (the labels, the
+// outline); the scene is the engine's alone.
 import * as THREE from 'three';
-import { DOOR_ROW, DOOR_SOFT, HIS_ROW, SIGHT, ROOFS_HALF, SIGHT_LOOK } from './sight';
-import type { ClusterWait } from './meshlets';
-import type { RenderPipeline, WebGPURenderer } from 'three/webgpu';
-import { RUNNING } from './rendererChoice';
-import { VILLAGE } from './beta';
+import type { WebGPURenderer } from 'three/webgpu';
 import { initHdrForWebGPU } from './hdr';
 import type { KitLooks } from './materials';
-import { SKY_ENVIRONMENT, skyEnvironment, type SkyEnvironment } from './skyEnvironment';
-import type { EnvColours } from '../world/props';
-
-/** Whether this page draws with WebGPURenderer: by its address alone (`?renderer=webgpu`, which the pause menu opens;
- *  `?renderer=webgpu-gl` its WebGL 2 backend), core/rendererChoice.ts. */
-export const WEBGPU = RUNNING.webgpu;
-
-/** the point lights the shaders' loop takes (`DynamicLighting`): a biome's eight without shadows, the hero's two,
- *  the effects' pool of eight (`fx/lights.ts`), with room */
-const MAX_LOOPED_LIGHTS = 24;
 
 /** how long three's async compile works before it yields a frame (ms, `compileSlice`): while nothing is played (the
  *  loading screen, the fight's loading bar), and while the lobby is. Its own 8 ms kept the GPU's compilers a third
@@ -31,221 +18,13 @@ export function compileSlice(ms: number): void {
   (globalThis as { __compileSliceMs?: number }).__compileSliceMs = ms;
 }
 
-let pipeline: RenderPipeline | null = null;
+/** the scene's target as the game holds it (`holdSceneTarget`) */
 let sceneTarget: THREE.RenderTarget | null = null;
-/** a pass three sizes as a share of the frame's pixels each way */
-type Scaled = { setResolutionScale(share: number): unknown };
-/** the passes the scene's share of the screen's pixels sizes (`setSceneShare`) */
-const sizedByShare: Scaled[] = [];
-/** bloom's node, sized by the scene's share, its first level's half and the quality's share (`sizeBloom`) */
-let bloomNode: Scaled | null = null;
-/** the scene's share of the screen's pixels and the quality's of bloom's, as last set */
-let sceneShareNow = 1;
-let bloomShareNow = 1;
-/** bloom's bright pass and first level at half the scene's pixels each way, as WebGL's `UnrealBloomPass` draws them:
- *  at the scene's own, a phone's Very low drew them at 3120x1440, each level half as wide on the screen as WebGL's */
-const BLOOM_FIRST_LEVEL = 0.5;
-
-/** Bloom sized by the scene's share and the quality's (`setBloomShareOnWebGPU`), its first level at half of them. */
-function sizeBloom(): void {
-  bloomNode?.setResolutionScale(sceneShareNow * BLOOM_FIRST_LEVEL * bloomShareNow);
-}
-
-/** Bloom drawn at `share` of its pixels each way, as WebGL's is (`setBloomShare` in core/renderer.ts: Low's half). */
-export function setBloomShareOnWebGPU(share: number): void {
-  // (none: its glow added at no strength and its passes not drawn, but for one frame that draws its glow out to
-  // nothing; WebGL leaves its pass out)
-  if (share <= 0 && !bloomOff) bloomDrawnOff = false;
-  bloomOff = share <= 0;
-  if (bloomStrength) bloomStrength.value = bloomOff ? 0 : bloomStrengthWanted;
-  if (share <= 0) return;
-  bloomShareNow = share;
-  sizeBloom();
-}
-/** Bloom's strength (photo mode's), its node's uniform: none while the quality draws no bloom. */
-export function setBloomStrengthOnWebGPU(strength: number): void {
-  bloomStrengthWanted = strength;
-  if (bloomStrength) bloomStrength.value = bloomOff ? 0 : strength;
-}
-/** bloom's strength as the game has it, and its node's uniform */
-const BLOOM_STRENGTH = 0.85;
-let bloomStrength: { value: number } | null = null;
-/** the strength asked for (`setBloomStrengthOnWebGPU`), and whether the quality draws none */
-let bloomStrengthWanted = BLOOM_STRENGTH;
-let bloomOff = false;
-/** whether bloom, off, has drawn its one frame at no strength since (`skipBloomWhileOff`) */
-let bloomDrawnOff = false;
-
-/**
- * Bloom's passes left out while the quality draws none (Very low): at no strength they still drew every frame, its
- * bright pass and blurs at the size the boot gave them, half the scene's pixels each way on a level booted at Very
- * low (a phone's frame: post 1.9 ms with bloom at an eighth of its pixels each way, 6.5 with it at half and adding
- * nothing, trace FJJ1-Z9XM). One frame is still drawn once it's off, its glow drawn out to nothing, so the frame
- * adds no glow left from before.
- */
-function skipBloomWhileOff(glow: { updateBefore(frame: unknown): unknown }): void {
-  const draw = glow.updateBefore.bind(glow);
-  glow.updateBefore = (frame: unknown) => {
-    if (bloomOff && bloomDrawnOff) return undefined;
-    if (bloomOff) bloomDrawnOff = true;
-    return draw(frame);
-  };
-}
-/** the scene's samples, chosen once (`setSceneSamples`); null until they are */
-let samplesChosen: number | null = null;
-/** the scene's pass as far as its samples go */
-let samplesOf: { options: { samples?: number }; renderTarget: THREE.RenderTarget } | null = null;
-/** the compiles started and not yet waited for (`compiled`) */
-const compiling: Promise<unknown>[] = [];
-
-/** Waits for every compile started so far (and any started meanwhile) to have made its pipelines. */
-export async function compiled(): Promise<void> {
-  while (compiling.length) await Promise.all(compiling.splice(0));
-}
-
-let clusters: ClusterWait = { hold: () => () => 0, back: () => Promise.resolve() };
-/** The GPU-driven drawing's clusters (`?meshlets`, core/meshlets.ts) held back from the frames while a warm-up
- *  compiles, so their batches' shaders are compiled there (`warmUpWebGPU`): built as the lobby first drew them, they
- *  held its frames up to 270 ms. The release lets those held in and says how many. */
-export const holdClusters = (): (() => number) => clusters.hold();
-/** waits for every cluster asked so far to be back */
-export const clustersBack = (): Promise<void> => clusters.back();
-
-/** The target the scene's pass draws into: what its pipelines are made for, the warm-ups' too. */
+/** The target that holds the scene's size and samples (core/renderer.ts's: nothing of three's draws into it). */
 export const webgpuSceneTarget = (): THREE.RenderTarget => sceneTarget!;
-/** a light node of three's as `shadeEnvironmentNodes` reads it */
-type LitNode = { light?: THREE.DirectionalLight; shadowNode?: { x: unknown } | null };
-
-/** what each lit material builds after its lights (`lightAfterLights`) */
-const builtAfterLights: { build(builder: unknown): void }[] = [];
-
-/** `node` built in each lit material's lighting, after its lights (the village's lamps: `core/lampNodes.ts`). */
-export function lightAfterLights(node: { build(builder: unknown): void }): void {
-  builtAfterLights.push(node);
-}
-
-/**
- * The ambient light and the environment's reflection darkened in the sun's shadow, as `shadeEnvironment` in
- * core/renderer.ts has WebGL's chunks do it (`inShadow` the share of each left there). The lights' nodes have all added
- * to the lighting's terms when `setupLights` ends, and three lights a surface by those terms next. The sun's shadow is
- * kept in a variable, as the direct light and the terms here both read it: its map read once a pixel.
- */
-export function shadeEnvironmentNodes(inShadow: { environment: number; ambient: number }): void {
-  const { LightsNode, DirectionalLightNode } = gpu;
-  const { mix, shadow } = tsl as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  const directional = DirectionalLightNode.prototype as unknown as { setupShadowNode(this: LitNode): unknown };
-  directional.setupShadowNode = function (this: LitNode) {
-    return shadow(this.light).toVar();
-  };
-  type Terms = Record<'irradiance' | 'iblIrradiance' | 'radiance', { mulAssign(by: unknown): void } | undefined>;
-  type Building = { object: THREE.Object3D; context: Terms };
-  const lights = LightsNode.prototype as unknown as { setupLights(builder: Building, nodes: LitNode[]): void };
-  const setupLights = lights.setupLights;
-  lights.setupLights = function (builder, nodes) {
-    setupLights.call(this, builder, nodes);
-    for (const after of builtAfterLights) after.build(builder);
-    if (!builder.object.receiveShadow) return;
-    const sun = nodes.find((node) => node.light?.isDirectionalLight && node.light.castShadow)?.shadowNode;
-    if (!sun) return;
-    const ambient = mix(inShadow.ambient, 1, sun.x);
-    builder.context.irradiance?.mulAssign(ambient);
-    builder.context.iblIrradiance?.mulAssign(ambient);
-    builder.context.radiance?.mulAssign(mix(inShadow.environment, 1, sun.x));
-  };
-}
-
-/** the lit shading made plain now (`plainLitNodes`'s branches): 1 at a level that asks for it, a uniform's value */
-const plainLit = { value: 0 };
-/** whether the boot's level made the lit shading plain: its pipelines built without the maps' code, a shadow read
- *  with one lookup */
-let plainAtBoot = false;
-/** whether any frame has been drawn: till then the level is the boot's */
-let drawnYet = false;
-
-/**
- * Low's and Very low's lit shading made plain (`QualityPreset.plainLit`), or whole again. At the boot's level the
- * lit pipelines are built plain (`plainLitNodes`); a level chosen once the game is shown switches the maps' branch on
- * a uniform, nothing compiled, its pipelines built plain from the next boot (as WebGPU's canvas takes HDR or not
- * once, as it's made: `initHdrForWebGPU`). Built plain, a level that's whole later keeps the plain look till a
- * reload.
- */
-export function setPlainLitOnWebGPU(on: boolean): void {
-  plainLit.value = on ? 1 : 0;
-  if (!drawnYet) plainAtBoot = on;
-}
-
-/** the surface maps' scopes a material's node reads, each with what it is without its map */
-const PLAIN_SCOPES = ['normal', 'roughness', 'metalness', 'ao'] as const;
-type PlainScope = (typeof PLAIN_SCOPES)[number];
-/** the material's maps each scope reads (the normal's bump map too) */
-const MAPS_OF: Record<PlainScope, string[]> = {
-  normal: ['normalMap', 'bumpMap'],
-  roughness: ['roughnessMap'],
-  metalness: ['metalnessMap'],
-  ao: ['aoMap'],
-};
-
-/**
- * The lit shading made plain at Low and Very low: no surface maps (normal, bump, roughness, metalness, occlusion: each
- * surface its material's own roughness and metalness, its normal the geometry's), and each shadow, the sun's and the
- * point lights', read with one lookup (three's basic filter, the hardware's compare of four texels) in place of five.
- * Booted at such a level, the lit pipelines are built so (`plainAtBoot`): `MaterialNode` reads no map. Otherwise the
- * maps are a branch on a uniform (three's `select` writes an `if` around the lookups), switched live, and the shadows
- * are read whole. On the owner's phone the branch saved about half of the maps' cost (trace NR72-ZXSK, Very low: 19%
- * of its frame against 26% whole): its compiler may flatten an `if`, and the code's registers weigh on every pixel.
- * Its GPU slows 2.35 times after a few seconds of play (DM4B-R468), so held at 60 frames a second its frame must cost
- * 7 ms at full speed, where it cost 11 with the maps and the shadows whole. No shadows at all cost a quarter of its
- * frame less, but lit every surface as if out of them: the fires through the props round them, flickering with their
- * flames, and the daylit forest a fifth brighter than High (from play, "fire flickers too much (blinding frames)",
- * "other objects also too bright on very low"; `lab light --renderer webgpu --levels`). Pipelines of their own for
- * each shading, compiled beside the frames as a level switched, still made 12 at a draw and held a frame 710 ms.
- */
-function plainLitNodes(): void {
-  const { uniform, renderGroup, select, float, normalView } = tsl as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  const plain = uniform(0).setGroup(renderGroup).onRenderUpdate(() => plainLit.value);
-  const whole = plain.lessThan(0.5);
-  type Built = { context: { material: Record<string, unknown> } };
-  type Scoped = { scope: string; getFloat(scope: string): unknown; setup(builder: Built): unknown };
-  const material = gpu.MaterialNode.prototype as unknown as Scoped;
-  const setup = material.setup;
-  material.setup = function (this: Scoped, builder: Built) {
-    const scope = this.scope as PlainScope;
-    const maps = MAPS_OF[scope];
-    if (!maps || !maps.some((map) => builder.context.material[map])) return setup.call(this, builder);
-    const without = scope === 'normal' ? normalView : scope === 'ao' ? float(1) : this.getFloat(scope);
-    return plainAtBoot ? without : select(whole, setup.call(this, builder), without);
-  };
-  // (booted plain: each shadow, the sun's and a point light's, read by three's basic filter)
-  type Filtering = { getShadowFilterFn(type: number): unknown };
-  for (const shadowNode of [gpu.ShadowNode, gpu.PointShadowNode]) {
-    const filtering = shadowNode.prototype as unknown as Filtering;
-    const filterFn = filtering.getShadowFilterFn;
-    filtering.getShadowFilterFn = function (this: Filtering, type: number) {
-      return filterFn.call(this, plainAtBoot ? THREE.BasicShadowMap : type);
-    };
-  }
-}
-
-/** The scene and bloom drawn at `share` of the screen's pixels each way (the quality's and Auto's, `sceneShare` in
- *  core/renderer.ts), the last pass scaling it up to the canvas. */
-export function setSceneShare(share: number): void {
-  sceneShareNow = share;
-  for (const pass of sizedByShare) pass.setResolutionScale(share);
-  sizeBloom();
-}
-
-/**
- * The scene's MSAA samples, taken from the quality as the game starts and kept until a reload (`?msaa=N` chooses them
- * instead). WebGL's target only makes its buffers again for a new count, where a WebGPU pipeline is made for one count:
- * a change would make every pipeline of the frame again, at its draws.
- */
-export function setSceneSamples(samples: number): void {
-  if (samplesChosen !== null) return;
-  const asked = new URLSearchParams(location.search).get('msaa');
-  samplesChosen = asked === null ? samples : Number(asked);
-  if (!samplesOf) return;
-  samplesOf.options.samples = samplesChosen;
-  samplesOf.renderTarget.samples = samplesChosen;
+/** `target` held as the scene's (`webgpuSceneTarget`). */
+export function holdSceneTarget(target: THREE.RenderTarget): void {
+  sceneTarget = target;
 }
 
 /** the renderer, for what's sent to the GPU outside a draw (`uploadTexture`) */
@@ -260,57 +39,6 @@ export function uploadTexture(texture: THREE.Texture): void {
 export let gpu: typeof import('three/webgpu');
 export let tsl: typeof import('three/tsl');
 
-/** What of three's point lights' data node `loopPassesUnreached` takes (its own fields, untyped in three's types). */
-interface PointLightData {
-  countNode: unknown;
-  positionsAndCutoffNode: { element(i: unknown): any }; // eslint-disable-line @typescript-eslint/no-explicit-any
-  colorsNode: { element(i: unknown): any }; // eslint-disable-line @typescript-eslint/no-explicit-any
-  decaysNode: { element(i: unknown): any }; // eslint-disable-line @typescript-eslint/no-explicit-any
-}
-
-/**
- * The point lights' loop (three's `PointLightDataNode`, which `DynamicLighting` builds) with a light put out, or a
- * point past its reach, passed over before its lighting, as WebGL's loop passes it (`POINT_LIGHTS_LOOPED` in
- * core/renderer.ts): three lit every point by every light, the physical model's whole direct term each time, its
- * attenuation 0 past the reach. A phone's lit shading was 61.5 of its 78.7 ms frame (trace V08X-13SR), and here the
- * forest's 20 point lights took 13.8 of the scene's 18.2 ms at a phone's pixels (`lab passes --features`). The
- * same lighting, light for light: what's passed over added nothing.
- */
-async function loopPassesUnreached(): Promise<void> {
-  const { default: PointLightDataNode } = await import('three/addons/tsl/lighting/data/PointLightDataNode.js');
-  const { Loop, If, getDistanceAttenuation, positionView, vec3 } = tsl;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const setup = function (this: PointLightData, builder: any): void {
-    const surfacePosition = builder.context.positionView || positionView;
-    const { lightingModel, reflectedLight } = builder.context;
-    const dynDiffuse = vec3(0).toVar('dynPointDiffuse');
-    const dynSpecular = vec3(0).toVar('dynPointSpecular');
-    Loop(this.countNode as never, ({ i }: { i: unknown }) => {
-      const positionAndCutoff = this.positionsAndCutoffNode.element(i);
-      const cutoffDistance = positionAndCutoff.w;
-      const color = this.colorsNode.element(i);
-      const lightVector = positionAndCutoff.xyz.sub(surfacePosition).toVar();
-      const reached = lightVector.dot(lightVector).lessThan(cutoffDistance.mul(cutoffDistance));
-      const inReach = cutoffDistance.equal(0).or(reached);
-      If(inReach.and(color.dot(color).greaterThan(0)), () => {
-        const lightDistance = lightVector.length();
-        const attenuation = getDistanceAttenuation({
-          lightDistance, cutoffDistance, decayExponent: this.decaysNode.element(i).x,
-        } as never);
-        lightingModel.direct({
-          lightDirection: lightVector.normalize(),
-          lightColor: color.mul(attenuation),
-          lightNode: { light: {}, shadowNode: null },
-          reflectedLight: { directDiffuse: dynDiffuse, directSpecular: dynSpecular },
-        }, builder);
-      });
-    });
-    reflectedLight.directDiffuse.addAssign(dynDiffuse);
-    reflectedLight.directSpecular.addAssign(dynSpecular);
-  };
-  (PointLightDataNode.prototype as unknown as { setup: typeof setup }).setup = setup;
-}
-
 /**
  * A WebGPURenderer, initialised, typed as the WebGLRenderer the rest of the game takes. What it lacks of one is
  * stood in for: `compile` (nothing listed as made), its programs (none
@@ -320,38 +48,13 @@ export async function makeWebGPURenderer(hdrAllowed: boolean): Promise<THREE.Web
   gpu = await import('three/webgpu');
   tsl = await import('three/tsl');
   const { WebGPURenderer } = gpu;
-  // (the canvas in extended range for HDR, as the WebGL renderer's presenter is: core/hdr.ts)
+  // (the canvas in extended range for HDR: core/hdr.ts)
   const outputType = initHdrForWebGPU(hdrAllowed) ? THREE.HalfFloatType : undefined;
   const renderer = new WebGPURenderer({
-    antialias: false, powerPreference: 'high-performance', forceWebGL: RUNNING.webgpuOnGl, trackTimestamp: true, outputType,
+    antialias: false, powerPreference: 'high-performance', forceWebGL: false, trackTimestamp: true, outputType,
   });
   await renderer.init();
   uploader = renderer;
-  // three's GPU-driven drawing (r187): clusters of 64 triangles culled and their detail picked on the GPU, for what
-  // it supports (static meshes and instanced ones in plain node materials); the rest drawn as before
-  if (RUNNING.meshlets) {
-    const meshlets = await import('three/addons/pipelines/MeshletDrawingPipeline.js');
-    const { MeshletDrawingPipeline } = meshlets;
-    // (exported by three, not by its types)
-    batchesBuiltApart((meshlets as unknown as { MeshletBatch: unknown }).MeshletBatch);
-    const drawing = new MeshletDrawingPipeline();
-    const { clustersInWorkers } = await import('./meshlets');
-    clusters = clustersInWorkers(drawing) ?? clusters;
-    (renderer as unknown as { drawingPipeline: unknown }).drawingPipeline = batchesKept(stillAlone(drawing));
-  }
-  // the point lights casting no shadow drawn by one loop over a uniform array in each lit shader, where three wrote
-  // each out in full (the physical model's every term, eight times over): the lit fragment shaders were 55 kB of
-  // WGSL each, 3.5 MB of the 4.6 the game made, and Chrome's DXC compiled them again on every visit (its cache
-  // never served them). `?lights=each` for three's own, to compare.
-  if (!RUNNING.lightsEach) {
-    await loopPassesUnreached();
-    const { DynamicLighting } = await import('three/addons/lighting/DynamicLighting.js');
-    renderer.lighting = new DynamicLighting({ maxPointLights: MAX_LOOPED_LIGHTS });
-  }
-  plainLitNodes();
-  compileShadowsToo(renderer);
-  compilesTakeTurns(renderer);
-  walkedAtOnce(renderer);
   pipelinesBeside(renderer);
   stillWhereStill(renderer);
   bundlesBeforeTransparents(renderer);
@@ -359,14 +62,9 @@ export async function makeWebGPURenderer(hdrAllowed: boolean): Promise<THREE.Web
   compileSlice(COMPILE_SLICE.loading);
   // (own properties over the class's getters: `compile` is one)
   const stand = (key: string, value: unknown) => Object.defineProperty(renderer, key, { value, writable: true });
-  // the WebGL code's compiles started as `compileAsync`, for the target set (the warm-ups': the scene's pass's,
-  // `sceneTarget` in renderer.ts): its pipelines made on the GPU's threads, its node builds a slice a frame, where
-  // they were made at each material's first draw, on the main thread (the loading screen froze 10-15 s); waited for
-  // by `compiled`. (Nothing listed as made: no WebGL programs to link.)
-  stand('compile', (scene: THREE.Object3D, camera: THREE.Camera, target?: THREE.Scene | null) => {
-    compiling.push(renderer.compileAsync(scene, camera, target ?? null).catch((e: unknown) => console.error('WebGPU compile:', e)));
-    return new Set<THREE.Material>();
-  });
+  // (three draws the overlays and a few targets alone, the engine the scene: nothing of the scene is compiled for
+  // three ahead, src/engine. Nothing listed as made: no WebGL programs to link.)
+  stand('compile', () => new Set<THREE.Material>());
   // (the labels' atlas is sized within it: missing, its side was NaN, a texture 1 px wide)
   const maxTextureSize = (renderer.backend as unknown as GpuBackend).device?.limits.maxTextureDimension2D ?? 4096;
   stand('capabilities', { getMaxAnisotropy: () => renderer.getMaxAnisotropy(), isWebGL2: true, maxTextureSize });
@@ -420,17 +118,46 @@ export function labelsMaterial(atlas: THREE.Texture, view: THREE.Vector2): {
   return { material, setAtlas: (t) => { shown.value = t; } };
 }
 
+/** whether the next draw over the frame clears the canvas as its pass begins (`clearOverFrame`) */
+let overClears = false;
+/**
+ * The canvas cleared by the next draw over the frame (`drawOverFrame`), as its pass begins: under the Rust engine
+ * three's canvas holds the world's overlays alone, over the engine's. Cleared by a pass of its own, each draw
+ * after it was a pass that read the whole canvas back first: on a phone's GPU, which draws by tiles, 4.5 million
+ * pixels loaded and stored a pass, three passes a frame with an outline shown (10.9 ms a frame of its GPU, a
+ * report from play, 64P8-0VPK, where a frame with nothing drawn over it took 1.5).
+ */
+export function clearOverFrame(): void {
+  overClears = true;
+  overPasses = 0;
+}
+/** how many passes the frame has drawn onto the canvas over the engine's so far */
+let overPasses = 0;
+/** A pass onto that canvas counted: a clear of its own (`drawOverFrame` counts its draws). */
+export function countOverPass(): void { overPasses++; }
+/** For a harness: the passes the last frame drew onto the canvas over the engine's. */
+export const overFramePasses = (): number => overPasses;
+/** Whether the canvas is still to be cleared: no draw over the frame has begun since `clearOverFrame`. */
+export function overFrameUncleared(): boolean {
+  const left = overClears;
+  overClears = false;
+  return left;
+}
+
 /**
  * `draw` onto the canvas over the frame the pipeline drew: with no tone mapping or conversion asked, so three draws
  * straight onto it (else it draws into a target of its own, empty, and copies that over the frame: the labels' first
- * port blacked the frame out), and not cleared.
+ * port blacked the frame out), and not cleared, but where the canvas is to be cleared first (`clearOverFrame`): then
+ * this draw's pass clears it as it begins.
  */
 export function drawOverFrame(renderer: THREE.WebGLRenderer, draw: () => void): void {
   const r = renderer as unknown as WebGPURenderer;
   const { toneMapping, outputColorSpace, autoClear } = r;
   r.toneMapping = THREE.NoToneMapping;
   r.outputColorSpace = THREE.ColorManagement.workingColorSpace;
-  r.autoClear = false;
+  r.autoClear = overClears;
+  overClears = false;
+  overPasses++;
   r.setRenderTarget(null);
   draw();
   r.toneMapping = toneMapping;
@@ -540,7 +267,6 @@ function recordNodeBuilds(renderer: WebGPURenderer): void {
   recordPipelines(renderer);
   recordDraws(renderer);
   recordRenders(renderer);
-  recordBatches(renderer);
   recordWrites();
   Object.assign(window, { __webgpuRecordFrom: recordFromNow });
 }
@@ -595,78 +321,6 @@ function recordFromNow(): void {
     for (const key of Object.keys(record)) delete record[key];
     if (countsFrames) record.frames = 0;
   }
-}
-
-/** A batch the GPU-driven drawing made (`?builds` with `?meshlets`): when, for what material, its geometry
- *  pool's size and version then (a pool grown or moved has every render list's batches made again), whether a
- *  compile made it or a draw (a draw's batch is node builds in that frame) and what it drew into */
-interface BatchMade {
-  at: number; material: string; vertices: number; indices: number; poolVersion: number;
-  by: 'compile' | 'draw'; target: string; size: string;
-  /** what became of the batch it replaces: none, its culling made again, outgrown, its material changed, other */
-  replaces: string;
-  /** its render list's record and culling, numbered as they're first met */
-  list: number; culling: number; entry: number;
-}
-
-/** Every batch three's meshlet pipeline makes, kept in `window.__meshletBatches`: each is drawn with materials of its
- *  own, so each is node builds at its first draw. */
-function recordBatches(renderer: WebGPURenderer): void {
-  type Pool = { vertexArray: Float32Array; indexArray: Uint32Array; version: number };
-  type Batch = { culling: unknown; capacity: number; materialVersion: number };
-  type Entry = { material: THREE.Material; batch: Batch | null; count: number };
-  type Batching = {
-    createBatch?: (entry: Entry, capacity: number, view: unknown, culling: unknown) => unknown;
-    _geometryPool: Pool;
-    _drawBatches(renderList: unknown, record: object): void;
-  };
-  type Drawing = { drawingPipeline: Batching; _precompilationState: unknown };
-  const r = renderer as unknown as Drawing;
-  const drawing = r.drawingPipeline;
-  const createBatch = drawing.createBatch?.bind(drawing);
-  if (createBatch === undefined) return;
-  const made: BatchMade[] = [];
-  Object.assign(window, { __meshletBatches: made });
-  const replaced = (entry: Entry, culling: unknown): string => {
-    const batch = entry.batch;
-    if (batch === null) return 'none';
-    if (batch.culling !== culling) return 'culling';
-    if (entry.count > batch.capacity) return 'outgrown';
-    if (batch.materialVersion !== entry.material.version) return 'material';
-    return 'other';
-  };
-  const numbers = new WeakMap<object, number>();
-  let numbered = 0;
-  const numberOf = (o: unknown): number => {
-    if (o === null || typeof o !== 'object') return -1;
-    if (!numbers.has(o)) numbers.set(o, numbered++);
-    return numbers.get(o)!;
-  };
-  let list = -1;
-  const drawBatches = drawing._drawBatches.bind(drawing);
-  drawing._drawBatches = (renderList, record) => {
-    list = numberOf(record);
-    drawBatches(renderList, record);
-  };
-  drawing.createBatch = (entry, capacity, view, culling) => {
-    const pool = drawing._geometryPool;
-    made.push({
-      at: performance.now(), material: entry.material.name || entry.material.type,
-      vertices: pool.vertexArray.length, indices: pool.indexArray.length, poolVersion: pool.version,
-      by: r._precompilationState !== null ? 'compile' : 'draw', target: renderer.getRenderTarget()?.texture.name ?? 'screen',
-      size: sizeDrawn(renderer), replaces: replaced(entry, culling), list, culling: numberOf(culling), entry: numberOf(entry),
-    });
-    return createBatch(entry, capacity, view, culling);
-  };
-}
-
-/** The size the renderer draws at now (the size the meshlets' occlusion culling is made for): its target's, else
- *  its canvas's. */
-function sizeDrawn(renderer: WebGPURenderer): string {
-  const target = renderer.getRenderTarget();
-  if (target) return `${target.width}x${target.height}`;
-  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-  return `${size.x}x${size.y}`;
 }
 
 /** One kind of render call summed over the frames (`recordRenders`): how many, their time (ms, its nested renders
@@ -802,8 +456,6 @@ type Monitored = {
   looksSeen?: Float32Array;
   /** whether its looks changed since its last draw: why it was refreshed in full (`fullBecause`) */
   looksChanged?: boolean;
-  /** a meshlet batch's place in its culling's buffers as this render object last drew it (`batchMoved`) */
-  batchSeen?: Float32Array;
   /** what a stand-in's base held as this render object last drew it (`baseChanged`) */
   baseSeen?: Float32Array;
 };
@@ -840,29 +492,6 @@ function baseChanged(base: BaseValues, seen: Float32Array): boolean {
   changed = seeAt(seen, at++, base.map?.id ?? 0) || changed;
   changed = seeAt(seen, at++, base.normalMap?.id ?? 0) || changed;
   return seeAt(seen, at, base.roughnessMap?.id ?? 0) || changed;
-}
-
-/** each meshlet batch's draw materials' batch (`batchesBuiltApart`) */
-const batchOf = new WeakMap<THREE.Material, Batch>();
-
-/** how many buffers have been freed (`batchesBuiltApart`) */
-let buffersFreed = 0;
-
-/** Whether what `batch`'s draws read differs from what `seen` holds, `seen` set to it: where it lies in its culling's
- *  buffers, which move as the culling is resized and as other batches come and go, and those buffers themselves,
- *  which a resize or a grown pool replaces: drawn on with the old ones, whole passes were refused every frame
- *  (`Buffer used in submit while destroyed`, 500 times a boot). Any buffer freed refreshes them all once: nothing is
- *  freed in a steady frame. */
-function batchMoved(batch: Batch, seen: Float32Array): boolean {
-  const { dataOffset, queueOffset, counterOffset, maxWorkItems } = batch.rangeNodes;
-  let moved = seeAt(seen, 0, dataOffset.value);
-  moved = seeAt(seen, 1, queueOffset.value) || moved;
-  moved = seeAt(seen, 2, counterOffset.value) || moved;
-  moved = seeAt(seen, 3, maxWorkItems.value) || moved;
-  moved = seeAt(seen, 4, batch.instanceOffset?.value ?? 0) || moved;
-  moved = seeAt(seen, 5, batch.transformCount?.value ?? 0) || moved;
-  moved = seeAt(seen, 7, buffersFreed) || moved;
-  return seeAt(seen, 6, batch.transformPreviousCount?.value ?? 0) || moved;
 }
 
 /** Whether `value` differs from `seen[i]`, `seen[i]` set to it (as the array holds it: a float32 never equals the
@@ -905,9 +534,7 @@ function looksChanged(looks: KitLooks, seen: Float32Array): boolean {
  * change (`looksChanged`: its nodes read them off the material, `kitNodes` in core/shaderPorts.ts): refreshed at each
  * draw, the lobby's two training dummies standing still were 31 full refreshes a frame (and 16 more as they swayed).
  * Its looks are kept on each render object: three's observer is one for every render object of a node build, and
- * kept on it, the two dummies' looks took turns and refreshed every draw. A meshlet batch's draws are too, and as
- * the batch moves in its culling's buffers (`batchMoved`): they read everything else off buffers the culling fills,
- * and were 38 full refreshes a frame, none of them changing anything.
+ * kept on it, the two dummies' looks took turns and refreshed every draw.
  */
 function stillWhereStill(renderer: WebGPURenderer): void {
   const nodes = (renderer as unknown as { _nodes: { needsRefresh(built: Monitored): number } })._nodes;
@@ -925,16 +552,11 @@ function stillWhereStill(renderer: WebGPURenderer): void {
     }
     // (and the shadow maps' depth materials: what makes a caster's shadow change moves it, which is a refresh)
     const shadow = (built.material as { isShadowPassMaterial?: boolean }).isShadowPassMaterial === true;
-    const batch = batchOf.get(built.material);
-    const still = shadow || batch !== undefined || stillNodes.has(built.material);
+    const still = shadow || stillNodes.has(built.material);
     // (at every draw: three sets it again as each render object of the build is first drawn, and a still material
-    // holds a node, `refreshedEachDraw` in core/shaderPorts.ts, for the meshlets' copy of it)
+    // holds a node, `refreshedEachDraw` in core/shaderPorts.ts)
     if (still) built.getMonitor().hasNode = false;
     const type = needsRefresh(built);
-    if (batch !== undefined) {
-      built.batchSeen ??= new Float32Array(8).fill(NaN);
-      return batchMoved(batch, built.batchSeen) ? 2 : type;
-    }
     const looks = built.material.kitLooks;
     if (!looks || !still) return type;
     built.looksSeen ??= new Float32Array(LOOKS_COUNT).fill(NaN);
@@ -1075,650 +697,6 @@ function recordPipelines(renderer: WebGPURenderer): void {
   };
 }
 
-/** a shadow node's view of its frame, and the renderer's state while it compiles */
-type ShadowFrame = { renderer: { _precompilationState: unknown } };
-type Shadowing = { updateShadow(frame: ShadowFrame): void };
-
-/**
- * three's `compileAsync` draws no shadow (r187: "do not render shadow maps during precompilation"), so every
- * caster's shadow pipeline was made as its shadow was first drawn, on the main thread, and with them the GPU's
- * process (the boot's 12 s stalls, which held the logo's WebGL exit up too). Here a compile draws each shadow once
- * as it meets it, its casters queued with the rest of the compile's work as any render inside a compile is
- * (each shadow drawn once a compile started: every object its light reaches meets it).
- */
-function compileShadowsToo(renderer: WebGPURenderer): void {
-  let compile = 0;
-  const drawnFor = new WeakMap<object, number>();
-  const compileAsync = renderer.compileAsync.bind(renderer);
-  renderer.compileAsync = (...args: Parameters<typeof compileAsync>) => {
-    compile++;
-    return compileAsync(...args);
-  };
-  // (a shadow is drawn once a render, by the render's number, and a compile's queue is worked through under the
-  // last frame's, whose shadows were drawn: so they're drawn here, where the compile updates each object's nodes)
-  const nodes = (renderer as unknown as { _nodes: CompileNodes })._nodes;
-  const updateBefore = nodes.updateBefore.bind(nodes);
-  nodes.updateBefore = (renderObject: unknown) => {
-    if ((renderer as unknown as ShadowFrame['renderer'])._precompilationState !== null) {
-      for (const node of nodes_(renderObject).updateBeforeNodes) {
-        if (!(node instanceof gpu.ShadowNode) || drawnFor.get(node) === compile) continue;
-        drawnFor.set(node, compile);
-        (node as unknown as Shadowing).updateShadow(nodes.getNodeFrameForRender(renderObject) as ShadowFrame);
-      }
-    }
-    updateBefore(renderObject);
-  };
-}
-
-/** the meshes the meshlet pipeline may draw: what the biomes stand, which never moves (`stillForMeshlets`) */
-const still = new WeakSet<object>();
-
-/** what's done to each still mesh's material as it's given to the meshlet pipeline (`stillMaterialsGo`) */
-let givingMaterial: (material: THREE.Material) => void = () => {};
-/** `give` run on every still mesh's material from now on. */
-export function stillMaterialsGo(give: (material: THREE.Material) => void): void {
-  givingMaterial = give;
-}
-
-/** Everything under `roots` (the biomes and the hall as they're built) given to the meshlet pipeline. */
-export function stillForMeshlets(...roots: THREE.Object3D[]): void {
-  if (!RUNNING.meshlets) return;
-  for (const root of roots) {
-    root.traverse((object) => {
-      // (a ray-march in a box: nothing in it to cull, and its copy in a batch drew its flames as a pale mound)
-      if (object.userData.noMeshlets) return;
-      still.add(object);
-      const { material } = object as THREE.Mesh;
-      if (Array.isArray(material)) material.forEach(givingMaterial);
-      else if (material) givingMaterial(material);
-    });
-  }
-}
-
-type Meshlets = { _isMeshlet(object: object, ...rest: unknown[]): boolean };
-
-/**
- * The meshlet pipeline kept to still meshes (`stillForMeshlets`): it took every mesh it could, the heroes' and the
- * training dummies' moving parts too, and after the pause menu closed the dummies were gone and a tan shell of their
- * burlap stood round the hero in the middle of the dais.
- */
-function stillAlone<T>(drawing: T): T {
-  const pipeline = drawing as unknown as Meshlets;
-  const isMeshlet = pipeline._isMeshlet.bind(pipeline);
-  pipeline._isMeshlet = (object, ...rest) => still.has(object) && isMeshlet(object, ...rest);
-  return drawing;
-}
-
-type Batch = {
-  meshes: THREE.Mesh[];
-  prepassMeshes: THREE.Mesh[];
-  rangeNodes: Record<'dataOffset' | 'queueOffset' | 'counterOffset' | 'maxWorkItems', { value: number }>;
-  instanceOffset?: { value: number };
-  transformCount?: { value: number };
-  transformPreviousCount?: { value: number };
-  setupDraw(shared: unknown): void;
-};
-type NodeMaterialKey = { customProgramCacheKey(this: THREE.Material): string };
-
-/**
- * Each meshlet batch's draws built apart. A batch draws with a copy of its material that takes the material's own
- * properties, so where the game's material has a `customProgramCacheKey` of its own (`seeThrough`'s, for WebGL) the
- * copy's node build was keyed by it alone, blind to the batch's nodes, and every batch of a see-through material
- * shared the first one's build: its offsets into the culling's queue and objects with it. The crypt's obelisks and
- * beacons drew another batch's range, so nothing at all (#331), and so, likely, did the forest's stones (da9701e).
- */
-function batchesBuiltApart(MeshletBatch: unknown): void {
-  const prototype = (MeshletBatch as { prototype: Batch }).prototype;
-  const setupDraw = prototype.setupDraw;
-  const nodeKey = (gpu.NodeMaterial.prototype as unknown as NodeMaterialKey).customProgramCacheKey;
-  let made = 0;
-  prototype.setupDraw = function (this: Batch, shared: unknown) {
-    setupDraw.call(this, shared);
-    const tag = `|batch${made++}`;
-    for (const { material } of this.meshes) {
-      const drawn = material as THREE.Material;
-      drawn.customProgramCacheKey = () => nodeKey.call(drawn) + tag;
-    }
-    // (their constructor makes the prepass's after `setupDraw`: found by the batch's draws as they're first refreshed)
-    for (const { material } of this.meshes) batchOf.set(material as THREE.Material, this);
-  };
-  // (what a batch's draws bind is replaced as buffers go: `batchMoved`)
-  const attribute = THREE.BufferAttribute.prototype as unknown as { dispose(this: object): void };
-  const dispose = attribute.dispose;
-  attribute.dispose = function (this: object) {
-    buffersFreed++;
-    dispose.call(this);
-  };
-}
-
-type KeptBatch = { capacity: number; dispose(): void; relocate(): boolean };
-type KeptEntry = { unusedProjections: number; batch: KeptBatch | null; source: KeptEntry | null };
-type KeptRecord = {
-  entries: KeptEntry[];
-  staticGroups: Map<unknown, { entries: KeptEntry[]; unusedProjections: number }>;
-  culling: unknown;
-};
-type Keeping = {
-  renderer: { _compilationPromises: unknown[] | null };
-  createBatch(entry: KeptEntry, ...rest: unknown[]): unknown;
-  _drawBatches(renderList: unknown, record: KeptRecord): void;
-  _shrinkCulling(record: KeptRecord, entries: KeptEntry[]): void;
-  _getCullingCapacity(entries: KeptEntry[], capacities: number[], ...rest: unknown[]): unknown;
-  _disposeBatches(record: KeptRecord, kept: Set<KeptEntry>): void;
-  _addGeometries(culling: unknown, entries: KeptEntry[]): boolean;
-};
-
-/**
- * The meshlet batches a warm-up compiled kept, however long the frames leave them undrawn, and every batch kept
- * through its culling's resize. The warm-ups compile into the frames' own render list, where three drops a batch:
- * one undrawn for 60 projections (0.4 s at 144 Hz); and every one not drawn in the projection that resizes the
- * culling, which each warm-up's new biome or part did, and the lobby's frames as they shrank it to their own. So the
- * lobby's frames made their own batches again after each warm-up, the warm-ups' draws theirs, and the fight's first
- * frames once more, each a node build in its frame: 1477 builds at a draw in the lobby's first seconds, its frames
- * held up 200 to 740 ms. A resized culling is sized for the undrawn batches too, and they're moved into it.
- */
-function batchesKept<T>(drawing: T): T {
-  const keeping = drawing as unknown as Keeping;
-  const warmed = new WeakSet<KeptEntry>();
-  /** the render list being drawn or shrunk, and its batches undrawn there, kept through its resize */
-  let record: KeptRecord | null = null;
-  let undrawn: KeptEntry[] = [];
-  const within = <A extends unknown[]>(run: (...args: A) => void) => (at: KeptRecord, ...args: A): void => {
-    record = at;
-    undrawn = [];
-    try {
-      run(...args);
-    } finally {
-      record = null;
-      undrawn = [];
-    }
-  };
-  const createBatch = keeping.createBatch.bind(keeping);
-  keeping.createBatch = (entry, ...rest) => {
-    if (keeping.renderer._compilationPromises !== null) warmed.add(entry);
-    return createBatch(entry, ...rest);
-  };
-  const drawBatches = keeping._drawBatches.bind(keeping);
-  keeping._drawBatches = (renderList, at) => within(() => {
-    for (const entry of at.entries) if (warmed.has(entry)) entry.unusedProjections = 0;
-    for (const group of at.staticGroups.values()) {
-      if (group.entries.some((entry) => warmed.has(entry))) group.unusedProjections = 0;
-    }
-    drawBatches(renderList, at);
-  })(at);
-  const shrinkCulling = keeping._shrinkCulling.bind(keeping);
-  keeping._shrinkCulling = (at, entries) => within(() => shrinkCulling(at, entries))(at);
-  const cullingCapacity = keeping._getCullingCapacity.bind(keeping);
-  keeping._getCullingCapacity = (entries, capacities, ...rest) => {
-    undrawn = record === null ? [] : undrawnOf(record, new Set(entries));
-    const all = [...entries, ...undrawn];
-    return cullingCapacity(all, [...capacities, ...undrawn.map((entry) => entry.batch!.capacity)], ...rest);
-  };
-  const disposeBatches = keeping._disposeBatches.bind(keeping);
-  keeping._disposeBatches = (at, kept) => disposeBatches(at, new Set([...kept, ...undrawn]));
-  const addGeometries = keeping._addGeometries.bind(keeping);
-  keeping._addGeometries = (culling, entries) => {
-    const added = addGeometries(culling, entries);
-    if (undrawn.length === 0 || record?.culling !== culling) return added;
-    const moved = undrawn;
-    undrawn = [];
-    const fits = addGeometries(culling, moved);
-    for (const entry of moved) {
-      if (fits && entry.batch!.relocate()) continue;
-      entry.batch!.dispose();
-      entry.batch = null;
-    }
-    return added;
-  };
-  return drawing;
-}
-
-/** `record`'s entries with a batch that aren't among `drawn`, whose objects' batch (a shared one's) is kept too. */
-function undrawnOf(record: KeptRecord, drawn: Set<KeptEntry>): KeptEntry[] {
-  const all = [...record.entries, ...[...record.staticGroups.values()].flatMap((group) => group.entries)];
-  const undrawn = all.filter((entry) => entry.batch !== null && !drawn.has(entry));
-  const kept = new Set([...drawn, ...undrawn]);
-  return undrawn.filter((entry) => entry.source === null || kept.has(entry.source));
-}
-
-/** what of three's renderer a compile's state is kept by (`compilesTakeTurns`) */
-type Precompiling = {
-  _precompilationState: object | null;
-  _beginPreCompile(state: object): void;
-  _finishPreCompile(): void;
-  _nodes: CompileNodes & { getForRenderAsync(renderObject: object, yieldFn?: () => Promise<void>): Promise<unknown> };
-};
-
-/**
- * three's async compile keeps the state of the item it builds (its target, its render context, its material's side)
- * on the renderer, one for all, and waits a microtask or more mid-item (each stage of a node build, a build found
- * cached): two compiles at once (the lobby's warm-up and a hero's, the fight's behind the lobby) worked through each
- * other's items with each other's state, and one's end cleared the other's ("Cannot destructure property
- * 'useFrameBufferTarget' of 'this._precompilationState' as it is null"), its compile thrown away and its pipelines
- * made at their first draw instead (the lobby at 2 fps). Here each item's state is its own: one begun over another
- * ends the other first, and each item takes its own back where its work goes on after a wait (its build's every
- * yield, and its node updates after the build, the first thing it does past its last wait).
- */
-function compilesTakeTurns(renderer: WebGPURenderer): void {
-  const r = renderer as unknown as Precompiling;
-  const begin = r._beginPreCompile.bind(r);
-  const finish = r._finishPreCompile.bind(r);
-  r._beginPreCompile = (state) => {
-    if (r._precompilationState !== null && r._precompilationState !== state) finish();
-    begin(state);
-  };
-  // (an item's state already ended by another's begin)
-  r._finishPreCompile = () => {
-    if (r._precompilationState !== null) finish();
-  };
-  const own = (state: object): void => {
-    if (r._precompilationState !== state) r._beginPreCompile(state);
-  };
-  const ownerOf = new WeakMap<object, object>();
-  const nodes = r._nodes;
-  const getForRenderAsync = nodes.getForRenderAsync.bind(nodes);
-  nodes.getForRenderAsync = (renderObject, yieldFn) => {
-    const state = r._precompilationState;
-    if (state === null || yieldFn === undefined) return getForRenderAsync(renderObject, yieldFn);
-    ownerOf.set(renderObject, state);
-    return getForRenderAsync(renderObject, async () => {
-      own(state);
-      await yieldFn();
-      own(state);
-    });
-  };
-  const updateBefore = nodes.updateBefore.bind(nodes);
-  nodes.updateBefore = (renderObject: object) => {
-    const state = ownerOf.get(renderObject);
-    if (state !== undefined) {
-      ownerOf.delete(renderObject);
-      own(state);
-    }
-    updateBefore(renderObject);
-  };
-}
-
-/**
- * The GPU-driven drawing's `prepareAsync` (`?meshlets`) waits as every compile starts, so the compile walked the
- * scene after the warm-up that asked for it had put it back (its objects out, the other biomes in): the lobby's and
- * the fight's pipelines were made at their first draws, on the main thread. Here the compile walks the scene at once,
- * and the clusters are made beside it (any it missed, as their meshes are first drawn).
- */
-function walkedAtOnce(renderer: WebGPURenderer): void {
-  type Preparing = { prepareAsync?: (scene: THREE.Object3D, camera: THREE.Camera) => Promise<void> | undefined };
-  const drawing = (renderer as unknown as { drawingPipeline: Preparing }).drawingPipeline;
-  const prepareAsync = drawing.prepareAsync?.bind(drawing);
-  if (prepareAsync === undefined) return;
-  const compileAsync = renderer.compileAsync.bind(renderer);
-  renderer.compileAsync = (...args: Parameters<typeof compileAsync>) => {
-    void prepareAsync(args[0], args[1])?.catch((e: unknown) => console.error('WebGPU clusters:', e));
-    drawing.prepareAsync = () => undefined;
-    try {
-      return compileAsync(...args);
-    } finally {
-      drawing.prepareAsync = prepareAsync;
-    }
-  };
-}
-
-/** what of three's node manager a compile's shadows use */
-type CompileNodes = { updateBefore(renderObject: unknown): void; getNodeFrameForRender(renderObject: unknown): unknown };
-const nodes_ = (renderObject: unknown): { updateBeforeNodes: object[] } =>
-  (renderObject as { getNodeBuilderState(): { updateBeforeNodes: object[] } }).getNodeBuilderState();
-
-/** Where the grade's highlights ease off (renderer.ts's `HI_KNEE`, `HI_CAP`): the brightest channel over `knee`
- *  eases towards `cap`. */
-export interface Highlights { knee: number; cap: number }
-
-/** The grade's numbers as renderer.ts has them: the highlights, the adaptation's base and the share of an area's
- *  light a pixel adapts with it from and fully at (`ADAPT_BASE`, `ADAPT_ALIKE`), and where a bright pixel keeps its
- *  hue, by its brightest channel and by the glare round it (`HUE_FROM`..`HUE_TO`, `GLARE_FROM`..`GLARE_TO`). */
-export interface GradeLooks {
-  highlights: Highlights;
-  /** HDR's knee (renderer.ts `HDR_KNEE`): the share of white under which the frame shows as on an SDR screen */
-  hdrKnee: number;
-  adaptBase: number;
-  adaptAlike: readonly [number, number];
-  hue: readonly [number, number];
-  glare: readonly [number, number];
-  /** each blur level's weight in bloom, tightest to widest (renderer.ts `BLOOM_LEVELS`) */
-  bloom: readonly number[];
-}
-
-/** the weights three's bloom gives its levels: a level's tint is what the game's weight asks of it */
-const THREE_BLOOM_LEVELS = [1, 0.8, 0.6, 0.4, 0.2];
-
-/** `colour` with a NaN or Inf pixel made black and the rest held to 0..64, as WebGL's passes read the scene
- *  (`SCENE_READ`): bloom smears a single bad pixel into black boxes across the frame. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function sanitized(colour: any): any {
-  const { clamp, select, vec4 } = tsl as any;
-  // (a NaN is the one value unequal to itself; an Inf is past any float's range)
-  const nan = colour.r.notEqual(colour.r).or(colour.g.notEqual(colour.g)).or(colour.b.notEqual(colour.b));
-  const inf = colour.r.abs().add(colour.g.abs()).add(colour.b.abs()).greaterThan(1e30);
-  return select(nan.or(inf), vec4(0, 0, 0, 1), clamp(colour, 0, 64));
-}
-
-/** the taps across the rays the sight's edge is softened by, beside the middle one (`seenAround` in core/sight.ts),
- *  and at a level built plain (`plainAtBoot`): its 18 lookups a pixel were most of a phone's final pass */
-const SIGHT_TAPS = [-1, -0.75, -0.5, -0.25, 0.25, 0.5, 0.75, 1];
-const PLAIN_SIGHT_TAPS = [-0.75, 0.75];
-
-/** `colour` in the fog where he can't see (core/sight.ts's `SIGHT_GLSL`, on WebGPU's clip space: depth from 0, y from the top). */
-function seenOnly(colour: any, depthNode: any): any {
-  const { atan, dot, length, max, min, mix, reference, screenUV, select, smoothstep, step, texture, vec2, vec3, vec4 } = tsl as any;
-  const on = reference('value', 'float', SIGHT.uSightOn);
-  const from = reference('value', 'vec2', SIGHT.uSightFrom);
-  const inverse = reference('value', 'mat4', SIGHT.uSightInverse);
-  const sealed = reference('value', 'vec4', SIGHT.uSightSealed);
-  const shutBy = reference('value', 'float', SIGHT.uSightShut);
-  const clip = vec4(screenUV.x.mul(2).sub(1), screenUV.y.mul(2).oneMinus(), depthNode.r, 1);
-  const world = inverse.mul(clip);
-  const place = world.xyz.div(world.w);
-  const to = place.xz.sub(from);
-  const away = length(to);
-  // (how far a place `toward` off a row's rays' middle is seen, soft across the rays: `seenAround` in sight.ts)
-  const seenAround = (toward: any, row: number): any => {
-    const far = length(toward);
-    // (atan(0, 0) is undefined, and NaN smears over the frame in the bloom)
-    const toSafe = select(far.lessThan(0.3), vec2(1, 0), toward);
-    const across = atan(toSafe.y, toSafe.x).div(Math.PI * 2).add(0.5);
-    const aside = min(far.max(0.01).reciprocal().mul(SIGHT_LOOK.edge), SIGHT_LOOK.edgeAngle).div(Math.PI * 2);
-    const seenAlong = (ray: any): any => {
-      const band = texture(SIGHT.tSight.value, vec2(ray, row));
-      const nearer = smoothstep(band.r.add(SIGHT_LOOK.wallFrom), band.r.add(SIGHT_LOOK.wall), far).oneMinus();
-      const further = smoothstep(band.g.add(SIGHT_LOOK.wallFrom), band.g.add(SIGHT_LOOK.wall), far).oneMinus();
-      return mix(nearer, further, band.b);
-    };
-    // (built plain at the boot's level, 3 taps across the rays where 9: a phone's Very low paid for every one)
-    const taps = plainAtBoot ? PLAIN_SIGHT_TAPS : SIGHT_TAPS;
-    let sum = seenAlong(across);
-    for (const tap of taps) sum = sum.add(seenAlong(across.add(aside.mul(tap))));
-    return select(far.lessThan(0.3), 1, sum.div(taps.length + 1));
-  };
-  // (past the door he sees through, the room as seen from the doorway: `seeThroughDoor` in sight.ts)
-  const door = reference('value', 'vec4', SIGHT.uSightDoor);
-  const fromDoor = place.xz.sub(door.xy);
-  const pastDoor = smoothstep(-DOOR_SOFT, 0, dot(fromDoor, door.zw)).mul(reference('value', 'float', SIGHT.uSightDoorOn));
-  // (the doorway's row read only with a door seen through: the same pixels, half the lookups elsewhere)
-  const doorOn = reference('value', 'float', SIGHT.uSightDoorOn);
-  const throughDoor = select(doorOn.greaterThan(0), seenAround(fromDoor, DOOR_ROW).mul(pastDoor), 0);
-  let open = max(seenAround(to, HIS_ROW), throughDoor);
-  // (the ground seen through a roof is by the rays: `seenColour`)
-  const offGround = smoothstep(SIGHT_LOOK.groundFrom, SIGHT_LOOK.groundTo, place.y);
-  const throughRoof = smoothstep(0.9, 0.99, min(colour.a, 1)).oneMinus()
-    .mul(smoothstep(SIGHT_LOOK.roofNear, SIGHT_LOOK.roofFar, away)).mul(offGround.oneMinus());
-  open = open.mul(throughRoof.mul(reference('value', 'float', SIGHT.uSightRoofOne)).oneMinus());
-  const inIt = step(sealed.x, place.x).mul(step(place.x, sealed.z)).mul(step(sealed.y, place.z)).mul(step(place.z, sealed.w));
-  const shut = inIt.mul(shutBy);
-  const over = mix(SIGHT_LOOK.over, SIGHT_LOOK.overSealed, shut);
-  const belowRoofs = smoothstep(SIGHT_LOOK.roofs, SIGHT_LOOK.roofs + SIGHT_LOOK.overSoft, place.y).oneMinus();
-  const roof = texture(SIGHT.tSightRoofs.value, place.xz.div(ROOFS_HALF * 2).add(0.5)).r;
-  const onRoof = min(roof.mul(2), 1);
-  const above = smoothstep(over, over.add(SIGHT_LOOK.overSoft), place.y).mul(max(belowRoofs.mul(onRoof), inIt));
-  const near = away.lessThan(0.3).or(depthNode.r.greaterThanEqual(0.99999));
-  const unseen = select(near, 0, max(open, above).oneMinus().mul(on));
-  const light = dot(colour.rgb, vec3(0.2126, 0.7152, 0.0722));
-  const pressed = light.div(light.add(SIGHT_LOOK.knee)).mul(SIGHT_LOOK.range);
-  const keptOpen = pressed.add(SIGHT_LOOK.floor);
-  const keptShut = pressed.mul(SIGHT_LOOK.sealed).add(SIGHT_LOOK.floor * SIGHT_LOOK.sealedFloor);
-  const kept = mix(keptOpen, keptShut, shut);
-  const ghostShare = smoothstep(0.9, 0.99, min(colour.a, 1)).oneMinus().mul(smoothstep(0.01, 0.05, colour.a));
-  // (ground outside every roof's eaves that he can't see is fogged whole, whatever ghost lies over it: \`seenColour\`)
-  const pastRoofs = offGround.oneMinus().mul(smoothstep(0.01, 0.05, roof).oneMinus());
-  const letOff = mix(1, min(colour.a, 1),
-    max(smoothstep(0.6, 0.9, roof), max(throughRoof, ghostShare).mul(pastRoofs.oneMinus())));
-  const eaves = throughRoof.mul(smoothstep(0.6, 0.9, roof).oneMinus()).mul(smoothstep(0.01, 0.05, roof))
-    .mul(on).mul(open.oneMinus());
-  // (under a ghost its share of the light alone is let off the fog, never its hue: \`seenColour\`)
-  const keptUnder = mix(light, kept, letOff);
-  const fogged = mix(colour.rgb.mul(keptUnder).div(max(light, 0.001)), vec3(...SIGHT_LOOK.tint).mul(keptUnder),
-    SIGHT_LOOK.grey);
-  // (only where the place read is the ground's; a ghost read at its own place lets the fog off by its share, whole)
-  const whole = mix(colour.rgb.mul(kept).div(max(light, 0.001)), vec3(...SIGHT_LOOK.tint).mul(kept), SIGHT_LOOK.grey);
-  const shown = mix(mix(colour.rgb, fogged, unseen), mix(colour.rgb, whole, unseen.mul(letOff)),
-    smoothstep(SIGHT_LOOK.ghostFrom, SIGHT_LOOK.ghostTo, place.y));
-  const seen = vec4(mix(shown, vec3(...SIGHT_LOOK.tint).mul(light).mul(SIGHT_LOOK.eaves),
-    eaves.mul(min(min(colour.a, 1).mul(SIGHT_LOOK.eavesBy), 1))), max(colour.a, 1));
-  // (none of it while the fog is off, as WebGL's returns at once (`SIGHT_GLSL`): a fight's, a whole view's. Worked out
-  // and weighed by nothing, its 18 lookups a pixel were the final pass's 3.2 ms of 4.0 in the lab's crypt at a phone's
-  // pixels, the village on; three's `select` writes an `if` round them)
-  return select(on.greaterThan(0), seen, vec4(colour.rgb, max(colour.a, 1)));
-}
-
-/** the light's weights, as the WebGL grade reads an area's and a pixel's */
-const LUM = [0.2126, 0.7152, 0.0722] as const;
-
-/** `sample` (a function of a place on the screen) averaged over each texel of a `width` by `height` target, as
- *  WebGL's `AreaPass` does: 8x8 taps an eighth of a texel apart, a NaN or Inf tap left out and each held to 64. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function boxDown(sample: (at: any) => any, width: number, height: number): any {
-  const { rtt, screenUV, vec2, vec3, vec4, min, select } = tsl as any;
-  const step = vec2(1 / width / 8, 1 / height / 8);
-  let sum = vec3(0);
-  for (let y = 0; y < 8; y++) {
-    for (let x = 0; x < 8; x++) {
-      const v = sample(screenUV.add(vec2(x - 3.5, y - 3.5).mul(step))).rgb;
-      // (a NaN is the one value unequal to itself; an Inf is past any float's range)
-      const bad = v.x.notEqual(v.x).or(v.y.notEqual(v.y)).or(v.z.notEqual(v.z)).or(v.x.add(v.y).add(v.z).greaterThan(1e30));
-      sum = sum.add(select(bad, vec3(0), min(v, vec3(64))));
-    }
-  }
-  return rtt(vec4(sum.div(64), 1), width, height, { depthBuffer: false });
-}
-
-/** `colour`'s light above the base compressed as the eye adapts to the average light round it, in a small area (a
- *  16x9 grid of the frame) and a large one (4x3), as WebGL's grade does: a pixel as bright as its area or brighter
- *  adapts with it, one half as bright or dimmer keeps its light (renderer.ts's `ADAPT`). */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function adapted(colour: any, small: any, large: any, u: GradeUniforms, looks: GradeLooks): any {
-  const { dot, vec3, vec4, log, pow, max, min, mix, smoothstep, select, reference, screenUV } = tsl as any;
-  const weights = vec3(...LUM);
-  const base = looks.adaptBase;
-  const lum = dot(colour.rgb, weights);
-  const adapt = (avg: any, target: any): any => select(avg.greaterThan(target),
-    log(target.div(base)).div(log(avg.div(base))), 1);
-  const adaptAt = (avg: any, target: any): any => mix(1, adapt(avg, target),
-    smoothstep(looks.adaptAlike[0], looks.adaptAlike[1], lum.div(max(avg, 1e-4))));
-  const smallTarget = reference('value', 'float', u.uSmall);
-  const largeTarget = reference('value', 'float', u.uLarge);
-  const g = min(adaptAt(dot(small.sample(screenUV).rgb, weights), smallTarget),
-    adaptAt(dot(large.sample(screenUV).rgb, weights), largeTarget));
-  const scale = select(lum.greaterThan(base), pow(lum.div(base), g).mul(base).div(max(lum, 1e-6)), 1);
-  return vec4(colour.rgb.mul(scale), colour.a);
-}
-
-/** `colour` tone mapped as WebGL's grade maps it: per channel, but a bright pixel in a large glare (bloom's widest
- *  level round it) mapped by its brightest channel, keeping its colour, as the eye sees a large bright area's. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toneMappedKeepingHue(colour: any, glareAt: any, looks: GradeLooks): any {
-  const { toneMapping, toneMappingExposure, vec3, vec4, max, mix, smoothstep } = tsl as any;
-  const mapped = (c: any): any => toneMapping(THREE.ACESFilmicToneMapping, toneMappingExposure, c);
-  const brightest = max(max(colour.r, max(colour.g, colour.b)), 1e-4);
-  const hue = colour.rgb.div(brightest).mul(mapped(vec3(brightest)).g);
-  const glare = max(glareAt.r, max(glareAt.g, glareAt.b));
-  const keep = smoothstep(looks.hue[0], looks.hue[1], brightest).mul(smoothstep(looks.glare[0], looks.glare[1], glare));
-  return vec4(mix(mapped(colour.rgb).rgb, hue, keep), colour.a);
-}
-
-/** `colour` compressed as the WebGL grade compresses it: the brightest channel over the knee eased towards the cap,
- *  the others kept in their ratio to it, so a stack of lights stops adding up (a fire's flames blew out white). */
-// (untyped: TSL's types don't follow a node through these calls yet)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function compressed(colour: any, { knee }: Highlights, u: GradeUniforms): unknown {
-  const { exp, max, select, vec4, reference } = tsl as any;
-  const brightest = max(colour.r, max(colour.g, colour.b));
-  // (as far again as HDR's peak has room over its paper white: `uCap`, the cap less the knee)
-  const room = reference('value', 'float', u.uCap);
-  const eased = exp(brightest.sub(knee).negate().div(room)).oneMinus().mul(room).add(knee);
-  const scale = select(brightest.greaterThan(knee), eased.div(brightest), 1);
-  return vec4(colour.rgb.mul(scale), colour.a);
-}
-
-/** The WebGL grade's uniforms the WebGPU one reads (core/renderer.ts `GradeShader`), each `{ value }` */
-export interface GradeUniforms {
-  uTime: { value: number };
-  uCap: { value: number };
-  uHdr: { value: number };
-  uPaper: { value: number };
-  uPeak: { value: number };
-  uSmall: { value: number };
-  uLarge: { value: number };
-  uVignette: { value: number };
-  uHurt: { value: number };
-  uLow: { value: number };
-  uBeat: { value: number };
-  tBlood: { value: THREE.Texture | null };
-}
-
-/** `colour` (tone mapped, in sRGB) graded as the WebGL grade grades it there: the vignette, shadows cooled and
- *  highlights warmed, a film's grain, the low Health look (the colour drained, the blood in from the edges as far as the Health has
- *  fallen: core/lowLife.ts) and a hit's red flash round the edges. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function graded(colour: any, u: GradeUniforms): unknown {
-  const { dot, vec2, vec3, vec4, mix, pow, smoothstep, step, clamp, texture, reference, screenUV, fract, sin } =
-    tsl as any;
-  const read = (uniform: { value: number }): any => reference('value', 'float', uniform);
-  const low = read(u.uLow);
-  const d = screenUV.sub(0.5);
-  const r = dot(d, d);
-  const vignette = smoothstep(0.12, 0.75, r.mul(read(u.uVignette))).oneMinus();
-  let c = colour.rgb.mul(mix(0.35, 1, vignette));
-  const lum = dot(c, vec3(0.299, 0.587, 0.114));
-  c = mix(c.mul(vec3(0.93, 0.97, 1.08)), c.mul(vec3(1.04, 1.0, 0.94)), smoothstep(0.2, 0.8, lum));
-  const grainAt = screenUV.mul(900).add(read(u.uTime));
-  const grain = fract(sin(dot(grainAt, vec2(12.9898, 78.233))).mul(43758.5453));
-  c = c.add(grain.sub(0.5).mul(0.025));
-  c = mix(c, vec3(dot(c, vec3(0.299, 0.587, 0.114))), pow(low, 1.5).mul(0.9));
-  // (the mask as WebGL's grade reads it, its rows from the screen's foot up)
-  const mask = texture(u.tBlood.value!, screenUV.flipY()).rgb;
-  const reach = low.mul(read(u.uBeat).mul(0.06).add(1));
-  const shown = mask.r.mul(smoothstep(mask.g.sub(0.03), mask.g.add(0.004), reach)).mul(step(1e-6, low));
-  const age = clamp(reach.sub(mask.g).div(0.45), 0, 1);
-  const rim = smoothstep(0, 0.035, reach.sub(mask.g)).oneMinus();
-  const blood = mix(vec3(0.42, 0.015, 0.025), vec3(0.11, 0, 0.006), age).mul(mask.b.mul(0.5).add(0.75))
-    .add(vec3(0.28, 0.04, 0.04).mul(rim).mul(mask.b));
-  c = mix(c, blood, shown.mul(mix(0.62, 0.94, age)));
-  c = mix(c, vec3(0.6, 0.02, 0.02), read(u.uHurt).mul(smoothstep(0.05, 0.5, r)).mul(0.8));
-  return vec4(c, colour.a);
-}
-
-/** `colour` (graded, in sRGB) for an HDR canvas, as the WebGL grade's HDR does: the frame as an SDR screen shows it
- *  (gamma 2.2: Windows shows SDR by the sRGB curve, which lifts its shadows), the highlights over `knee` grown towards
- *  the peak by their brightest channel (hue kept; with no room over the paper white, nothing grown), all of it at the
- *  paper white, encoded as extended sRGB. As it is in SDR. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function inHdr(colour: any, u: GradeUniforms, knee: number): any {
-  const { clamp, max, pow, reference, select, sRGBTransferOETF, vec3, vec4 } = tsl as any;
-  const read = (uniform: { value: number }): any => reference('value', 'float', uniform);
-  const paper = read(u.uPaper);
-  const v = pow(clamp(colour.rgb, 0, 1), vec3(2.2));
-  const top = max(max(v.r, v.g), v.b);
-  const room = max(read(u.uPeak).div(paper), 1);
-  const along = clamp(top.sub(knee).div(1 - knee), 0, 1);
-  const a = room.sub(knee).div(1 - knee).reciprocal();
-  const grown = v.mul(along.mul(1 - knee).div(along.mul(a.oneMinus()).oneMinus()).add(knee)).div(max(top, 1e-6));
-  const shown = sRGBTransferOETF(vec4(select(top.greaterThan(knee), grown, v).mul(paper), 1)).rgb;
-  // (the frame is opaque, whatever the scene's added light left in its alpha: core/renderer.ts's grade, #575)
-  return vec4(select(read(u.uHdr).greaterThan(0.5), shown, colour.rgb), 1);
-}
-
-/** what draws into the scene's target after its pass, before the post chain reads it (the arms: `core/renderer.ts`) */
-let overScene: () => void = () => {};
-export function drawOverScene(draw: () => void): void {
-  overScene = draw;
-}
-
-/** The post chain on WebGPU: the scene's pass, its bloom added, adapted to the light round each pixel, its highlights
- *  compressed, tone mapped keeping a large glare's hue and in sRGB, then graded there as WebGL's grade is
- *  (`graded`), its NaN and Inf pixels cleaned out first (`sanitized`), and in HDR grown past white (`inHdr`). */
-export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera,
-  looks: GradeLooks, grade: GradeUniforms): Promise<void> {
-  const { RenderPipeline } = await import('three/webgpu');
-  const { pass } = await import('three/tsl');
-  const { bloom } = await import('three/addons/tsl/display/BloomNode.js');
-  const gpu = renderer as unknown as WebGPURenderer;
-  const scenePass = pass(scene, camera);
-  // (sized as its frames will size it, before the warm-ups compile into it: the meshlets' culling is made for the
-  // size it's drawn at, and the lobby's, compiled at the 1 px it started at, was made again with all its batches at
-  // its first frame, their node builds in it)
-  const size = gpu.getDrawingBufferSize(new THREE.Vector2());
-  scenePass.setSize(size.x, size.y);
-  sceneTarget = scenePass.renderTarget;
-  samplesOf = scenePass as unknown as NonNullable<typeof samplesOf>;
-  if (samplesChosen !== null) {
-    samplesOf.options.samples = samplesChosen;
-    samplesOf.renderTarget.samples = samplesChosen;
-  }
-  sizedByShare.push(scenePass);
-  const drawScene = scenePass.updateBefore.bind(scenePass);
-  scenePass.updateBefore = (frame: Parameters<typeof drawScene>[0]) => {
-    const drawn = drawScene(frame);
-    overScene();
-    return drawn;
-  };
-  const raw = scenePass.getTextureNode('output');
-  // (the fog of what he can't see is the village's: core/beta.ts)
-  const color = VILLAGE ? seenOnly(sanitized(raw), scenePass.getTextureNode('depth')) : sanitized(raw);
-  pipeline = new RenderPipeline(gpu);
-  // (tone mapped and in sRGB here, the grade after: the pipeline's own conversion off)
-  pipeline.outputColorTransform = false;
-  const glow = bloom(color, BLOOM_STRENGTH, 0, 0.9);
-  bloomNode = glow as unknown as Scaled;
-  bloomStrength = glow.strength as unknown as { value: number };
-  // (the quality may have turned it off before the node was made)
-  bloomStrength.value = bloomOff ? 0 : bloomStrengthWanted;
-  skipBloomWhileOff(glow as unknown as { updateBefore(frame: unknown): unknown });
-  sizeBloom();
-  looks.bloom.forEach((weight, i) => glow.bloomTintColors[i].setScalar(weight / THREE_BLOOM_LEVELS[i]));
-  // (untyped in three's types: its output as a texture node)
-  const glowTexture = (glow as unknown as { getTextureNode(): any }).getTextureNode(); // eslint-disable-line @typescript-eslint/no-explicit-any
-  // (after bloom, as on WebGL: the eye adapts to all the light that reaches it, halos included)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const lightAt = (at: any): any => sanitized(raw.sample(at)).add(glowTexture.sample(at));
-  const grid = boxDown(lightAt, 64, 36);
-  const small = boxDown((at) => grid.sample(at), 16, 9);
-  const large = boxDown((at) => small.sample(at), 4, 3);
-  for (const grid_ of [grid, small, large]) {
-    grid_.autoUpdate = false;
-    lightGrids.push(grid_);
-  }
-  // (bloom's widest level: how large a bright spot is)
-  const widest = (glow as unknown as { _renderTargetsVertical: THREE.RenderTarget[] })._renderTargetsVertical.at(-1)!;
-  const lit = compressed(adapted(color.add(glow), small, large, grade, looks), looks.highlights, grade);
-  const mapped = toneMappedKeepingHue(lit, tsl.texture(widest.texture).sample(tsl.screenUV), looks);
-  // (tone mapped above: here only into sRGB)
-  const out = tsl.renderOutput(mapped as never, THREE.NoToneMapping);
-  pipeline.outputNode = <typeof pipeline.outputNode>inHdr(graded(out, grade), grade, looks.hdrKnee);
-}
-
-/** the scene's environment as one node, its map swapped (`oneEnvironment`) */
-let environment: { value: THREE.Texture } | null = null;
-/** the sky worked out in its place, its colours set per biome (`skyEnvironment.ts`) */
-let sky: SkyEnvironment | null = null;
-
-/**
- * The scene's environment map given to WebGPU as one node for good, its map swapped as the look changes: three
- * makes each map a node of its own, whose id is in every lit pipeline's key, so each biome's map and the hall of
- * heroes' had a copy of every lit pipeline, made at the first frames in its look (a first visit's hall: 6 s held up).
- */
-export function oneEnvironment(scene: THREE.Scene, colours: EnvColours): void {
-  const map = scene.environment;
-  if (!WEBGPU || !map) return;
-  sky ??= skyEnvironment();
-  sky.set(colours);
-  environment ??= (map as THREE.CubeTexture).isCubeTexture ? tsl.cubeTexture(map as THREE.CubeTexture) : tsl.texture(map);
-  environment.value = map;
-  environmentWorkedOut(scene, SKY_ENVIRONMENT.sky === 1);
-}
-
-/** The scene's environment the sky worked out (`skyEnvironment.ts`), or three's map looked up: Profile this spot's
- *  part times one against the other (`perf/shadingParts.ts`). */
-export function environmentWorkedOut(scene: THREE.Scene, workedOut: boolean): void {
-  const node = workedOut ? sky?.node : environment;
-  if (node) (scene as unknown as { environmentNode: unknown }).environmentNode = node;
-}
-
 /** `group`'s point lights, those casting shadows first (as the rig has them: `rigPointLights`). */
 function pointLightsIn(group: THREE.Object3D): THREE.PointLight[] {
   const lights: THREE.PointLight[] = [];
@@ -1752,23 +730,17 @@ function mirror(light: THREE.PointLight, rigged: THREE.PointLight): void {
  * has as many as the rig, as many casting (`arena.ts` checks): the casters take its first slots.
  */
 export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): void {
-  if (!WEBGPU) return;
   const lightsOf = rigPlaces.lightsOf;
   for (const group of groups) rigMorePointLights(group);
   groups = rigPlaces.groups;
   const most = Math.max(...[...lightsOf.values()].map((lights) => lights.length));
   const rig = Array.from({ length: most }, () => new THREE.PointLight(0xffffff, 0));
+  for (const rigged of rig) rigged.userData.rigged = true;
   [...lightsOf.values()][0].forEach((light, i) => {
     rig[i].castShadow = light.castShadow;
     rig[i].shadow.autoUpdate = light.shadow.autoUpdate;
   });
   scene.add(...rig);
-  rig.forEach((rigged, i) => {
-    rigSources.set(rigged, () => {
-      const shown = groups.find((group) => group.visible);
-      return shown ? lightsOf.get(shown)![i] : undefined;
-    });
-  });
   const before = scene.onBeforeRender;
   scene.onBeforeRender = (...args) => {
     const shown = groups.find((group) => group.visible);
@@ -1781,26 +753,32 @@ export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): vo
   };
 }
 
+/**
+ * The shown place's own point lights, which the rig copies (`rigPointLights`) and three never sees: for a renderer
+ * that isn't three's (src/engine), which runs none of the hooks the rig is set in. It walked the scene for its
+ * lights and found the rig's alone, as the last hook left them: a house's candles, hearth and chandelier lit
+ * nothing (`lab rust --village --room library`: "0 point lights").
+ */
+export function shownPointLights(): readonly THREE.PointLight[] {
+  const shown = rigPlaces.groups.find((group) => group.visible);
+  return (shown && rigPlaces.lightsOf.get(shown)) || NO_LIGHTS;
+}
+const NO_LIGHTS: readonly THREE.PointLight[] = [];
+
+/** The place shown now, of those the rig copies its lights from (the Rust engine draws its lights' shadows of
+ *  what stands still in it: engine/lampShadows.ts). */
+export const shownPlace = (): THREE.Object3D | undefined => rigPlaces.groups.find((group) => group.visible);
+
 /** the places the rig copies its lights from, each with its point lights (`rigPointLights`, `rigMorePointLights`) */
 const rigPlaces = { groups: [] as THREE.Object3D[], lightsOf: new Map<THREE.Object3D, THREE.PointLight[]>() };
 
 /** A place built after the rig was made (a fight's biome, built at the run's start: world/arena.ts) copied by it too:
  *  it has as many lights as every place, so the rig's lit pipelines take it as they are. */
 export function rigMorePointLights(group: THREE.Object3D): void {
-  if (!WEBGPU) return;
   const lights = pointLightsIn(group);
   rigPlaces.lightsOf.set(group, lights);
   rigPlaces.groups.push(group);
   for (const light of lights) light.visible = false;
-}
-
-/** each rig light's source now: the shown biome's point light it's copied from before each render (`mirror`) */
-const rigSources = new WeakMap<THREE.PointLight, () => THREE.PointLight | undefined>();
-
-/** The light whose place, colour and reach `light` draws with: a rig light's source (`rigPointLights`: a reach set
- *  on the rig light is copied over before the next render), else itself (the profiler's lights' reach). */
-export function drawnFrom(light: THREE.PointLight): THREE.PointLight {
-  return rigSources.get(light)?.() ?? light;
 }
 
 /** Waits for the GPU to be done with every command sent so far: the device's queue, or on WebGPURenderer's WebGL 2
@@ -1809,39 +787,4 @@ export async function gpuDone(renderer: THREE.WebGLRenderer): Promise<void> {
   const backend = (renderer as unknown as { backend: { device?: GPUDevice; gl?: WebGL2RenderingContext } }).backend;
   if (backend.device) await backend.device.queue.onSubmittedWorkDone();
   else backend.gl?.finish();
-}
-
-/**
- * A new frame of three's nodes begun, by each of the game's frames (`renderWebGPU`): three's own animation loop begins
- * one at each of the browser's frames, and a pass draws its scene once a node frame. A frame drawn within the same
- * one drew the post chain over the scene as it was: a phone's game went on with the scene's picture stuck (from play:
- * "everything stuck, but not frozen", the view moving at once as the profiler, which began its own, started), and the
- * profiler's canary, the frame drawn twice, drew the scene once.
- */
-export function newNodeFrame(renderer: THREE.WebGLRenderer): void {
-  const nodes = (renderer as unknown as { _nodes: { nodeFrame: { update(): void; frameId: number } } })._nodes;
-  nodes.nodeFrame.update();
-  (renderer.info as unknown as { frame: number }).frame = nodes.nodeFrame.frameId;
-}
-
-/** the adaptation's grids of the frame's light, made again in turn (`renderWebGPU`) */
-const lightGrids: { autoUpdate: boolean; textureNeedsUpdate: boolean }[] = [];
-let nextGrid = 0;
-
-/** Draws a frame through the WebGPU post chain. */
-/**
- * The frame: its last pass drawn onto the canvas. three's pipeline draws it into whatever target is set, and an async
- * compile finishing puts back the target set when it started (a warm-up's, the scene's own): the frame after drew
- * into the texture it read (a GPUValidationError on `output`, that pass dropped).
- */
-export function renderWebGPU(): void {
-  if (!pipeline) return;
-  // (one of the adaptation's three grids a frame: the eye's adapting is slow, and each was a render of its own)
-  if (lightGrids.length > 0) lightGrids[(nextGrid++) % lightGrids.length].textureNeedsUpdate = true;
-  const renderer = (pipeline as unknown as { renderer: WebGPURenderer }).renderer;
-  // (each frame a node frame of its own: three's passes draw their scene once a node frame, `newNodeFrame`)
-  newNodeFrame(renderer as unknown as THREE.WebGLRenderer);
-  renderer.setRenderTarget(null);
-  drawnYet = true;
-  pipeline.render();
 }

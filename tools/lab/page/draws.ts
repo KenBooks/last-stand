@@ -18,7 +18,6 @@ import * as THREE from 'three';
 import type { Lab, Fixture, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
 import { G } from '../../../src/state';
-import { WEBGPU } from '../../../src/core/webgpu';
 import { crowdPlaces, CROWD_FACING, CROWD_SPOT } from './crowd';
 import { foesAt } from './death';
 import * as swingTrail from '../../../src/fx/swingTrail';
@@ -27,7 +26,7 @@ import { toLobby } from './hallMoves';
 import { holdHour } from '../../../src/game/clock';
 import { holdShadowsOnMove } from '../../../src/world/shadowsOnMove';
 import { groundHeight } from '../../../src/world/ground';
-import { faceCamera, type ViewMode } from '../../../src/core/renderer';
+import { faceCamera, setZoom, type ViewMode } from '../../../src/core/renderer';
 import { GHOST_COUNT_LAYER } from '../../../src/core/layers';
 import { standIn } from './light';
 
@@ -179,36 +178,26 @@ interface DrawingBackend {
   draw(renderObject: RenderObject, info: unknown): void;
 }
 
-/** The pass a WebGPU draw is in: its shadow maps are drawn from the scene by the light's camera (WebGL's are drawn
- *  with no scene). */
+/** The pass a WebGPU draw is in: its shadow maps are drawn from the scene by the light's camera. */
 function webgpuPassOf(drawn: RenderObject): Pass {
   const shadowed = drawn.scene === G.scene && drawn.camera !== G.camera
     && (drawn.camera as THREE.OrthographicCamera).isOrthographicCamera;
   return passOf(drawn.camera, shadowed ? null : drawn.scene);
 }
 
-/** Records every draw call until `stop()`: what was drawn, and the record. On WebGPU, each draw its backend is given
- *  (`backend.draw`, a `RenderObject` a draw: WebGL's `renderBufferDirect` isn't there). */
+/** Records every draw call until `stop()`: what was drawn, and the record: each draw three's backend is given
+ *  (`backend.draw`, a `RenderObject` a draw). */
 function recordDraws(): { record: FrameDraws; stop(): void } {
   const record: FrameDraws = {
     geometries: new Map(), looks: new Map(), parts: new Map(), weights: new Map(), arms: new Map(), alike: new Map(),
   };
-  if (WEBGPU) {
-    const backend = (G.renderer as unknown as { backend: DrawingBackend }).backend;
-    const draw = backend.draw;
-    backend.draw = function (drawn, info) {
-      recordDraw(record, webgpuPassOf(drawn), drawn.camera, drawn.geometry, drawn.material, drawn.object);
-      draw.call(this, drawn, info);
-    };
-    return { record, stop: () => { backend.draw = draw; } };
-  }
-  const gl = G.renderer;
-  const own = gl.renderBufferDirect.bind(gl);
-  gl.renderBufferDirect = (camera, scene, geometry, material, object, group) => {
-    recordDraw(record, passOf(camera, scene), camera, geometry, material, object);
-    own(camera, scene, geometry, material, object, group);
+  const backend = (G.renderer as unknown as { backend: DrawingBackend }).backend;
+  const draw = backend.draw;
+  backend.draw = function (drawn, info) {
+    recordDraw(record, webgpuPassOf(drawn), drawn.camera, drawn.geometry, drawn.material, drawn.object);
+    draw.call(this, drawn, info);
   };
-  return { record, stop: () => { gl.renderBufferDirect = own; } };
+  return { record, stop: () => { backend.draw = draw; } };
 }
 
 /** One draw call into the record: by its geometry, by its look in the scene's pass, by its object in the arms'. */
@@ -250,21 +239,14 @@ function recordDraw(record: FrameDraws, pass: Pass, camera: THREE.Camera, geomet
   }
 }
 
-/** A scene's draw by its program and look (`Alike`). */
+/** A scene's draw by its look (`Alike`). */
 function recordAlike(record: FrameDraws, material: THREE.Material, part: string): void {
-  const key = `${lookOf(material)}, program ${programOf(material)}`;
+  const key = lookOf(material);
   const alike = record.alike.get(key) ?? { draws: 0, materials: new Set(), parts: new Set() };
   alike.draws++;
   alike.materials.add(material);
   alike.parts.add(part);
   record.alike.set(key, alike);
-}
-
-/** The program `material` last drew with, by three's id (WebGL's; none on WebGPU). */
-function programOf(material: THREE.Material): string {
-  if (WEBGPU) return '?';
-  const program = (G.renderer.properties.get(material) as { currentProgram?: { id: number } }).currentProgram;
-  return program ? String(program.id) : '?';
 }
 
 /** The scene's programs and looks drawn by more than one material, the most materials first: what a merge by
@@ -613,7 +595,12 @@ export interface Stand {
   village: boolean;
   /** with `village`, the hour it's lit for (the page's own when not given) */
   hour?: number;
+  /** with `village`, the camera's zoom from above (the lobby's own when not given; 1.7 the furthest out) */
+  zoom?: number;
 }
+
+/** the frames the camera is given to glide to a zoom asked for */
+const ZOOM_FRAMES = 90;
 
 /** The hero stood where `stand` asks: in a biome, or in the lobby's village as `draws --village` stands him. */
 export async function standAt(lab: Lab, stand: Stand): Promise<void> {
@@ -624,6 +611,10 @@ export async function standAt(lab: Lab, stand: Stand): Promise<void> {
   await lab.setup({ view: stand.view, facing: VILLAGE_FACING, fresh: true });
   if (stand.hour !== undefined) holdHour(stand.hour);
   await inVillage(lab, stand.at ?? VILLAGE_SPOT, VILLAGE_FACING);
+  if (stand.zoom !== undefined) {
+    setZoom(stand.zoom);
+    await lab.step(ZOOM_FRAMES);
+  }
 }
 
 /** The run the set-up started left for the village, the hero put at (x, z) facing `facing` and let settle. */

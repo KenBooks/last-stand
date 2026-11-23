@@ -91,6 +91,8 @@ const NORMAL = /* glsl */ `
 export function triplanar<T extends THREE.Material>(material: T, tile: number): T {
   const own = material.onBeforeCompile;
   const key = `${material.customProgramCacheKey()}-triplanar${tile}`;
+  // (for a renderer with no hook of three's: the Rust engine's kit look reads it, engine/looks/kit.ts)
+  material.userData.triplanar = tile;
   material.onBeforeCompile = (shader, renderer) => {
     own.call(material, shader, renderer);
     shader.vertexShader = shader.vertexShader

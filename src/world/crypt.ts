@@ -2,9 +2,10 @@
 // spawn gates, lancet window niches and banners; a raised central dais with obelisks,
 // flagstone paths from the gates and a ring walk, spirit beacons and braziers. Broken columns,
 // sarcophagi and gravestones break up the floor; a ruined necropolis and dead trees stand beyond.
+import { rustLook } from '../engine/custom';
+import { beaconLook, dampLook, outsideLook } from '../engine/looks/crypt';
 import * as THREE from 'three';
 import { portShader, seeKept, seeUniforms, wgslNoise } from '../core/shaderPorts';
-import { WEBGPU } from '../core/webgpu';
 import { dampNodes, outsideOutputNode } from './cryptNodes';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA } from '../data/balance';
@@ -12,8 +13,8 @@ import { cobblestone, soil, ashlar, granite, limestone, marble, slate, bark, ban
 import { particles, col } from '../fx/particles';
 import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
-import { seeThrough, seeThroughFade } from '../core/seeThrough';
-import { floorRelief, reliefContext } from '../core/parallax';
+import { seeThrough, seeThroughFade, seeValue } from '../core/seeThrough';
+import { reliefContext } from '../core/parallax';
 import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, asTree, asGrass, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type GatePlace, type Portal, type Updater } from './props';
 
 /** the crypt's environment's colours (compiled ahead: `compileEnvMaps`) */
@@ -70,30 +71,11 @@ const MOON_DIR = new THREE.Vector3(-0.74, 0.3, 0.6).normalize();
  * so the eye stays on the arena; the close views look out at the full skyline.
  */
 const outside = restartsAt({ value: 0 }, { value: 1 });
-function dimOutside(shader: THREE.WebGLProgramParametersWithUniforms): void {
-  shader.uniforms.uOutside = outside;
-  shader.vertexShader = shader.vertexShader
-    .replace('#include <common>', '#include <common>\nvarying vec2 vOutXZ;')
-    .replace('#include <project_vertex>', `#include <project_vertex>
-      vec4 outW = vec4(transformed, 1.0);
-      #ifdef USE_INSTANCING
-        outW = instanceMatrix * outW;
-      #endif
-      vOutXZ = (modelMatrix * outW).xz;`);
-  shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying vec2 vOutXZ;\nuniform float uOutside;')
-    .replace('#include <opaque_fragment>', `outgoingLight *= 1.0 - uOutside * 0.8 * smoothstep(${(WALL_R + 1.5).toFixed(1)}, ${(WALL_R + 7).toFixed(1)}, length(vOutXZ));
-      #include <opaque_fragment>`);
-}
-/** how `dimOutside` darkens past the wall (WebGPU's nodes: `outsideOutputNode`) */
+/** how far past the wall it darkens, and by how much (the nodes: `outsideOutputNode`) */
 const OUTSIDE = { from: WALL_R + 1.5, to: WALL_R + 7, most: 0.8 };
 function outsideDim<M extends THREE.Material>(m: M): M {
-  if (WEBGPU) {
-    (m as M & { outputNode: unknown }).outputNode = outsideOutputNode(outside, OUTSIDE);
-    return m;
-  }
-  m.onBeforeCompile = dimOutside;
-  m.customProgramCacheKey = () => 'outsidedim';
+  (m as M & { outputNode: unknown }).outputNode = outsideOutputNode(outside, OUTSIDE);
+  rustLook(m, outsideLook(outside, OUTSIDE));
   return m;
 }
 
@@ -159,76 +141,17 @@ const EARTH = { reach: 1.4, ragged: 0.45, tile: 3, stones: 0.4, washed: [0.25, 0
 function dampGround<M extends THREE.MeshStandardMaterial>(m: M, earth: THREE.Vector3[]): M {
   const damp = { value: dampMap() };
   const litter = pbrMaterialMaps(soil(), 1);
-  if (WEBGPU) {
-    const nodes = dampNodes(m, {
-      map: damp.value, span: DAMP_SPAN, earth, ragged: EARTH.ragged, stones: EARTH.stones, washed: EARTH.washed,
-      tile: EARTH.tile, soil: litter,
-    });
-    Object.assign(m, {
-      colorNode: nodes.color, roughnessNode: nodes.roughness, normalNode: nodes.normal,
-      outputNode: outsideOutputNode(outside, OUTSIDE),
-    });
-    reliefContext(m, COBBLE_RELIEF);
-    return m;
-  }
-  m.onBeforeCompile = (shader) => {
-    dimOutside(shader);
-    shader.uniforms.uDamp = damp;
-    shader.uniforms.uEarth = { value: earth };
-    shader.uniforms.uLitter = { value: litter.map };
-    shader.uniforms.uLitterN = { value: litter.normalMap };
-    shader.uniforms.uLitterR = { value: litter.roughnessMap };
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vDampXZ;')
-      .replace('#include <project_vertex>', '#include <project_vertex>\nvDampXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
-    shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>
-        varying vec2 vDampXZ;
-        uniform sampler2D uDamp;
-        uniform vec3 uEarth[${earth.length}];
-        uniform sampler2D uLitter;
-        uniform sampler2D uLitterN;
-        uniform sampler2D uLitterR;
-        float dampAmt;
-        float earthAmt;
-        vec2 litterAt;`)
-      .replace('#include <map_fragment>', `#include <map_fragment>
-        vec3 dampS = texture2D(uDamp, vDampXZ * ${(1 / DAMP_SPAN).toFixed(6)}).rgb;
-        dampAmt = dampS.r;
-        diffuseColor.rgb *= 0.82 + dampS.g * 0.36;
-        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.5, 0.55, 0.68), dampAmt);
-        // moss creeping in from the wall
-        float mossR = smoothstep(22.0, 28.0, length(vDampXZ)) * dampS.b;
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.075, 0.035), mossR * 0.7);
-        // earth round the dead trees' feet, its edge ragged by the damp's own noise and cut round the cobbles: the
-        // grout gives way first, a stone's top last, so the paving stops at whole stones
-        float stoneTop = textureGrad(roughnessMap, reliefAt, reliefDx, reliefDy).r;
-        earthAmt = 0.0;
-        float earthIn = 1.0;
-        for (int i = 0; i < ${earth.length}; i++) {
-          float reach = uEarth[i].z;
-          float d = length(vDampXZ - uEarth[i].xy) + (dampS.g - 0.5) * reach * ${EARTH.ragged.toFixed(2)};
-          float edge = d - reach - (0.5 - stoneTop) * ${EARTH.stones.toFixed(2)};
-          earthAmt = max(earthAmt, 1.0 - smoothstep(${(-EARTH.washed[0]).toFixed(2)}, ${EARTH.washed[1].toFixed(2)}, edge));
-          earthIn = min(earthIn, d / max(reach, 1e-3));
-        }
-        // (bare soil, darker in towards the trunk)
-        litterAt = vDampXZ * ${(1 / EARTH.tile).toFixed(6)};
-        vec3 soil = texture2D(uLitter, litterAt).rgb * (0.75 + 0.25 * clamp(earthIn, 0.0, 1.0));
-        diffuseColor.rgb = mix(diffuseColor.rgb, soil, earthAmt);
-        dampAmt *= 1.0 - earthAmt;`)
-      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-        // (the soil's own relief, its tangent space the floor's: u along x, v along z, up its normal)
-        vec3 litterN = texture2D(uLitterN, litterAt).xyz * 2.0 - 1.0;
-        vec3 litterUp = normalize((viewMatrix * vec4(litterN.x, litterN.z, -litterN.y, 0.0)).xyz);
-        normal = normalize(mix(normal, litterUp, earthAmt));`)
-
-      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-        roughnessFactor = mix(roughnessFactor, 0.42, dampAmt);
-        roughnessFactor = mix(roughnessFactor, texture2D(uLitterR, litterAt).g, earthAmt);`);
-    floorRelief(shader, COBBLE_RELIEF);
+  const laid = {
+    map: damp.value, span: DAMP_SPAN, earth, ragged: EARTH.ragged, stones: EARTH.stones, washed: EARTH.washed,
+    tile: EARTH.tile, soil: litter,
   };
-  m.customProgramCacheKey = () => 'dampground';
+  const nodes = dampNodes(m, laid);
+  rustLook(m, dampLook(laid, outside, OUTSIDE, COBBLE_RELIEF));
+  Object.assign(m, {
+    colorNode: nodes.color, roughnessNode: nodes.roughness, normalNode: nodes.normal,
+    outputNode: outsideOutputNode(outside, OUTSIDE),
+  });
+  reliefContext(m, COBBLE_RELIEF);
   return m;
 }
 
@@ -1237,13 +1160,14 @@ function beaconFlameMat(updaters: Updater[]): THREE.ShaderMaterial {
     };
   });
   updaters.push((_dt, t) => { mat.uniforms.uTime.value = t; });
+  rustLook(mat, { ...beaconLook(mat.uniforms.uTime), fades: seeValue('prop') });
   return mat;
 }
 
 /** A brazier on two stepped slabs, its fire's light casting the still shadows; `y0` the floor it stands on (the hall
  *  of heroes' stage: world/heroHall.ts), `slabs` how wide its slabs are against the crypt's (the village's hall's dais
  *  leaves less room). */
-export function buildBrazier(scene: THREE.Object3D, x: number, z: number, a: number, iron: THREE.Material, stone: THREE.Material, updaters: Updater[], y0 = 0, glow = 15, flames = 1, slabs = 1): void {
+export function buildBrazier(scene: THREE.Object3D, x: number, z: number, a: number, iron: THREE.Material, stone: THREE.Material, updaters: Updater[], y0 = 0, glow = 15, flames = 1, slabs = 1): THREE.PointLight {
   // two stepped slabs lift the fire
   for (const [w, y] of [[2.4 * slabs, 0.14], [1.7 * slabs, 0.4]]) {
     const step = new THREE.Mesh(boxWithUV(w, 0.28, w, 0.5), stone);
@@ -1267,6 +1191,7 @@ export function buildBrazier(scene: THREE.Object3D, x: number, z: number, a: num
     bowl: [[-0.16, 0.25], [0.04, 0.6], [0.19, 0.65]],
     smoke: 2.5, smokeColour: 0x2c2a28, embers: 8, glow: flames,
   }, updaters);
+  return light;
 }
 
 /** Clusters of candles of different heights, their flames swaying, now and then giving off a spark. */

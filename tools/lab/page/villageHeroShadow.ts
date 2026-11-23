@@ -5,7 +5,7 @@
 // lamp in turn, on paving where there is some round it ("it was missing for half of them"). `canary` stops him
 // casting by the last lamp, which must be found.
 import * as THREE from 'three';
-import type { Lab } from './lab';
+import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
 import { groundHeight } from '../../../src/world/ground';
@@ -66,6 +66,14 @@ function castingLights(): THREE.PointLight[] {
   return lights;
 }
 
+/** On the Rust engine (`src/engine`), the lamps' shadows at `strength`, the still ones and the movers': it reads no
+ *  light's own `shadow.intensity`, so with those alone held off both readings were the same and his shadow read 0%
+ *  of every patch while the frame showed it. Its switch is the game's tunable (`rust.lampShadows`), read each frame;
+ *  nothing on three's renderers. */
+function engineLampShadows(strength: number): void {
+  if (document.getElementById('rust-canvas')) window.__tune?.('rust.lampShadows', [strength]);
+}
+
 /** The middle of `patches`. */
 function middleOf(patches: THREE.Vector3[]): THREE.Vector3 {
   const middle = new THREE.Vector3();
@@ -86,6 +94,7 @@ function readOver(lab: Lab, patches: THREE.Vector3[], strength: number | null): 
   const lights = castingLights();
   const strengths = lights.map((light) => light.shadow.intensity);
   if (strength !== null) for (const light of lights) light.shadow.intensity = strength;
+  if (strength !== null) engineLampShadows(strength);
   const over = middleOf(patches);
   camera.position.set(over.x + 0.01, over.y + OVER, over.z);
   camera.lookAt(over);
@@ -97,6 +106,7 @@ function readOver(lab: Lab, patches: THREE.Vector3[], strength: number | null): 
     lights.forEach((light, i) => {
       light.shadow.intensity = strengths[i];
     });
+    if (strength !== null) engineLampShadows(1);
     camera.position.copy(kept.at);
     camera.quaternion.copy(kept.turn);
     camera.updateMatrixWorld();
@@ -116,6 +126,21 @@ function heroCasts(on: boolean, kept: Map<THREE.Object3D, boolean>): void {
     }
   });
   if (on) kept.clear();
+  engineCastsAll(on);
+}
+
+/** On the Rust engine, whether the sun's shadow map is kept on the frames the game leaves it out of
+ *  (`rust.shadowTurns`): drawn every frame while he's read casting and not, stood still, as the game's movers are. */
+function engineShadowTurns(on: boolean): void {
+  if (document.getElementById('rust-canvas')) window.__tune?.('rust.shadowTurns', [on ? 1 : 0]);
+}
+
+/** On the Rust engine, whether what takes a shadow casts one too (its `rust.castAll`, on as it boots: the village's
+ *  still things are in maps of three's the engine hasn't got). Left on, a hero told to cast nothing cast on, as he
+ *  takes shadows: both readings were the same, and his shadows read 0%. Off while he casts nothing, and what stands
+ *  still casts nothing then either; the patches read lie on open paving behind him. */
+function engineCastsAll(on: boolean): void {
+  if (document.getElementById('rust-canvas')) window.__tune?.('rust.castAll', [on ? 1 : 0]);
 }
 
 /** The share of the ground's light round each of `patches` the lamps' shadows take, read with them at their
@@ -212,6 +237,26 @@ function mostOfTheMoon(lab: Lab, patches: THREE.Vector3[], casts: Map<THREE.Obje
   return Math.max(...patches.map((_, i) => 1 - casting[i] / Math.max(bare[i], 1e-3)));
 }
 
+/** The ground round `patches` pictured from straight over their middle, as `readOver` reads it, the lamps' shadows
+ *  held off: what the moon's reading sees, to look at when it disagrees with the game's own view. */
+async function picturedOver(lab: Lab, patches: THREE.Vector3[], label: string): Promise<Pictured> {
+  const camera = G.camera;
+  const kept = { at: camera.position.clone(), turn: camera.quaternion.clone() };
+  const over = middleOf(patches);
+  camera.position.set(over.x + 0.01, over.y + OVER, over.z);
+  camera.lookAt(over);
+  camera.updateMatrixWorld();
+  engineLampShadows(0);
+  try {
+    return await lab.screen(label);
+  } finally {
+    engineLampShadows(1);
+    camera.position.copy(kept.at);
+    camera.quaternion.copy(kept.turn);
+    camera.updateMatrixWorld();
+  }
+}
+
 /** One lamp's reading: the most his shadow takes behind him by it at each of `BYS`, the most his moon shadow takes
  *  of a patch's light there, and whether he stood on paving. */
 interface ByLamp { lamp: number; his: (number | null)[]; moon: (number | null)[]; paved: boolean }
@@ -223,9 +268,11 @@ export async function heroShadowByLamp(lab: Lab, canary: boolean): Promise<Light
   holdHour(0);
   const casts = new Map<THREE.Object3D, boolean>();
   const read: ByLamp[] = [];
+  const moments: Pictured[] = [];
   // (his shadow drawn every frame: it's read with him casting and not, stood still, which a level that draws the
   // movers only as they move never sees change)
   holdShadowsOnMove('every');
+  engineShadowTurns(false);
   try {
     await lab.step(SETTLE);
     if (!castingLights().length) throw new Error('lab: village: no lamp casting at midnight');
@@ -239,15 +286,19 @@ export async function heroShadowByLamp(lab: Lab, canary: boolean): Promise<Light
         reading.his.push(patches && mostHeTakes(lab, patches, casts, planted));
         const fromMoon = patches && behindFromMoon(G.player.pos.clone());
         reading.moon.push(fromMoon && mostOfTheMoon(lab, fromMoon, casts, planted));
+        if (fromMoon && lamp === 0 && by === BYS[0]) {
+          moments.push(await picturedOver(lab, fromMoon, 'from over the ground away from the moon, by lamp 0'));
+        }
       }
       read.push(reading);
     }
   } finally {
     holdShadowsOnMove('level');
+    engineShadowTurns(true);
     heroCasts(true, casts);
     holdHour(null);
   }
-  return shadowsChecked(read, canary);
+  return { ...shadowsChecked(read, canary), moments };
 }
 
 /** the most two lamps may stand apart for him to be read between them (m: each casting light's reach is 15), where

@@ -37,6 +37,24 @@ const VISITS = [
   },
 ];
 
+/** `page`'s window minimised (`--covered`: its page hidden, as under another window); returns what shows it again. */
+async function coverWindow(page) {
+  const cdp = await page.context().newCDPSession(page);
+  const { windowId } = await cdp.send('Browser.getWindowForTarget');
+  await cdp.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'minimized' } });
+  return async () => {
+    await cdp.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
+    await cdp.detach();
+  };
+}
+
+/** `--restart`'s visit: the page loaded in a Chrome started again on the profile the visits before it left. */
+const RESTARTED = {
+  name: 'a return in a Chrome started again',
+  note: 'the same profile, Chrome closed and started again: its caches read from the disk',
+  load: (page, url) => page.goto(url, { waitUntil: 'commit' }),
+};
+
 /** `browser`'s first context made ready for a boot: never taking the pointer, the boot recorded from each document's
  *  start (and where its exit draws, with `--resize`), `variant` (each of its parts) applied before the page's
  *  scripts, the performance overlay shown if `perf`, Auto's quality where `auto` says a device settled it and the
@@ -132,9 +150,11 @@ async function warmedBehind(page) {
 async function bootTraced(browser, page, url, visit, options, picture, setRate) {
   const trace = await startTrace(browser, { js: options.js, angle: options.angle, dawn: options.dawn });
   const film = options.film ? await startFilm(page, { full: options.filmLogo }) : null;
+  const uncover = options.covered ? await coverWindow(page) : null;
   await visit.load(page, url);
   const resized = options.resize ? resizeTrips(page, options) : null;
   await Promise.all([page.waitForFunction(loaded, null, { timeout: BOOT_TIMEOUT_MS, polling: 250 }), resized]);
+  await uncover?.();
   await page.waitForTimeout(options.seconds * 1000);
   const windFit = options.resize ? await page.evaluate(windFitRead) : null;
   const logo = options.filmLogo ? await page.evaluate(logoBox) : null;
@@ -300,16 +320,21 @@ export async function measureBoots(urls, options, { chromeFor, sourcesFor, pictu
   for (let round = 1; round <= options.rounds; round++) {
     for (const url of urls) {
       for (const variant of options.variants) {
-        const chrome = await chromeFor(options);
+        let chrome = await chromeFor(options);
         try {
-          const context = await bootContext(chrome.browser, url, variant, options);
-          const page = await context.newPage();
-          const errors = [];
-          keepErrors(page, errors);
-          const setRate = await slowCpu(page, options.cpuSlowdown);
-          await touchScreen(page, options.touch);
-          options.sourceOf = sourcesFor(url);
-          for (const visit of VISITS) {
+          const visits = options.restart ? [...VISITS, RESTARTED] : VISITS;
+          let page, errors, setRate;
+          for (const visit of visits) {
+            if (visit === RESTARTED) chrome = await chromeFor({ ...options, kept: await chrome.leave() });
+            if (visit !== VISITS[1]) {
+              const context = await bootContext(chrome.browser, url, variant, options);
+              page = await context.newPage();
+              errors = [];
+              keepErrors(page, errors);
+              setRate = await slowCpu(page, options.cpuSlowdown);
+              await touchScreen(page, options.touch);
+              options.sourceOf = sourcesFor(url);
+            }
             console.log(`booting ${options.nameOf(url)} ${variant}, ${visit.name}, round ${round}`);
             const picture = pictureAt();
             const loaded = options.builds ? withBuilds(url) : url;

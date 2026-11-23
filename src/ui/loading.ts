@@ -3,6 +3,7 @@
 import { TIPS } from '../data/tips';
 import { dropWind, prepareBlow, logoWindOff, type LogoBlow } from './logoWind';
 import { qualityLevel } from '../core/quality';
+import { hasWebGpu } from '../core/rendererChoice';
 import { recorder } from '../perf/recorder';
 import { sfx } from '../core/audio';
 
@@ -122,8 +123,8 @@ export function loadingDone(onReveal: () => void): void {
 export function loadingFailed(err: unknown): void {
   clearInterval(tipTimer);
   el().classList.add('failed');
-  const noWebgl = !document.createElement('canvas').getContext('webgl2');
-  sub().textContent = noWebgl
-    ? 'Your browser or device does not support WebGL 2, which Last Stand needs to run.'
+  sub().textContent = !hasWebGpu()
+    ? 'Your browser or device does not support WebGPU, which Last Stand needs to run. '
+      + 'Try the latest Chrome, Edge or Safari.'
     : `Something went wrong while loading: ${err instanceof Error ? err.message : String(err)}`;
 }

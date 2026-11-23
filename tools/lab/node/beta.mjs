@@ -10,7 +10,7 @@
 // away before it's read, the cookie lost before the next visit, the lobby the room refused it for forgotten.
 import { labError } from './errors.mjs';
 import { callPage, DEFAULT_JITTER, DEFAULT_PING, JOIN_FRAMES, judgeRoom, Pair, PARTY_TAGS } from './coop.mjs';
-import { bootAddress, LAB_BOOT } from './side.mjs';
+import { LAB_BOOT } from './side.mjs';
 
 /** how long a click is given to start the page's load (ms) */
 const LOAD_STARTS_MS = 15000;
@@ -79,7 +79,7 @@ class Visitor {
 
   /** The page loaded at the game's own address with `query` set on it (none: as a next visit, no parameter). */
   visit(query = {}) {
-    const address = new URL(bootAddress(this.side.url, this.side.bootedAs ?? LAB_BOOT));
+    const address = new URL(this.side.url);
     for (const [name, value] of Object.entries(query)) address.searchParams.set(name, value);
     return this.loadedBy(() => this.page.goto(address.toString(), { waitUntil: 'domcontentloaded' }));
   }

@@ -90,6 +90,18 @@ async function connect(port) {
   throw new Error(`stalls: Chrome never opened its debugging port ${port}`);
 }
 
+/** how long a Chrome asked to close is given to (ms) */
+const LEAVE_MS = 8000;
+
+/** Resolves once `child` has ended, or after `most` ms. */
+function exited(child, most) {
+  return new Promise((done) => {
+    if (child.exitCode !== null) done();
+    child.once('exit', done);
+    setTimeout(done, most);
+  });
+}
+
 /** Kills `child` and every process it started (Chrome's GPU, renderer and utility processes), unless it has ended. */
 function killTree(child) {
   if (child.exitCode !== null) return;
@@ -145,12 +157,14 @@ export async function slowCpu(page, rate) {
  * Starts the installed Chrome with a fresh profile under `outDir` (headless unless `headed`, its screen scaled
  * `scale`) and connects to it. Sound may play without a gesture unless `autoplay` is 'browser': then the desktop's
  * policy holds, a gesture on the page or before its navigation needed (`--scenario autoplay`).
- * Returns the browser, its profile's folder and `close`, which kills its process tree and deletes its profile.
+ * Returns the browser, its profile's folder and `close`, which kills its process tree and deletes its profile;
+ * `leave` closes the browser as a player quits it, its caches written, and keeps the profile for a Chrome started
+ * on it again (`kept`: that profile, not a fresh one).
  */
 export async function startChrome({
-  outDir, headed = false, width = 1536, height = 864, scale = 1, autoplay = 'always', gpuMemory = null,
+  outDir, headed = false, width = 1536, height = 864, scale = 1, autoplay = 'always', gpuMemory = null, kept = null,
 }) {
-  const profile = join(outDir, `profile-${Date.now()}`);
+  const profile = kept ?? join(outDir, `profile-${Date.now()}`);
   mkdirSync(profile, { recursive: true });
   const port = await freePort();
   const args = chromeArgs({ headed, profile, port, width, height, scale, autoplay, gpuMemory });
@@ -167,6 +181,14 @@ export async function startChrome({
         kill();
         await browser.close().catch(() => {});
         await removeOrWarn(profile);
+      },
+      async leave() {
+        // (asked to close, so it writes its caches down; then whatever it left is killed)
+        const session = await browser.newBrowserCDPSession();
+        await session.send('Browser.close').catch(() => {});
+        await exited(child, LEAVE_MS);
+        kill();
+        return profile;
       },
     };
   } catch (error) {

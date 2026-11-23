@@ -14,7 +14,7 @@ export const EVERY_HERO = 'ranger';
  */
 export const EVERY_SKIPS = {
   // sorted
-  parity: 'a run on two renderers, WebGPU too: an audit runs the default renderer alone',
+  parity: 'pictures for two sides to be compared by (--ab): it finds nothing on one side alone',
   village: 'a check\'s own jobs in shards (--commands village)',
 };
 

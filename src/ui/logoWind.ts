@@ -504,6 +504,11 @@ const HOME_UNIFORMS = ['uView', 'uBox', 'uDst', 'uDpr', 'uHomeAt', 'uHome', 'uT'
 const COMPLETION_STATUS_KHR = 0x91b1;
 /** how often the link is asked after, ms */
 const LINK_POLL_MS = 20;
+/** how long after the field is made the link is first asked after, ms: asked at once, the question itself waited
+ *  behind the GPU process's main thread rastering the loading screen's first paint, 0.83 s of a first visit's
+ *  "Forging the arena" with the bar standing still (`npm run stalls -- --scenario boot`: 826 to 839 ms, its
+ *  budget 500; from play, "desktop still stuck here for a bit"). The exit that reads it is seconds later. */
+const LINK_FIRST_ASK_MS = 2500;
 
 /** The programs' link status and locations: each a round trip to the GPU's process, waiting behind its work. */
 function readLinked(made: Context): Linked | null {
@@ -530,7 +535,7 @@ function readWhenLinked(made: Context): void {
     if (done(made.prog) && done(made.homeProg)) made.linked = readLinked(made);
     else setTimeout(ask, LINK_POLL_MS);
   };
-  setTimeout(ask, LINK_POLL_MS);
+  setTimeout(ask, LINK_FIRST_ASK_MS);
 }
 
 function makeContext(): Context | null {

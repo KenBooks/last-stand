@@ -18,7 +18,6 @@ import * as renderer from '../../../src/core/renderer';
 import { CAMERA } from '../../../src/data/balance';
 import { hdrOutput } from './hdrOutput';
 import { useQuality } from '../../../src/core/quality';
-import { WEBGPU } from '../../../src/core/webgpu';
 import { webGpuPixels } from './pixels';
 import type { QualityLevel } from '../../../src/data/quality';
 import type { BiomeId } from '../../../src/data/biomes';
@@ -175,21 +174,12 @@ function readCanvas(box?: CanvasBox): Canvas {
   G.renderer.setRenderTarget(null);
   const frame = renderer.frameRect();
   const { left, bottom, width, height } = box ?? { left: 0, bottom: 0, width: frame.width, height: frame.height };
-  if (WEBGPU) return readWebGpuCanvas({ left, bottom, width, height });
-  const gl = G.renderer.getContext() as WebGL2RenderingContext & { drawingBufferFormat: number };
-  if (gl.drawingBufferFormat === gl.RGBA16F) {
-    const pixels = new Float32Array(width * height * 4);
-    gl.readPixels(frame.left + left, frame.bottom + bottom, width, height, gl.RGBA, gl.FLOAT, pixels);
-    return { pixels, width, height, hdr: true };
-  }
-  const bytes = new Uint8Array(width * height * 4);
-  gl.readPixels(frame.left + left, frame.bottom + bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
-  return { pixels: channelsOf(bytes), width, height, hdr: false };
+  return readWebGpuCanvas({ left, bottom, width, height });
 }
 
 /** A frame as read back, before its bytes are made channels: what a measure of thousands of frames keeps of each
- *  (`villageHallEntry.ts`: making every frame's 8 MB of bytes floats was a quarter of its time). `pixels` in an HDR
- *  frame, which is read as floats. */
+ *  (`villageHallEntry.ts`: making every frame's 8 MB of bytes floats was a quarter of its time). The WebGPU canvas
+ *  is read as `pixels`; `bytes` are what a WebGL read gave, none now. */
 export interface RawFrame {
   bytes: Uint8Array | null;
   pixels: Float32Array | null;
@@ -197,7 +187,7 @@ export interface RawFrame {
   height: number;
 }
 
-/** The frame drawn now by the game's own camera and read back whole, its bytes as they came. */
+/** The frame drawn now by the game's own camera and read back whole. */
 export function drawRaw(lab: Lab): RawFrame {
   const drawing = lab.drawing;
   lab.drawing = true;
@@ -206,21 +196,8 @@ export function drawRaw(lab: Lab): RawFrame {
   } finally {
     lab.drawing = drawing;
   }
-  if (WEBGPU) {
-    const { pixels, width, height } = readCanvas();
-    return { bytes: null, pixels, width, height };
-  }
-  const gl = G.renderer.getContext() as WebGL2RenderingContext & { drawingBufferFormat: number };
-  if (gl.drawingBufferFormat === gl.RGBA16F) {
-    const { pixels, width, height } = readCanvas();
-    return { bytes: null, pixels, width, height };
-  }
-  G.renderer.setRenderTarget(null);
-  const frame = renderer.frameRect();
-  const { width, height } = frame;
-  const bytes = new Uint8Array(width * height * 4);
-  gl.readPixels(frame.left, frame.bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
-  return { bytes, pixels: null, width, height };
+  const { pixels, width, height } = readCanvas();
+  return { bytes: null, pixels, width, height };
 }
 
 /** A raw frame as a canvas's pixels, as `drawFrame` gives them. */
@@ -230,8 +207,7 @@ export function canvasOf(raw: RawFrame): Canvas {
   return { pixels: channelsOf(raw.bytes!), width, height, hdr: false };
 }
 
-/** `box` of the WebGPU canvas as last drawn, its rows from the bottom up as WebGL's reads come. Its HDR canvas isn't
- *  read so: SDR only. */
+/** `box` of the WebGPU canvas as last drawn, its rows from the bottom up. Its HDR canvas isn't read so: SDR only. */
 function readWebGpuCanvas(box: CanvasBox): Canvas {
   const { left, bottom, width, height } = box;
   const frame = renderer.frameRect();

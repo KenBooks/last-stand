@@ -1,10 +1,16 @@
 // tools/lab pixels: what was just drawn on the game's canvas, read back from its drawing buffer as an opaque picture.
 // The game draws its frame with an alpha of 0 (core/hdr.ts adds it to the page as light): copied onto a 2D canvas, a
-// frame drawn outside the game's own chain (a studio's, a look's) came out black. On WebGPU the canvas has no
+// frame drawn outside the game's own chain (a studio's, a look's) came out black. A WebGPU canvas has no
 // `readPixels`: it's copied onto a 2D canvas in the same task as the draw, as the lab's pictures are.
 import { G } from '../../../src/state';
 import { frameRect } from '../../../src/core/renderer';
-import { WEBGPU } from '../../../src/core/webgpu';
+
+/** The canvas the frame is drawn on: the Rust engine's own where it runs (`src/engine`: three's stays blank under
+ *  it, and read there every measure of the frame's light read black), else the game's. */
+export function drawnCanvas(): HTMLCanvasElement {
+  const engines = document.getElementById('rust-canvas') as HTMLCanvasElement | null;
+  return engines ?? G.renderer.domElement;
+}
 
 /** An area of the canvas, css px from its top left. */
 export interface Area {
@@ -18,26 +24,15 @@ export interface Area {
 export function readOpaque(area: Area): ImageData {
   const frame = frameRect();
   const ratio = frame.width / innerWidth;
-  if (WEBGPU) {
-    const box = {
-      left: frame.left + area.left * ratio,
-      top: frame.top + area.top * ratio,
-      width: area.width * ratio,
-      height: area.height * ratio,
-    };
-    const image = webGpuPixels(box);
-    for (let k = 3; k < image.data.length; k += 4) image.data[k] = 255;
-    return image;
-  }
-  const gl = G.renderer.getContext();
-  const width = Math.round(area.width * ratio);
-  const height = Math.round(area.height * ratio);
-  const left = frame.left + Math.round(area.left * ratio);
-  // (the drawing buffer's rows run from its bottom)
-  const bottom = frame.bottom + frame.height - Math.round(area.top * ratio) - height;
-  const pixels = new Uint8Array(width * height * 4);
-  gl.readPixels(left, bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-  return opaqueRows(pixels, width, height);
+  const box = {
+    left: frame.left + area.left * ratio,
+    top: frame.top + area.top * ratio,
+    width: area.width * ratio,
+    height: area.height * ratio,
+  };
+  const image = webGpuPixels(box);
+  for (let k = 3; k < image.data.length; k += 4) image.data[k] = 255;
+  return image;
 }
 
 /** `box` of the WebGPU canvas as last drawn (its own pixels from its top left, rounded), rows from the top. */
@@ -50,7 +45,7 @@ export function webGpuPixels(box: Area): ImageData {
   copy.width = width;
   copy.height = height;
   const context = copy.getContext('2d', { willReadFrequently: true })!;
-  context.drawImage(G.renderer.domElement, left, top, width, height, 0, 0, width, height);
+  context.drawImage(drawnCanvas(), left, top, width, height, 0, 0, width, height);
   return context.getImageData(0, 0, width, height);
 }
 

@@ -37,7 +37,6 @@ import { readCookie, writeCookie } from '../core/cookies';
 import { gearGlow, setGearGlow } from '../core/materials';
 import { eyesPortal, setEyesPortal } from '../core/eyesEffects';
 import { hdrSettings, hdrStatus, onHdrChange, setHdrSettings, type HdrMode, type HdrStatus } from '../core/hdr';
-import { addressOn, RUNNING, type RendererKind } from '../core/rendererChoice';
 import { QUALITY, type QualitySetting } from '../data/quality';
 import { BIOMES, BIOME_IDS, type BiomeId, type BiomeSetting } from '../data/biomes';
 import { biomeSetting, setBiomeSetting, bestStart, randomPool, type Bests } from '../game/biome';
@@ -307,7 +306,6 @@ export function initMenus(h: MenuHooks): void {
   // (it starts, stops or fails on its own: a window moved to another monitor, the WebGPU device lost)
   onHdrChange(renderHdrOptions);
   initVolumeOptions();
-  initRendererOptions();
   initBeta();
   if (!VILLAGE) {
     // (the panels' alone: the village's way in is its hall of heroes, walked to or picked on the map)
@@ -1321,40 +1319,6 @@ function renderVolumeOptions(): void {
   });
 }
 
-/** what the renderer's row says */
-const RENDERER_NOTES = {
-  trial: 'WebGPU is a trial, slower for now. It opens at its own address: the game\'s plain address stays on WebGL.',
-  held: 'Switch renderer in the lobby, out of co-op: it loads the game again.',
-  missing: 'This browser or graphics card has no WebGPU.',
-};
-
-/** The renderer's row: a press loads the game at that renderer's address. */
-function initRendererOptions(): void {
-  document.querySelectorAll<HTMLElement>('#opt-renderer button').forEach((b) => {
-    b.onclick = () => { sfx.click(); void switchRenderer(b.dataset.r as RendererKind); };
-  });
-}
-
-/** Leaves for `kind`'s address, unless it runs already or the machine has none to give. */
-async function switchRenderer(kind: RendererKind): Promise<void> {
-  if ((kind === 'webgpu') === RUNNING.webgpu) return;
-  if (kind === 'webgpu' && !await navigator.gpu?.requestAdapter().catch(() => null)) {
-    $('.renderer-note').textContent = RENDERER_NOTES.missing;
-    return;
-  }
-  location.assign(addressOn(kind));
-}
-
-/** what the renderer's row shows: what this page runs, and neither to press where loading again would lose a run */
-function renderRendererOptions(): void {
-  const held = G.mode === 'run' || isCoop();
-  document.querySelectorAll<HTMLButtonElement>('#opt-renderer button').forEach((b) => {
-    b.classList.toggle('active', (b.dataset.r === 'webgpu') === RUNNING.webgpu);
-    b.disabled = held;
-  });
-  $('.renderer-note').textContent = held ? RENDERER_NOTES.held : RENDERER_NOTES.trial;
-}
-
 /** the pause menu's pages: the controls, the settings, performance (the quality, the reports, the profiler), the
  *  betas to try (ui/beta.ts) and the guide's doors (ui/guide/) */
 export type PauseTab = 'controls' | 'settings' | 'performance' | 'beta' | 'guide';
@@ -1418,7 +1382,6 @@ export function showPause(v: boolean): void {
     renderGearGlowOptions();
     renderTraceOptions();
     renderHdrOptions();
-    renderRendererOptions();
     renderBetaOptions();
     // the hour is the village's alone (a biome keeps its own light)
     $('.hour-row').classList.toggle('hidden', G.arena.place !== 'village' || G.mode === 'run');

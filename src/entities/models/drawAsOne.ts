@@ -21,14 +21,14 @@
 // `?drawAsOne=0` draws each part on its own, for A/B.
 import * as THREE from 'three';
 import { G } from '../../state';
-import { gpu, standInBases, stillNodes, tsl, uploadTexture, WEBGPU } from '../../core/webgpu';
+import { gpu, standInBases, stillNodes, tsl, uploadTexture } from '../../core/webgpu';
 import { HIDDEN_LAYER } from '../../core/layers';
 import { aroundShadows, aroundViews } from '../../world/culling';
 import type { Model } from '../../types';
 
-/** Whether a hero's parts are drawn as one (WebGPU only; `?drawAsOne=0`: each on its own). */
+/** Whether a hero's parts are drawn as one (`?drawAsOne=0`: each on its own). */
 export const drawingAsOne = {
-  on: WEBGPU && (typeof location === 'undefined' || !/[?&]drawAsOne=0/.test(location.search)),
+  on: (typeof location === 'undefined' || !/[?&]drawAsOne=0/.test(location.search)),
 };
 
 /** One model's parts drawn as one: its merged meshes, and how many times they were made. */

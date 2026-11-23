@@ -12,15 +12,14 @@ import { ARENA } from '../data/balance';
 import { BIOME_IDS, type BiomeId, type PlaceId } from '../data/biomes';
 import { groundHeight, setRelief } from './ground';
 import { setAdaptScale } from '../core/renderer';
-import { oneEnvironment, rigMorePointLights, rigPointLights, stillForMeshlets } from '../core/webgpu';
+import { rigMorePointLights, rigPointLights } from '../core/webgpu';
 import { castBreakablesAsOne, type BreakableShadows } from './breakableShadows';
 import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, lampFaceDrawn, lampShadowsAsked, mergeStill, nextLampFace, sunShadowStill, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { countGhosts, depthOfWhatStaysWhole } from '../core/seeThrough';
 import { GHOST_COUNT_LAYER } from '../core/layers';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { packWhileDrawn } from '../core/lightBounds';
-import { castHeroesOverLamps } from './lampShadows';
-import { castMoversOverMoon, holdMoonShadow } from './moonShadow';
+import { holdMoonShadow } from './moonShadow';
 import { hallDoorway } from './hallPortal';
 import { addDoorway, cullByDoorways } from './doorways';
 import { buildCrypt, CRYPT_ENV } from './crypt';
@@ -106,11 +105,6 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   cullWhileDrawn(scene, renderer);
   // (each point light's reach packed for the shaders' loop, before each render: `core/lightBounds.ts`)
   packWhileDrawn(scene);
-  // (the village's alone: its lamps' and its sun's kept shadows, its movers drawn over them)
-  if (VILLAGE) {
-    castHeroesOverLamps(renderer);
-    castMoversOverMoon(renderer, moon);
-  }
   const fog = scene.fog = new THREE.Fog(0);
 
   /** the places built (a fight's biome, where the lobby is the village, once a run first needs it: `buildBiome`) */
@@ -227,7 +221,6 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   // (on WebGPU their point lights are drawn by one rig: its lit pipelines are keyed by its lights' ids)
   const groups = [...Object.values(places).map((place) => place.group), hallGroup, ...roomGroups];
   rigPointLights(scene, groups);
-  stillForMeshlets(...groups);
   /** Whether `groups` have as many point lights each, and as many casting (dev builds: a mismatch says so). */
   function checkLights(groups: THREE.Group[]): void {
     const lights = groups.map((g) => { let n = 0; g.traverse((o) => { if ((o as THREE.PointLight).isPointLight) n++; }); return n; });
@@ -256,7 +249,6 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       build = buildPlace(id, step).then(() => {
         const group = placeOf(id).group;
         rigMorePointLights(group);
-        stillForMeshlets(group);
         if (import.meta.env.DEV) checkLights([placeOf('village').group, group]);
       }).finally(() => building.delete(id));
       building.set(id, build);
@@ -335,7 +327,6 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   function setLook(L: BiomeLook): void {
     setColours(L);
     scene.environment = envMap(renderer, L.env);
-    oneEnvironment(scene, L.env);
   }
   /** what of a look changes with the hour: everything but its environment's map */
   function setColours(L: BiomeLook): void {
