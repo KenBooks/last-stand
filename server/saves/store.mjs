@@ -16,6 +16,8 @@ const byCredential = new Map();
 const byGoogle = new Map();
 /** a session token's digest -> its account's id */
 const bySession = new Map();
+/** a site's friend id or friend code -> its account's id (friends.mjs: each site's friends are its own) */
+const bySocial = new Map();
 /** id -> the promise its last change resolves to (each account's changes wait their turn) */
 const queues = new Map();
 let root = '/data';
@@ -39,6 +41,10 @@ async function writeWhole(file, value) {
 function indexAccount(account) {
   for (const passkey of account.passkeys) byCredential.set(passkey.id, account.id);
   for (const session of account.sessions) bySession.set(session.hash, account.id);
+  for (const [site, social] of Object.entries(account.social ?? {})) {
+    bySocial.set(socialKey(site, 'id', social.pid), account.id);
+    bySocial.set(socialKey(site, 'code', social.code), account.id);
+  }
   for (const [site, { sub, linked }] of Object.entries(account.googles ?? {})) {
     const key = googleKey(site, sub);
     const before = byGoogle.get(key);
@@ -49,6 +55,10 @@ function indexAccount(account) {
 function unindexAccount(account) {
   for (const passkey of account.passkeys) byCredential.delete(passkey.id);
   for (const session of account.sessions) bySession.delete(session.hash);
+  for (const [site, social] of Object.entries(account.social ?? {})) {
+    bySocial.delete(socialKey(site, 'id', social.pid));
+    bySocial.delete(socialKey(site, 'code', social.code));
+  }
   for (const [site, { sub }] of Object.entries(account.googles ?? {})) {
     const key = googleKey(site, sub);
     if (byGoogle.get(key)?.id === account.id) byGoogle.delete(key);
@@ -56,6 +66,7 @@ function unindexAccount(account) {
 }
 
 const googleKey = (site, sub) => `${site}\0${sub}`;
+const socialKey = (site, kind, value) => `${site}\0${kind}\0${value}`;
 /** Old accounts had a site-free Google binding. Its first Google session identifies where it was made. */
 const legacyGoogleSite = (account) => account.google?.site
   ?? account.sessions.find((session) => session.via === 'google')?.site
@@ -68,6 +79,7 @@ export async function load(data) {
   byCredential.clear();
   bySession.clear();
   byGoogle.clear();
+  bySocial.clear();
   queues.clear();
   await mkdir(join(root, 'accounts'), { recursive: true });
   await mkdir(join(root, 'saves'), { recursive: true });
@@ -111,6 +123,10 @@ export const account = (id) => accounts.get(id) ?? null;
 export const accountOfCredential = (credentialId) => account(byCredential.get(credentialId));
 export const accountOfGoogle = (site, sub) => account(byGoogle.get(googleKey(site, sub))?.id);
 export const accountOfSession = (token) => account(bySession.get(digest(token)));
+/** The account whose friend id on `site` is `pid` (friends.mjs). */
+export const accountOfFriendId = (site, pid) => account(bySocial.get(socialKey(site, 'id', pid)));
+/** The account whose friend code on `site` is `code` (friends.mjs). */
+export const accountOfFriendCode = (site, code) => account(bySocial.get(socialKey(site, 'code', code)));
 export const allAccounts = () => [...accounts.values()];
 /**
  * The account's play id: what the game's heartbeat counts a signed-in player by (server/traces stats.mjs), the same

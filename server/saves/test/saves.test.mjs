@@ -95,7 +95,7 @@ test('health says what is on, from anywhere; everything else only from the game\
   assert.equal(health.status, 200);
   // (Google's sign-in and the backups are off: their settings are unset here, google.test.mjs sets them)
   const off = { state: 'off', last: 0 };
-  assert.deepEqual(health.body, { ok: true, passkeys: true, google: false, cleanup: true, backups: off });
+  assert.deepEqual(health.body, { ok: true, passkeys: true, friends: true, google: false, cleanup: true, backups: off });
   assert.equal((await call('GET', '/saves/save', { origin: 'https://evil.example' })).status, 403);
   assert.equal((await call('GET', '/saves/save', { origin: null })).status, 403);
   assert.equal((await call('GET', '/saves/save')).status, 401);

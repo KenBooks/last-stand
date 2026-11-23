@@ -4,7 +4,7 @@
 // sets, so a preview's page can never write production's heroes. A save is parts (a hero each, what they share),
 // each gzipped JSON with a version: a write names the version it builds on, and a stale one is refused (409) with
 // the version kept, so the game can ask its player which copy to keep (#382).
-//   GET    /saves/health               { ok, passkeys, google, cleanup, backups }: what is on
+//   GET    /saves/health               { ok, passkeys, friends, google, cleanup, backups }: what is on
 //   POST   /saves/passkey/options      { purpose: 'register' | 'login' } -> the options for navigator.credentials
 //   POST   /saves/passkey/verify       { purpose, response } -> { token, account } (a new passkey or a sign-in)
 //   GET    /saves/account              the account: its passkeys, its sites' saves (sizes, times)
@@ -27,6 +27,7 @@
 //   POST   /saves/auth/google/finish   { code, nonce } -> { token, account } or { linked, account }: that tab alone
 //   POST   /saves/google/move           { code }: move an OAuth-proven Google login to this production account
 //   DELETE /saves/google               Google unlinked from the account (never the last way in)
+//   /saves/friends...                  friends, requests, who of them is online and invites (friends.mjs)
 // Everything but the health and Google's callback takes a page of the game's (ORIGINS) and, but the passkey's, a session: `Authorization:
 // Bearer <token>`, a token made at sign-in for that one site (only its digest is kept).
 import { createServer } from 'node:http';
@@ -36,6 +37,7 @@ import * as store from './store.mjs';
 import * as passkeys from './passkeys.mjs';
 import { cleanUp, forgetPrs, isCommitBuild, prOf } from './cleanup.mjs';
 import * as google from './google.mjs';
+import { friendsRequest, pruneFriends, resetFriends, setFriendFaults } from './friends.mjs';
 import { backupHealth, backupSettingsFrom, resetBackups, runBackup } from './backups.mjs';
 
 const env = process.env;
@@ -163,6 +165,7 @@ function prune(now = Date.now()) {
   for (const [code, { until }] of copyCodes) if (until <= now) copyCodes.delete(code);
   for (const [code, { until }] of moveCodes) if (until <= now) moveCodes.delete(code);
   google.pruneGoogle(now);
+  pruneFriends(now);
 }
 
 /** Whether `site` is production's: the one trusted site. A preview or commit build runs unmerged code, so a session
@@ -639,6 +642,11 @@ async function signedInRequest(req, res, path, origin, headers) {
   await touch(signedIn);
   const { account } = signedIn;
   if (path === '/saves/save' || path.startsWith('/saves/save/')) return siteSave(req, res, signedIn, site, headers);
+  if (path === '/saves/friends' || path.startsWith('/saves/friends/')) {
+    // a site's friends are its own (a preview's never reach production's), so any site's session may use them
+    const told = await friendsRequest(req.method, path, account.id, site, () => jsonOf(req));
+    if (told) return answer(res, told.status, told.body, headers);
+  }
   if (path === '/saves/copy-code' && req.method === 'POST') {
     if (!trusted(site)) return answer(res, 403, 'sign in on last-stand.cc', headers);
     for (const [old, entry] of copyCodes) if (entry.accountId === account.id) copyCodes.delete(old);
@@ -738,7 +746,7 @@ async function handle(req, res) {
   }
   if (path === '/saves/health') {
     return answer(res, 200, {
-      ok: true, passkeys: true, google: settings.google.on, cleanup: Boolean(settings.githubRepo),
+      ok: true, passkeys: true, friends: true, google: settings.google.on, cleanup: Boolean(settings.githubRepo),
       backups: backupHealth(),
     }, headers);
   }
@@ -767,11 +775,14 @@ async function backUp() {
 }
 
 /** The service on `port` (0: any; its PORT by default), `overrides` over the environment's settings (`DATA`,
- *  `ORIGINS`... as named there); resolves to its server once it listens. */
-export async function start(port, overrides = {}) {
+ *  `ORIGINS`... as named there); resolves to its server once it listens. `faults`: the lab's canary's alone
+ *  (friends.mjs `setFriendFaults`), never set by the deploy. */
+export async function start(port, overrides = {}, { faults = {} } = {}) {
   settings = settingsFrom({ ...env, ...overrides });
   counts.clear();
   linkCodes.clear();
+  resetFriends();
+  setFriendFaults(faults);
   passkeys.clearChallenges();
   google.pruneGoogle(Date.now(), true);
   resetBackups(settings.backups);
