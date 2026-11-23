@@ -9,7 +9,7 @@ import { grassPlacedOnce } from './rustFields';
 import { goneWholeLeftOut } from './rustGone';
 import { doorwaysLeaveTheFrame, keptSameFrame } from './rustKept';
 import { brokenDownSameFrame } from './rustPartsCheck';
-import { plainShaderSameFrame } from './rustPlain';
+import { levelSwitchLeavesNothingOut, plainShaderSameFrame } from './rustPlain';
 import { sceneWaitsItsPipelines } from './rustReveal';
 import { overCanvasCleared } from './rustOver';
 import { type Checked, failed, passed } from './rustPixels';
@@ -324,6 +324,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(await house(lab, bridge, command.room as RoomId));
       checks.push(await blankCanvas(lab, bridge));
       checks.push(await mapPaintedLate(lab, bridge));
+      checks.push(await levelSwitchLeavesNothingOut(lab));
       checks.push(await plainShaderSameFrame(lab));
       checks.push(await sceneWaitsItsPipelines(lab));
       checks.push(await keptSameFrame(lab, bridge));
