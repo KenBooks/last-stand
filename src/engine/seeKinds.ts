@@ -54,7 +54,9 @@ export class SeeKinds {
     g[GLOBALS.seeHall + 6] = SEE_FLOOR_CLEAR;
     // (how far the houses' rule is on: a cover dropped where it hides ground he sees)
     const rule = this.coverRule();
-    g[GLOBALS.seeHall + 7] = rule;
+    // (`rust.housesWhole`: a house's parts drawn as covers still, as they are played, and the rule opening none:
+    // thinned as their kinds were instead, a roof's verge and a sign were drawn in another order than played)
+    g[GLOBALS.seeHall + 7] = TUNE.housesWhole ? 0 : rule;
     for (let slot = 0; slot < this.kinds.length; slot++) {
       const see = this.kinds[slot], at = GLOBALS.seeKinds + slot * SEE_KIND_FLOATS;
       const cover = rule > 0 && !!see.cover;
@@ -93,7 +95,7 @@ export class SeeKinds {
   /** How far the houses' rule is on this frame, 0 to 1 (`rust.houseRule`): from above, with the fog of what he can't
    *  see on, whose answer it reads. Off, a cover is thinned as its kind was, by the game's own shares. */
   coverRule(): number {
-    if (!TUNE.houseRule || TUNE.housesWhole || !TUNE.see || TUNE.sightFog <= 0 || SIGHT.uSightOn.value <= 0) return 0;
+    if (!TUNE.houseRule || !TUNE.see || TUNE.sightFog <= 0 || SIGHT.uSightOn.value <= 0) return 0;
     return coverRuleNow() * (1 - TUNE.houseLeft);
   }
 
@@ -138,7 +140,9 @@ export class SeeKinds {
     // (a cover left as a smooth ghost: blended by the share the rule leaves, whatever its material says of its own
     // blending; the nearest of a house's layers alone drawn, a column a layer of its own under them: the nearest
     // alone drawn, a roof over it left none of it)
-    if (this.cover(see) && TUNE.houseSmooth && material.transparent) {
+    // (not one that is a ghost of its own already, its opacity under 1: a layer's depth is written whatever its
+    // alpha, and an unseen sheet of a house's stood nearest, a sign and a roof's verge behind it never shaded)
+    if (this.cover(see) && TUNE.houseSmooth && material.transparent && material.opacity >= 1) {
       return SEE_FLAGS.thinned | (see.reach ? SEE_FLAGS.underLayers : SEE_FLAGS.oneLayer);
     }
     // (a cover is never blended: drawn with what's opaque and writing its depth, its pixels over ground he sees

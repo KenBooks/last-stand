@@ -123,7 +123,7 @@ export const TUNE = tunable('rust', {
   /** whether what the rule leaves of a house's part is a smooth ghost, blended, the nearest of its layers alone
    *  drawn (0: a fine pattern of its pixels dropped, drawn opaque; from play, "whats the deal with dots? we didn't
    *  have them before... like perforated texture") */
-  houseSmooth: 0,
+  houseSmooth: 1,
   /** a harness's: every part of a house drawn whole, nothing of it thinned by the rule or by the game's shares
    *  (`lab houserule`'s frame to set the played one against) */
   housesWhole: 0,

@@ -183,7 +183,9 @@ const GHOST_RAMP = 0.5;
 /** the raised floor the hall of heroes stands on: its terrace, and its own narrower footing past the terrace's back */
 const HALL_FLOORS = [
   [TERRACE.x - TERRACE.half, TERRACE.back, TERRACE.x + TERRACE.half, TERRACE.front],
-  [TERRACE.x - HALL.half, HALL.wall - 0.6, TERRACE.x + HALL.half, TERRACE.back],
+  // (to its side walls' inner faces: out to their outer ones, a line ending in a wall's own thickness read as
+  // floor he saw, and the roof was a ghost over the wall in a band along it)
+  [TERRACE.x - HALL.inHalf, HALL.wall - 0.6, TERRACE.x + HALL.inHalf, TERRACE.back],
 ] as const;
 
 const kinds = {

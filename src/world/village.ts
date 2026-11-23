@@ -983,7 +983,9 @@ function buildGround(scene: THREE.Object3D, M: Mats, mask: MaskUniforms): void {
   // draw the same)
   scene.add(flatPatch(squareOutline(), M.cobbles, 0.012));
   roadLines.forEach((road, k) => scene.add(roadStrip(road.line, road.width, M.cobbles, k)));
-  scene.add(curbs(M.coping));
+  // (in the stone that stands free, no part of a house: a house's part, a kerb under a roof's ghost was one of its
+  // layers and not the nearest, and went from under it)
+  scene.add(curbs(M.freeCoping));
 }
 
 /** the curbs along the roads' and the square's edges: how wide and how high (m); the grass grows up to them (from play,
