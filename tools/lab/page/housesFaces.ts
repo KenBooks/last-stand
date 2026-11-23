@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { G } from '../../../src/state';
 import { HOUSES, type RoomId } from '../../../src/data/houses';
+import { rayChunks } from './rayChunks';
 
 /** how far apart two faces a ray meets may be and still lie in one plane (m), and how alike their facing */
 const SAME_PLANE = 0.0005;
@@ -11,6 +12,8 @@ const SAME_FACING = 0.99;
 /** the rays' spacing (m), and how far beside a ray those that confirm it are sent (m) */
 const STEP = 0.021;
 const BESIDE = 0.004;
+/** how far inside the front wall the rays at its face start (m): the furthest back any ray round the door starts */
+const RAYS_FROM = 1;
 /** the canary's sheet: where along the wall from the door's middle (m), how high, and its size */
 const SHEET = { x: 0.64, y: 1.1, size: 0.1 };
 
@@ -23,7 +26,9 @@ function raysRoundDoor(id: RoomId): RoomRay[] {
   const [hx, hz] = HOUSES[id].half, high = HOUSES[id].high;
   const rays: RoomRay[] = [];
   for (let x = -1.3; x < 1.3; x += STEP) {
-    for (let y = 0.013; y < high; y += STEP) rays.push([new THREE.Vector3(x, y, hz - 1), new THREE.Vector3(0, 0, 1)]);
+    for (let y = 0.013; y < high; y += STEP) {
+      rays.push([new THREE.Vector3(x, y, hz - RAYS_FROM), new THREE.Vector3(0, 0, 1)]);
+    }
   }
   for (let z = hz - 0.32; z < hz + 0.18; z += STEP / 3) {
     for (let y = 0.013; y < 2.5; y += STEP) {
@@ -38,6 +43,23 @@ function raysRoundDoor(id: RoomId): RoomRay[] {
     }
   }
   return rays;
+}
+
+/** Whether any of `mesh` lies at or past `z` in `frame`'s own frame (by its bounding box's corners): every ray
+ *  round the door starts there or further toward the front wall and goes no way back, so the rest meets none. */
+function reachesFront(mesh: THREE.Mesh, frame: THREE.Object3D, z: number): boolean {
+  if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+  const box = mesh.geometry.boundingBox!;
+  const corner = new THREE.Vector3();
+  for (const x of [box.min.x, box.max.x]) {
+    for (const y of [box.min.y, box.max.y]) {
+      for (const cz of [box.min.z, box.max.z]) {
+        frame.worldToLocal(corner.set(x, y, cz).applyMatrix4(mesh.matrixWorld));
+        if (corner.z >= z) return true;
+      }
+    }
+  }
+  return false;
 }
 
 /** Whether `object` and all it hangs from are shown. */
@@ -106,10 +128,13 @@ export function doorFacesSteady(id: RoomId, canary: boolean): DoorFaces {
   const sheet = canary ? sheetInFrame(id) : null;
   try {
     room.group.updateMatrixWorld(true);
-    const meshes: THREE.Mesh[] = [];
+    const whole: THREE.Mesh[] = [];
     room.group.traverse((object) => {
-      if ((object as THREE.Mesh).isMesh && shown(object)) meshes.push(object as THREE.Mesh);
+      if ((object as THREE.Mesh).isMesh && shown(object)) whole.push(object as THREE.Mesh);
     });
+    // (in chunks: a room's still parts are merged meshes of thousands of triangles, and its 80 thousand rays sent at
+    // them whole tested every triangle of the room each, a task that never ended: `lab houses` hung, the page with it)
+    const meshes = rayChunks(whole).filter((chunk) => reachesFront(chunk, room.group, HOUSES[id].half[1] - RAYS_FROM));
     const rays = raysRoundDoor(id);
     const places = rays.flatMap((ray) => {
       const at = inOnePlane(ray, meshes, room.group);

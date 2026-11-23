@@ -247,15 +247,17 @@ function crate(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, w: n
   c.position.set(x, y, z);
   c.rotation.y = turn;
   g.add(c);
-  const post = 0.045, slat = 0.016;
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(c, post, h, post, sx * (w / 2 - post / 2), 0, sz * (d / 2 - post / 2), M.timber);
+  const post = 0.045, slat = 0.016, lid = 0.02;
+  // (each post up to under the lid: as tall as the crate, its top lay in the lid's top at every corner, two faces in
+  // one plane, which flicker from above; `lab houses` found the stack by the door once it ran again)
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(c, post, h - lid, post, sx * (w / 2 - post / 2), 0, sz * (d / 2 - post / 2), M.timber);
   const rows = 3, tall = (h - 0.02) / rows - 0.025;
   for (let k = 0; k < rows; k++) {
     const yy = 0.01 + k * (tall + 0.025);
     for (const sz of [-1, 1]) box(c, w - 0.01, tall, slat, 0, yy, sz * (d / 2 - slat / 2), M.oak);
     for (const sx of [-1, 1]) box(c, slat, tall, d - 0.01, sx * (w / 2 - slat / 2), yy, 0, M.oak);
   }
-  for (let k = 0; k < 4; k++) box(c, w, 0.02, d / 4 - 0.006, 0, h - 0.02, -d / 2 + d / 8 + (k * d) / 4, M.oak);
+  for (let k = 0; k < 4; k++) box(c, w, lid, d / 4 - 0.006, 0, h - lid, -d / 2 + d / 8 + (k * d) / 4, M.oak);
   return c;
 }
 

@@ -960,7 +960,18 @@ function mergeUnder(root: THREE.Object3D, kept: boolean): void {
     one.matrixAutoUpdate = false;
     // (merged of what stands still, it stands still: the engine keeps it, `engine/kept.ts`)
     one.userData.standsStill = true;
-    for (const mesh of meshes) mesh.removeFromParent();
+    // (how many meshes it's made of: what reads a thing's parts passes a merge over, `mergedParts` below)
+    one.userData.mergedOf = meshes.length;
+    for (const mesh of meshes) {
+      // (dev builds keep where each part stood, on what it hung from: a check of a thing's parts against another's,
+      // `lab houses`' chandeliers against the beams, finds no mesh of either once they're merged; a box a part, none
+      // in a production build)
+      if (import.meta.env.DEV && mesh.parent) {
+        const parts = (mesh.parent.userData.mergedParts ??= []) as THREE.Box3[];
+        parts.push(new THREE.Box3().setFromObject(mesh));
+      }
+      mesh.removeFromParent();
+    }
   }
 }
 
