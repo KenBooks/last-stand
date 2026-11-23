@@ -10,7 +10,9 @@
 // `--canary` starts the saves service with the faults it must catch: a request counted as a friendship before it's
 // accepted, and a room kept from friends shown to them; and each page lays a room's cards out as they were before
 // Victor's review of #700 (a narrow card's class name run on over the stats' labels), which the text check of each
-// picture must find. Pictures of each step in `out/friends/<screen>/`, each checked for text over other text.
+// picture must find; and the friends' rows' button slots sized by what they hold and the note's and the badge's room
+// let go, which the columns' check and the shift's must find. Pictures of each step in `out/friends/<screen>/`, each
+// checked for text over other text and for the lists' columns.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { labError } from './errors.mjs';
@@ -107,6 +109,18 @@ async function until(games, done, what) {
   }
 }
 
+/** Nothing on the Friends tab moved as a request came and went (Victor: "avoiding layout shift is one of key
+ *  concepts behind good UX"): the asked one's tabs as its badge came, the asker's own code's line as its note did. */
+async function nothingShifted(asked, asker, askedBefore, askerBefore, found) {
+  const [askedAfter, askerAfter] = [await asked.call('friendsLayout'), await asker.call('friendsLayout')];
+  const tabsMoved = askedBefore.tabs.some((left, i) => Math.abs(left - askedAfter.tabs[i]) > 0.5);
+  const lineMoved = Math.abs(askerBefore.meTop - askerAfter.meTop) > 0.5;
+  found.say(`as the request came: ${asked.name}'s tabs ${tabsMoved ? 'moved' : 'stayed'}, `
+    + `${asker.name}'s own code ${lineMoved ? `moved ${(askerAfter.meTop - askerBefore.meTop).toFixed(1)} px` : 'stayed'}`);
+  found.expect(!tabsMoved, `${asked.name}'s tabs moved as the Friends tab's count came`, 'layoutShift');
+  found.expect(!lineMoved, `${asker.name}'s own code's line moved as the request's note came`, 'layoutShift');
+}
+
 /** A row of `state` by its section and name. */
 const rowOf = (state, section, name) => state.rows.find((r) => r.section === section && r.name === name);
 
@@ -118,6 +132,9 @@ async function picture(game, dir, name, found) {
   const over = await game.call('friendsTextOver', { where: `${game.name}'s ${name}` });
   if (over.length) found.say(`text over text: ${over.join('; ')}`);
   for (const problem of over) found.expect(false, problem, 'textOverlap');
+  const loose = await game.call('friendsColumns', { where: `${game.name}'s ${name}` });
+  if (loose.length) found.say(`columns apart: ${loose.join('; ')}`);
+  for (const problem of loose) found.expect(false, problem, 'columns');
   found.checked.add(name);
   const cdp = await game.page.context().newCDPSession(game.page);
   try {
@@ -157,6 +174,7 @@ async function befriend(games, codes, found, dir) {
   const [brannoch, ysolde, pell] = games;
   for (const game of games) await game.call('friendsOpenTab');
   await picture(brannoch, dir, '1-friends', found);
+  const [askedBefore, askingBefore] = [await brannoch.call('friendsLayout'), await ysolde.call('friendsLayout')];
   await ysolde.call('friendsAdd', { code: codes.Brannoch });
   const [asked, asking] = await until([brannoch, ysolde], (b) => rowOf(b, 'Requests', 'Ysolde'),
     'Brannoch never saw Ysolde\'s request');
@@ -165,6 +183,7 @@ async function befriend(games, codes, found, dir) {
   found.expect(Boolean(rowOf(asking, 'Sent', 'Brannoch')), 'Ysolde\'s tab doesn\'t list her request as sent');
   const early = asking.service.some((f) => f.name === 'Brannoch');
   found.expect(!early, 'Ysolde lists Brannoch as a friend before he accepted', 'oneWay');
+  await nothingShifted(brannoch, ysolde, askedBefore, askingBefore, found);
   await picture(brannoch, dir, '2-request', found);
   await brannoch.call('friendsAct', { name: 'Ysolde', act: 'accept' });
   await until([brannoch, ysolde], (b, y) => rowOf(b, 'Online', 'Ysolde') && rowOf(y, 'Online', 'Brannoch'),
@@ -176,6 +195,12 @@ async function befriend(games, codes, found, dir) {
   await until([brannoch, pell], (b, p) => rowOf(b, 'Online', PELL) && rowOf(p, 'Online', 'Brannoch'),
     'Brannoch and Pell never listed each other');
   found.say('Pell asked and was accepted');
+  // (Pell and Ysolde friends too, so her list holds rows with other buttons later on)
+  await pell.call('friendsAdd', { code: codes.Ysolde });
+  await until([ysolde], (y) => rowOf(y, 'Requests', PELL), 'Ysolde never saw Pell\'s request');
+  await ysolde.call('friendsAct', { name: PELL, act: 'accept' });
+  await until([ysolde, pell], (y, p) => rowOf(y, 'Online', PELL) && rowOf(p, 'Online', 'Ysolde'),
+    'Ysolde and Pell never listed each other');
 }
 
 /** Brannoch opens a private room for friends; Ysolde sees it in her list and joins from it. */
@@ -220,7 +245,7 @@ async function inviteToRoom(games, code, found, dir) {
 }
 
 /** Everyone out; Brannoch opens a room kept from friends: Ysolde sees him in a room, with no Join. */
-async function hiddenRoom(games, code, found) {
+async function hiddenRoom(games, code, found, dir) {
   const [brannoch, ysolde, pell] = games;
   for (const game of [pell, ysolde, brannoch]) await game.call('roomsLeave');
   await until(games, (...states) => states.every((s) => s.session === 'off'), 'the room was never left');
@@ -234,6 +259,10 @@ async function hiddenRoom(games, code, found) {
   }, 'Ysolde never heard Brannoch was in another room');
   const row = rowOf(seen, 'Online', 'Brannoch');
   found.say(`a room kept from friends: Ysolde's list says "${row?.line}"${row?.acts.includes('join') ? ' with Join' : ''}`);
+  // (her list now holds rows with other buttons, Brannoch's Remove alone and Pell's Invite and Remove: the picture
+  // whose columns most need checking)
+  await until([ysolde], (y) => rowOf(y, 'Online', PELL)?.acts.includes('invite'), 'Ysolde never saw Pell out of the room');
+  await picture(ysolde, dir, '7-friends-mixed', found);
   found.expect(!row?.acts.includes('join') && !seen.service.find((f) => f.name === 'Brannoch').room,
     'a room kept from friends is shown to them with its code', 'hiddenRooms');
   await brannoch.call('roomsLeave');
@@ -259,14 +288,19 @@ export async function runFriends(side, { canary = false } = {}) {
     for (const partner of partners) await prepare(partner, screen);
     const games = [new Game(side.page, NAMES[0]), new Game(partners[0], NAMES[1]), new Game(partners[1], NAMES[2])];
     const codes = await signUpAll(games, relayUrl, saves.url);
-    if (canary) for (const game of games) await game.call('friendsPlantOverlap');
+    if (canary) {
+      for (const game of games) {
+        await game.call('friendsPlantOverlap');
+        await game.call('friendsPlantShifts');
+      }
+    }
     found.say(`signed up: ${games.map((g) => g.name).join(', ')}, each with a friend code`);
     await befriend(games, codes, found, dir);
     const code = await joinFromList(games, found, dir);
     await inviteToRoom(games, code, found, dir);
-    await hiddenRoom(games, code, found);
+    await hiddenRoom(games, code, found, dir);
     if (canary) {
-      for (const fault of ['oneWay', 'hiddenRooms', 'textOverlap']) {
+      for (const fault of ['oneWay', 'hiddenRooms', 'textOverlap', 'columns', 'layoutShift']) {
         const seen = found.faultsSeen.has(fault);
         found.say(`canary: ${fault} ${seen ? 'caught' : 'went unseen'}`);
         if (!seen) found.problems.push(`friends: the canary's ${fault} went unseen`);

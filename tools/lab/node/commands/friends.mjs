@@ -6,8 +6,10 @@ import { COMMON_OPTIONS } from '../optionKit.mjs';
 export default {
   summary: 'co-op\'s friends end to end, three games against a saves service and a relay of the lab\'s own (a friend '
     + 'code asked and accepted, a friend\'s room joined from the list, an invite joined from its toast, a room kept '
-    + 'from friends shown with no Join, every picture\'s text checked for text drawn over other text; `--canary` a '
-    + 'request counted as a friendship, a hidden room shown and the room\'s cards laid out as before #700\'s review)',
+    + 'from friends shown with no Join, every picture\'s text checked for text drawn over other text and its lists\' '
+    + 'columns for one edge each, nothing moved as a request comes; `--canary` a request counted as a friendship, a '
+    + 'hidden room shown, the room\'s cards laid out as before #700\'s review, the rows\' buttons sized by what they '
+    + 'hold and the note\'s and the badge\'s room let go)',
   help: 'co-op\'s friends end to end, three games against a saves service and a co-op relay of the lab\'s own: '
     + 'cloud save accounts made by each page\'s passkey, a friend code typed and its request accepted from its row, '
     + 'a friend\'s private room shown online in the list and joined from it, a friend invited from the room and '

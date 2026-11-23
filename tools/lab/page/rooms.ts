@@ -54,7 +54,10 @@ export function roomsState(): RoomsState {
     locked: Boolean(row.querySelector('.coop-lock')),
     join: text(row.querySelector('.coop-room-join')),
   }));
-  const status = text(inDialog('.coop-checking')) || text(inDialog('.coop-error')) || text(inDialog('.coop-offline p'));
+  // (the server's check is said where the rooms are listed, no longer in a line of its own over the pages)
+  const checking = text(inDialog('.coop-rooms-empty')).startsWith('Checking') ? 'Checking the co-op server…' : '';
+  const status = text(inDialog('.coop-checking')) || checking || text(inDialog('.coop-error'))
+    || text(inDialog('.coop-offline p'));
   return {
     open: coopOpen(), pane: inDialog<HTMLElement>('.coop-main')?.dataset.pane ?? '',
     status, passwordAsked: Boolean(inDialog('.coop-pass-ask')),
