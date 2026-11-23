@@ -1,7 +1,7 @@
 // `npm run lab -- profile`: its command line (help, options) and its work on a side (node/commands/AGENTS.md).
 import { DEVICES } from '../devices.mjs';
 import { labError } from '../errors.mjs';
-import { playAsDevice, qualityOf, asText, problemsIn } from '../commandKit.mjs';
+import { playAsDevice, qualityOf, asText, problemsIn, textWithSheetEach } from '../commandKit.mjs';
 import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
 
 /** `lab profile`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
@@ -55,7 +55,11 @@ export default {
       help: 'in the lobby\'s village instead (the run the set-up starts left, no foes; --at where the hero stands '
         + 'there, the square by default), as `draws --village` stands him',
     },
-    canary: { kind: 'switch', help: 'a part of its own, the frame drawn twice: it must read 1.6 times once' },
+    canary: {
+      kind: 'switch',
+      help: 'a part of its own, the frame drawn twice: it must read 1.6 times once; and the walk after a cancelled '
+        + 'profile walked again with the game\'s frames held, which must read stuck',
+    },
     ...COMMON_OPTIONS,
   },
   check(options) {
@@ -84,6 +88,10 @@ export default {
     } finally {
       await service.close();
     }
+  },
+  /** each side's text, and where the walk after a cancelled profile stuck, its pictures before and after */
+  finish(results, options, session) {
+    return textWithSheetEach(results, session.outFor('profile'), session.browser);
   },
   textOf: asText,
   problemsOf: problemsIn,
