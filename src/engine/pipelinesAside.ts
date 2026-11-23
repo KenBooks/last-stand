@@ -90,10 +90,27 @@ interface Pass {
   waits?: boolean;
 }
 
+/** What kind of scene pipeline a descriptor makes: a shadow's, the particles', the depth drawn first (no colour),
+ *  the scene after it (its depth equal), or the scene drawn whole in one pass (`lab pipelines` counts them). */
+function kindOf(descriptor: Descriptor): string {
+  if (descriptor.label !== 'scene') return descriptor.label ?? 'unnamed';
+  if (descriptor.fragment && !descriptor.fragment.targets?.length) return 'depth first';
+  return descriptor.depthStencil?.depthCompare === 'equal' ? 'after the depth' : 'whole';
+}
+
+/** A scene pipeline stood in for: its kind, when it was asked for (the page's ms), and whether a pass has set it. */
+export interface PipelineAsked { kind: string; at: number; drawn: boolean }
+/** Every scene pipeline stood in for, as it was asked for: what the boot asked for that nothing draws, read by
+ *  `lab pipelines`. */
+export const PIPELINES_ASKED: PipelineAsked[] = [];
+
 /** A pipeline being compiled aside: what the engine holds in its place. */
 class StandIn {
   real: object | null = null;
+  asked: PipelineAsked;
   constructor(device: Device, descriptor: Descriptor) {
+    this.asked = { kind: kindOf(descriptor), at: performance.now(), drawn: false };
+    PIPELINES_ASKED.push(this.asked);
     PIPELINES.made++;
     PIPELINES.compiling++;
     // (one first asked for once the loading screens are done with: it compiles as the player plays, the GPU's
@@ -137,6 +154,7 @@ function patchPasses(): void {
   const { setPipeline, draw, drawIndexed } = pass;
   pass.setPipeline = function (this: Pass, pipeline: object): void {
     if (pipeline instanceof StandIn) {
+      pipeline.asked.drawn = true;
       this.waits = !pipeline.real;
       if (pipeline.real) setPipeline.call(this, pipeline.real);
       return;
