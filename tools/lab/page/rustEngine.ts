@@ -12,6 +12,7 @@ import { perfClock } from '../../../src/core/perfClock';
 import { RUST } from '../../../src/engine';
 import type { Bridge, FrameStats } from '../../../src/engine/bridge';
 import { canvasSaid, plainCanvasSaid } from './rustCanvas';
+import { bodiesSaid, hideBodies } from './rustBodies';
 import { census, heaviest } from './rustCensus';
 import { standAt } from './draws';
 import { skyLightLines, turnToSkyLight } from './skyLight';
@@ -49,6 +50,8 @@ export interface RustCommand {
   skylight: boolean;
   /** the scene's materials listed by their kind and what they ask of a renderer */
   census: boolean;
+  /** every body on a skeleton hidden before the frames timed: what they cost is the difference */
+  nobody?: boolean;
   /** the game's tunable values set before the stand, by their paths (`rust.shadows`: src/engine/bridge.ts `TUNE`) */
   tune: Record<string, number[]>;
   /** the frame written down as a tape for the engine's own harness, its maps no larger than this a side (0: none) */
@@ -212,6 +215,8 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
     return { text: `the Rust engine isn't running: ${why}`, problems: ['the Rust engine is not running'], moments: [] };
   }
   const where = await stand(lab, command);
+  const bodies = bodiesSaid(G.scene);
+  if (command.nobody) hideBodies(G.scene);
   const sky = command.skylight ? await turnToSkyLight(lab) : undefined;
   const hold = castHeld(command);
   /** what a frame timed left undrawn, by its kind: the most of any frame */
@@ -311,6 +316,7 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   // pictures differ with no change behind them; this line says so before the pictures are read)
   lines.push(`  the moment: the game's clock ${G.time} s, the camera at ${G.camera.position.toArray().join(', ')}`);
   const problems: string[] = [];
+  lines.push(`  ${bodies}${command.nobody ? ' (all hidden for these frames)' : ''}`);
   // (what reaches the canvas, read in the task that draws it: a tree from before has the engine's `said` too)
   const reached = canvasSaid(canvas);
   lines.push(...reached.lines, ...await plainCanvasSaid());

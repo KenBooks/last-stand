@@ -346,3 +346,15 @@ not intend to support the old way of rendering".
   village from above: the ground and the buildings gone, the grass standing on white); the wait ended only once
   they were let go. Not seen: the owner's own frame, which the report doesn't hold. Whether his 9 were the ground's
   is read from the notes of the next such report.
+
+## 2026-11-23, a character as one record: counted first, not built
+
+- Counted before building (`lab rust --nobody`: every body on a skeleton hidden, the frame timed with and
+  without): the village from above at Very low has 2 bodies in view, 58 shown meshes (12 moved by bones, 46 hung
+  on a joint), 35 materials, 64 joints. One hero alone is 81 meshes, 38 materials, 4 skeletons, 67 thousand
+  triangles.
+- With them hidden the render's CPU is 1.70 ms both ways (the walk 1.0 to 0.9); over the shoulder at 2880 by 1800
+  at 2, 2.30 to 2.20, the GPU 3.00 to 2.98. **The bodies are about 0.1 ms of this frame's CPU**, so their walk
+  taken into the engine can't move it by more, here or by a few times that on a phone whose frame is its GPU's
+  (14.7 ms, G82F-ZNNE). Not built for that reason. The engine owning a body's joints is still what animation in
+  the engine needs: build it when that is the piece, not for the frame.
