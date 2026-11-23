@@ -265,7 +265,7 @@ function raise(player: Player, def: Def, at: Placement): void {
       wall.root.updateWorldMatrix(true, true);
       wall.root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible) visit(o as THREE.Mesh); });
     },
-  }, 'wood', (left) => fx('ward', middle.x, middle.z, left));
+  }, 'sticks', (left) => fx('ward', middle.x, middle.z, left));
   const ward: Ward = { ax: at.ax, az: at.az, bx: at.bx, bz: at.bz, prop };
   addWard(ward);
   const takeDown = (): void => end(false);

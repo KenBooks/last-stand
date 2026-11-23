@@ -1412,7 +1412,7 @@ function wardHit(): void {
 function chip(kind: string | undefined): void {
   const v = voice(0, 0.25);
   const lane = v.lane(1, Math.random() * 0.6 - 0.3);
-  if (kind === 'wood' || kind === 'shroom') {
+  if (kind === 'wood' || kind === 'sticks' || kind === 'shroom') {
     const wood = v.c.createBiquadFilter(); wood.type = 'bandpass'; wood.frequency.value = 300 + Math.random() * 80; wood.Q.value = 1.2;
     v.loop(wood); wood.connect(drive(4)).connect(v.hit(0.38, 0.22, lane, 0.002));
     thump(v, 0, 900, 70, 0.3, 0.3, lane, 3.5);

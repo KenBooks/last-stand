@@ -44,6 +44,7 @@ import { clearEffects } from '../../../src/fx/effects';
 import { pressing, skillNamed, type BoundSkill } from './cast';
 import { readinessOf } from '../../../src/combat/skills/readiness';
 import { cameraAhead } from './onScreen';
+import { debris } from './hedgewardDebris';
 
 export interface HedgewardOptions {
   fixture: Fixture;
@@ -904,6 +905,8 @@ const CANARY_CAUGHT = {
   late: 'played met late: through it dealing nothing',
   trampled: 'trampled: never broke it',
   walled: 'walled: never broke its way in',
+  // (its own break taken away: it breaks as a big prop, into more and thicker pieces)
+  debris: 'debris: a broken wall left',
 };
 
 /** `lab hedgeward`: every case, its lines and problems; with `--canary`, the planted faults, each a problem unless
@@ -915,6 +918,8 @@ export async function hedgeward(lab: Lab, options: HedgewardOptions): Promise<Re
   const outcomes: Outcome[] = [];
   const canary = options.canary;
   const cases: [string, () => Promise<Outcome>][] = [
+    // (first: in the village's training yard, before a case starts a run)
+    ['debris', () => debris(lab, { raise: (aim) => raiseAt(lab, skillNamed('hedgeward'), aim), canary })],
     ['placed', () => placed(lab, options)],
     ['bolts', () => bolts(lab, options)],
     ['round', () => round(lab, options, canary)],

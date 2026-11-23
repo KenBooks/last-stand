@@ -13,7 +13,7 @@ import type { Updater } from './props';
 import { simulates, hurtsProps } from '../net/role';
 import type { Player } from '../entities/player';
 import { burst, debris, smokePuff } from '../fx/particles';
-import { rubble, type RubbleKind } from '../fx/rubble';
+import { rubble, BREAKS, type RubbleKind } from '../fx/rubble';
 import { addShake } from '../core/renderer';
 import { sfx } from '../core/audio';
 import { G } from '../state';
@@ -252,10 +252,14 @@ export function breakProp(p: Prop): void {
   hideBar(p);
   for (const o of p.parts) { const i = p.list.indexOf(o); if (i >= 0) p.list.splice(i, 1); }
   AHEAD.propsRev = ++state.rev;
-  const c = centre(p, _p), size = Math.max(...p.parts.map((o) => o.r)) + p.parts.length * 0.25;
+  // (a kind with a break of its own, a wall of stakes, sets its pieces itself, `BREAKS` in fx/rubble.ts)
+  const own = BREAKS[p.kind];
+  const c = centre(p, _p), size = own ? own.as : Math.max(...p.parts.map((o) => o.r)) + p.parts.length * 0.25;
   // the prop comes apart: chunks that fly, bounce and lie a few seconds before they crumble away
   const reach = Math.max(...p.parts.map((o) => Math.hypot(o.x - c.x, o.z - c.z) + o.r));
-  rubble(c.x, c.z, { count: Math.min(36, Math.round(8 + size * 10) * (p.kind === 'wood' ? 1.4 : 1)), color: p.color, kind: p.kind, radius: reach * 0.8, height: Math.min(2, Math.max(...p.parts.map((o) => o.h))) * 0.7, size: 0.16 + size * 0.09, speed: 2.5 + size });
+  const height = Math.min(2, Math.max(...p.parts.map((o) => o.h))) * 0.7;
+  if (own) rubble(c.x, c.z, { count: own.count, color: p.color, kind: p.kind, radius: reach * own.spread, height, size: own.size, speed: own.speed });
+  else rubble(c.x, c.z, { count: Math.min(36, Math.round(8 + size * 10) * (p.kind === 'wood' ? 1.4 : 1)), color: p.color, kind: p.kind, radius: reach * 0.8, height, size: 0.16 + size * 0.09, speed: 2.5 + size });
   debris(c, { count: 8, color: p.color, speed: 4 + size * 2, size: 0.14 });
   smokePuff(c, { count: 4 + Math.round(size * 3), color: p.color, alpha: 0.4, size: 0.8 + size * 0.4, sizeEnd: 2 + size, life: 1.2, speed: 1.6 });
   burst(c, { count: 6, color: 0xffd9a0, intensity: 1.5, speed: 4, life: 0.35, size: 0.1, gravity: 8 });

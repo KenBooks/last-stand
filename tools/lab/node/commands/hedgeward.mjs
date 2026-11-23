@@ -4,7 +4,8 @@ import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
 
 /** `lab hedgeward`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
 export default {
-  summary: 'the ranger\'s wall (`--class ranger`), an ordinary breakable prop: placed where aimed, square across his '
+  summary: 'the ranger\'s wall (`--class ranger`), an ordinary breakable prop: broken in the training yard, a few thin '
+    + 'sticks no bigger than its stakes, gone soon after, the renderer heard as they fall (`debris`); placed where aimed, square across his '
     + 'line to it; a boss\'s bolts flying over it or wearing it; a melee foe going round it with a way open, and '
     + 'breaking through only when walled in; his arrows breaking it, every arrow wearing it as the cursor finds it '
     + 'from near and far (`played`); a slam wearing it, a Brute walking through it; '
@@ -33,10 +34,11 @@ export default {
     cases: {
       kind: 'list',
       usage: 'a,b',
-      choices: ['placed', 'bolts', 'round', 'arrows', 'played', 'walled', 'slammed', 'trampled', 'stays', 'arrow',
-        'reach'],
-      help: 'the cases run (all by default): placed, bolts, round, arrows, played, walled, slammed, trampled, stays, '
-        + 'arrow, reach',
+      choices: ['debris', 'placed', 'bolts', 'round', 'arrows', 'played', 'walled', 'slammed', 'trampled', 'stays',
+        'arrow', 'reach'],
+      help: 'the cases run (all by default): debris (a wall broken in the training yard: what it leaves, its pieces '
+        + 'counted and sized against a stake, the renderer heard), placed, bolts, round, arrows, played, walled, '
+        + 'slammed, trampled, stays, arrow, reach',
     },
     ...SETUP_OPTIONS,
     ...COMMON_OPTIONS,
