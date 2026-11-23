@@ -588,12 +588,14 @@ export function windAhead(): WindContext | null {
   return made;
 }
 
+/** Whether the loading screen's exit has a context made ahead (`prepareWind`), not yet taken or let go. */
+export const exitWindAhead = (): boolean => ahead !== null;
+
 /** Whether the crest's context made at the boot is still waiting for its first blow. */
 export const crestWindAhead = (): boolean => crestAhead !== null;
 
-/** The crest's context made at the boot let go, where its blow is a fade. */
+/** The crest's context made at the boot let go, where its blow is a fade: left to the collector, as `dropWind`'s. */
 export function dropCrestWind(): void {
-  crestAhead?.gl.getExtension('WEBGL_lose_context')?.loseContext();
   crestAhead = null;
 }
 
@@ -601,9 +603,10 @@ export function dropCrestWind(): void {
 export const windLinked = (made: WindContext): boolean =>
   made.linked !== undefined || !made.gl.getExtension('KHR_parallel_shader_compile');
 
-/** The context made ahead let go, where the exit is a plain fade. */
+/** The context made ahead let go, where the exit is a plain fade: left to the collector, never lost by hand. Its
+ *  `loseContext` is a round trip to the GPU's process, waiting behind all its work: in the boot's last task (as the
+ *  loading screen leaves) it waited on the pipelines still compiling, 13 s on an Adreno 810 (trace DMDE-1E1R). */
 export function dropWind(): void {
-  ahead?.gl.getExtension('WEBGL_lose_context')?.loseContext();
   ahead = null;
 }
 

@@ -2,8 +2,11 @@
 // the context the boot made at its start, while the GPU's process was idle (`prepareCrest`): made as the crest was
 // found, half way through the boot, that context waited 3.7 s behind the lobby's compiles on a CPU slowed four times,
 // as a laptop's AMD Radeon held its boot 3.8 s and an Adreno 810 7.4 (traces EP2G-9M10, 4NA2-KWVF). At High each blow
-// is the wind's; at Very low the crest fades, with no context made for it. `--canary` puts the level at Very low for
-// the High blow, which must be caught as a fade.
+// is the wind's; at Very low the crest fades, with no context made for it. The loading screen's exit is held to the
+// same (`prepareExit` in loading.ts): a context made at High, none at Very low, where it fades; and a context let go
+// is never lost by hand (`loseContext` waits on the GPU's process: as the lobby showed, an Adreno 810's boot held 13 s
+// behind the pipelines it was compiling, trace DMDE-1E1R). `--canary` puts the level at Very low for the High blow,
+// which must be caught as a fade, and makes the exit's context at Very low, as main made it at every level.
 //
 // The lab's pages have the wind off (reduced motion, and the device marked slow: `freshStorage` in node/browser.mjs),
 // so its boot faded the crest and made no context for it: the wind is let back on here, the boot's context made and
@@ -11,6 +14,8 @@
 // timers (`readWhenLinked` in logoWind.ts), which the lab's stepped frames leave no time for: each read waits a moment
 // of the browser's clock, as the game's frames leave it.
 import * as crestBlow from '../../../src/ui/crestBlow';
+import * as loading from '../../../src/ui/loading';
+import * as logoWind from '../../../src/ui/logoWind';
 import { qualityLevel, qualitySetting, setQuality } from '../../../src/core/quality';
 import type { QualitySetting } from '../../../src/data/quality';
 import type { Lab, Report } from './lab';
@@ -47,6 +52,54 @@ const SLOW_KEY = 'last-stand.logo-wind-slow';
 const LAB_SLOW = '2';
 
 const reads = crestBlow as CrestReads;
+
+/** The exit's functions a tree from before `prepareExit` lacks. */
+interface ExitReads {
+  prepareExit?: () => void;
+  exitWindAhead?: () => boolean;
+}
+const exitReads = { ...loading, ...logoWind } as ExitReads;
+
+/** How many contexts were lost by hand since `countLosses` began (each `WEBGL_lose_context`'s `loseContext`). */
+let losses = 0;
+let counting = false;
+
+/** Each context's `loseContext` counted from here on: the extension's prototype, every context's, patched once,
+ *  found on a context of the check's own (the page's globals don't hold its interface). */
+function countLosses(): void {
+  if (counting) return;
+  counting = true;
+  const own = document.createElement('canvas').getContext('webgl2')?.getExtension('WEBGL_lose_context');
+  if (!own) throw new Error('the page has no WEBGL_lose_context to count its losses by');
+  const prototype = Object.getPrototypeOf(own) as WEBGL_lose_context;
+  const lose = prototype.loseContext;
+  prototype.loseContext = function (this: WEBGL_lose_context): void {
+    losses++;
+    lose.call(this);
+  };
+}
+
+/** The loading screen's exit's context made as the boot makes it at `level`, then let go as a fade lets it go;
+ *  problems where it's made at a level that fades, missing at one that blows, or lost by hand. */
+function exitAt(level: QualitySetting, lines: string[], problems: string[], canary: boolean): void {
+  if (!exitReads.prepareExit || !exitReads.exitWindAhead) {
+    lines.push('the exit: a tree before prepareExit');
+    return;
+  }
+  setQuality(level);
+  // (the canary: made at every level, as main made it)
+  if (canary) logoWind.prepareWind();
+  else exitReads.prepareExit();
+  const made = exitReads.exitWindAhead();
+  const fades = level === 'low' || level === 'verylow';
+  const before = losses;
+  logoWind.dropWind();
+  const lost = losses - before;
+  lines.push(`the exit at ${level}: ${made ? 'a context made' : 'no context made'}, ${lost} lost by hand as let go`);
+  if (fades && made) problems.push(`the exit's context made at ${level}, where it fades`);
+  if (!fades && !made) problems.push(`no context made for the exit at ${level}, where it blows`);
+  if (lost > 0) problems.push(`the exit's context lost by hand at ${level} (loseContext waits on the GPU's process)`);
+}
 
 /** How the crest stands now, or null in a tree whose crest says nothing of it (main's, before `crestNow`). */
 const crestNow = (): CrestNow | null => reads.crestNow?.() ?? null;
@@ -97,8 +150,11 @@ export async function crestBlows(lab: Lab, options: CrestOptions): Promise<Repor
   const problems: string[] = [];
   const lines: string[] = [`booted at ${qualityLevel()}`];
   const setting = qualitySetting();
+  countLosses();
   await windOn(lab, true);
   try {
+    exitAt('high', lines, problems, false);
+    exitAt('verylow', lines, problems, options.canary);
     // (the boot's context made as the boot makes it, at the level it starts at, and the crest found as it finds it)
     setQuality('high');
     reads.prepareCrest?.();
@@ -114,6 +170,7 @@ export async function crestBlows(lab: Lab, options: CrestOptions): Promise<Repor
     const low = await blowAt(lab, 'verylow', 'at Very low', lines);
     if (low && low.went !== 'fade') problems.push(`the crest blown at Very low went by ${low.went ?? 'nothing'}`);
     if (low?.waiting) problems.push('a context waits for a blow at Very low, which fades');
+    if (losses > 0) problems.push(`${losses} of the wind's contexts lost by hand (loseContext waits on the GPU)`);
   } finally {
     setQuality(setting);
     await windOn(lab, false);
