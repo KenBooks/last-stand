@@ -73,7 +73,10 @@ export const UNSEEN_OPEN = { mean: 0.08, block: 0.5, blocksOver: 0.03 };
  *  matter what"; and "in hall need to see full walls, like the player can see"): the least share of the blocks over
  *  ground he doesn't see that must stand (its walls, by the rule), and the most of its roof, pictured alone, that
  *  may be left over what `rust.houseLeft` leaves: on average, and the share of its blocks over `SEEN_COVER.block` */
-export const INSIDE = { stands: 0.1, roofOverLeft: 0.08, roofBlocksOver: 0.03 };
+// (its roof, pictured alone, is gone whole: "if inside building, we thin the roof 100%, so player cannot even
+// see it": `roofLeft` the most of it read left, on average, and `roofBlocksOver` the share of its blocks
+// over `SEEN_COVER.block`)
+export const INSIDE = { stands: 0.1, roofLeft: 0.04, roofBlocksOver: 0.01 };
 /** the fewest covered blocks a view must have of a kind (seen, unseen) for its number to count */
 const BLOCKS_LEAST = 12;
 /** the frames a view is given to settle its fades, and a switch before its picture */
@@ -348,6 +351,9 @@ export async function readView(lab: Lab, view: RuleView): Promise<[RuleRead, Pic
     RUST.tune.debug = 3;
     showColumns(false);
     const played = await shotAfter(lab, `${view.name}: as played`);
+    // (stood in a building its roof is gone whole, and read alone below: the rest is held against the frame
+    // without it, where a wall's ghost isn't read against the roof that covered it)
+    if (inHall(view.at[0], view.at[1])) show(INSIDE_ROOFS, false, true);
     RUST.tune.housesWhole = 1;
     const whole = await shotAfter(lab, `${view.name}: nothing thinned`);
     RUST.tune.housesWhole = 0;
@@ -400,7 +406,7 @@ export function judged(read: RuleRead): Checked {
   if (enough && !read.inside && (unseen.opened > UNSEEN_OPEN.mean || unseen.blocksOver > UNSEEN_OPEN.blocksOver)) {
     wrong.push(`ground he does not see is opened${read.openedAt}`);
   }
-  const roofLeft = RUST.tune.houseLeft + INSIDE.roofOverLeft;
+  const roofLeft = INSIDE.roofLeft;
   if (roof && (roof.blocks < BLOCKS_LEAST || roof.coverLeft > roofLeft || roof.blocksOver > INSIDE.roofBlocksOver)) {
     wrong.push('he is inside and its roof is not opened whole');
   }

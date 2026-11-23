@@ -1683,14 +1683,16 @@ function hallDais(scene: THREE.Object3D, backWall: THREE.Object3D, levels: Level
   const deep = HALL.daisZ - HALL.wall, step = STEP_RUN, rise = HALL.daisHigh / 2;
   block(scene, inHalf * 2, rise, step, X, y0, HALL.daisZ - step / 2, M.granite);
   block(scene, inHalf * 2, HALL.daisHigh, deep - step, X, y0, HALL.wall + (deep - step) / 2, M.granite);
-  block(scene, inHalf * 2, 0.06, 0.12, X, top - 0.06, HALL.daisZ - step + 0.06, M.coping);
+  block(scene, inHalf * 2, 0.06, 0.12, X, top - 0.06, HALL.daisZ - step + 0.06, M.freeCoping);
   levels.paint(X - inHalf, HALL.daisZ - step, X + inHalf, HALL.daisZ, () => y0 + rise);
   levels.paint(X - inHalf, HALL.wall, X + inHalf, HALL.daisZ - step, () => top);
   const { plinthHalf: half, plinthHigh: high, plinthZ: z } = HALL;
   for (const dx of HALL.plinths) {
     const x = X + dx;
     block(scene, half * 2, high - 0.06, half * 2, x, top, z, M.granite);
-    block(scene, half * 2 + 0.08, 0.06, half * 2 + 0.08, x, top + high - 0.06, z, M.coping);
+    // (free stone, as the dais's edge: of a wall's coping, a house's part, a plinth's top was a ghost where it hid
+    // floor he saw and whole behind the hero on it, from play "these half colored pedestals")
+    block(scene, half * 2 + 0.08, 0.06, half * 2 + 0.08, x, top + high - 0.06, z, M.freeCoping);
     levels.paint(x - half, z - half, x + half, z + half, () => top + high);
     obstacles.push({ x, z, r: half * 1.2, h: top + high });
   }

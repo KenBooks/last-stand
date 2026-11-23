@@ -108,7 +108,9 @@ export class SeeKinds {
       // (a cover reads it as how far he stands in the room it roofs: all of it opens then, the owner's one
       // exception to the rule, "if the player is inside a building... we will thin whole roof no matter what")
       // (a roof by how far he stands under it; a wall of his room the same under 0: over its room alone)
-      if (cover) g[at + 19] = see.roofs ? this.inside.get(see) ?? 0 : -(this.inside.get(see) ?? 0);
+      // (`rust.housesWhole`, a harness's frame of nothing thinned: neither then)
+      const inside = TUNE.housesWhole ? 0 : this.inside.get(see) ?? 0;
+      if (cover) g[at + 19] = see.roofs ? inside : -inside;
       // (`rust.see` off: nothing of any kind thinned; `rust.housesWhole`: nothing of a house's, a harness's frame)
       if (!TUNE.see || (TUNE.housesWhole && see.cover)) { g[at + 2] = 0; g[at + 6] = 0; g[at + 10] = 0; g[at + 18] = 0; }
     }

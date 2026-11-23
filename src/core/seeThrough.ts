@@ -223,7 +223,7 @@ const kinds = {
   hallBack: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
     sight: true, sightOn: HALL_SIGHT_ASIDE, walls: HALL_IN },
   hallBeam: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
-    sight: true, door: HALL_DOOR, doorOn: HALL_DOOR_ON },
+    sight: true, door: HALL_DOOR, doorOn: HALL_DOOR_ON, walls: HALL_IN },
   hallEast: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
     sight: true, sightOn: HALL_SIGHT_ASIDE, walls: HALL_IN },
   hallWest: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
