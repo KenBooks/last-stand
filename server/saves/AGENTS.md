@@ -21,6 +21,11 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 - **What it checks of a save:** its size and shape alone (gzip of a JSON object, unpacking to 512 KB at most). Saves stay the player's own and client-authoritative: cheating is out of scope (#382).
 - **Copying production into a preview** gives each copied part a version past the preview's own. A device holding the preview's older copy is then told it changed (409), and never writes over the copy unseen. Production is never written from another site.
 
+## Play stats
+
+- `GET /saves/play-id` (any site's session) -> `{ id }`: the account's play id, what the game's anonymous heartbeat counts a signed-in player by, so one account on every device is one player (`src/stats/AGENTS.md`, `server/traces/AGENTS.md`). `store.playIdOf`: the first 16 bytes of HMAC-SHA256 by `play-key` (32 random bytes made once beside `accounts/`, never sent) over `"play-id/v1\n" + account id`, base64url: shaped as a browser's own id. Made again when asked, kept nowhere: the account's file doesn't change, and the traces service keeps only its own salted hash of it, so nothing in the stats leads back to an account without both services' secrets.
+- `play-key` isn't in the backups (they hold accounts and saves alone): restored onto an empty volume, every account gets a new play id, and each signed-in player counts twice once in the month it happens.
+
 ## Google
 
 - **Identity display (#539):** `/saves/account` and sign-in responses return the current session's `via` and, for a Google session alone, its verified email. Email is display text, never an account key: Google bindings still use site + sub. Older Google sessions may lack email; sign in again to populate it. Passkey/code sessions reveal no other session's email. Never log email or put it in public health/traces. `google.test.mjs` checks these boundaries and reload from disk.

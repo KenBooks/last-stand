@@ -293,6 +293,26 @@ export const googleLanding = (): Promise<GoogleLanding | null> => landing;
 /** Whether the server lets this session add a passkey off production: in its first 10 minutes, made by a code. */
 export const passkeyWindow = (): boolean => Boolean(kept?.byCodeAt && Date.now() - kept.byCodeAt < 10 * 60_000);
 
+/** the signed-in account's play id, asked once a visit (or again a while after it failed) */
+let playId: { accountId: string; id: string | null; at: number; asking: Promise<string | null> | null } | null = null;
+const PLAY_ID_RETRY_MS = 10 * 60_000;
+
+/** The play id the stats count this account by (src/stats/AGENTS.md): null signed out, or while the service can't
+ *  say (the browser's own id is counted meanwhile). */
+export async function accountPlayId(): Promise<string | null> {
+  if (!kept) return null;
+  const accountId = kept.accountId;
+  if (playId?.accountId === accountId) {
+    if (playId.asking) return playId.asking;
+    if (playId.id || Date.now() - playId.at < PLAY_ID_RETRY_MS) return playId.id;
+  }
+  const entry: NonNullable<typeof playId> = { accountId, id: null, at: Date.now(), asking: null };
+  entry.asking = api.playId().then(({ id }) => (/^[A-Za-z0-9_-]{22}$/.test(id) ? id : null), () => null)
+    .then((id) => { entry.id = id; entry.at = Date.now(); entry.asking = null; return id; });
+  playId = entry;
+  return entry.asking;
+}
+
 /** Signed out on this device: slot 1 stays here as a local save. */
 export async function signOut(): Promise<void> {
   try { await api.signOut(); } catch { /* offline: the session expires on its own */ }

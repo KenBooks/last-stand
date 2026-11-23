@@ -12,6 +12,13 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md); the service
   room, a save, a build or the device. The owner's choice (2026-11-20): an anonymous id, so weekly and monthly active
   players count each player once. Don't add a field without asking: the privacy page (`public/privacy.html`) says
   what's sent.
+- **Signed in to cloud saves, a player is the account** (from the owner, 2026-11-23: "we should count as user, if
+  its one account, for those we know"): the beat's `id` is the account's play id (`accountPlayId` in
+  `loot/cloud.ts`: `GET /saves/play-id`, an HMAC of the account's id by a key of the saves service's own, the same
+  on every device and site; asked once a visit, again 10 minutes after a failure) and `was` the browser's own id.
+  The traces service folds the browser's kept days into the account's (`fold` in `server/traces/stats.mjs`), so the
+  phone played signed out this morning and the PC signed in tonight are one player today, this week and this month.
+  The browser's id stays kept for when the player signs out; no account's play id is kept in the browser.
 - **On by default, off in one click** (the owner's choice, 2026-11-20: "Keep on by default") (the pause menu's Performance tab, the checkbox Anonymous play stats beside Slow-game reports, `#opt-stats`, `localStorage`
   `last-stand-play-stats`). A browser sending Global Privacy Control starts off. Turned off, the id is deleted: turned
   on again it's a new id.

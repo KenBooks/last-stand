@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { gunzipSync, gzipSync } from 'node:zlib';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { authenticator } from './authenticator.mjs';
 
@@ -207,6 +207,33 @@ test('a sign-in code takes the account to a preview, where a passkey of its own 
   const onCommit = await signIn(previewKey, COMMIT);
   assert.equal(onCommit.status, 200, onCommit.body);
   assert.equal(onCommit.body.account.id, added.body.account.id);
+});
+
+test("the play id: the account's on every site and device, another account's apart, never the account", async () => {
+  const phone = authenticator();
+  const token = await signUp(phone);
+  const account = (await call('GET', '/saves/account', { token })).body;
+  const mine = await call('GET', '/saves/play-id', { token });
+  assert.equal(mine.status, 200);
+  assert.match(mine.body.id, /^[A-Za-z0-9_-]{22}$/, "shaped as a browser's own id: the stats take either");
+  assert.ok(!account.id.includes(mine.body.id.slice(0, 6)), "nothing of the account's id");
+  // signed in again with its own session, and a preview by a sign-in code: the same id
+  const again = await signIn(phone);
+  assert.equal((await call('GET', '/saves/play-id', { token: again.body.token })).body.id, mine.body.id);
+  const { body: { code } } = await call('POST', '/saves/link-code', { token });
+  const preview = await call('POST', '/saves/link', { origin: PREVIEW, json: { code } });
+  const onPreview = await call('GET', '/saves/play-id', { origin: PREVIEW, token: preview.body.token });
+  assert.equal(onPreview.body.id, mine.body.id);
+  const other = await signUp(authenticator());
+  assert.notEqual((await call('GET', '/saves/play-id', { token: other })).body.id, mine.body.id);
+  assert.equal((await call('GET', '/saves/play-id')).status, 401, 'signed in alone');
+  assert.equal((await call('GET', '/saves/play-id', { origin: PREVIEW, token })).status, 401, "a session's own site");
+  // a restart makes the same ids: the key is kept, the ids are not
+  server.close();
+  await boot();
+  assert.equal((await call('GET', '/saves/play-id', { token })).body.id, mine.body.id);
+  const file = readFileSync(join(DATA, 'accounts', `${account.id}.json`), 'utf8');
+  assert.ok(!file.includes(mine.body.id), 'no account keeps its play id');
 });
 
 test('a separately signed-in preview copies production with a one-time production code', async () => {

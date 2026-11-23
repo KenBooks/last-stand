@@ -2,9 +2,10 @@
 // (`accounts/<id>.json`: its passkeys, Google's ids by site, its sessions' digests, which sites have a save),
 // and each site's save a file (`saves/<id>/<site>.json`: its parts, each gzipped JSON with a version). Every file is written whole to a temporary
 // name and renamed over the old, so a crash never leaves half a save. The accounts are read into memory at a start
-// (they're small: a passkey is a public key); the saves are read when asked for.
+// (they're small: a passkey is a public key); the saves are read when asked for. Beside them, `play-key`: the key the
+// accounts' play ids are made with (`playIdOf`), made once.
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 
 /** id -> account */
@@ -18,6 +19,8 @@ const bySession = new Map();
 /** id -> the promise its last change resolves to (each account's changes wait their turn) */
 const queues = new Map();
 let root = '/data';
+/** the key the play ids are made with: made once, kept on the volume, never sent */
+let playKey = '';
 
 const accountFile = (id) => join(root, 'accounts', `${id}.json`);
 const savesDir = (id) => join(root, 'saves', id);
@@ -68,6 +71,15 @@ export async function load(data) {
   queues.clear();
   await mkdir(join(root, 'accounts'), { recursive: true });
   await mkdir(join(root, 'saves'), { recursive: true });
+  try {
+    playKey = (await readFile(join(root, 'play-key'), 'utf8')).trim();
+  } catch {
+    playKey = '';
+  }
+  if (!playKey) {
+    playKey = randomBytes(32).toString('base64url');
+    await writeFile(join(root, 'play-key'), playKey);
+  }
   for (const name of await readdir(join(root, 'accounts'))) {
     if (!name.endsWith('.json')) continue;
     let account;
@@ -100,6 +112,14 @@ export const accountOfCredential = (credentialId) => account(byCredential.get(cr
 export const accountOfGoogle = (site, sub) => account(byGoogle.get(googleKey(site, sub))?.id);
 export const accountOfSession = (token) => account(bySession.get(digest(token)));
 export const allAccounts = () => [...accounts.values()];
+/**
+ * The account's play id: what the game's heartbeat counts a signed-in player by (server/traces stats.mjs), the same
+ * on every device and site, 16 bytes base64url as a browser's own id. An HMAC of the account's id by `playKey`, so
+ * nothing in the stats leads back to the account, and kept nowhere: made again when asked.
+ */
+export const playIdOf = (accountId) => createHmac('sha256', playKey).update(`play-id/v1
+${accountId}`).digest()
+  .subarray(0, 16).toString('base64url');
 /** Where the accounts and saves are kept (a backup's snapshot reads it). */
 export const dataRoot = () => root;
 

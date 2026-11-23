@@ -6,7 +6,9 @@
 //   GET  /traces/stats?days=    the sums of the last `days` days (1 to STATS_KEEP_DAYS), live and test apart (read)
 // What a heartbeat holds: a random id the game made for this browser (never an account, a name or an address), where
 // the player is (the lobby or a fight), whether in co-op, and whether it starts a page's session or is the browser's
-// first ever. The id is kept only as a salted hash (the salt made once, on the volume, never sent), and only for
+// first ever. A player signed in to cloud saves sends instead the play id the saves service derives from the account
+// (server/saves, GET /saves/play-id: an HMAC of its own key, never the account) and the browser's id as `was`: the
+// browser's days fold into the account's (`fold`), so one account on a phone and a PC is one player. The id is kept only as a salted hash (the salt made once, on the volume, never sent), and only for
 // STATS_ID_DAYS (35: a month's active players need 30), then just the day's sums. No address is written down: the
 // limits count in memory alone. Production (last-stand.cc) is counted as `live`, every PR preview, commit build and
 // dev server as `test`, apart, so testing never reads as players.
@@ -29,7 +31,7 @@ export const BEAT_MAX_BYTES = 512;
 /** a heartbeat's id: 16 random bytes, base64url */
 const ID = /^[A-Za-z0-9_-]{22}$/;
 const WHERE = new Set(['lobby', 'fight']);
-const FIELDS = new Set(['id', 'where', 'coop', 'start', 'first']);
+const FIELDS = new Set(['id', 'was', 'where', 'coop', 'start', 'first']);
 /** the sites counted as production's; every other allowed page is a test build */
 const LIVE = new Set(['https://last-stand.cc', 'https://www.last-stand.cc']);
 
@@ -61,11 +63,16 @@ export function checkBeat(json) {
   if (!json || typeof json !== 'object' || Array.isArray(json)) return { error: 'not an object' };
   for (const key of Object.keys(json)) if (!FIELDS.has(key)) return { error: `no field ${key}` };
   if (typeof json.id !== 'string' || !ID.test(json.id)) return { error: 'no id' };
+  if (json.was !== undefined && (typeof json.was !== 'string' || !ID.test(json.was) || json.was === json.id)) {
+    return { error: 'no browser id' };
+  }
   if (!WHERE.has(json.where)) return { error: 'no such place' };
   for (const flag of ['coop', 'start', 'first']) {
     if (json[flag] !== undefined && typeof json[flag] !== 'boolean') return { error: `${flag} is not true or false` };
   }
-  return { beat: { id: json.id, where: json.where, coop: !!json.coop, start: !!json.start, first: !!json.first } };
+  const beat = { id: json.id, where: json.where, coop: !!json.coop, start: !!json.start, first: !!json.first };
+  if (json.was) beat.was = json.was;
+  return { beat };
 }
 
 /**
@@ -86,6 +93,9 @@ export function statsService(settings, { log, clock = Date.now }) {
   let slot = { key: '', live: new Set(), test: new Set() };
   /** `address day` -> the new ids it sent that day */
   const idsFrom = new Map();
+  /** hashed id -> the day it came as a new player (`first`), in memory alone: a browser new today folded into an
+   *  account seen before takes its new player back */
+  const newIds = new Map();
   const beats = new Limiter([[MINUTE, limits.beatsPerMinute]]);
   let salt = '';
 
@@ -135,6 +145,48 @@ export function statsService(settings, { log, clock = Date.now }) {
     return true;
   }
 
+  /** Whether `id` is among the kept days' players of `kind`. */
+  function seen(id, kind) {
+    for (const day of days.values()) if (day[kind].ids.has(id)) return true;
+    return false;
+  }
+
+  /**
+   * A signed-in player's browser `was` folded into the account's `id`: every kept day the browser played counts the
+   * account in its place (the same player once, never both), who is online and the minute counted move over, and a
+   * browser new today takes its new player back when the account played before (today's alone: the days before
+   * keep their sums as counted). Nothing is kept of the pair: the days hold the account's hash alone after. Only
+   * replaces an id already counted, so it adds no player.
+   */
+  function fold(was, id, kind, known, today) {
+    for (const [name, day] of days) {
+      if (!day[kind].ids.delete(was)) continue;
+      day[kind].ids.add(id);
+      dirty.add(name);
+    }
+    const before = last.get(was);
+    if (before) {
+      const mine = last.get(id);
+      if (!mine || mine.counted < before.counted) last.set(id, { ...before, at: Math.max(before.at, mine?.at ?? 0) });
+      last.delete(was);
+    }
+    if (slot[kind].delete(was)) {
+      slot[kind].add(id);
+      const [name, index] = slot.key.split(' ');
+      const day = days.get(name);
+      if (day) day[kind].online[Number(index)] = slot[kind].size;
+    }
+    const newOn = newIds.get(was);
+    newIds.delete(was);
+    if (newOn === today && known) {
+      const day = days.get(newOn);
+      if (day && day[kind].newPlayers > 0) {
+        day[kind].newPlayers--;
+        dirty.add(newOn);
+      }
+    }
+  }
+
   /** A checked beat from a page at `origin` and `address`, counted; false if its id was one too many. */
   function take(beat, origin, address) {
     const now = clock();
@@ -143,6 +195,9 @@ export function statsService(settings, { log, clock = Date.now }) {
     const day = dayFor(today);
     const sums = day[kind];
     const id = hash(beat.id);
+    // (an account's id: whether it played before, asked before its browser's days fold into it)
+    const known = beat.was ? seen(id, kind) : false;
+    if (beat.was) fold(hash(beat.was), id, kind, known, today);
     if (!sums.ids.has(id)) {
       if (!newIdAllowed(address, today, day)) return false;
       sums.ids.add(id);
@@ -155,7 +210,11 @@ export function statsService(settings, { log, clock = Date.now }) {
       if (beat.coop) sums.coop++;
     }
     if (beat.start) sums.sessions++;
-    if (beat.first) sums.newPlayers++;
+    // (a browser made its id just now: a new player, unless it is signed in to an account that played before)
+    if (beat.first && !known) {
+      sums.newPlayers++;
+      if (!beat.was) newIds.set(id, today);
+    }
     last.set(id, { at: now, counted: newMinute ? now : before.counted, kind });
     const slotIndex = Math.floor((now % DAY) / SLOT);
     const key = `${today} ${slotIndex}`;
@@ -233,6 +292,7 @@ export function statsService(settings, { log, clock = Date.now }) {
     beats.prune(now);
     const today = dayOf(now);
     for (const key of idsFrom.keys()) if (!key.endsWith(today)) idsFrom.delete(key);
+    for (const [id, day] of newIds) if (day !== today) newIds.delete(id);
     await save();
   }
 

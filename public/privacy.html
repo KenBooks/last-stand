@@ -58,11 +58,12 @@
     <h2>Anonymous play stats</h2>
     <p>So the game's maintainer can see how many people play and for how long, the game tells its server once a minute while it's on screen that it is being played. Each message holds only:</p>
     <ul>
-      <li>a random id this browser made for it, which isn't linked to an account, a name, your saves or your address;</li>
+      <li>a random id this browser made for it, which isn't linked to a name, your saves or your address;</li>
+      <li>if you're signed in to cloud saves, also a play id the server makes from your account, the same on every device you sign in on, so you count as one player and not one per device. It is a scrambled code (a keyed hash), not your account id: nothing in the stats leads back to your account, and the play id isn't stored with your account either;</li>
       <li>whether you're in the lobby or a fight, and whether in co-op;</li>
       <li>whether it's the first message of this visit, or of this browser.</li>
     </ul>
-    <p>The server keeps the id only scrambled (a salted hash), and only for 35 days; after that, only each day's totals (how many players, minutes played, visits). It writes down no address. Turn it off in the pause menu (Performance, Anonymous play stats): the id is then deleted from this browser. If your browser sends Global Privacy Control, it starts off.</p>
+    <p>The server keeps the id only scrambled (a salted hash), and only for 35 days; after that, only each day's totals (how many players, minutes played, visits). When you're signed in, the days this browser played are counted as your play id's instead, and only the play id's scrambled form is kept: not which browsers it was played on. It writes down no address. Turn it off in the pause menu (Performance, Anonymous play stats): the id is then deleted from this browser. If your browser sends Global Privacy Control, it starts off.</p>
   </section>
   <section>
     <h2>Logs and reports</h2>

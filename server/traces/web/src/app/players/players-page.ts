@@ -21,7 +21,7 @@ const REFRESH_MS = 60_000;
   imports: [StatCard, TimeChart, PlayersTable],
   template: `
     <p class="sub">
-      Production's players, from the anonymous heartbeat games send once a minute while they're played. No account, name or address is kept.
+      Production's players, from the anonymous heartbeat games send once a minute while they're played: a browser counts as one player, and a player signed in to cloud saves counts once over all their devices. No account, name or address is kept.
     </p>
     <div class="spans" role="group" aria-label="Span">
       @for (s of spans; track s) {
