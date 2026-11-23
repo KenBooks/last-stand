@@ -286,6 +286,9 @@ export class Bridge {
   /** A harness's: the last frame's point lights, a line each (`Lights.pointLines`). */
   pointLines(): string[] { return this.lit.pointLines(); }
 
+  /** A harness's: whether a see-through material is drawn solid this frame, with what's opaque. */
+  drawnSolid(material: THREE.Material): boolean { return this.materials.solidNow(material as never); }
+
   /** A harness's: how many kinds of see-through the engine holds, and how many of them thin anything this frame (a
    *  hole, a share of the whole, a door open). */
   seeKindsNow(): { held: number; thinning: number } { return this.seeKinds.now(); }
