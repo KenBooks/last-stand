@@ -81,7 +81,7 @@ function pose(model: Model, how: NeckPose, rest: { neck: THREE.Euler; head: THRE
 }
 
 /** `model`'s neck pictured in the studio from each view, as `look` draws it. */
-function pictureOf(lab: Lab, model: Model, look: Look): Tile[] {
+async function pictureOf(lab: Lab, model: Model, look: Look): Promise<Tile[]> {
   const scene = studio();
   scene.add(model.root);
   model.root.updateMatrixWorld(true);
@@ -95,7 +95,7 @@ function pictureOf(lab: Lab, model: Model, look: Look): Tile[] {
   const shots: Shot[] = VIEWS.map((view) => ({ name: view.name, camera: cameraOn(box, view.from) }));
   const worn = wearLook(look, meshesOf(model.root));
   try {
-    return shoot(lab, scene, shots).tiles;
+    return (await shoot(lab, scene, shots)).tiles;
   } finally {
     worn();
     scene.remove(model.root);
@@ -128,7 +128,7 @@ export async function neck(lab: Lab, options: NeckOptions): Promise<Report> {
             lines.push(...caught.lines);
             problems.push(...caught.problems);
           }
-          moments.push({ label: what, tiles: pictureOf(lab, model, options.look), notes: found.lines });
+          moments.push({ label: what, tiles: await pictureOf(lab, model, options.look), notes: found.lines });
         }
       }
     } finally {

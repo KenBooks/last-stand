@@ -171,7 +171,7 @@ export async function maps(lab: Lab, options: MapsOptions): Promise<Report> {
     for (const step of seams.filter((found) => found.seam)) problems.push(seamProblem(key, step));
     if (options.pictures) {
       const { groupOf, picturesOf } = await import('./mapPictures');
-      moments.push({ label: `${groupOf(name)}: ${key}`, tiles: picturesOf(lab, name, data), notes: [size] });
+      moments.push({ label: `${groupOf(name)}: ${key}`, tiles: await picturesOf(lab, name, data), notes: [size] });
     }
     if (!options.canary || canaryLines.length || !seams.length) continue;
     const canary = canaryOf(key, data, digest);

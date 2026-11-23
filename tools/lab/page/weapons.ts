@@ -88,13 +88,14 @@ function partOf(box: THREE.Box3, frames: [number, number]): THREE.Box3 {
 
 /** `copy` pictured from each of the studio's views (none of it shown with `empty`), and the least and the most of a
  *  picture drawn. */
-function pictureOf(lab: Lab, copy: THREE.Object3D, empty = false): { tiles: Tile[]; least: number; most: number } {
+async function pictureOf(lab: Lab, copy: THREE.Object3D, empty = false):
+  Promise<{ tiles: Tile[]; least: number; most: number }> {
   const scene = studio();
   if (!empty) scene.add(copy);
   const box = new THREE.Box3().setFromObject(copy);
   const shots = VIEWS.map((view) => ({ name: view.name, camera: cameraOn(partOf(box, view.frames), view.from) }));
   try {
-    return shoot(lab, scene, shots);
+    return await shoot(lab, scene, shots);
   } finally {
     scene.remove(copy);
   }
@@ -126,7 +127,7 @@ export async function weapons(lab: Lab, options: WeaponsOptions): Promise<Report
     await lab.setup({ ...options.fixture, gear: styleOf(lab, base), weapon: base });
     const copy = weaponCopy(lab);
     if (!copy) throw new Error(`lab: weapons: no ${base} in the hero's hand`);
-    const { tiles, least } = pictureOf(lab, copy);
+    const { tiles, least } = await pictureOf(lab, copy);
     if (least < LEAST_DRAWN) problems.push(`the ${base} covers ${(least * 100).toFixed(1)}% of a picture: not drawn`);
     const notes = notesOn(copy);
     moments.push({ label: base, tiles, notes });
@@ -134,7 +135,7 @@ export async function weapons(lab: Lab, options: WeaponsOptions): Promise<Report
   }
   if (options.canary) {
     const copy = weaponCopy(lab)!;
-    const { most } = pictureOf(lab, copy, true);
+    const { most } = await pictureOf(lab, copy, true);
     const read = `the canary's empty studio read as ${(most * 100).toFixed(1)}% drawn`;
     if (most >= LEAST_DRAWN) problems.push(read);
     else lines.push(read);

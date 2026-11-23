@@ -138,7 +138,7 @@ function textureOf(canvas: HTMLCanvasElement, srgb: boolean): THREE.CanvasTextur
 }
 
 /** The map's material on a square above a ball, lit in the studio. */
-function lit(lab: Lab, name: RecipeName, canvases: ReturnType<typeof canvasesOf>): Tile {
+async function lit(lab: Lab, name: RecipeName, canvases: ReturnType<typeof canvasesOf>): Promise<Tile> {
   const look = LOOKS[name] ?? PLAIN;
   const maps = {
     map: textureOf(canvases.albedo, true),
@@ -161,7 +161,8 @@ function lit(lab: Lab, name: RecipeName, canvases: ReturnType<typeof canvasesOf>
   scene.updateMatrixWorld(true);
   try {
     const box = new THREE.Box3().setFromObject(scene);
-    return shoot(lab, scene, [{ name: 'lit', camera: cameraOn(box, [0, 0, 1]) }]).tiles[0];
+    const { tiles } = await shoot(lab, scene, [{ name: 'lit', camera: cameraOn(box, [0, 0, 1]) }]);
+    return tiles[0];
   } finally {
     for (const mesh of [square, ball]) mesh.geometry.dispose();
     for (const texture of Object.values(maps)) texture.dispose();
@@ -170,12 +171,12 @@ function lit(lab: Lab, name: RecipeName, canvases: ReturnType<typeof canvasesOf>
 }
 
 /** A map's pictures: its albedo and height laid, its corner, and its material lit. */
-export function picturesOf(lab: Lab, name: RecipeName, data: PBRData): Tile[] {
+export async function picturesOf(lab: Lab, name: RecipeName, data: PBRData): Promise<Tile[]> {
   const canvases = canvasesOf(data);
   return [
     laid('albedo', canvases.albedo),
     laid('height', canvases.height),
     cornered('corner', canvases.albedo),
-    lit(lab, name, canvases),
+    await lit(lab, name, canvases),
   ];
 }

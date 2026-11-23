@@ -418,8 +418,8 @@ function posedCopy(copier: Copier, pose: Pose, scale = 1, wrap?: ArmBuild) {
 
 /** `wrist` (a hand on it) pictured from `views` as `look` draws it, and the least and most of a picture drawn; the
  *  studio framed on it but with nothing in it, `empty`. */
-function pictureOf(lab: Lab, hand: Hand, wrist: THREE.Object3D, views: HandView[], look: Look, empty = false):
-  { tiles: Tile[]; least: number; most: number } {
+async function pictureOf(lab: Lab, hand: Hand, wrist: THREE.Object3D, views: HandView[], look: Look, empty = false):
+  Promise<{ tiles: Tile[]; least: number; most: number }> {
   const scene = studio();
   scene.add(wrist);
   const whole = new THREE.Box3().setFromObject(wrist, true);
@@ -431,7 +431,7 @@ function pictureOf(lab: Lab, hand: Hand, wrist: THREE.Object3D, views: HandView[
   });
   const worn = wearLook(look, meshesOf(wrist));
   try {
-    return shoot(lab, scene, shots);
+    return await shoot(lab, scene, shots);
   } finally {
     worn();
     scene.remove(wrist);
@@ -447,20 +447,20 @@ const SEE_THROUGH = 0.001;
  *  is closed by the wrap's edge), drawn in the `faces` look: its skin
  *  seen from inside and the backdrop through a hole, each view's share of the hand's pixels, and a problem for each
  *  view past `SEE_THROUGH`. */
-function seeThroughOf(lab: Lab, hand: Hand, wrist: THREE.Object3D, name: string):
-  { line: string; problems: string[]; tiles: Tile[] } {
+async function seeThroughOf(lab: Lab, hand: Hand, wrist: THREE.Object3D, name: string):
+  Promise<{ line: string; problems: string[]; tiles: Tile[] }> {
   const scene = studio();
   scene.add(wrist);
   const box = new THREE.Box3().setFromObject(hand.vis, true);
   const worn = wearLook('faces', meshesOf(hand.vis));
-  const backdrop = backdropDrawn();
+  const backdrop = await backdropDrawn();
   const readings: string[] = [];
   const problems: string[] = [];
   const tiles: Tile[] = [];
   try {
     for (const view of [...VIEWS, ...CLOSE_UPS]) {
       const camera = cameraOn(box, view.from(-hand.s), view.up);
-      const { pixels, width, height } = drawnPixels(lab, scene, { name: view.name, camera });
+      const { pixels, width, height } = await drawnPixels(lab, scene, { name: view.name, camera });
       const seen = seenThrough(pixels, width, height, backdrop.colour, backdrop.slack);
       const inside = seen.inside / Math.max(1, seen.drawn), holes = seen.holes / Math.max(1, seen.drawn);
       readings.push(`${view.name} ${pct(inside)}/${pct(holes)}`);
@@ -529,11 +529,12 @@ function chosen<T extends { name: string }>(all: T[], names: string[] | undefine
 }
 
 /** The canaries' problems: an empty studio read as drawn, or the hand built larger not measured so. */
-function canaries(lab: Lab, copier: Copier, views: HandView[], size: Size): { lines: string[]; problems: string[] } {
+async function canaries(lab: Lab, copier: Copier, views: HandView[], size: Size):
+  Promise<{ lines: string[]; problems: string[] }> {
   const lines: string[] = [];
   const problems: string[] = [];
   const { hand, wrist } = posedCopy(copier, POSES.flat);
-  const { most } = pictureOf(lab, hand, wrist, views, 'lit', true);
+  const { most } = await pictureOf(lab, hand, wrist, views, 'lit', true);
   const read = `the canary's empty studio read as ${share(most)} drawn`;
   if (most >= LEAST_DRAWN) problems.push(read);
   else lines.push(read);
@@ -567,9 +568,9 @@ export async function hands(lab: Lab, options: HandsOptions): Promise<Report> {
     const bareFist = name === 'clenched' && lab.player.cls.id === 'warrior' && options.glove !== true;
     const wrapped = bareFist && options.wrap !== false ? lab.model.arm : undefined;
     const { hand, root } = posedCopy(bareFist ? copierOf(lab, false) : copier, pose, 1, wrapped);
-    const { tiles, least } = pictureOf(lab, hand, root, views, look);
+    const { tiles, least } = await pictureOf(lab, hand, root, views, look);
     if (bareFist) {
-      const seen = seeThroughOf(lab, hand, root, name);
+      const seen = await seeThroughOf(lab, hand, root, name);
       lines.push(seen.line);
       problems.push(...seen.problems);
       if (seen.tiles.length) moments.push({ label: `${name}: seen through, holes magenta`, tiles: seen.tiles, notes: [] });
@@ -594,7 +595,7 @@ export async function hands(lab: Lab, options: HandsOptions): Promise<Report> {
     problems.push(...contact.problems);
   }
   if (options.canary) {
-    const found = canaries(lab, copier, views, size);
+    const found = await canaries(lab, copier, views, size);
     lines.push(...found.lines);
     problems.push(...found.problems);
   }

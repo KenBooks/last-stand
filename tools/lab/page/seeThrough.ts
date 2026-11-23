@@ -32,7 +32,7 @@ export function marked(pixels: Uint8Array, width: number, height: number, backdr
   return out;
 }
 
-/** A pixel of a back face in the `faces` look: red, shaded by how square it faces the camera (0.45 to 1). */
+/** A pixel of a back face in the `faces` look: red (`looks.ts`, drawn flat by its twin). */
 function isBack(red: number, green: number, blue: number): boolean {
   return red > 60 && red > 2 * green && red > 2 * blue;
 }
