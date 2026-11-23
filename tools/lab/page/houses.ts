@@ -22,10 +22,11 @@ import { holdThroughDoor } from './housesDoor';
 import { doorFacesSteady } from './housesFaces';
 import { ownZoom, zoomGivenBack, zoomInRoom } from './housesZoom';
 import { YARD_DUMMIES, type VillageObject } from '../../../src/data/village';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 import { resolveWorld } from '../../../src/world/collision';
 import type { Enemy } from '../../../src/entities/enemy';
 
-/** `--canary`: a program compiled as the first room comes in, the yard's dummies kept in its walls as if they stood
+/** `--canary`: the yard's dummies kept in its walls as if they stood
  *  there, the room left shown as he comes out, the door's hold made a press, and a sheet laid in the door frame's face
  *  inside. */
 export interface HousesOptions {
@@ -65,7 +66,9 @@ interface Visit {
   caught?: boolean;
 }
 
-const programs = (): number => G.renderer.info.programs?.length ?? 0;
+/** the pipelines the engine has made so far (`src/engine/pipelinesAside.ts`): three compiles no program for the scene
+ *  under it, and its count of them read 0 whatever was drawn */
+const programs = (): number => PIPELINES.made;
 const yardDummies = (): Enemy[] => G.enemies.filter((e) => e.def.dummy);
 
 /** How far each of the yard's dummies stands from its spot (`YARD_DUMMIES`, in the order they were stood). */
@@ -308,13 +311,10 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
   const tapCaught = held.some((p) => p.includes('a tap of E'));
   if (!canary) problems.push(...held);
   await lab.until(() => G.arena.room === id, DOOR_FRAMES, `${id}'s door never took him in`);
-  // (the canary's program: a material of its own, compiled as the room is first drawn)
-  const planted = canary ? plantProgram(id) : null;
   await lab.step(SETTLE, () => {
     if (canary) keepDummiesInWorld();
     return {};
   });
-  planted?.removeFromParent();
   const into = insideOf(id);
   const placed = Math.hypot(G.player.pos.x - into.x, G.player.pos.z - into.z);
   if (placed > PLACED_WITHIN) problems.push(`${id}: he came in ${placed.toFixed(2)} m from the door's inside`);
@@ -333,10 +333,10 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
   G.arena.rooms![id].cutAway(G.camera.getWorldPosition(new THREE.Vector3()));
   // (its trophies hung again for the bosses beaten: the check showed every part)
   if (id === 'records') writeRecords();
-  const caught = canary ? compiled > 0 && tapCaught && (faces?.places ?? 0) > 0 : undefined;
-  if (compiled && !canary) problems.push(`${id} in ${view}: ${compiled} programs compiled going in`);
+  const caught = canary ? tapCaught && (faces?.places ?? 0) > 0 : undefined;
+  if (compiled && !canary) problems.push(`${id} in ${view}: ${compiled} pipelines made going in`);
   lines.push(`${id} in ${view}: in at ${G.player.pos.x.toFixed(2)},${G.player.pos.z.toFixed(2)}; cut away: `
-    + `${cutAway(id).join(', ') || 'none'}; programs compiled ${compiled}`);
+    + `${cutAway(id).join(', ') || 'none'}; pipelines made ${compiled}`);
   moments.push(await lab.screen(`houses-${id}-${view}`));
   // (from above, the wheel turned out and in as far as it goes, before any card opens over the room: the zoom kept to the room's)
   const zoomed = view === 'top' ? await zoomInRoom(lab, id, moments, canary) : null;
@@ -384,7 +384,7 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
   if (!villageShown()) problems.push(`${id}: out of it, the village isn't shown`);
   const leftShown = roomShown(id);
   if (leftShown && !canary) problems.push(`${id}: out of it, the room is still drawn`);
-  if (programs() !== leaving) problems.push(`${id}: ${programs() - leaving} programs compiled going out`);
+  if (programs() !== leaving) problems.push(`${id}: ${programs() - leaving} pipelines made going out`);
   if (view === 'top' && !canary) problems.push(...zoomGivenBack(id));
   if (canary) G.arena.rooms![id].group.visible = false;
   const dummies = dummyProblems(id);
@@ -397,20 +397,6 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
     problems,
     caught: plantTalk ? talkCaught === true : canary ? caught === true && leftShown && dummiesMoved && zoomCaught : undefined,
   };
-}
-
-/** The canary's program: a mesh in a material no other program has, added to room `id` for its next draw. */
-function plantProgram(id: RoomId): THREE.Mesh {
-  const material = new THREE.MeshStandardMaterial({ color: 0xff00ff });
-  material.customProgramCacheKey = () => 'houses-canary';
-  material.onBeforeCompile = (shader) => {
-    shader.fragmentShader = `// houses canary\n${shader.fragmentShader}`;
-  };
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), material);
-  mesh.position.set(0, 1, 0);
-  G.arena.rooms![id].group.add(mesh);
-  mesh.updateMatrixWorld();
-  return mesh;
 }
 
 /** `lab houses`. */
@@ -430,6 +416,19 @@ const shrunk = (box: THREE.Box3, by: number): THREE.Box3 =>
  * a wheel or a candle in one is. With `canary`, the first room's chandelier lifted by `LIFTED` first, which must be
  * found.
  */
+/** The box of each part under `object`, in the world: its meshes', and those of the meshes a merge of what stands
+ *  still took from under it (`mergedParts`, kept by `mergeStill` in dev builds: merged, a chandelier and the ceiling's
+ *  beams are no meshes of their own, and read by its meshes alone this check passed with nothing read). */
+function partBoxes(object: THREE.Object3D): THREE.Box3[] {
+  const boxes: THREE.Box3[] = [];
+  object.traverse((o) => {
+    // (a merge itself is no part: its box is round every part merged into it, the ceiling's timbers' the whole ceiling)
+    if ((o as THREE.Mesh).isMesh && !o.userData.mergedOf) boxes.push(new THREE.Box3().setFromObject(o));
+    for (const box of (o.userData.mergedParts as THREE.Box3[] | undefined) ?? []) boxes.push(box.clone());
+  });
+  return boxes;
+}
+
 function fixturesClear(canary: boolean): { lines: string[]; problems: string[]; caught: boolean } {
   const lines: string[] = [];
   const problems: string[] = [];
@@ -441,25 +440,15 @@ function fixturesClear(canary: boolean): { lines: string[]; problems: string[]; 
     if (!ceiling) throw new Error(`lab: houses: the ${id} has no ceiling named`);
     const fixtures = room.children.filter((child) => child.name === 'chandelier');
     const lifted = canary && i === 0 ? fixtures[0] : undefined;
-    if (lifted) {
-      lifted.position.y += LIFTED;
-      lifted.updateMatrixWorld(true);
-    }
-    const beams: THREE.Box3[] = [];
-    ceiling.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh) beams.push(shrunk(new THREE.Box3().setFromObject(o), TOUCH));
-    });
+    const beams = partBoxes(ceiling).map((box) => shrunk(box, TOUCH));
+    if (!beams.length) throw new Error(`lab: houses: the ${id}'s ceiling has no parts to read`);
     let through = 0;
     for (const fixture of fixtures) {
-      fixture.traverse((o) => {
-        if (!(o as THREE.Mesh).isMesh) return;
-        const part = new THREE.Box3().setFromObject(o);
-        if (beams.some((beam) => beam.intersectsBox(part))) through++;
-      });
-    }
-    if (lifted) {
-      lifted.position.y -= LIFTED;
-      lifted.updateMatrixWorld(true);
+      const parts = partBoxes(fixture);
+      if (!parts.length) throw new Error(`lab: houses: the ${id}'s chandelier has no parts to read`);
+      // (the canary's lift: its parts are merged into the room's still meshes, so its group moves nothing drawn)
+      if (fixture === lifted) for (const part of parts) part.translate(new THREE.Vector3(0, LIFTED, 0));
+      through += parts.filter((part) => beams.some((beam) => beam.intersectsBox(part))).length;
     }
     const note = lifted ? ' (lifted: the canary)' : '';
     lines.push(`fixtures: the ${id}'s ${fixtures.length} chandelier(s), ${through} part(s) into the ceiling's beams${note}`);
@@ -490,7 +479,7 @@ export async function houses(lab: Lab, options: HousesOptions): Promise<Report> 
   if (!options.canary) return { text: lines.join('\n'), problems, moments };
   const talked = visits.find((v, i) => VISITS[i].id === 'library' && VISITS[i].view === 'third');
   const caught = visits[0].caught === true && talked?.caught === true && fixtures.caught;
-  lines.push(`canary: ${caught ? 'caught' : 'missed'} (a program compiled going in, the dummies kept in the room's `
+  lines.push(`canary: ${caught ? 'caught' : 'missed'} (the dummies kept in the room's `
     + 'walls, the room left drawn going out, a tap through a door made a press, a sheet in the door frame, the zoom '
     + `let go in a room: ${visits[0].caught ? 'found' : 'unseen'}; `
     + `the scholar's talk card wider than the window: ${talked?.caught ? 'found' : 'unseen'}; `

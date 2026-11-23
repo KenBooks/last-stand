@@ -30,7 +30,19 @@ const BOOT_POLL_MS = 16;
 /** how long an expression `evaluate` runs may take to settle, ms: one waiting on a frame of the page's, which the lab's
  *  clock holds, never settled, and every command after it waited on it, `status` too, till the server was stopped */
 const EVALUATE_TIMEOUT_MS = 60_000;
+/** how long a command's work on its page may take, ms (`LAB_COMMAND_TIMEOUT_MS` sets another): the longest, a shard
+ *  of the village's checks on the lent laptop, took 10 minutes. One whose page is held in a single task (a loop that
+ *  never ends, a test that grew with the scene) never returns: `houses` sat with nothing on screen until it was
+ *  stopped, on main too, its rays sent at the rooms' merged meshes whole. */
+const COMMAND_TIMEOUT_MS = Number(process.env.LAB_COMMAND_TIMEOUT_MS) || 20 * 60_000;
 const SHOWN = 'shown';
+
+/** What a command that never returned is told. */
+function commandTimeoutText(fn) {
+  const seconds = Math.round(COMMAND_TIMEOUT_MS / 1000);
+  return `${fn}: its work on the page hadn't returned after ${seconds} s (LAB_COMMAND_TIMEOUT_MS sets the limit): `
+    + 'the page is likely held in one task; --profile on a shorter limit says where, or run its steps on lab live';
+}
 
 /** What an expression that never settled is told. */
 function evaluateTimeoutText() {
@@ -756,11 +768,33 @@ export class Side {
 
   /** Calls the page function `fn` (page/commands/<fn>.ts) with the lab and `options`; returns its result. */
   command(fn, options) {
-    return this.page.evaluate(async ([fn, options, afresh]) => {
+    return this.withinCommandLimit(fn, this.page.evaluate(async ([fn, options, afresh]) => {
       const command = await import(`/tools/lab/page/commands/${fn}.ts`);
       window.__lab.begin(afresh);
       return command[fn](window.__lab, options);
-    }, [fn, options, this.afresh]);
+    }, [fn, options, this.afresh]));
+  }
+
+  /**
+   * `work`, command `fn`'s on the page, or a failure once it has taken `COMMAND_TIMEOUT_MS`: its page is closed then
+   * (one held in a task answers nothing more, and the next command boots its own).
+   */
+  async withinCommandLimit(fn, work) {
+    let timer;
+    const late = labError(commandTimeoutText(fn));
+    const timedOut = new Promise((resolve, reject) => {
+      timer = setTimeout(() => reject(late), COMMAND_TIMEOUT_MS);
+    });
+    // (left unheard once the limit wins: the closed page rejects it)
+    work.catch(() => {});
+    try {
+      return await Promise.race([work, timedOut]);
+    } catch (error) {
+      if (error === late) await this.closePage();
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**
@@ -768,11 +802,11 @@ export class Side {
    * each moment fetched over Playwright's pipe on its own.
    */
   async picturedCommand(fn, options) {
-    const report = await this.page.evaluateHandle(async ([fn, options, afresh]) => {
+    const report = await this.withinCommandLimit(fn, this.page.evaluateHandle(async ([fn, options, afresh]) => {
       const command = await import(`/tools/lab/page/commands/${fn}.ts`);
       window.__lab.begin(afresh);
       return command[fn](window.__lab, options);
-    }, [fn, options, this.afresh]);
+    }, [fn, options, this.afresh]));
     try {
       return await readPicturedReport(report);
     } finally {
