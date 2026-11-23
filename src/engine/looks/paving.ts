@@ -4,18 +4,14 @@
 // With the maps read as they repeat, the square's stones came round every metre and a half in rows (from play, "too
 // obvious texture pieces (tiling is visible)", #819).
 import type { RustLook, RustShader } from '../custom';
+import { noiseTable, noiseWgsl } from './noiseTable';
 
 const PAVING: RustShader = {
   name: 'paving-unrepeated',
   hooks: /* wgsl */ `
-fn pave_hash(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
-fn pave_noise(p: vec2f) -> f32 {
-  let i = floor(p);
-  var f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(pave_hash(i), pave_hash(i + vec2f(1.0, 0.0)), f.x),
-    mix(pave_hash(i + vec2f(0.0, 1.0)), pave_hash(i + vec2f(1.0, 1.0)), f.x), f.y);
-}
+${noiseWgsl('ground_noise', 't_extra0')}
+// (the table's red: the paving's hash, noiseTable.ts)
+fn pave_noise(p: vec2f) -> f32 { return ground_noise_r(p); }
 
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {}
 
@@ -49,4 +45,4 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 };
 
 /** The paving's look: its maps read unrepeated, its vertices where its mesh has them. */
-export const pavingLook = (): RustLook => ({ shader: PAVING, casts: true, numbers() {} });
+export const pavingLook = (): RustLook => ({ shader: PAVING, maps: [noiseTable()], casts: true, numbers() {} });

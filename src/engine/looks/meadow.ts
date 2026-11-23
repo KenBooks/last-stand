@@ -10,6 +10,7 @@ import type { BladeNumbers, BladeUniforms } from '../../world/meadowNodes';
 import type { RustLook, RustShader } from '../custom';
 import { TUNE } from '../globals';
 import { ONE_GRASS } from '../../world/meadowOne';
+import { noiseTable, noiseWgsl } from './noiseTable';
 
 /** The one grass's numbers as a ring is drawn (`world/meadowOne.ts`): the camera's height over the ground and
  *  how far from it all the grass is kept, and the least share of it kept however far. */
@@ -36,21 +37,10 @@ const TUFT_GROWS = ${TUFT.grows};
 
 const SHARED = /* wgsl */ `
 fn blade_hash(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
-fn meadow_hash(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(269.5, 183.3))) * 43758.5453); }
-fn blade_noise(p: vec2f) -> f32 {
-  let i = floor(p);
-  var f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(blade_hash(i), blade_hash(i + vec2f(1.0, 0.0)), f.x),
-    mix(blade_hash(i + vec2f(0.0, 1.0)), blade_hash(i + vec2f(1.0, 1.0)), f.x), f.y);
-}
-fn meadow_noise(p: vec2f) -> f32 {
-  let i = floor(p);
-  var f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(mix(meadow_hash(i), meadow_hash(i + vec2f(1.0, 0.0)), f.x),
-    mix(meadow_hash(i + vec2f(0.0, 1.0)), meadow_hash(i + vec2f(1.0, 1.0)), f.x), f.y);
-}
+${noiseWgsl('ground_noise', 't_extra1')}
+// (the value noises read from the table, noiseTable.ts: red the blades' hash, green the mask's)
+fn blade_noise(p: vec2f) -> f32 { return ground_noise_r(p); }
+fn meadow_noise(p: vec2f) -> f32 { return ground_noise_g(p); }
 fn mask_at(uv: vec2f) -> f32 { return textureSampleLevel(t_extra0, samp, uv, 0.0).r; }
 /// The mask's grass at xz (0 to 1), its edges made ragged.
 fn meadow_at(xz: vec2f, span: f32) -> f32 {
@@ -366,7 +356,7 @@ export function bladeLook(u: BladeUniforms, combed: boolean, numbers: BladeNumbe
   one: OneNow | null): RustLook {
   return {
     shader: BLADES,
-    maps: [u.uMeadow.value],
+    maps: [u.uMeadow.value, noiseTable()],
     position: 'bv',
     before: true,
     numbers(out) {
@@ -396,5 +386,5 @@ export function bladeLook(u: BladeUniforms, combed: boolean, numbers: BladeNumbe
 
 /** The ground under the meadow: `mask` in the engine's first extra map. */
 export function swardLook(mask: THREE.Texture, half: number): RustLook {
-  return { shader: SWARD, maps: [mask], numbers(out) { out[0] = half; } };
+  return { shader: SWARD, maps: [mask, noiseTable()], numbers(out) { out[0] = half; } };
 }
