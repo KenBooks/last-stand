@@ -1,7 +1,8 @@
 // The game's kinds of see-through as the engine holds them (`SeeKind` in its common.wgsl): what's dissolved where it
 // hides the hero, each kind's numbers written to the frame's globals as the game has them (core/seeThrough.ts).
 import * as THREE from 'three';
-import { BLEND_GONE, SIGHT_CONE, type SeeThrough } from '../core/seeThrough';
+import { BLEND_GONE, SIGHT_CONE, roofGhostNow, type SeeThrough } from '../core/seeThrough';
+import { SIGHT } from '../core/sight';
 import { HALL, TERRACE } from '../data/village';
 import type { Core } from './core';
 import { GLOBALS, TUNE } from './globals';
@@ -47,6 +48,8 @@ export class SeeKinds {
     g[GLOBALS.seeHall] = TERRACE.x - HALL.inHalf; g[GLOBALS.seeHall + 1] = HALL.inFront;
     g[GLOBALS.seeHall + 2] = TERRACE.x + HALL.inHalf; g[GLOBALS.seeHall + 3] = HALL.wall;
     g[GLOBALS.seeHall + 6] = SEE_FLOOR_CLEAR;
+    // (how far what stands under a roof thins with it where it hides ground he sees)
+    g[GLOBALS.seeHall + 7] = TUNE.houseGhost > 0 ? roofGhostNow() : 0;
     for (let slot = 0; slot < this.kinds.length; slot++) {
       const see = this.kinds[slot], at = GLOBALS.seeKinds + slot * SEE_KIND_FLOATS;
       see.k.value.toArray(g, at);
@@ -81,6 +84,9 @@ export class SeeKinds {
   gone(see: SeeThrough | undefined): boolean {
     if (!TUNE.goneWhole || !TUNE.see || !see?.blended || see.reach || see.room) return false;
     if (see.k.value.w > GONE_REACH) return false;
+    // (with the fog of what he can't see on, the engine thins such a kind only where it hides floor he sees, and
+    // leaves it whole over the rest: a share of 1 is no longer nothing drawn)
+    if (TUNE.sightFog > 0 && SIGHT.uSightOn.value > 0) return false;
     const left = 1 - see.whole.value;
     return (this.oneLayer(see) ? left : left * left * left) < BLEND_GONE;
   }

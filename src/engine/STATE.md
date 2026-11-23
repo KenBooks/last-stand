@@ -391,3 +391,14 @@ not intend to support the old way of rendering".
   over the cottages, and their roofs stand darker.
 - [ ] Still drawn and dropped there: two things thinned whole by 0.81 with a room of their own (0.76 of the screen).
   Next by size on the phone: the opaque still meshes, the paving's and the meadow's shaders.
+
+## 2026-11-23, later: a house thins by his sight
+
+- [x] One rule for a house from above (the owner's, after two wrong tries): a pixel of its roof, gables or walls
+  thins only where the line of sight through it ends on ground he sees; whole otherwise. Bulwark abe6452 and the
+  commit after it. Pictured round a cottage from four sides, at the library's door, in the hall, by night.
+- [x] A pixel thinned away dropped before its surface is made: blended 1.49 ms to 1.12 at the phone's view.
+- `rust.goneWhole` applies with the fog off alone now; `rust.oneLayer` stays off (it changes the hall's inside,
+  17% of that frame, and loses the cottages' gables).
+- [ ] No check of its own holds the rule: `lab village`'s roof checks read three's ghost pass and don't run on the
+  engine (the suite's port is on the branch `lab/village-on-engine`, unfinished).

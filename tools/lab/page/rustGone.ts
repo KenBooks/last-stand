@@ -39,6 +39,10 @@ export async function goneWholeLeftOut(lab: Lab, bridge: Bridge): Promise<Checke
   lab.drawing = true;
   await lab.step(60);
   G.paused = true;
+  // (the fog of what he can't see held off: with it on a roof thins only where it hides floor he sees, and stands
+  // whole over the rest, so nothing of it is gone whole)
+  const fog = RUST.tune.sightFog;
+  RUST.tune.sightFog = 0;
   try {
     const [without, few] = await drawnWith(lab, bridge, 1, 'thinned to nothing: left out');
     const [drawn, all] = await drawnWith(lab, bridge, 0, 'thinned to nothing: drawn and dropped');
@@ -54,6 +58,7 @@ export async function goneWholeLeftOut(lab: Lab, bridge: Bridge): Promise<Checke
       + `same (${percent(apart)} of its pixels apart)`);
   } finally {
     RUST.tune.goneWhole = 1;
+    RUST.tune.sightFog = fog;
     G.paused = paused;
     await lab.step(SETTLE_FRAMES);
     lab.drawing = drawing;

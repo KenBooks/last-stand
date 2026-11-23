@@ -202,10 +202,10 @@ const kinds = {
     sight: true, sightOn: HALL_SIGHT_ASIDE },
   hallRoof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, oneLayer: true },
   /** the other roofs: as what's built, and a ghost from above (`ROOF_GHOST_ABOVE`) */
-  roof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, oneLayer: true },
+  roof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true },
   /** a house's gables from above, fainter than its roof: at the roof's own ghost, plaster that pale read as a strip
    *  standing off the roof's end, edge on (a review; from play, "chimney/gable needs work") */
-  gable: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, oneLayer: true },
+  gable: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true },
   /** what stands free in the hall (its columns, its banners), which hides as much of the room as of him */
   // (those near the line to him: a column well aside of it hides nothing of him, and all gone, the portico stood on plinths)
   hallColumn: { k: COLUMN_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: { value: 0.4 }, blended: true,
@@ -1270,6 +1270,12 @@ onWholeView(() => {
   if (seeAsked) updateSeeThrough(...seeAsked);
   for (const [kind, share] of [...wholeAsked]) fadeWhole(kind, share);
 });
+
+/** How far a roof thins from above now, where it thins (0: not from above): a house's walls thin by it too, where
+ *  they hide ground he sees (the engine's `house_share`). */
+export function roofGhostNow(): number {
+  return kinds.roof.whole.value;
+}
 
 /** For a harness (tools/lab): every roof thinned from above by `ghost` (null: the game's), from the next frame: thinner,
  *  what lies under one shows enough to read the fog on it. */
