@@ -1,2 +1,5 @@
 * text=auto eol=lf
 *.png binary
+# The engine's build (Bulwark's wasm-bindgen output): generated, its diff noise, a conflict settled by building again
+src/engine/pkg/** linguist-generated=true -diff -merge
+src/engine/pkg/BUILT_FROM -linguist-generated diff merge
