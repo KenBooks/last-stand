@@ -9,9 +9,12 @@
 //   wall still standing;
 // - arrows: his own arrows loosed into it, at points across its width and up its height, each wear it as they wear
 //   any prop, and as many as its life break it (from the owner: "if you can destroy a marble pillar with arrows, you
-//   for sure should be able to destroy a wooden wall"); one through a gap in its weave dealing nothing is a problem
+//   for sure should be able to destroy a wooden wall"); one through a gap in its weave dealing nothing is a problem;
+// - played: his arrows at it as the player looses them, the cursor finding it from above: from where he raised it and
+//   stepped back and aside, at least and full draw, low, half way and high on it, every one that ends at it wearing it
 //   (from Victor's review: "Sometimes arrow can fly through without dealing damage, I get it more than half the
-//   time": met as drawn, an arrow found the gaps between its stakes and courses);
+//   time": met as drawn, an arrow found the gaps between its stakes and courses; and through them the cursor found the
+//   earth at its foot, and an arrow aimed there put its point in the ground before its middle met the wall);
 // - slammed: a foe's slam landing on it wears it;
 // - trampled: a big foe walking at him straight through it breaks it ("Big enemies should break it by simply walking
 //   over it");
@@ -21,8 +24,9 @@
 // - reach: aimed past its range it rises at its range; aimed onto a foe it rises before the foe, never on it; with a
 //   prop right before him (nowhere clear) it isn't raised, its outline red, and the press costs nothing.
 // `--canary` plants a fault for the arrow (its body made a tall prop's, which stops a shot), the round (its body taken
-// out of the foes' way), the arrows (the wall met as drawn alone, through its gaps), the trample and the walled in
-// (its body no breakable prop's), each a problem unless caught. `--pictures` takes the wall
+// out of the foes' way), the trample and the walled in (its body no breakable prop's), and plays `played` twice, the
+// wall met as drawn alone (through its gaps) and the props met by an arrow's middle after its flight, each a problem
+// unless caught. `--pictures` takes the wall
 // from round it alone (front, three-quarter, side, above), and in the forest and the crypt from the game's views:
 // standing, its preview held, and a blow on it with its bar.
 import * as THREE from 'three';
@@ -48,6 +52,8 @@ export interface HedgewardOptions {
   canary: boolean;
   /** the wall pictured alone from round it, and in each biome from the game's views */
   pictures: boolean;
+  /** the cases run by name, or null for every one */
+  cases: string[] | null;
 }
 
 /** frames the key is held before it's let go, and the most a cast may take to raise the wall */
@@ -416,10 +422,10 @@ const RELOAD = 60;
  * ended. Pressed again within the reload, a shot looses nothing, and counted as one it read as an arrow through the
  * wall dealing nothing.
  */
-async function loose(lab: Lab, shot: BoundSkill, aim: THREE.Vector3): Promise<Projectile> {
+async function loose(lab: Lab, shot: BoundSkill, aim: THREE.Vector3, draw = ARROW_DRAW): Promise<Projectile> {
   const before = new Set(G.projectiles);
   const ownNew = (): Projectile | undefined => G.projectiles.find((p) => !before.has(p) && p.by === lab.player);
-  await lab.step(ARROW_DRAW, () => pressing(shot.key, aim, true));
+  await lab.step(draw, () => pressing(shot.key, aim, true));
   await lab.until(() => Boolean(ownNew()), LOOSE_WAIT, 'the arrow was never loosed', () => ({ aim }));
   const arrow = ownNew()!;
   await lab.until(() => !arrow.alive, FLIGHT_WAIT, 'the arrow never ended its flight', () => ({ aim }));
@@ -441,40 +447,33 @@ function arrowAims(ward: Ward): THREE.Vector3[] {
  * arrows: his arrows loosed into it at points across its width and up its height, one after another, each wearing it
  * as it wears a prop, and breaking it at its life. An arrow that wore nothing went through a gap: a problem.
  */
-async function arrows(lab: Lab, options: HedgewardOptions, canary: boolean): Promise<Outcome> {
+async function arrows(lab: Lab, options: HedgewardOptions): Promise<Outcome> {
   const { way, skill } = await setUp(lab, options.fixture);
   const hero = G.player;
   const ward = await raiseAt(lab, skill, hero.pos.clone().addScaledVector(way, ARROW_OUT));
-  // (the canary: the wall met as drawn alone, as before its solid, whose gaps an arrow went through)
-  const { holdWallSolid } = await import('../../../src/combat/skills/hedgeward');
-  holdWallSolid(canary);
   const shot = skillNamed('mouse0'), moments: Pictured[] = [];
   const through: string[] = [];
   let loosed = 0;
   // (pictured standing, half worn and as it breaks, over the shoulder)
   if (options.pictures) moments.push(await lab.screen('arrows: the wall standing', [`life ${ward.prop.life} of ${ward.prop.max}`]));
   let halfShown = false;
-  try {
-    for (const aim of arrowAims(ward)) {
-      if (ward.prop.broken) break;
-      const before = ward.prop.life;
-      const arrow = await loose(lab, shot, aim);
-      loosed++;
-      if (ward.prop.life >= before && !ward.prop.broken) {
-        const along = lineOf(ward).along.dot(arrow.pos.clone().sub(lineOf(ward).middle));
-        through.push(`${aim.y.toFixed(2)} m up, landed ${along.toFixed(1)} m along`);
-      }
-      if (options.pictures && !halfShown && ward.prop.life <= ward.prop.max / 2 && !ward.prop.broken) {
-        halfShown = true;
-        moments.push(await lab.screen('arrows: worn half way, arrows standing in it', [`life ${ward.prop.life} of ${ward.prop.max}`]));
-      }
+  for (const aim of arrowAims(ward)) {
+    if (ward.prop.broken) break;
+    const before = ward.prop.life;
+    const arrow = await loose(lab, shot, aim);
+    loosed++;
+    if (ward.prop.life >= before && !ward.prop.broken) {
+      const along = lineOf(ward).along.dot(arrow.pos.clone().sub(lineOf(ward).middle));
+      through.push(`${aim.y.toFixed(2)} m up, landed ${along.toFixed(1)} m along`);
     }
-    if (options.pictures && ward.prop.broken) {
-      await lab.step(8);
-      moments.push(await lab.screen('arrows: broken by the arrows', [`${loosed} loosed`]));
+    if (options.pictures && !halfShown && ward.prop.life <= ward.prop.max / 2 && !ward.prop.broken) {
+      halfShown = true;
+      moments.push(await lab.screen('arrows: worn half way, arrows standing in it', [`life ${ward.prop.life} of ${ward.prop.max}`]));
     }
-  } finally {
-    holdWallSolid(false);
+  }
+  if (options.pictures && ward.prop.broken) {
+    await lab.step(8);
+    moments.push(await lab.screen('arrows: broken by the arrows', [`${loosed} loosed`]));
   }
   const state = ward.prop.broken ? 'broken' : `standing at ${ward.prop.life} of ${ward.prop.max}`;
   const lines = [`arrows: ${loosed} loosed across it and up it, ${state}; ${through.length} dealt nothing`];
@@ -484,6 +483,129 @@ async function arrows(lab: Lab, options: HedgewardOptions, canary: boolean): Pro
   }
   if (!ward.prop.broken) problems.push(`arrows: never broke it (${loosed} loosed, its life ${ward.prop.max})`);
   return { lines, problems, moments };
+}
+
+/** played: where he shoots it from, as he steps back and aside after raising it (m from its middle, and the angle off
+ *  square across it, rad) */
+const PLAYED_STANDS: { out: number; off: number }[] = [
+  { out: 3, off: 0 },
+  { out: 6, off: 0 },
+  { out: 6, off: 0.75 },
+  { out: 10, off: 0 },
+];
+/** played: the draws, let go just past the bow's least draw and at full draw (frames held), and the points aimed at on
+ *  the wall, across it from its middle and up from its foot (m) */
+const PLAYED_DRAWS: { name: string; frames: number }[] = [
+  { name: 'least', frames: 40 },
+  { name: 'full', frames: 80 },
+];
+const PLAYED_AIMS: { across: number; up: number }[] = [
+  { across: 0, up: 0.15 },
+  { across: 0, up: 0.5 },
+  { across: 0, up: 0.85 },
+  { across: -1.2, up: 0.15 },
+  { across: 1.2, up: 0.15 },
+  { across: 1.2, up: 0.5 },
+];
+/** played: how far before its line an arrow that wore nothing may have ended and still be the wall's (m: its circles
+ *  are 0.25 round, and an arrow's middle is half its length behind its point) */
+const BEFORE_LINE = 0.8;
+
+/** One stand's place before `ward`: `out` from its middle, `off` round from square on his side of it. */
+function standBefore(ward: Ward, toward: THREE.Vector3, stand: { out: number; off: number }): THREE.Vector3 {
+  const { middle } = lineOf(ward);
+  const way = toward.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), stand.off);
+  return middle.clone().addScaledVector(way, stand.out);
+}
+
+/**
+ * played: his arrows at the wall as the player looses them, from where he raised it and stepped back and aside, at
+ * least and full draw, low, half way and high on it, each at a whole wall (its life set back before each): every
+ * arrow that ends at the wall must wear it. From Victor's review of #647, "Sometimes arrow can fly through without
+ * dealing damage, I get it more than half the time": through a gap between its stakes the cursor from above finds the
+ * earth at its foot, and an arrow aimed there put its point in the ground before its middle met the wall, and stood
+ * there dealing nothing. `arrows`, aimed at its face at full draw from 3 m, never met it.
+ */
+async function played(lab: Lab, options: HedgewardOptions, canary: boolean): Promise<Outcome> {
+  if (!canary) return playedWith(lab, options, 'played', null);
+  // (the canary: played twice, each with a fault of its own planted: the wall met as drawn alone, as before its solid,
+  // the cursor finding the gaps between its stakes; and the props met by an arrow's middle after its flight, as before
+  // its tip, its point in the ground at the wall's foot first)
+  const { holdWallSolid } = await import('../../../src/combat/skills/hedgeward');
+  const { holdPropsAfterFlight } = await import('../../../src/combat/projectiles');
+  const drawn = await playedWith(lab, options, 'played as drawn', holdWallSolid);
+  const late = await playedWith(lab, options, 'played met late', holdPropsAfterFlight);
+  return {
+    lines: [...drawn.lines, ...late.lines],
+    problems: [...drawn.problems, ...late.problems],
+    moments: [],
+  };
+}
+
+/** `played` under `name`, a wall raised afresh, with `plant` held on through it (a canary's fault) where it's given. */
+async function playedWith(lab: Lab, options: HedgewardOptions, name: string,
+  plant: ((on: boolean) => void) | null): Promise<Outcome> {
+  const { way, skill } = await setUp(lab, options.fixture);
+  plant?.(true);
+  try {
+    return await playedFrom(lab, skill, way, name);
+  } finally {
+    plant?.(false);
+  }
+}
+
+/** One of `played`'s arrows, as it ended: its wall worn, stopped short of it by something else, or how it went through
+ *  dealing nothing. */
+type PlayedShot = { kind: 'worn' } | { kind: 'short' } | { kind: 'through'; how: string };
+
+/** A shot of `played`: him stood at `at` facing the wall, its life set back, an arrow loosed at `aim` on it. */
+async function playedShot(lab: Lab, ward: Ward, toward: THREE.Vector3, at: THREE.Vector3, aim: THREE.Vector3,
+  drawFrames: number): Promise<PlayedShot> {
+  const hero = G.player;
+  hero.place(at.clone(), Math.atan2(-toward.x, -toward.z));
+  ward.prop.life = ward.prop.max;
+  const arrow = await loose(lab, skillNamed('mouse0'), aim, drawFrames);
+  if (ward.prop.life < ward.prop.max) return { kind: 'worn' };
+  // (where it ended, before the wall's line on his side: one stopped short by something else isn't the wall's)
+  const { middle } = lineOf(ward);
+  const before = arrow.pos.clone().sub(middle).dot(toward);
+  if (before > BEFORE_LINE) return { kind: 'short' };
+  const took = hero.aim.clone();
+  const tookBefore = took.clone().sub(middle).dot(toward);
+  const how = `ended ${before.toFixed(2)} m before its line ${arrow.pos.y.toFixed(2)} m up, past ${arrow.passed.size} `
+    + `of its circles; the cursor took ${tookBefore.toFixed(2)} m before its line ${took.y.toFixed(2)} m up`;
+  return { kind: 'through', how };
+}
+
+/** `played`'s arrows under `name`, its wall raised `way` from where he stands. */
+async function playedFrom(lab: Lab, skill: BoundSkill, way: THREE.Vector3, name: string): Promise<Outcome> {
+  const ward = await raiseAt(lab, skill, G.player.pos.clone().addScaledVector(way, ARROW_OUT));
+  const toward = way.clone().negate();
+  const { middle, along } = lineOf(ward);
+  const through: string[] = [];
+  let worn = 0;
+  let short = 0;
+  for (const stand of PLAYED_STANDS) {
+    const at = standBefore(ward, toward, stand);
+    const standName = `${stand.out} m out ${Math.round(THREE.MathUtils.radToDeg(stand.off))}°`;
+    for (const draw of PLAYED_DRAWS) {
+      for (const { across, up } of PLAYED_AIMS) {
+        const aim = middle.clone().addScaledVector(along, across).setY(up);
+        const shot = await playedShot(lab, ward, toward, at, aim, draw.frames);
+        if (shot.kind === 'worn') worn++;
+        else if (shot.kind === 'short') short++;
+        else through.push(`${standName}, ${draw.name} draw, ${across} m across ${up} m up: ${shot.how}`);
+      }
+    }
+  }
+  const met = worn + through.length;
+  const lines = [`${name}: ${met} arrows met the wall from ${PLAYED_STANDS.length} stands, at least and full draw; `
+    + `${through.length} dealt nothing; ${short} stopped short of it`];
+  const problems: string[] = [];
+  if (through.length) {
+    problems.push(`${name}: through it dealing nothing: ${through.length} of ${met} (${through.join('; ')})`);
+  }
+  return { lines, problems, moments: [] };
 }
 
 /** walled: him boxed in by four walls, a husk outside breaking its way through one, never striking him over a wall
@@ -776,8 +898,10 @@ export const lastWallLife = (): number => wards.at(-1)?.prop.max ?? 0;
 const CANARY_CAUGHT = {
   round: 'round: went',
   arrow: 'arrow: stopped by his own wall',
-  // (an arrow through a gap: the wall met as drawn alone)
-  arrows: 'arrows: through it dealing nothing',
+  // (an arrow through a gap the cursor found: the wall met as drawn alone)
+  drawn: 'played as drawn: through it dealing nothing',
+  // (an arrow aimed low as the cursor finds the wall from above: the props met after its flight, by its middle)
+  late: 'played met late: through it dealing nothing',
   trampled: 'trampled: never broke it',
   walled: 'walled: never broke its way in',
 };
@@ -794,7 +918,8 @@ export async function hedgeward(lab: Lab, options: HedgewardOptions): Promise<Re
     ['placed', () => placed(lab, options)],
     ['bolts', () => bolts(lab, options)],
     ['round', () => round(lab, options, canary)],
-    ['arrows', () => arrows(lab, options, canary)],
+    ['arrows', () => arrows(lab, options)],
+    ['played', () => played(lab, options, canary)],
     ['walled', () => walled(lab, options, canary)],
     ['slammed', () => slammed(lab, options)],
     ['trampled', () => trampled(lab, options, canary)],
@@ -809,13 +934,16 @@ export async function hedgeward(lab: Lab, options: HedgewardOptions): Promise<Re
     }
   }
   // (a case that throws is its problem, the others still run)
-  for (const [name, run] of cases) outcomes.push(await run().catch((error: Error) => thrown(name, error)));
+  const chosen = cases.filter(([name]) => !options.cases || options.cases.includes(name.split(' ')[0]));
+  for (const [name, run] of chosen) outcomes.push(await run().catch((error: Error) => thrown(name, error)));
   const lines = outcomes.flatMap((outcome) => outcome.lines);
   const problems = outcomes.flatMap((outcome) => outcome.problems);
   const moments = outcomes.flatMap((outcome) => outcome.moments);
   if (!canary) return { text: lines.join('\n'), problems, moments };
   const caughtBy = (sign: string): boolean => problems.some((problem) => problem.startsWith(sign));
-  const caught = Object.entries(CANARY_CAUGHT).map(([fault, sign]) => [fault, caughtBy(sign)] as const);
+  const run = Object.entries(CANARY_CAUGHT).filter(([, sign]) => !options.cases
+    || options.cases.includes(sign.split(/[ :]/)[0]));
+  const caught = run.map(([fault, sign]) => [fault, caughtBy(sign)] as const);
   const verdict = caught.map(([fault, was]) => `canary ${fault}: ${was ? 'caught' : 'MISSED'}`);
   const missed = caught.filter(([, was]) => !was).map(([fault]) => `the canary's ${fault} fault went uncaught`);
   return { text: [...lines, ...verdict].join('\n'), problems: missed, moments };

@@ -54,7 +54,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
 - `headshots`: the bow's and the fists' headshots (#750: every kind of foe, bosses and the dummy too, stood before the ranger and shot with each aimed shot at the middle of its head and at its chest, his own crit chance put to nothing: over the shoulder every head shot must strike and crit, every chest shot strike and not; top-down none crits; `--class warrior` punches them with Savage Fists: through the eyes the head punches crit, from outside none) (in full: [`commands/headshots.md`](commands/headshots.md))
 - `health`: the low-Health look (the hero's Health held at shares of his most in each biome, view and facing: the colour drained, the blood's cover and how far in it reaches, nothing in the view's middle, more of both as the Health falls, none above where it starts)
 - `heard <skills>`: the sounds each skill plays as its key is held as a player holds it, at foes stood where it strikes (every sound the game asks for, when from the press, a held sound's start and stop; a skill playing nothing, a held sound never stopped, a sound it's known to play missing; `--hold`, `--biome`, `--awake` for the blows foes strike at a lure, `--canary`)
-- `hedgeward`: the ranger's wall (`--class ranger`), an ordinary breakable prop: placed where aimed, square across his line to it; a boss's bolts flying over it or wearing it; a melee foe going round it with a way open, and breaking through only when walled in; his arrows breaking it, a slam wearing it, a Brute walking through it; standing 30 s on, gone at none of its life, four standing at once; his own arrow over it at a foe beyond (`--canary`, `--pictures`)
+- `hedgeward`: the ranger's wall (`--class ranger`), an ordinary breakable prop: placed where aimed, square across his line to it; a boss's bolts flying over it or wearing it; a melee foe going round it with a way open, and breaking through only when walled in; his arrows breaking it, every arrow wearing it as the cursor finds it from near and far (`played`); a slam wearing it, a Brute walking through it; standing 30 s on, gone at none of its life, four standing at once; his own arrow over it at a foe beyond (`--canary`, `--pictures`)
 - `held`: every held skill's preview as the player holds it (ready, then through its cooldown and short of energy: its own look, red and counting down until a release would cast; Quarry Mark's outline round its foe in every view, its pixels near the foe and none away; Starfall's ring against its strikes, every foe inside it struck on every cast; every mark on the floor held across the dais's step, on each level and down its faces, none of it under the floor or standing off it; no shader compiled meanwhile) (in full: [`commands/held.md`](commands/held.md))
 - `herolooks`: each class's looks (`data/heroLooks.ts`) made by the workers and a hero built in each (his head sculpted nowhere on the page, its face, hair and beard there, no program compiled as the game draws him), pictured in the studio, the hair colours on one hero of each, two colours compared on the hair's cards, the brows and the beard and not the cheeks, and a look picked kept (`--classes`, `--canary`)
 - `heropick`: a first visit's hero picked on the hero selection screen, by a finger's tap and by the mouse (each landing in the lobby, no run started or waiting for the warm-up, the click after the press reaching nothing past the screen; `--screen 640x360@3` puts Enter the Arena under the hero, `--canary` lets the tap's click through; `--quick` the mage picked at once on a slowed CPU, the others still warming, the view changed meanwhile: every hero drawn where he stands, none on the fountain)
@@ -959,9 +959,13 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   0.08 m into its body. Walled: four walls raised round him 2.2 m out (no limit), their ends meeting, him held still,
   and a Husk risen 5.5 m out: within 900 frames it must break one with its blows (no way round left), and never strike
   him over a wall still standing.
-  Arrows: the wall aimed 3 m out and Nockshot loosed into its middle 0.45 m up, again and again: it must break within
-  three times its life in arrows (some go through the gaps between its stakes, as an arrow finds where it goes in by
-  what's drawn). Slammed: a slam of 80 (`fx('slam')`) on its middle must wear it. Trampled: a Brute (the forest's Bark
+  Arrows: the wall aimed 3 m out and Nockshot loosed at points across its width and up its face, one after another:
+  each must wear it, and it must break. Played: the wall aimed 3 m out, him stood 3, 6 and 10 m before it and 6 m
+  aside (43°), Nockshot let go just past its least draw and at full draw at six points on it (its middle 0.15, 0.5 and
+  0.85 m up, its ends 0.15 m and one 0.5 m up), its life set back before each: every arrow that ends at it must wear
+  it (from Victor's review of #647, "Sometimes arrow can fly through without dealing damage, I get it more than half
+  the time": from above the cursor finds the earth at its foot through the gaps between its stakes, and an arrow aimed
+  there put its point in the ground before its middle met the wall; 48 arrows, about 110 s). Slammed: a slam of 80 (`fx('slam')`) on its middle must wear it. Trampled: a Brute (the forest's Bark
   Hulk) risen 5 m beyond it, its throws held out, must break it walking at him within 600 frames. Stays: still standing
   30 s after it rose (it has no time of its own); struck down to none it goes at once, its circles with it; four
   raised round him, a way each, must all stand (no limit); then the wave cleared (`waveCleared`), none may stand and their looks go within 90 frames. Reach: aimed
@@ -969,8 +973,10 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   with a 3 m prop planted 1.2 m before him (nowhere clear) it must not rise, its outline red, no energy spent. Arrow:
   the wall aimed 3 m out and a training dummy 5 m past it, Nockshot drawn 70 frames at the dummy's chest and let go:
   the arrow must fly at least 0.75 m past the wall's line. `--canary` makes its body a tall prop's for the arrow (a
-  shot strikes it), takes its circles out of the obstacles for the round (the husk pushed into it), and makes its body
-  no breakable prop's for the arrows, the trample and the walled in (nothing wears it), each a problem unless caught.
+  shot strikes it), takes its circles out of the obstacles for the round (the husk pushed into it), makes its body
+  no breakable prop's for the trample and the walled in (nothing wears it), and plays `played` twice, the wall met as
+  drawn alone (through the gaps between its stakes) and the props met by an arrow's middle after its flight (its point
+  in the ground first), each a problem unless caught. `--cases` runs some of the cases alone (`--cases played`).
   `--pictures` writes `out/hedgeward`: a husk going round its end, him boxed in and a husk broken through, the wall
   standing, worn half way with arrows standing in it and broken by them, a Brute coming
   up to it and walked through it; the wall alone from its front (the foes' side), three-quarter, side, back, above and
