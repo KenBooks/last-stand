@@ -71,6 +71,7 @@ export default {
     },
     nobody: { kind: 'switch', help: 'every body on a skeleton hidden (heroes, ghost, dummies): what they cost' },
     blended: { kind: 'switch', help: 'the blended meshes shown, by how the engine draws them and what they are' },
+    parts: { kind: 'switch', help: 'the frame\'s GPU time by its parts, each timed within the one frame' },
     census: { kind: 'switch', help: 'the shown meshes\' materials by kind, and what each asks beyond the engine' },
     capture: {
       kind: 'number',
@@ -103,6 +104,7 @@ export default {
       zoom: options.zoom,
       skylight: Boolean(options.skylight),
       census: Boolean(options.census),
+      parts: Boolean(options.parts),
       blended: Boolean(options.blended),
       nobody: Boolean(options.nobody),
       capture: Math.round(options.capture ?? 0),

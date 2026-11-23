@@ -44,6 +44,15 @@ export class Engine {
      */
     bones(floats: number): number;
     /**
+     * Each part's time in the last frame broken down whose stamps have come back (ms), then how many passes
+     * it was stamped in, how many frames have been, and whether one's are on their way (1). Read with no frame drawn: it asks for what's come.
+     */
+    breakdown(): Float32Array;
+    /**
+     * The parts' names, one a line, in the order `breakdown` has their times.
+     */
+    breakdown_names(): string;
+    /**
      * The engine drawing to `canvas`, at the canvas's own size.
      */
     static create(canvas: HTMLCanvasElement): Promise<Engine>;
@@ -105,6 +114,11 @@ export class Engine {
      * The bloom at the quality level's share of the scene's pixels each way: 1, 0.5, or 0 for none.
      */
     set_bloom_share(share: number): void;
+    /**
+     * The frames broken down from now on, each pass stamped and the scene a pass for each kind of its draws, or
+     * drawn as they are. A frame broken down isn't timed whole (`stats`' time stays the last whole frame's).
+     */
+    set_breakdown(on: boolean): void;
     /**
      * The scene's depth drawn ahead of its shading, or not (`Gpu::set_depth_first`).
      */
@@ -207,6 +221,8 @@ export interface InitOutput {
     readonly engine_bake_lamp_face: (a: number, b: number, c: number, d: number) => void;
     readonly engine_bake_lights: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => number;
     readonly engine_bones: (a: number, b: number) => number;
+    readonly engine_breakdown: (a: number, b: number) => void;
+    readonly engine_breakdown_names: (a: number, b: number) => void;
     readonly engine_create: (a: any) => any;
     readonly engine_drop_instances: (a: number, b: number) => void;
     readonly engine_drop_kept: (a: number, b: number, c: number) => void;
@@ -226,6 +242,7 @@ export interface InitOutput {
     readonly engine_resize: (a: number, b: number, c: number) => void;
     readonly engine_set_bloom: (a: number, b: number) => void;
     readonly engine_set_bloom_share: (a: number, b: number) => void;
+    readonly engine_set_breakdown: (a: number, b: number) => void;
     readonly engine_set_depth_first: (a: number, b: number) => void;
     readonly engine_set_edges_map: (a: number, b: number) => void;
     readonly engine_set_fields_first: (a: number, b: number) => void;
@@ -248,12 +265,12 @@ export interface InitOutput {
     readonly engine_show_kept: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1773: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1798: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_647: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_647_55: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_647_56: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_649: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1780: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1805: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_654: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_654_58: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_654_59: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_656: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

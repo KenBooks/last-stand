@@ -7,6 +7,7 @@ import { plantedFaults } from './rustFaults';
 import { blankCanvas, lookTakesItsMapAgain, mapPaintedLate } from './rustMaps';
 import { grassPlacedOnce } from './rustFields';
 import { doorwaysLeaveTheFrame, keptSameFrame } from './rustKept';
+import { brokenDownSameFrame } from './rustPartsCheck';
 import { plainShaderSameFrame } from './rustPlain';
 import { sceneWaitsItsPipelines } from './rustReveal';
 import { overCanvasCleared } from './rustOver';
@@ -325,6 +326,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(await plainShaderSameFrame(lab));
       checks.push(await sceneWaitsItsPipelines(lab));
       checks.push(await keptSameFrame(lab, bridge));
+      checks.push(await brokenDownSameFrame(lab, bridge));
       checks.push(await doorwaysLeaveTheFrame(lab, bridge));
       await standIn(lab, { biome: command.biome, view: 'third', facing: 0, fresh: true });
       lab.drawing = true;
