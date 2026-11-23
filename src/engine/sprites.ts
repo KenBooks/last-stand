@@ -15,7 +15,9 @@ export class Sprites {
     // (the dazed foes' stars with those blended: a sprite of a width below 0 is a star)
     const stars = dazedDrawn();
     const runs = pools.map((pool, slot) => {
-      const count = pool?.count ?? 0, extra = slot === 0 ? stars.count : 0;
+      // (a pool hidden draws nothing, as three drew it: the game hides an empty one, a harness one it takes out)
+      const count = pool?.points.visible === false ? 0 : pool?.count ?? 0;
+      const extra = slot === 0 ? stars.count : 0;
       if (this.runs[slot].length < (count + extra) * 8) this.runs[slot] = new Float32Array((count + extra) * 16);
       const run = this.runs[slot];
       for (let star = 0; star < extra; star++) {

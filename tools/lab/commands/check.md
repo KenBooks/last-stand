@@ -116,10 +116,10 @@ after 11.5 minutes and was stopped past 17.
 
 One session alone (`--jobs 1`, this tree), the check's work was 822 s and 40 boots of 5.5 s; a warm boot is about
 2.5 s to the lobby (the modules from Vite, the lobby's warm-ups) and 2 s more for the fight's and the heroes'. A cast
-reads back only its cells' sums: every second pixel each way summed over the fine grid's cells on the GPU, as whole
-numbers, read a frame behind (`page/gridSums.ts`; the whole canvas read back was 70% of a cast, and each read waited
-for the GPU to finish the frame), checked once a page against the whole canvas summed on the CPU. A cast's page time
-went from 7.3 s to 3.5 s with every line the same, and the casts' work from 213 s to about 100. What's left of a job
+read back only its cells' sums under three's WebGL: every second pixel each way summed over the fine grid's cells on
+the GPU, read a frame behind (the whole canvas read back was 70% of a cast). A cast's page time went from 7.3 s to
+3.5 s with every line the same, and the casts' work from 213 s to about 100. The engine alone draws the game now, with
+no WebGL context to sum on: each frame is read off its canvas and summed on the CPU (`page/screenCells.ts`). What's left of a job
 is the game's own frames: the hero's animation and his coat's drape (`stops`), the eyes' set-ups and frames.
 
 One command at a time, both sides every time, the mage's cape stepped throughout and each gait scenario run again for

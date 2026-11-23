@@ -9,6 +9,8 @@ import * as hall from '../../../src/game/hall';
 import { holdHour } from '../../../src/game/clock';
 import { openHall, toLobby } from './hallMoves';
 import type { LightsChecked } from './villageLights';
+import { gpuDone } from '../../../src/core/webgpu';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
 /** the frames timed from the press, and the frame the canary stalls */
 const FRAMES = 90;
@@ -33,29 +35,25 @@ function stall(ms: number): void {
   while (realNow() < until);
 }
 
-/** The frame's draws waited for: a stall in the GPU's process shows here, where the page's own work ends sooner. */
-function waitForTheGpu(): void {
-  const gl = G.renderer.getContext();
-  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
-}
-
 /** The time of each frame from `press` on (ms), and the programs they compiled. */
 async function framesFrom(lab: Lab, canary: boolean): Promise<{ times: number[]; compiled: number }> {
-  const before = G.renderer.info.programs?.length ?? 0;
+  const before = PIPELINES.made;
   const times: number[] = [];
   let started = realNow();
   lab.drawing = true;
   try {
-    await lab.step(FRAMES, (frame) => ({ keys: frame === 0 ? ['enter'] : [] }), (frame) => {
+    for (let frame = 0; frame < FRAMES; frame++) {
+      await lab.step(1, () => ({ keys: frame === 0 ? ['enter'] : [] }));
       if (canary && frame === CANARY_FRAME) stall(CANARY_STALL);
-      waitForTheGpu();
+      // (the frame's draws waited for: a stall in the GPU's process shows here, where the page's own work ends sooner)
+      await gpuDone(G.renderer);
       times.push(realNow() - started);
       started = realNow();
-    });
+    }
   } finally {
     lab.drawing = false;
   }
-  return { times, compiled: (G.renderer.info.programs?.length ?? 0) - before };
+  return { times, compiled: PIPELINES.made - before };
 }
 
 /** The hall's screen opened and another hero chosen on it, the first time of each, builds no hero: built then, each

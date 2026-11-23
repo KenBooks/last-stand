@@ -21,6 +21,7 @@ import { groundHeight } from '../../../src/world/ground';
 import { drawnInShadowsOnly } from '../../../src/world/culling';
 import type { LightsChecked } from './villageLights';
 import { untilInRealTime } from './villageWaits';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
 /** the frames given to the lobby and to the hero at the dais, the most for the heroes to warm as he nears them, and
  *  the frames read from the press */
@@ -90,7 +91,7 @@ export async function daisOpensCompileNothing(lab: Lab, canary: boolean): Promis
   await lab.step(SETTLE);
   const spare = pooledLights()[CANARY_LIGHT];
   if (canary) spare.castShadow = true;
-  const before = G.renderer.info.programs?.length ?? 0;
+  const before = PIPELINES.made;
   let most = 0;
   lab.drawing = true;
   try {
@@ -109,7 +110,7 @@ export async function daisOpensCompileNothing(lab: Lab, canary: boolean): Promis
     const nearNow = objectNear()?.id ?? 'nothing';
     throw new Error(`lab: village: E at the dais never opened the hall (near ${nearNow}, mode ${G.mode})`);
   }
-  const compiled = (G.renderer.info.programs?.length ?? 0) - before;
+  const compiled = PIPELINES.made - before;
   const { remade, leftShown } = remadeInOneDraw(canary);
   if (remade < 1) throw new Error('lab: village: his shadow cast as one was never made again in the hall');
   // (left open, the screen's menu held V from every check after this one)

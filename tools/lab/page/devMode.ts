@@ -18,6 +18,7 @@ import { foesAsked, foesTold } from '../../../src/net/sync';
 import { BIOMES, BIOME_IDS, type BiomeId } from '../../../src/data/biomes';
 import { updateRun } from '../../../src/game/run';
 import { middleOf, realWait, type Lab, type Pictured, type Report } from './lab';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
 const element = <T extends HTMLElement = HTMLElement>(selector: string): T => {
   const found = document.querySelector<T>(selector);
@@ -120,7 +121,7 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   await action('labels');
   check(overFrame.draw === draw, 'World labels did not restore their draw');
   // Trees, Leaves and Grass: out of what's drawn everywhere at once, held through a biome change, no program made.
-  const programs = (): number => G.renderer.info.programs?.length ?? 0;
+  const programs = (): number => PIPELINES.made;
   const markedCosts: string[] = [];
   for (const [mark, key] of MARKED_PARTS) {
     const marked = bearing(mark);

@@ -105,6 +105,7 @@ import {
 import { daisOpensCompileNothing } from './villageDaisOpens';
 import { arrowsStickInGround } from './villageArrows';
 import { grassNotThroughProps } from './villageGrassThrough';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
 export interface VillageOptions {
   canary: boolean;
@@ -751,7 +752,7 @@ async function hoursCompileNothing(lab: Lab, canary: boolean): Promise<Checked> 
   await stand(lab, [0, 4.5]);
   holdHour(HOURS[0]);
   lab.capture(['lobby']);
-  const programs = (): number => G.renderer.info.programs?.length ?? 0;
+  const programs = (): number => PIPELINES.made;
   const first = programs();
   let planted: THREE.Mesh | null = null;
   for (const hour of HOURS) {

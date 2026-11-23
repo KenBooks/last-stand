@@ -29,6 +29,7 @@ import { groundHeight } from '../../../src/world/ground';
 import { faceCamera, setZoom, type ViewMode } from '../../../src/core/renderer';
 import { GHOST_COUNT_LAYER } from '../../../src/core/layers';
 import { standIn } from './light';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
 export interface DrawsOptions {
   fixture: Fixture;
@@ -650,7 +651,7 @@ export async function draws(lab: Lab, options: DrawsOptions): Promise<Report> {
 }
 
 /** The programs the renderer has compiled so far. */
-const programCount = (): number => G.renderer.info.programs?.length ?? 0;
+const programCount = (): number => PIPELINES.made;
 
 /** One frame's draws in the village, where the hero stands (`--at`, `--facing`), in the view the set-up asks for. */
 async function villageDraws(lab: Lab, options: DrawsOptions): Promise<Report> {

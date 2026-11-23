@@ -17,6 +17,7 @@ import { RARITIES } from '../../../src/data/items';
 import type { HeroColourId } from '../../../src/data/heroColours';
 import type { Gear, GlowSlot, RarityId } from '../../../src/types';
 import type { Lab, Pictured, Report, ViewName } from './lab';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
 /** What `lab glow` takes. */
 export interface GlowOptions {
@@ -338,7 +339,7 @@ interface Judged {
 async function round(lab: Lab, options: GlowOptions, problems: string[]): Promise<Judged> {
   const slots = SHOWN[lab.player.cls.id] ?? SLOTS;
   const strength = ITEM_GLOW.strength;
-  const programs = (G.renderer.info.programs ?? []).length;
+  const programs = PIPELINES.made;
   const lines: string[] = [];
   try {
     for (const slot of slots) lines.push(judgeSlot(lab, slot, options.rarity, strength, problems));
@@ -350,7 +351,7 @@ async function round(lab: Lab, options: GlowOptions, problems: string[]): Promis
   lines.push(judgeLevel(lab, slots, options.rarity, problems));
   lines.push(judgeSetting(lab, slots, options.rarity, problems));
   const moments = options.pictures ? pictures(lab, slots, options.rarity) : [];
-  const compiled = (G.renderer.info.programs ?? []).length - programs;
+  const compiled = PIPELINES.made - programs;
   if (compiled) problems.push(`${compiled} programs compiled as the items glowed`);
   lines.push(`programs compiled: ${compiled}`);
   return { lines, moments };

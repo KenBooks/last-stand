@@ -20,6 +20,7 @@ import { bodyShape, overlaps } from '../../../src/entities/models/anatomy';
 import { handCapsules, type Hand } from '../../../src/entities/models/hands';
 import { segmentDistance } from './geometry';
 import { toVillage } from './village';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
 /** `--canary`: his standing feet dragged along under him. */
 export interface OdoOptions {
@@ -43,7 +44,7 @@ const BY_DOOR = { x: 0.6, z: 2.9 };
 const ANKLE_H = 0.086;
 const STANCE = 0.105;
 
-const programs = (): number => G.renderer.info.programs?.length ?? 0;
+const programs = (): number => PIPELINES.made;
 const realNow = (): number => (window as unknown as { __labClock: { realNow: () => number } }).__labClock.realNow();
 const footName = (i: number): string => (i === 0 ? 'left' : 'right');
 const mm = (m: number): string => (m * 1000).toFixed(1);

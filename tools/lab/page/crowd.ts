@@ -16,6 +16,7 @@ import { hitEnemy } from '../../../src/combat/damage';
 import { bindKnown, holdFor, pressing, skillNamed, type BoundSkill } from './cast';
 import { foeKind, foesAt } from './death';
 import { timeCalls, type Timing } from './timing';
+import { gpuDone } from '../../../src/core/webgpu';
 
 export interface CrowdOptions {
   fixture: Fixture;
@@ -196,7 +197,7 @@ async function timedFrame(lab: Lab, foes: Enemy[], timings: BodyTimings, input: 
   const start = now();
   await lab.step(1, input);
   // (waited out on the GPU: what it draws runs behind the page, and the page's own time leaves it out)
-  G.renderer.getContext().finish();
+  await gpuDone(G.renderer);
   const frame = now() - start;
   info.autoReset = true;
   const alive = { glow: particles.glow.count, smoke: particles.smoke.count };

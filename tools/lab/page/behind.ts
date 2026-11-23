@@ -15,6 +15,7 @@ import { headsMadeHere, headsMadeHereSince } from '../../../src/entities/models/
 import { setQuality } from '../../../src/core/quality';
 import { portraitPieces, startPortraits } from '../../../src/ui/guide/portraits';
 import { BuildingWait } from './behindQueue';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
 /** Options of `lab behind`. */
 export interface BehindOptions {
@@ -123,7 +124,7 @@ async function builtByChoosing(
   const chose = Player.built;
   if (canary) hall.dropSpareHeroes();
   const lights = heroLights();
-  const compiled = G.renderer.info.programs!.length;
+  const compiled = PIPELINES.made;
   // (the choice's frame and the next: after it the old class's spare is built behind the lobby, a piece a frame)
   await lab.step(2, (frame) => ({ keys: frame === 0 ? ['enter'] : [] }));
   const choosing = Player.built - chose;
@@ -140,7 +141,7 @@ async function builtByChoosing(
   } finally {
     lab.drawing = drawing;
   }
-  return { opening, choosing, programs: G.renderer.info.programs!.length - compiled };
+  return { opening, choosing, programs: PIPELINES.made - compiled };
 }
 
 /** Auto can change detail with the hall open. Back alone must not sculpt the new detail on the input thread. */

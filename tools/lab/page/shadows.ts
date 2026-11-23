@@ -18,6 +18,7 @@ import { G } from '../../../src/state';
 import { drawFrame, type Canvas } from './light';
 import { stylesOf } from './form';
 import { quantile, timeCalls, type Timing } from './timing';
+import { gpuDone } from '../../../src/core/webgpu';
 
 export interface ShadowsOptions {
   /** the views the frames are drawn in (top, third, first by default) */
@@ -147,10 +148,9 @@ const medianOf = (values: number[]): number => quantile([...values].sort((a, b) 
  * shadow map's draw read 0.8 ms or 2 ms by the turns before it).
  */
 async function framesTimed(lab: Lab, timing: Timing): Promise<number> {
-  const gl = G.renderer.getContext();
   let took = 0;
   for (let frame = 0; frame < TURN_FRAMES; frame++) {
-    gl.finish();
+    await gpuDone(G.renderer);
     timing.lap();
     await lab.step(1);
     took += timing.lap();
