@@ -91,7 +91,8 @@ export class SeeKinds {
         const inside = was + Math.sign(toward - was) * Math.min(Math.abs(toward - was), passed / INSIDE_FADE);
         this.inside.set(see, inside);
         // (a wall of the room he stands in reads its room as its floor's one box)
-        const [box, more] = (inside > 0 && see.walls ? [see.walls] : see.floorBoxes) ?? [];
+        // (and the floor past its walls he may see out to as the other: its porch)
+        const [box, more] = (inside > 0 && see.walls ? [see.walls, see.porch] : see.floorBoxes) ?? [];
         g[at + 12] = box ? box[0] : -1e5; g[at + 13] = box ? box[1] : -1e5;
         g[at + 14] = box ? box[2] : 1e5; g[at + 15] = box ? box[3] : 1e5;
         g[at + 8] = more ? more[0] : 0; g[at + 9] = more ? more[1] : 0;
