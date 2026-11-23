@@ -377,3 +377,28 @@ not intend to support the old way of rendering".
   the page's opaque shaders 8.39 ms (40%), blended and added 3.87, opaque still meshes 3.28, the grade 1.77, the
   depth drawn first 1.64, counted instances 0.85, bloom 0.72. Here that first row is the paving's shader
   (`paving-unrepeated`) and the meadow's (`meadow-sward`): the phone's next profile says which.
+
+## 2026-11-23, what blends, counted: the hall's roof thinned to nothing
+
+- The phone's frame by its parts (BVTG-0HZ8, Very low, 3120 by 1440, stood before the hall): 21.0 ms of parts, the
+  frame 20.8; blended by the engine's own shader 6.23, opaque still meshes 3.41, `paving-unrepeated` 2.36,
+  `meadow-sward` 2.16, `kit` 1.77, the grade 1.51, the depth first 1.44, `meadow-blades` 1.05, bloom 0.59.
+- Counted at that view (`lab rust --blended`, its camera by `--zoom 0.5 --turned 178`): what blends covers 2.2
+  screens of pixels there, 1.6 of them thinned to nothing and dropped pixel by pixel: the hall's roof, three layers.
+- [x] `rust.goneWhole`: what's thinned to nothing whole is left out (kept for its shadow). The frame there 4.68 ms
+  to 3.82, the same picture. `lab rustcheck` 43 of 43.
+- [x] Bulwark 2281f60, `ONE_LAYER`: layers that blend drawn the nearest alone. Off here (`rust.oneLayer`): no gain
+  over the cottages, and their roofs stand darker.
+- [ ] Still drawn and dropped there: two things thinned whole by 0.81 with a room of their own (0.76 of the screen).
+  Next by size on the phone: the opaque still meshes, the paving's and the meadow's shaders.
+
+## 2026-11-23, later: a house thins by his sight
+
+- [x] One rule for a house from above (the owner's, after two wrong tries): a pixel of its roof, gables or walls
+  thins only where the line of sight through it ends on ground he sees; whole otherwise. Bulwark abe6452 and the
+  commit after it. Pictured round a cottage from four sides, at the library's door, in the hall, by night.
+- [x] A pixel thinned away dropped before its surface is made: blended 1.49 ms to 1.12 at the phone's view.
+- `rust.goneWhole` applies with the fog off alone now; `rust.oneLayer` stays off (it changes the hall's inside,
+  17% of that frame, and loses the cottages' gables).
+- [ ] No check of its own holds the rule: `lab village`'s roof checks read three's ghost pass and don't run on the
+  engine (the suite's port is on the branch `lab/village-on-engine`, unfinished).

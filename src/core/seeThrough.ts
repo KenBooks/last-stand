@@ -30,6 +30,9 @@ interface Kind {
   blended?: boolean;
   /** of `blended`: whether a pale surface of it keeps less of itself than a dark one (`PALE`) */
   pale?: boolean;
+  /** of `blended`: its meshes lie in layers (a roof's slabs over its deck over its beams), and the Rust engine draws
+   *  the nearest of them alone at each pixel (`src/engine/AGENTS.md`, Bulwark's `ONE_LAYER`) */
+  oneLayer?: boolean;
   /** of `blended`: thinned where it hides the floor he sees (`HALL_SIGHT`), its depth let go there */
   sight?: boolean;
   /** of `sight`: the share of that it thins by (all if not given) */
@@ -197,7 +200,7 @@ const kinds = {
     sight: true, sightOn: HALL_SIGHT_ASIDE },
   hallWest: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true,
     sight: true, sightOn: HALL_SIGHT_ASIDE },
-  hallRoof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true },
+  hallRoof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, oneLayer: true },
   /** the other roofs: as what's built, and a ghost from above (`ROOF_GHOST_ABOVE`) */
   roof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true },
   /** a house's gables from above, fainter than its roof: at the roof's own ghost, plaster that pale read as a strip
@@ -512,6 +515,7 @@ export interface SeeThrough {
   doorOn?: { value: number };
   blended?: boolean;
   pale?: boolean;
+  oneLayer?: boolean;
   sight?: boolean;
   sightShare?: number;
   sightOn?: { value: number };
@@ -1266,6 +1270,12 @@ onWholeView(() => {
   if (seeAsked) updateSeeThrough(...seeAsked);
   for (const [kind, share] of [...wholeAsked]) fadeWhole(kind, share);
 });
+
+/** How far a roof thins from above now, where it thins (0: not from above): a house's walls thin by it too, where
+ *  they hide ground he sees (the engine's `house_share`). */
+export function roofGhostNow(): number {
+  return kinds.roof.whole.value;
+}
 
 /** For a harness (tools/lab): every roof thinned from above by `ghost` (null: the game's), from the next frame: thinner,
  *  what lies under one shows enough to read the fog on it. */

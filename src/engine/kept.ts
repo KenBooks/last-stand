@@ -11,6 +11,7 @@ import { RECORD, type Core } from './core';
 import { lookOf } from './custom';
 import { TUNE, type Grade } from './globals';
 import type { AnyMaterial, Materials } from './materials';
+import type { SeeKinds } from './seeKinds';
 
 /** a kept record's flag where the game hides it (`HIDDEN` in the engine's kept.rs), and where a record's flags are */
 const HIDDEN = 128, FLAGS = 6;
@@ -93,7 +94,8 @@ export class Kept {
    * @param add a mesh's records written at the frame's end (`Bridge.addMesh`)
    * @param visit an object taken as the walk takes one (`Bridge.visit`)
    */
-  constructor(private core: Core, private materials: Materials, private add: (mesh: THREE.Mesh) => void,
+  constructor(private core: Core, private materials: Materials, private seeKinds: SeeKinds,
+    private add: (mesh: THREE.Mesh) => void,
     private visit: (object: THREE.Object3D) => void) {}
 
   /** Everything kept let go: the next walk keeps it again. */
@@ -186,8 +188,8 @@ export class Kept {
 
   /** A material as a kept record reads it: its engine material, and how it's drawn now. */
   private stamp(material: AnyMaterial): number {
-    return this.materials.materialId(material) * 8 + (material.visible ? 1 : 0)
-      + (this.materials.solidNow(material) ? 2 : 0) + (this.materials.thinnedByBlending(material) ? 4 : 0);
+    // (its id, whether it's shown, and its see-through's flags: under 2 ** 21, so the three never meet)
+    return this.materials.materialId(material) * 2 ** 22 + (material.visible ? 2 ** 21 : 0) + this.seeKinds.flagsOf(material);
   }
 
   /** A mesh's run of records let go, and its materials no longer its part's to ask. */

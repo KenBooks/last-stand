@@ -3,7 +3,7 @@
 // calls, objects and triangles, what it couldn't draw by its kind, and its boot.
 import type { Fixture, Lab, Report } from './lab';
 import { BIOMES, type BiomeId } from '../../../src/data/biomes';
-import { overCanvasLeftOut, type ViewMode } from '../../../src/core/renderer';
+import { faceCamera, overCanvasLeftOut, type ViewMode } from '../../../src/core/renderer';
 import { outlinedLook } from '../../../src/ui/overlay/outline';
 import { drawnLabels } from '../../../src/ui/overlay/layer';
 import { lastFrameParts } from '../../../src/perf/webgpuPasses';
@@ -48,6 +48,8 @@ export interface RustCommand {
   dying?: number;
   hour?: number;
   zoom?: number;
+  /** the camera's turn, in degrees as a report's Scene line has it */
+  turned?: number;
   /** the camera turned to the sky's key light, the picture what's round it */
   skylight: boolean;
   /** the scene's materials listed by their kind and what they ask of a renderer */
@@ -114,9 +116,16 @@ async function gpuOver(lab: Lab, frames: number): Promise<number> {
 }
 
 /** The hero stood where the command asks, its foes before him. */
+/** the frames the view is given to settle after the camera is turned */
+const TURN_FRAMES = 30;
+
 async function stand(lab: Lab, command: RustCommand): Promise<string> {
   for (const [path, values] of Object.entries(command.tune)) window.__tune?.(path, values);
   await standAt(lab, command);
+  if (command.turned !== undefined) {
+    faceCamera((command.turned * Math.PI) / 180 - Math.PI);
+    await lab.step(TURN_FRAMES);
+  }
   lab.wield({ wear: command.wear, rarity: command.rarity });
   levelsBefore = command.levels.length && RUST.bridge ? await gpuOver(lab, LEVEL_FRAMES) : undefined;
   for (const level of command.levels) {

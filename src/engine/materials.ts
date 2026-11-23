@@ -141,21 +141,6 @@ export class Materials {
     return blend | (side << 2) | (material.depthWrite ? 16 : 0);
   }
 
-  /** Whether the game thins `material` by blending it (core/seeThrough.ts's blended kinds). */
-  thinnedByBlending(material: AnyMaterial): boolean {
-    return (material.seeThrough as SeeThrough | undefined)?.blended === true;
-  }
-
-  /** Whether `material` blends only where the game thins it and is thinned nowhere this frame: drawn solid, with
-   *  what's opaque (the engine's `SOLID`). One the game made see-through to thin it (a wall, a roof's beams) is
-   *  whole otherwise; a roof that tells its share in its alpha (custom blending) and what writes no depth stay
-   *  blended. */
-  solidNow(material: AnyMaterial): boolean {
-    if (!TUNE.solidSee || !material.transparent || !material.depthWrite || material.opacity < 1) return false;
-    if (material.blending !== THREE.NormalBlending) return false;
-    return this.seeKinds.solid(material.seeThrough as SeeThrough | undefined);
-  }
-
   /** The engine's material for the numbers, maps and key in the scratch arrays: one for every material alike. */
   private sharedId(key: number): number {
     const core = this.core;
