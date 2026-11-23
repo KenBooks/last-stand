@@ -30,6 +30,8 @@ import { CLASS_IDS } from '../data/classes/index';
 import { LAMP_SOFT } from '../core/lamps';
 import { standHeroes } from './hall';
 import { dropNameAt } from './groundItems';
+import { leaveSeatsTo } from '../entities/sitting';
+import type { Seat } from '../world/seats';
 import { isWarm } from './warm';
 import { flash, release, type LightSlot } from '../fx/lights';
 import { lampReachBy, lampsOut, lightLamp, placeLamps, type LampPlace } from '../core/lamps';
@@ -151,6 +153,7 @@ export function heroLookedAt(): number {
 /** The village's objects set going: their names over them, the pointer's picks. */
 export function initVillage(h: VillageHooks): void {
   hooks = h;
+  leaveSeatsTo(fireLeftToItsObject);
   for (const o of OBJECTS) {
     const at = (): { x: number; y: number; z: number } | null => {
       if (!named(o)) return null;
@@ -201,6 +204,21 @@ function wakeByHero(on: boolean): void {
   G.arena.village.setChestNear(chestOpen);
   G.arena.village.setCandleNear(candleLit);
   G.arena.village.setChestFull(G.profile.stash.length / RUN.bagLimit);
+}
+
+/** How near a fire's middle an object stands to be the one used at that fire (m). */
+const AT_FIRE = 1;
+
+/** Whether a seat is a fire the hero stands at to use, in a close view (from play: "you hover over campfire and it
+ *  says sit instead of being able to interact with play together"): there the crosshair rests on the fire as he faces
+ *  it, so the fire's floor took E wherever he stood by it and the campfire could never be used. Its logs still seat
+ *  him, and the fire's floor from beyond its object's reach, or from above, where the cursor is his to move off it. */
+export function fireLeftToItsObject(seat: Seat): boolean {
+  if (!seat.ground || viewMode() === 'top' || !hooks.active()) return false;
+  for (const o of OBJECTS) {
+    if (here(o) && Math.hypot(o.at[0] - seat.ax, o.at[1] - seat.az) < AT_FIRE && distanceTo(o) < o.reach) return true;
+  }
+  return false;
 }
 
 /** The object the hero is near enough to use (the nearest), or null. */

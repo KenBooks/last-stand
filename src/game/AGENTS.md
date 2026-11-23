@@ -69,6 +69,13 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
 
 <!-- sorted -->
 - `ghost.ts`: the ghost is drawn in its kind's crowd while shown (`drawnInCrowd`), out of it while hidden (the other hour's, the village left): a crowd draws a body whatever its meshes' visibility. Drawn on its own a thornling was 46 of the village's draws (`lab draws --village`'s parts). The boot stands the ghosts a task each, a frame painted before each (`standGhostInSteps`, from `spawnDummiesInSteps` in `main.ts`): stood with the dummies in one task, they held a first visit's boot 0.9 s with the CPU 4 times slower, now 0.25 s at most. Their kinds are all drawn before the first pause: the frames painted between draw random numbers of their own, and the lab's seeded boots stood other ghosts from one run to the next (`lab programs --first --ab`).
+- `village.ts`: a fire's floor is left to the object used at it while the hero stands within that object's reach in a
+  close view (`fireLeftToItsObject`, told to the sit by `leaveSeatsTo` in `entities/sitting.ts`). Over the shoulder
+  the crosshair rests on the fire as he faces it, the fire's floor is a seat (`fireSeat`), and a seat outlined takes
+  E (`Sitting.takesKey`): the campfire by him was never named and Play together never opened, the prompt said E Sit
+  (from play: "you hover over campfire and it says sit instead of being able to interact with play together"). Its
+  logs still seat him, and the fire's floor from beyond the campfire's reach, or from above, where the cursor is his
+  to move off the fire. `lab village --only campfireUsedUpClose` (`--canary` leaves the fire's floor a seat there).
 - `warm.ts`, `warmup.ts`: the other heroes are approached as he nears the village's hall (`approach`, from
   `game/village.ts`, within 22 m of its door), not wanted: their warm-up begins there behind the lobby, a hero
   a step a frame, and is given up at a frame held past `WARM_BEHIND.heldMost` (or one given up before) until
