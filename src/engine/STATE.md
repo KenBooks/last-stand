@@ -333,3 +333,16 @@ not intend to support the old way of rendering".
   light and so aren't frozen (the gates, the chest, the fountain, the candles: about 100). A character as one
   record with its pieces' rows the engine's is the next piece (this file's "Next", and animation with it); a
   character's bounds stated so the bridge passes it by whole out of both views is the cheap half.
+
+## 2026-11-23, the white ground on load, a third cause
+
+- [x] From play on the 4070 Ti, main b48f685 (8YEZ-W9ZG): the lobby shown at 17.5 s, its boot notes "47 made, 8
+  compiling; waited 3809 ms, 9 left". The loading screens' waits had used their shared 12 s (4.3 s on the hearth's
+  pipelines, 4.3 on the fight's, the PC busy with two sessions' lab runs), and the lobby was shown with pipelines
+  its own frame draws still compiling: their draws are left out, and the sky's colour stands where the ground is.
+  The boot's last step now draws the lobby's frame until it sets no unready pipeline (`sceneReady`, 10 s of its
+  own); what it's shown without after that is named in the report's notes.
+- `lab rustcheck`: with 15 new pipelines held back the frame set 9 unready and 44% of it was left out (the
+  village from above: the ground and the buildings gone, the grass standing on white); the wait ended only once
+  they were let go. Not seen: the owner's own frame, which the report doesn't hold. Whether his 9 were the ground's
+  is read from the notes of the next such report.

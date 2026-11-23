@@ -38,7 +38,22 @@ export const PIPELINES = {
   waitLeft: 12000,
   /** how many were first asked for once the loading screens were done with (`waitLeft` endless) */
   late: 0,
+  /** how many times a pass set a pipeline still compiling since this was last set to 0: each a thing left out of
+   *  a frame (`sceneReady` reads a frame's) */
+  unready: 0,
+  /** a harness's: pipelines asked for from now on stay unready until `releaseHeld` (`lab rustcheck`: a frame
+   *  drawn with pipelines still compiling, as a busy GPU's process leaves one) */
+  hold: false,
 };
+
+/** the pipelines compiled and held back (`PIPELINES.hold`): each made ready by its call */
+const held: (() => void)[] = [];
+
+/** A harness's: every pipeline held back made ready (`PIPELINES.hold`, which this ends). */
+export function releaseHeld(): void {
+  PIPELINES.hold = false;
+  for (const ready of held.splice(0)) ready();
+}
 
 /** how many pipelines first asked for in play are said among the notes */
 const LATE_NOTED = 40;
@@ -106,12 +121,29 @@ export interface PipelineAsked { kind: string; at: number; drawn: boolean }
  *  `lab pipelines`. */
 export const PIPELINES_ASKED: PipelineAsked[] = [];
 
+/** the pipelines still compiling */
+const compiling = new Set<StandIn>();
+
+/** The pipelines still compiling that a pass has set, by what they are with how many of each: what a frame is
+ *  drawn without. */
+function leftOut(): string {
+  const counts = new Map<string, number>();
+  for (const pipeline of compiling) {
+    if (pipeline.asked.drawn) counts.set(pipeline.what, (counts.get(pipeline.what) ?? 0) + 1);
+  }
+  return [...counts].map(([what, count]) => (count > 1 ? `${count} ${what}` : what)).join(', ');
+}
+
 /** A pipeline being compiled aside: what the engine holds in its place. */
 class StandIn {
   real: object | null = null;
   asked: PipelineAsked;
+  /** what it is, for a report of what the lobby was shown without */
+  readonly what: string;
   constructor(device: Device, descriptor: Descriptor) {
     this.asked = { kind: kindOf(descriptor), at: performance.now(), drawn: false };
+    this.what = `${this.asked.kind} ${descriptor.vertex?.module?.label ?? ''}`.trim();
+    compiling.add(this);
     PIPELINES_ASKED.push(this.asked);
     PIPELINES.made++;
     PIPELINES.compiling++;
@@ -122,9 +154,15 @@ class StandIn {
     }
     if (PIPELINES.waitLeft === Infinity) PIPELINES.late++;
     device.createRenderPipelineAsync(descriptor).then((real) => {
-      this.real = real;
-      PIPELINES.compiling--;
+      const ready = (): void => {
+        this.real = real;
+        compiling.delete(this);
+        PIPELINES.compiling--;
+      };
+      if (PIPELINES.hold) held.push(ready);
+      else ready();
     }, (refused: { reason?: string; message?: string }) => {
+      compiling.delete(this);
       // (refused by this device: its draws stay left out, and the refusal is a fault with what the GPU said of
       // it. Made the plain way instead, it was an invalid pipeline, and a pass drawing with one made the whole
       // frame invalid: a phone's village all black)
@@ -158,6 +196,7 @@ function patchPasses(): void {
     if (pipeline instanceof StandIn) {
       pipeline.asked.drawn = true;
       this.waits = !pipeline.real;
+      if (this.waits) PIPELINES.unready++;
       if (pipeline.real) setPipeline.call(this, pipeline.real);
       return;
     }
@@ -234,7 +273,7 @@ const NOTED_FROM = 400;
 export async function pipelinesReady(most: number): Promise<void> {
   const began = performance.now();
   const until = began + Math.min(most, PIPELINES.waitLeft);
-  const { made, compiling } = PIPELINES;
+  const { made, compiling: compilingThen } = PIPELINES;
   await new Promise<void>((done) => {
     const look = (): void => {
       if (PIPELINES.compiling === 0 || performance.now() >= until) done();
@@ -246,9 +285,36 @@ export async function pipelinesReady(most: number): Promise<void> {
   PIPELINES.waitLeft = Math.max(0, PIPELINES.waitLeft - waited);
   if (waited < NOTED_FROM) return;
   const left = PIPELINES.compiling;
-  const note: [number, string] = [Math.round(began), `(pipelines: ${made} made, ${compiling} compiling; waited `
+  const note: [number, string] = [Math.round(began), `(pipelines: ${made} made, ${compilingThen} compiling; waited `
     + `${Math.round(waited)} ms, ${left} left)`];
   PIPELINES.notes.push(note);
   // (and how busy the GPU's process is after it, said when it answers: never waited for)
   void gpuAnswerMs().then((ms) => { note[1] = note[1].replace(/\)$/, `; the GPU answered in ${Math.round(ms)} ms)`); });
+}
+
+/** the longest the lobby's own frame is waited for (ms), and how often it's drawn again meanwhile */
+const SCENE_WAIT_MOST = 10000, SCENE_LOOK_MS = 50;
+
+/**
+ * Resolves once a frame drawn by `draw` sets no pipeline still compiling, or after `most` ms: the last thing a
+ * loading screen waits for, with a budget of its own. The loading screens' waits share one (`PIPELINES.waitLeft`),
+ * and a boot on a PC whose GPU's process was busy spent it on the fight's pipelines and the other heroes', which
+ * the lobby doesn't draw: the lobby was shown with 9 still compiling, its ground among what was left out and the
+ * sky's colour in its place (from play, "white ground on load", report 8YEZ-W9ZG). Only what the frame itself
+ * draws with holds it here; what it was shown without is said among the boot's notes.
+ */
+export async function sceneReady(draw: () => void, most = SCENE_WAIT_MOST): Promise<void> {
+  const began = performance.now();
+  for (;;) {
+    PIPELINES.unready = 0;
+    draw();
+    if (PIPELINES.unready === 0 || performance.now() - began >= most) break;
+    await new Promise((done) => setTimeout(done, SCENE_LOOK_MS));
+  }
+  const waited = performance.now() - began;
+  if (PIPELINES.unready > 0) {
+    PIPELINES.notes.push([Math.round(began), `(the lobby shown without: ${leftOut()}; waited ${Math.round(waited)} ms)`]);
+  } else if (waited >= NOTED_FROM) {
+    PIPELINES.notes.push([Math.round(began), `(the lobby's own pipelines waited for ${Math.round(waited)} ms)`]);
+  }
 }
