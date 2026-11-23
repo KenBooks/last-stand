@@ -4,7 +4,7 @@
 // its own, the frame drawn twice, which must read at least `CANARY_LEAST` times the frame once. Its result is sent
 // as the Performance tab's Send sends it, to a traces service of the lab's own (`send`), and read back there.
 import * as THREE from 'three';
-import type { Lab, Report } from './lab';
+import type { Lab, Pictured, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { QualityLevel } from '../../../src/data/quality';
 import type { ViewMode } from '../../../src/core/renderer';
@@ -19,6 +19,7 @@ import { packTrace, sendTrace } from '../../../src/perf/upload';
 import { clearSpent, SINK, stickAt } from '../../../src/fx/stuckArrows';
 import { groundHeight } from '../../../src/world/ground';
 import { RUST } from '../../../src/engine';
+import { holdFrames } from '../../../src/core/frameLoop';
 
 export interface ProfileCommand {
   biome: BiomeId;
@@ -90,10 +91,13 @@ function compiledByFrameParts(found: Profile): number {
 /** the engine's parts that draw with pipelines of their own, made once by their first frame and waited for before
  *  they're timed (`partPipelinesMade` in src/perf/profiler.ts): the depth drawn first taken out draws each opaque
  *  thing whole, and the grass in it draws its blades into the depth, and the engine makes each pipeline only as a
- *  place is first asked for (Bulwark c9e506c: 15 and 12 in the lab's village, over the 24 the rest may make) */
+ *  place is first asked for (Bulwark c9e506c: 15 and 12 in the lab's village, over the 24 the rest may make); at Low
+ *  and Very low the lit shader's part draws with the shader made for the plain levels, a pipeline of its own for
+ *  each of the scene's (#824: 72 in the forest over the shoulder, which failed every profile at Very low) */
 const OWN_PIPELINES = [
   'the scene\'s depth drawn first',
   'the grass left out of the depth drawn first',
+  'the lit shader whole',
 ];
 
 /** Whether a part's pipelines are its own, meant (the lit shading's own parts, the depth drawn first's). */
@@ -103,8 +107,11 @@ function makesItsOwn(part: Profile['parts'][number]): boolean {
 }
 
 /** the page's part the lab gives the profiler: work done in each frame while it's shown, which the frame's interval
- *  as the browser shows it must see (`ProfileOptions.pageParts`: the game's are its panels and the pause menu) */
-const PAGE_CANARY = { name: 'canary: 30 ms of work a frame', work: 30, least: 20 };
+ *  as the browser shows it must see (`ProfileOptions.pageParts`: the game's are its panels and the pause menu). An
+ *  interval steps by the display's refresh, so its least is half the work: on a 144 Hz screen the 30 ms read 25 to
+ *  29 (6.9 ms a refresh), on the lent laptop's 60 Hz one 16.8 to 18 (33.4 against 16.6), where a least of 20 failed
+ *  every run; unseen, it reads about 0 */
+const PAGE_CANARY = { name: 'canary: 30 ms of work a frame', work: 30, least: 15 };
 
 /** The page's canary part and the work it does each frame it's shown. */
 function pageCanary(clock: () => number): Pick<ProfileOptions, 'pageParts' | 'eachPageFrame'> {
@@ -150,8 +157,9 @@ function sceneState(): string {
   return `pixel ratio ${G.renderer.getPixelRatio()}, ${shown} shown, ${casting} casting, reach ${reach.toFixed(3)}`;
 }
 
-/** A profile cancelled after a few frames: it must stop, every part put back and the game's frames let go. */
-async function cancelProblems(lab: Lab): Promise<string[]> {
+/** A profile cancelled after a few frames: it must stop, every part put back and the game's frames let go (the walk
+ *  after it pictured where its picture stuck). */
+async function cancelProblems(lab: Lab, canary: boolean): Promise<{ problems: string[]; moments: Pictured[] }> {
   const before = sceneState();
   const clock = window.__labClock;
   let frames = 0;
@@ -167,35 +175,75 @@ async function cancelProblems(lab: Lab): Promise<string[]> {
   const after = sceneState();
   if (after !== before) problems.push(`cancel: the scene was left changed (${before} before, ${after} after)`);
   const start = lab.player.pos.clone();
-  const redrawn = await redrawnWithoutThreesLoop(lab, () => lab.step(30, () => ({ keys: ['w'] })));
-  const share = `${Math.round(redrawn * 100)}% of the screen's middle changed`;
+  const walk = await redrawnWithoutThreesLoop(lab, () => lab.step(30, () => ({ keys: ['w'] })));
+  const share = `${Math.round(walk.changed * 100)}% of the screen's middle changed`;
   if (lab.player.pos.distanceTo(start) < 0.5) problems.push('cancel: the game\'s frames were left held');
-  if (redrawn < WALK_CHANGES) {
-    problems.push(`the scene's picture stuck as the hero walked, three's own loop held (WebGPU): ${share}`);
+  if (canary) problems.push(...await stuckCanaryProblems(lab));
+  if (walk.changed >= WALK_CHANGES) return { problems, moments: [] };
+  problems.push(`the scene's picture stuck as the hero walked, three's own loop held (WebGPU): ${share}`);
+  return { problems, moments: [walkMoment(walk)] };
+}
+
+/** The stuck walk's canary: the walk with the game's frames held, as a profile that never let them go leaves them
+ *  (`holdFrames`), which must read as stuck. (`lab.drawing` off holds three's draws alone: the engine drew on, and
+ *  such a walk read 84% changed.) */
+async function stuckCanaryProblems(lab: Lab): Promise<string[]> {
+  const heldWalk = () => {
+    holdFrames(true);
+    return lab.step(30, () => ({ keys: ['w'] }));
+  };
+  try {
+    const walk = await redrawnWithoutThreesLoop(lab, heldWalk);
+    if (walk.changed < WALK_CHANGES) return [];
+    return [`canary: a walk with the game's frames held read ${Math.round(walk.changed * 100)}% changed, not stuck`];
+  } finally {
+    holdFrames(false);
   }
-  return problems;
 }
 
 /** the screen's middle the walk is read in (css px about the window's middle) */
 const MIDDLE = { width: 400, height: 300 };
 /** the levels two pixels must differ by, summed over red, green and blue, to count as changed */
 const CHANGED_LEVELS = 12;
-/** the least share of the middle's pixels a walk must change: with the scene's picture stuck, 9% changed (the labels
- *  and the HUD over it); drawn afresh, 92 to 95% */
+/** the least share of the middle's pixels a walk must change: with the scene's picture stuck, 9% changed of the
+ *  screen as shown (the labels and the HUD over it); drawn afresh, 92 to 95% */
 const WALK_CHANGES = 0.5;
 
-/** The screen's middle as the browser shows it, its pixels (the canvas and the page's UI over it). */
-async function middleShown(): Promise<Uint8ClampedArray> {
+/** The screen's middle as the browser showed it: the picture, and its pixels. */
+interface Shown {
+  png: string;
+  pixels: Uint8ClampedArray;
+}
+
+/**
+ * The screen's middle as the browser shows it (the canvas and the page's UI over it), as the player sees it. On the
+ * lent 4080 laptop the engine's frame reached the screen black (the game's own warning: "the frame is black: every
+ * pixel of 1920x1080, 3 checks in a row"), the HUD alone over it, its work all done (`lab rust` there read as here
+ * but for its times): every profile there failed as stuck, rightly. Read from the canvas itself it was black too.
+ */
+async function middleShown(): Promise<Shown> {
   const clip = { x: (innerWidth - MIDDLE.width) / 2, y: (innerHeight - MIDDLE.height) / 2, ...MIDDLE };
+  const png = await window.__labScreenshot!(clip);
   const image = new Image();
-  image.src = await window.__labScreenshot!(clip);
+  image.src = png;
   await image.decode();
   const canvas = document.createElement('canvas');
   canvas.width = image.width;
   canvas.height = image.height;
   const context = canvas.getContext('2d')!;
   context.drawImage(image, 0, 0);
-  return context.getImageData(0, 0, image.width, image.height).data;
+  return { png, pixels: context.getImageData(0, 0, image.width, image.height).data };
+}
+
+/** The walk's two pictures of the screen's middle, as a moment of the report: where the picture stuck, what it
+ *  showed before and after. */
+function walkMoment(walk: Walked): Pictured {
+  const tile = (png: string) => ({ view: 'screen' as const, png, ...MIDDLE });
+  return {
+    label: 'the walk with three\'s loop held: before, after',
+    tiles: [tile(walk.before.png), tile(walk.after.png)],
+    notes: [`${Math.round(walk.changed * 100)}% changed`],
+  };
 }
 
 /** The share of two pictures' pixels that differ by over `CHANGED_LEVELS`. */
@@ -218,6 +266,13 @@ interface ThreesLoop {
   start(): void;
 }
 
+/** a walk's pictures of the screen's middle and the share of it that changed */
+interface Walked {
+  before: Shown;
+  after: Shown;
+  changed: number;
+}
+
 /** a context whose frames never come: three's loop asks it for its next frame and never runs again */
 const NEVER = { requestAnimationFrame: () => 0, cancelAnimationFrame: () => undefined };
 
@@ -229,7 +284,7 @@ const NEVER = { requestAnimationFrame: () => 0, cancelAnimationFrame: () => unde
  * as main's does here (9% changed); now each game frame begins a node frame of its own (`renderWebGPU`). After a
  * level's change the sun's shadow map resized left it stuck too, 0% changed (`apply` in core/quality.ts).
  */
-async function redrawnWithoutThreesLoop(lab: Lab, walk: () => Promise<unknown>): Promise<number> {
+async function redrawnWithoutThreesLoop(lab: Lab, walk: () => Promise<unknown>): Promise<Walked> {
   const renderer = G.renderer as unknown as { _animation: ThreesLoop };
   const loop = renderer._animation;
   const context = loop.getContext();
@@ -239,7 +294,8 @@ async function redrawnWithoutThreesLoop(lab: Lab, walk: () => Promise<unknown>):
     await lab.step(2);
     const before = await middleShown();
     await walk();
-    return changedShare(before, await middleShown());
+    const after = await middleShown();
+    return { before, after, changed: changedShare(before.pixels, after.pixels) };
   } finally {
     loop.stop();
     loop.setContext(context);
@@ -339,7 +395,8 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
       const what = onWebGPU ? 'pipelines made' : 'programs compiled';
       problems.push(`${compiled} ${what}: a part changes the scene's programs (most ${most})`);
     }
-    problems.push(...await cancelProblems(lab));
+    const cancel = await cancelProblems(lab, command.canary);
+    problems.push(...cancel.problems);
     const hour = command.hour === undefined ? '' : ` at ${command.hour}:00`;
     const place = command.village ? `the village${hour}` : command.biome;
     const name = `${place} ${command.view}, ${quality.qualityLevel()}`;
@@ -350,7 +407,7 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
       text.push(sent.text);
       problems.push(...sent.problems);
     }
-    return { text: text.join('\n'), problems };
+    return { text: text.join('\n'), problems, moments: cancel.moments };
   } finally {
     lab.drawing = drawing;
     if (command.arrows) clearSpent();

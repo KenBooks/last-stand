@@ -368,17 +368,20 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   side), one in each of the browser's frames (`__labClock.realFrame`), each waited for and timed by the browser's
   clock (`__labClock.realNow`), and the parts listed by what they take, as the player's device lists them, with how
   long it took and the programs it compiled: over 8 fails (a part changing the scene's programs compiled them all
-  again, 66 s of a 69 s run). The page's parts are timed by the frame's interval as the browser shows it; the lab gives one of its own, 30 ms of work a frame while shown, which must read at least 20 ms (28.7 here). Then a second profile cancelled after 20 frames must stop there, leave the scene as it
+  again, 66 s of a 69 s run). The page's parts are timed by the frame's interval as the browser shows it; the lab gives one of its own, 30 ms of work a frame while shown, which must read at least 15 ms (28.7 here; an interval steps by the display's refresh, and a 60 Hz screen reads 17 or so). Then a second profile cancelled after 20 frames must stop there, leave the scene as it
   was (the pixel ratio, what's shown, what casts, the lights' reach) and let the game's frames go (the hero walks).
   On this PC it says what this GPU pays, which is not what a phone's tiled GPU pays for cut-out and blended pixels:
   for that, have the player press the button and read their trace with `lab trace` (its Profile section).
-  `--canary` draws the frame twice, which must read 1.6 times once (on WebGPU the GPU waited out between the two).
+  `--canary` draws the frame twice, which must read 1.6 times once (on WebGPU the GPU waited out between the two),
+  and walks the hero again with the game's frames held, which must read stuck; a walk that reads stuck is pictured,
+  before and after (`out/profile/film-1.png`: on the lent 4080 laptop, the HUD over a black scene).
   `--arrows <n>` stands n spent arrows in the ground round the hero first, timed as their own part (1,000, the
   most kept, read nothing of a phone's 8.5 ms frame at Very low: `--device phone --level verylow --arrows 1000`).
   The forest at 15.4,15.4: the frame 4.6 to 4.9 ms here, profiled in 3.4 s, 4 programs compiled, the canary 1.75 to
   1.97 times (2 frames a side read 1.57 once). Its result is sent as the tab's Send sends it, to a traces service of
   the lab's own, and read back as `lab trace` reports it: its Profile section must hold the lines as sent. The
-  pipelines made count (over 24 fails: the plain colour's 12 to 16; the lit shading's own parts make
+  pipelines made count (over 24 fails: the plain colour's 12 to 16; the lit shading's own parts, the depth drawn first's and,
+  at Low and Very low, the lit shader whole against the plain levels' (72 in the forest) make
   theirs and are left out of it: 94 in the crypt at the phone's pixels, the profile 24 s), and the forest's frame
   read 6.8 to 9 ms, the canary 1.99
   to 2.1 times. It keeps no copy of the
