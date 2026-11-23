@@ -1548,8 +1548,9 @@ function hallColumns(scene: THREE.Object3D, capital: THREE.Material, M: Mats, lo
       // (held by an iron band round the shaft: a flat plate on it stood off its curve at one edge and cut into it at
       // the other)
       // (proud of the tapering shaft all round: level with it there, it showed as a dash from some sides, a review)
-      const band = solid(scene, new THREE.CylinderGeometry(COLUMN_IN.radius * 1.01, COLUMN_IN.radius * 1.01, 0.1, 18),
-        M.iron);
+      // (open at its ends: with the shaft cut away above it from above, its lid stood as a black disc on the column)
+      const hoop = new THREE.CylinderGeometry(COLUMN_IN.radius * 1.01, COLUMN_IN.radius * 1.01, 0.1, 18, 1, true);
+      const band = solid(scene, hoop, M.iron);
       band.position.set(x, y0 + 2.4, z);
       band.castShadow = false;
     }

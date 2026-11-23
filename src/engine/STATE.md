@@ -171,7 +171,7 @@ Fixed, each with its measure:
 
 Open:
 
-- [ ] The hall's column bands and its torches' cups are not drawn from above (drawn over the shoulder; WebGL
+- [x] (fixed 2026-11-22, the last section) The hall's column bands and its torches' cups are not drawn from above (drawn over the shoulder; WebGL
   draws them, three's WebGPU thinned). Not the thinning (the iron taken out of its list), not the depth drawn
   first (`rust.depthFirst=0`), not a hidden object (`lab rustcheck` counts none). The columns are a blended kind
   (`hallColumn`) whose depth the game draws by a twin that writes no colour, which the engine takes for a
@@ -284,3 +284,10 @@ not intend to support the old way of rendering".
 - three's WebGPURenderer is still the engine's host: the labels' and the outline's canvas, the portraits. The
   comparisons with WebGL above (`--webgl`, `--three`, `&renderer=webgl`) can't be run again from this tree:
   `--ab` against a commit before this one is what's left of them.
+- [x] The hall's column bands and torch cups from above: a shaft was drawn over its own band, all that blends
+  being drawn the farthest first by its middle. What the game thins by blending is drawn before the rest of what
+  blends, the larger first (Bulwark's `THINNED`, its test in `plan::tests`); a band is a hoop, open at its ends.
+  No check of the game's own pictures it: `lab rust --village --at=0,-20 --view top --hour 12` is the look.
+- [x] `lab rustcheck` as the mage: the hero's own two lights were counted among the scene's still ones.
+- [ ] Still open from above: the crypt entered from the village, its east path too bright (not looked at again);
+  the village's grass lighter than it was on WebGL, with no WebGL left in this tree to set it beside.

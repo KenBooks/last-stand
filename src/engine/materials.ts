@@ -141,6 +141,11 @@ export class Materials {
     return blend | (side << 2) | (material.depthWrite ? 16 : 0);
   }
 
+  /** Whether the game thins `material` by blending it (core/seeThrough.ts's blended kinds). */
+  thinnedByBlending(material: AnyMaterial): boolean {
+    return (material.seeThrough as SeeThrough | undefined)?.blended === true;
+  }
+
   /** Whether `material` blends only where the game thins it and is thinned nowhere this frame: drawn solid, with
    *  what's opaque (the engine's `SOLID`). One the game made see-through to thin it (a wall, a roof's beams) is
    *  whole otherwise; a roof that tells its share in its alpha (custom blending) and what writes no depth stay
