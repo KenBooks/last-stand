@@ -57,10 +57,56 @@ export function apartShare(one: Uint8ClampedArray, other: Uint8ClampedArray): nu
 
 export const percent = (share: number): string => `${(share * 100).toFixed(2)}%`;
 
+/** the most frames a level switch in play is given to make its shaders' pipelines aside and switch */
+const SWITCH_FRAMES = 600;
+
+/**
+ * A level stepped to in play leaves nothing out of a frame: the plain levels' shaders, not made yet, are made aside
+ * while the whole ones draw on, and switched to once all are ready (`plainSet.ts`). From the owner's PC (ZSW4-FVNM,
+ * #850's preview): Auto stepped Low to Medium in play, the level's making was switched to at once, and the village
+ * drew grey while its ~50 pipelines compiled. Run before the plain making is first made (`plainShaderSameFrame`).
+ */
+export async function levelSwitchLeavesNothingOut(lab: Lab): Promise<Checked> {
+  const level = qualityLevel();
+  const tuned = RUST.tune.plainShader;
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    if (PIPELINES.waitLeft !== Infinity) return failed('not in play: the loading screens still wait for pipelines');
+    RUST.tune.plainShader = 1;
+    setQuality('high');
+    await lab.step(SETTLE_FRAMES);
+    const made = PIPELINES.made;
+    PIPELINES.unready = 0;
+    setQuality('verylow');
+    let frames = 0;
+    do {
+      await window.__labClock.realFrame();
+      await lab.step(1);
+      frames++;
+    } while ((waiting() || frames < SETTLE_FRAMES) && frames < SWITCH_FRAMES);
+    const leftOut = PIPELINES.unready;
+    const asked = PIPELINES.made - made;
+    if (waiting()) return failed(`the switch to Very low still waited on its pipelines after ${frames} frames`);
+    if (asked === 0) return failed('the switch to Very low asked for no pipeline: the plain making was made before');
+    if (leftOut > 0) {
+      return failed(`stepping High to Very low in play left ${leftOut} draws out while its ${asked} pipelines `
+        + 'compiled: the plain making switched to before it was made');
+    }
+    return passed(`stepping High to Very low in play made ${asked} pipelines aside over ${frames} frames, no draw `
+      + 'left out');
+  } finally {
+    RUST.tune.plainShader = tuned;
+    setQuality(level);
+    await lab.step(SETTLE_FRAMES);
+    lab.drawing = drawing;
+  }
+}
+
 /**
  * At Very low the plain levels' shaders draw the frame the whole ones draw: the game held still, the frame
- * pictured with the switch off, on, and off again. Switching on asks for pipelines of its own; switching back
- * and on again asks for none (each making's are kept). The canary: the switch forced at High (`rust.plainShader=2`),
+ * pictured with the switch off, on, and off again. Switching back and on again asks for no pipeline (each making's
+ * are kept; the plain one's were first made by `levelSwitchLeavesNothingOut`). The canary: the switch forced at High (`rust.plainShader=2`),
  * where the plain levels' shaders must draw another frame, the normal maps and the lights' shine gone from it.
  */
 export async function plainShaderSameFrame(lab: Lab): Promise<Checked> {
@@ -77,7 +123,8 @@ export async function plainShaderSameFrame(lab: Lab): Promise<Checked> {
     G.paused = true;
     await switched(lab, 0);
     const whole = await pixelsIn(lab, undefined, 'plain: the whole shaders');
-    const asked = await switched(lab, 1);
+    // (their own pipelines were made by the level switch before, `levelSwitchLeavesNothingOut`)
+    await switched(lab, 1);
     const plain = await pixelsIn(lab, undefined, 'plain: the plain levels\' shaders');
     const askedBack = await switched(lab, 0);
     const again = await pixelsIn(lab, undefined, 'plain: the whole shaders again');
@@ -97,9 +144,6 @@ export async function plainShaderSameFrame(lab: Lab): Promise<Checked> {
     if (still > STILL_SHARE) {
       return failed(`the frame held still moved between two pictures of it (${percent(still)} of its pixels)`);
     }
-    if (asked === 0) {
-      return failed('switching to the plain levels\' shaders asked for no pipeline: they aren\'t drawn with');
-    }
     if (apart > STILL_SHARE) {
       return failed(`at Very low the plain levels' shaders draw ${percent(apart)} of the frame's pixels apart from `
         + 'the whole shaders\'');
@@ -113,8 +157,8 @@ export async function plainShaderSameFrame(lab: Lab): Promise<Checked> {
         + 'drawn with');
     }
     return passed(`the plain levels' shaders draw Very low's frame as the whole ones do (${percent(apart)} of its `
-      + `pixels apart, two pictures of the whole ones' ${percent(still)}; ${asked} pipelines of their own, none made `
-      + `switching back and on again; forced at High they change ${percent(canary)} of the frame)`);
+      + `pixels apart, two pictures of the whole ones' ${percent(still)}; no pipeline made switching back and on `
+      + `again; forced at High they change ${percent(canary)} of the frame)`);
   } finally {
     G.paused = paused;
     RUST.tune.plainShader = tuned;

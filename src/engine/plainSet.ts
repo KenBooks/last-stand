@@ -32,9 +32,11 @@ export class PlainSet {
   }
 
   /** The making `plain` told ahead of the frame that would say so, as the samples are (`rustPlain`): a boot at a
-   *  plain level makes the plain one's pipelines alone. */
+   *  plain level makes the plain one's pipelines alone. Under the loading screens alone: in play the frame's own
+   *  `tell` makes them aside first. Switched at once in play, every draw of the making was left out until its
+   *  pipeline compiled: Auto stepping Low to Medium drew the village grey for seconds (ZSW4-FVNM). */
   ahead(plain: boolean): void {
-    if (plain !== this.drawn) this.switchTo(plain);
+    if (plain !== this.drawn && PIPELINES.waitLeft !== Infinity) this.switchTo(plain);
   }
 
   /** The making `plain` switched to, and back at once: its pipelines asked for, the scene drawn on as it was. */
