@@ -61,6 +61,11 @@ export const TUNE = tunable('rust', {
   looksByMaps: 1,
   /** what the camera stands inside (the ground, the sky) drawn after the rest of what's opaque (the engine's plan.rs) */
   nearFirst: 1,
+  /** at the plain levels (`Grade.lite`: Low and Very low) the scene drawn by lit shaders made for them alone, what
+   *  the other levels shade with compiled out of them (Bulwark's `set_plain_only`): the same frame, by a shorter
+   *  shader (2: at every level, a check's canary). 0, as it is, until a phone's profile says what it saves (the Performance tab's part): switched on
+   *  at a level change it makes each pipeline met again, which a phone compiles for seconds */
+  plainShader: 0,
   /** the point lights' shine: 0 leaves it out at every level (a profile's), as the lite levels do (`Grade.lite`) */
   shine: 1,
   /** how far along its normal a surface is moved before the shadow map is read, world units */
