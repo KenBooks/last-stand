@@ -49,6 +49,15 @@ export class Levels {
     return { ms: told.slice(0, -3), passes, reads, busy: busy > 0 };
   }
 
+  /** The last frame broken down's parts' times by each shader of the page's that drew in them: the part's place
+   *  among `breakdownNames`, the shader's id, its time (ms). */
+  breakdownByShader(): { part: number; shader: number; ms: number }[] {
+    const told = this.core.engine.breakdown_by_shader();
+    const rows: { part: number; shader: number; ms: number }[] = [];
+    for (let at = 0; at + 2 < told.length; at += 3) rows.push({ part: told[at], shader: told[at + 1], ms: told[at + 2] });
+    return rows;
+  }
+
   /** The engine told the quality level's samples and shadow map, when they change: it drew 4 samples a pixel
    *  and a map of 2048 at every level, a phone's Very low among them (26 ms a frame on its GPU, from play). */
   private quality(samples: number, shadowSize: number): void {

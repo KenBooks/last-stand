@@ -370,4 +370,10 @@ not intend to support the old way of rendering".
 - The village at night, Very low, the ranger at -0.7, -10.5, 2880 by 1800 at 2 on the 4070 Ti (3.1 ms): opaque
   still meshes 40%, blended and added 16%, the page's shaders 12%, the grade 11%, the depth drawn first 8%, bloom
   4%, counted instances 3%. A phone's is the one to act on: its next profile carries it.
-- [ ] Not in it: the lamps' shadows and the light cache's bake, the sight map, and the page's shaders each by name.
+- [x] Bulwark 83c8489: each of the page's shaders by itself within its part (`breakdown_by_shader`, named here by
+  `Bridge.shaderNames`), a lamp's face and the light cache's bake stamped and timed apart from the frame they're
+  sent ahead of, the sight map's pass. The pause menu's list shows the rows.
+- From the owner's phone (MDV7-B29A, before the shaders had rows of their own): 20.8 ms of parts, the frame 23.3;
+  the page's opaque shaders 8.39 ms (40%), blended and added 3.87, opaque still meshes 3.28, the grade 1.77, the
+  depth drawn first 1.64, counted instances 0.85, bloom 0.72. Here that first row is the paving's shader
+  (`paving-unrepeated`) and the meadow's (`meadow-sward`): the phone's next profile says which.

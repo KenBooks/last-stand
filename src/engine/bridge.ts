@@ -286,6 +286,9 @@ export class Bridge {
   /** A harness's: the last frame's point lights, a line each (`Lights.pointLines`). */
   pointLines(): string[] { return this.lit.pointLines(); }
 
+  /** The page's shaders' names by the engine's ids for them. */
+  shaderNames(): Map<number, string> { return this.materials.shaderNames(); }
+
   /** A harness's: whether a see-through material is drawn solid this frame, with what's opaque. */
   drawnSolid(material: THREE.Material): boolean { return this.materials.solidNow(material as never); }
 
