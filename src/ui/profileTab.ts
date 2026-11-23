@@ -7,8 +7,9 @@ import { sfx } from '../core/audio';
 import { traceConsent, sendProfile } from '../perf/consent';
 import { recorder } from '../perf/recorder';
 import {
-  profile, profileLines, ProfileCancelled, type PartCost, type Profile, type ProfileProgress,
+  profile, ProfileCancelled, type PartCost, type Profile, type ProfileProgress,
 } from '../perf/profiler';
+import { costKnown, profileLines, shareOf } from '../perf/profileReport';
 
 /** the scene's parts listed under the button, the page's after them (the report has them all) */
 const PARTS_SHOWN = 3;
@@ -40,20 +41,21 @@ function note(text: string): void {
   $('.profile-note').textContent = text;
 }
 
-/** A part as a list item: what it takes and its share of `frame`. */
-function partItem(part: PartCost, frame: number): HTMLLIElement {
+/** A part as a list item: what it takes and its share of the frame it was timed in; one not told apart from
+ *  nothing says so. */
+function partItem(part: PartCost): HTMLLIElement {
   const item = document.createElement('li');
   const takes = part.on - part.off;
-  const share = frame > 0 ? Math.round((100 * takes) / frame) : 0;
-  item.textContent = `${part.name.replace(/ \(\d+\)$/, '')}: ${takes.toFixed(1)} ms (${share}%)`;
+  const share = costKnown(part) ? `${Math.round(shareOf(part))}%` : 'too little to tell';
+  item.textContent = `${part.name.replace(/ \(\d+\)$/, '')}: ${takes.toFixed(1)} ms (${share})`;
   return item;
 }
 
 /** The costliest of the scene's parts as list items, then the page's. */
 function showParts(result: Profile): void {
   const list = $('.profile-parts');
-  const scene = result.parts.slice(0, PARTS_SHOWN).map((part) => partItem(part, result.frame));
-  const page = result.shown?.parts.map((part) => partItem(part, result.shown!.frame)) ?? [];
+  const scene = result.parts.slice(0, PARTS_SHOWN).map((part) => partItem(part));
+  const page = result.shown?.parts.map((part) => partItem(part)) ?? [];
   list.replaceChildren(...scene, ...page);
   list.classList.remove('hidden');
 }

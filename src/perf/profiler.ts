@@ -25,11 +25,18 @@ export interface ProfileTurns {
  *  from part to part) */
 export const PROFILE_TURNS: ProfileTurns = { rounds: 6, frames: 3, settle: 1 };
 
+// (the report's lines are `profileReport.ts`'s: named here too for what read them from this module)
+export { profileLines } from './profileReport';
+
 /** A part's cost: the frame's median time with it and without (ms). */
 export interface PartCost {
   name: string;
   on: number;
   off: number;
+  /** how far its cost is known (ms): the standard error of its rounds' differences, each round its own with and
+   *  without. A phone's profile read the same frame 14.4 to 32.1 ms from part to part as its GPU's clock moved, a
+   *  part that draws nothing -0.4 ms, and every part's cost was written as if exact (report TPRV-JMH7) */
+  error?: number;
   /** the programs (WebGPU's pipelines) made while it was timed: each was a wait in its first frame */
   compiled?: number;
 }
@@ -274,8 +281,25 @@ async function costOf(part: ScenePart, timedFrame: TimedDraw, turns: ProfileTurn
     if (part.restore) part.restore();
     else part.change(true);
   }
-  return { name: part.name, on: average(await Promise.all(on)), off: average(await Promise.all(off)) };
+  const [with_, without] = [await Promise.all(on), await Promise.all(off)];
+  return { name: part.name, on: average(with_), off: average(without), error: errorOf(with_, without, turns, average) };
 }
+
+/** A part's cost round by round (each round's frames with it less its frames without), and from their spread the
+ *  standard error of their median: 1.2533 of the mean's, the spread by the median's distance from the middle one
+ *  (times 1.4826, a normal's), which one round the clock jumped in doesn't move. */
+function errorOf(on: number[], off: number[], turns: ProfileTurns, average: (values: number[]) => number): number {
+  const apart: number[] = [];
+  for (let round = 0; round < turns.rounds; round++) {
+    const from = round * turns.frames;
+    apart.push(average(on.slice(from, from + turns.frames)) - average(off.slice(from, from + turns.frames)));
+  }
+  if (apart.length < 2) return 0;
+  const middle = medianOf(apart);
+  const spread = medianOf(apart.map((one) => Math.abs(one - middle)));
+  return (1.2533 * 1.4826 * spread) / Math.sqrt(apart.length);
+}
+
 
 /** Profiles the frame as it stands, the game's frames held meanwhile; throws `ProfileCancelled` if cancelled. */
 export async function profile(options: ProfileOptions = {}): Promise<Profile> {
@@ -363,36 +387,4 @@ async function shownCosts(parts: ScenePart[], shownFrame: TimedDraw,
   } finally {
     for (const part of parts) part.change(true);
   }
-}
-
-/** A part's cost as a line: what it takes, its share of the frame, the frame with it and without; on WebGPU, the
- *  pipelines made while it was timed (WebGL's line as it was). */
-function partLine(part: PartCost, frame: number, onWebGPU = false): string {
-  const takes = part.on - part.off;
-  const share = frame > 0 ? (100 * takes) / frame : 0;
-  const made = onWebGPU && part.compiled ? `, ${part.compiled} pipelines made` : '';
-  return `${part.name}: ${takes.toFixed(1)} ms, ${share.toFixed(0)}% (${part.on.toFixed(1)} with it, `
-    + `${part.off.toFixed(1)} without${made})`;
-}
-
-/** A profile as lines: the frame, then each part's cost, the costliest first. */
-export function profileLines(found: Profile): string[] {
-  const fps = found.frame > 0 ? Math.round(1000 / found.frame) : 0;
-  // (WebGL's lines as they were, the traces before WebGPU's read alike; WebGPU's says so, and counts its pipelines)
-  const onWebGPU = found.renderer.startsWith('WebGPU') || found.renderer.startsWith('the Rust engine');
-  const made = onWebGPU
-    ? `${found.compiled} pipelines made (${found.compiledAtDraw ?? 0} at a draw), on ${found.renderer}`
-    : `${found.compiled} programs compiled`;
-  const timed = found.gpuTimed ? 'timed by the GPU\'s timestamps' : 'drawn and waited for';
-  const frame = `the frame ${found.frame.toFixed(1)} ms (${fps} fps), each frame ${timed}; `
-    + `profiled in ${found.seconds.toFixed(1)} s, ${made}`
-    + (found.idle === undefined ? '' : `, the GPU kept drawing in ${((1 - found.idle) * 100).toFixed(0)}% of the frames between`);
-  const lines = [frame, ...found.parts.map((part) => partLine(part, found.frame, onWebGPU))];
-  lines.push(...(found.untimed ?? []).map((part) => `${part.name}: ${part.why}`));
-  if (!found.shown) return lines;
-  const shownFps = found.shown.frame > 0 ? Math.round(1000 / found.shown.frame) : 0;
-  lines.push(`the frame as the browser shows it, frame to frame: ${found.shown.frame.toFixed(1)} ms (${shownFps} fps), `
-    + 'the page\'s parts hidden');
-  lines.push(...found.shown.parts.map((part) => partLine(part, found.shown!.frame)));
-  return lines;
 }
