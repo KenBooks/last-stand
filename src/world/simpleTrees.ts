@@ -311,6 +311,9 @@ export function simpleTree(kind: TreeKind, bark: THREE.Mesh[], ...leaves: THREE.
   }
 }
 
+/** How the trees are drawn now: grown (false), simple or cartoon. */
+export const simpleTreesNow = (): SimpleTrees => look;
+
 /** How the trees are drawn (the quality level's): grown, simple or cartoon, live: geometries swapped alone. */
 export function setSimpleTrees(wanted: SimpleTrees): void {
   if (wanted === look) return;

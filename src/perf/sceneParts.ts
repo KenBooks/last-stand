@@ -11,6 +11,7 @@ import { QUALITY } from '../data/quality';
 import { qualityBudget, qualityLevel } from '../core/quality';
 import { scenePixels, setRenderQuality } from '../core/renderer';
 import { RUST } from '../engine';
+import { setSimpleTrees, simpleTreesNow } from '../world/simpleTrees';
 
 /** A part of a frame's work, put in (`on`) or taken out; `change` may resize a target, settled by frames drawn. */
 export interface ScenePart {
@@ -154,6 +155,19 @@ export function frameParts(): ScenePart[] {
   return [pixelsPart(), ...engineParts(), ...shownParts()];
 }
 
+/** Where the trees are simple, their crown against the other simple one (Very low's cartoon clumps against Low's
+ *  leafy lumps, #688): a swap of geometry alone, put back as found. */
+function treeLookParts(): ScenePart[] {
+  const found = simpleTreesNow();
+  if (!found) return [];
+  const other = found === 'cartoon' ? 'simple' : 'cartoon';
+  return [{
+    name: `the trees' crown, ${found} (without: ${other})`,
+    change: (on) => setSimpleTrees(on ? found : other),
+    restore: () => setSimpleTrees(found),
+  }];
+}
+
 /** What's shown or hidden to time it. */
 function shownParts(): ScenePart[] {
   return [
@@ -163,6 +177,7 @@ function shownParts(): ScenePart[] {
     // (the ground's blades and the trees, a million triangles and more of the village's frame at High)
     shownPart('the meadow\'s grass', shownWhere((object) => object.name === 'meadow')),
     shownPart('the trees: bark and leaves', shownWhere((object) => /trees' (bark|leaves)/.test(object.name))),
+    ...treeLookParts(),
     shownPart('what\'s cut out: leaves, grass', shownWhere(cutOut)),
     shownPart('what\'s blended: smoke, glows, effects', shownWhere(blended)),
     shownPart('the fires\' flames', shownWhere((object) => Boolean(object.userData.fireFlames))),
