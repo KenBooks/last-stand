@@ -3,9 +3,26 @@ name: Deploy GitHub Pages
 # Production deploy, from the `gh-pages` branch, which holds production alone.
 # The PR previews are Dokci's (server/game-preview), each at a host of its own.
 
+# Only a merge that changes what the build reads deploys. The build is stamped with its commit and time, so a
+# deploy of the same game is a new version to every player's page and its worker: a merge of the lab's code
+# alone (#830) rebuilt and republished production. A manual run (workflow_dispatch) deploys whatever changed.
+# A new place the build reads from goes in this list, or its changes won't ship until the next merge that does.
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'vite.config.ts'
+      - 'tsconfig.json'
+      - 'package.json'
+      - 'package-lock.json'
+      # (the worker and the Pages check the build runs: scripts/pwa.ts, scripts/check-pages-build.mjs)
+      - 'scripts/**'
+      - '.github/workflows/deploy-pages.yml'
+      # (the agents' notes sit beside the code and the build reads none of them)
+      - '!**/*.md'
   workflow_dispatch:
 
 permissions:
