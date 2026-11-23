@@ -11,6 +11,7 @@ import { G } from '../../../src/state';
 import { perfClock } from '../../../src/core/perfClock';
 import { RUST } from '../../../src/engine';
 import type { Bridge, FrameStats } from '../../../src/engine/bridge';
+import { canvasSaid, plainCanvasSaid } from './rustCanvas';
 import { census, heaviest } from './rustCensus';
 import { standAt } from './draws';
 import { skyLightLines, turnToSkyLight } from './skyLight';
@@ -310,6 +311,10 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   // pictures differ with no change behind them; this line says so before the pictures are read)
   lines.push(`  the moment: the game's clock ${G.time} s, the camera at ${G.camera.position.toArray().join(', ')}`);
   const problems: string[] = [];
+  // (what reaches the canvas, read in the task that draws it: a tree from before has the engine's `said` too)
+  const reached = canvasSaid(canvas);
+  lines.push(...reached.lines, ...await plainCanvasSaid());
+  problems.push(...reached.problems);
   const turned = sky === undefined ? undefined : skyLightLines(sky);
   if (turned) lines.push(turned.line);
   if (turned) problems.push(...turned.problems);
