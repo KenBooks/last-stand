@@ -5,7 +5,7 @@
 // shading 11.9 ms of a 38.5 ms frame.
 import type { Lab } from './lab';
 import { type Checked, failed, passed, pixelsIn } from './rustPixels';
-import { RUST } from '../../../src/engine';
+import { RUST, rustSwitching } from '../../../src/engine';
 import { PIPELINES } from '../../../src/engine/pipelinesAside';
 import { G } from '../../../src/state';
 import { qualityLevel, setQuality } from '../../../src/core/quality';
@@ -25,15 +25,20 @@ const STILL_SHARE = 0.0005;
 /** the least share of the frame the plain levels' shaders must change at High (the canary) */
 const CANARY_SHARE = 0.01;
 
+/** whether the engine still waits on pipelines, compiling or a switch's own (`plainSet.ts`: in play the other
+ *  making's are made aside first, and switched to by the frame after they're all made) */
+const waiting = (): boolean => PIPELINES.compiling > 0 || rustSwitching();
+
 /** `rust.plainShader` set to `value`, the frames after it drawn with the game held still, and the browser waited on
- *  for the pipelines it asked: how many were asked for. */
+ *  for the pipelines it asked, the switch made: how many were asked for. */
 async function switched(lab: Lab, value: number): Promise<number> {
   const before = PIPELINES.made;
   RUST.tune.plainShader = value;
   await lab.step(SETTLE_FRAMES);
   const began = window.__labClock.realNow();
-  while (PIPELINES.compiling > 0 && window.__labClock.realNow() - began < COMPILE_MS) {
+  while (waiting() && window.__labClock.realNow() - began < COMPILE_MS) {
     await window.__labClock.realFrame();
+    await lab.step(1);
   }
   await lab.step(SETTLE_FRAMES);
   return PIPELINES.made - before;
@@ -60,10 +65,13 @@ export const percent = (share: number): string => `${(share * 100).toFixed(2)}%`
  */
 export async function plainShaderSameFrame(lab: Lab): Promise<Checked> {
   const level = qualityLevel();
+  const tuned = RUST.tune.plainShader;
   const drawing = lab.drawing;
   const paused = G.paused;
   lab.drawing = true;
   try {
+    // (Very low drawn by the whole shaders first: on by default, stepping there would make the plain ones)
+    RUST.tune.plainShader = 0;
     setQuality('verylow');
     await lab.step(LEVEL_FRAMES);
     G.paused = true;
@@ -109,7 +117,7 @@ export async function plainShaderSameFrame(lab: Lab): Promise<Checked> {
       + `switching back and on again; forced at High they change ${percent(canary)} of the frame)`);
   } finally {
     G.paused = paused;
-    RUST.tune.plainShader = 0;
+    RUST.tune.plainShader = tuned;
     setQuality(level);
     await lab.step(SETTLE_FRAMES);
     lab.drawing = drawing;

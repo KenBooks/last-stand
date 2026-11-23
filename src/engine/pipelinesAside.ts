@@ -134,6 +134,23 @@ function leftOut(): string {
   return [...counts].map(([what, count]) => (count > 1 ? `${count} ${what}` : what)).join(', ');
 }
 
+/** the stand-ins asked for while `pipelinesOf` runs its work, there alone */
+let caught: StandIn[] | null = null;
+
+/** `work` run, and a test of whether every scene pipeline it asked for is done compiling (made or refused): the
+ *  other making of the lit shaders compiled aside while the one drawn with now goes on drawing (`plainSet.ts`). */
+export function pipelinesOf(work: () => void): () => boolean {
+  const outer = caught;
+  const mine: StandIn[] = [];
+  caught = mine;
+  try {
+    work();
+  } finally {
+    caught = outer;
+  }
+  return () => mine.every((pipeline) => !compiling.has(pipeline));
+}
+
 /** A pipeline being compiled aside: what the engine holds in its place. */
 class StandIn {
   real: object | null = null;
@@ -144,6 +161,7 @@ class StandIn {
     this.asked = { kind: kindOf(descriptor), at: performance.now(), drawn: false };
     this.what = `${this.asked.kind} ${descriptor.vertex?.module?.label ?? ''}`.trim();
     compiling.add(this);
+    caught?.push(this);
     PIPELINES_ASKED.push(this.asked);
     PIPELINES.made++;
     PIPELINES.compiling++;

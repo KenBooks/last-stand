@@ -5,6 +5,7 @@ import { bossReady, everyBossWarm, readyEveryBoss, readyNextBoss } from './game/
 import { G } from './state';
 import { keepBootPaceHidden } from './core/hiddenBoot';
 import { sceneReady } from './engine/pipelinesAside';
+import { rustSwitching } from './engine';
 import { pipelinesAtOnceFromNow } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
 import { CAMERA, COOP } from './data/balance';
@@ -1363,7 +1364,8 @@ function frame(timestamp: number): void {
     // compiled at a draw; Auto starts again a settle after them)
     const compiled = programsCompiledInGame();
     const loading = loadingFrame({
-      warming: isWarming(), readying: isReadying(), hall: hallOpen(), compiled: compiled !== compiledBefore,
+      warming: isWarming(), readying: isReadying(), hall: hallOpen(),
+      compiled: compiled !== compiledBefore || rustSwitching(),
     });
     compiledBefore = compiled;
     if (loading) holdQuality();

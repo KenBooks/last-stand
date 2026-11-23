@@ -6,7 +6,7 @@ import { lightTheLamps } from './lamps';
 import { aimSight } from './sight';
 import { clearOverFrame, countOverPass, holdSceneTarget, makeWebGPURenderer, overFrameUncleared } from './webgpu';
 import { G } from '../state';
-import { bootRust, drawRust, rustFrame, rustSamples, RUST } from '../engine';
+import { bootRust, drawRust, rustFrame, rustPlain, rustSamples, RUST } from '../engine';
 import { perfClock } from './perfClock';
 import { sunShadowStill } from '../world/props';
 import { moonShadowKept } from '../world/moonShadow';
@@ -623,6 +623,7 @@ let casterLeast = 0;
  *  None of them change shader variants. */
 export function setRenderQuality(p: QualityPreset, budget = Infinity): void {
   liteLevel = p.plainLit;
+  rustPlain(liteLevel);
   casterLeast = p.minCasterRadius;
   pixelCap = p.pixels;
   pixelBudget = budget;
