@@ -93,11 +93,13 @@ export const TUNE = tunable('rust', {
   /** what a doorway hides is left out of the frame, as the game left it out of three's (`cullForEngine` in
    *  world/doorways.ts; 0: everything walked, to compare) */
   doorways: 1,
-  /** whether a thing's layers that blend (`oneLayer` in core/seeThrough.ts: the hall's roof) are drawn the nearest
-   *  alone at each pixel (Bulwark's `ONE_LAYER`), keeping the kind's share itself; off, each is shaded and blended
-   *  over the last, as it is. Off: under the hall's roof it shows the roof over the aisles he half sees, 17% of
-   *  that frame's pixels changed, and over the cottages it loses the gables' ghosts; the look is the owner's */
-  oneLayer: 0,
+  /** whether a thing's layers that blend (`oneLayer` in core/seeThrough.ts: the hall's roof alone) are drawn the
+   *  nearest alone at each pixel (Bulwark's `ONE_LAYER`), keeping what its three layers kept together; off, each
+   *  is shaded and blended over the last. On: since a roof stands whole where it hides what he can't see, the
+   *  hall's from the terrace with the camera over it was three blended layers over a screen, 11.3 ms of a phone's
+   *  24.8 ms frame (VCE0-7NZK) and 3.2 ms here at 2880 by 1800 at 2, 1.0 so; and each blended, its beams and deck
+   *  showed through its slabs as a tangle. The cottages' roofs aren't marked: one layer loses their gables */
+  oneLayer: 1,
   /** whether what's thinned to nothing whole (a roof seen from over it, `SeeKinds.gone`) is left out of the
    *  frame's draws, kept for its shadow; off, drawn and every pixel of it dropped, as it was */
   goneWhole: 1,
