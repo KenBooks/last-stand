@@ -98,7 +98,7 @@ const BEATS: readonly [number, string][] = [[5, 'reading'], [12.2, 'musing'], [2
   [45, 'pushing his spectacles up'], [52, 'leaning in']];
 
 /** His joints (every group under him, a finger's and an eye's too), by name and place among them. */
-function jointsOf(s: Scholar): THREE.Object3D[] {
+export function jointsOf(s: Scholar): THREE.Object3D[] {
   const out: THREE.Object3D[] = [];
   s.root.traverse((o) => { if (!(o as THREE.Mesh).isMesh) out.push(o); });
   return out;

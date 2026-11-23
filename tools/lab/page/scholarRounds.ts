@@ -18,7 +18,8 @@ import { objectNear } from '../../../src/game/village';
 import { closeTalk, talkOpen } from '../../../src/ui/screens/talk/talk';
 import type { Scholar } from '../../../src/entities/models/scholar';
 import type { Rounds } from '../../../src/world/scholarRounds';
-import { offHero } from './scholar';
+import { jointsOf, offHero } from './scholar';
+import { scholarPlant } from '../../../src/entities/models/scholar';
 
 /** the most frames a round may take (a minute and a half at 60 a second), how far a book may be from his nearer hand
  *  (m), how near what stands in the room his middle may come (m past its circle), how far off the hero his face must
@@ -31,6 +32,19 @@ const STILL_MOST = 0.02;
 /** how far his dusting cloth may be from his right palm (m), and how far the globe must turn once he's set it turning
  *  (rad) */
 const CLOTH_MOST = 0.08;
+/** the most any joint of him may turn in a frame over his rounds (deg: getting up, sitting down, walking, and where one
+ *  beat hands on to the next; from play, "like he teleports a bit into these different poses"), the most his head may
+ *  be turned off the way he walks (deg, while he walks: "looking sideways when walking forwards"), how fast he walks
+ *  before that's read (m/s), and how far a shoe may come out through his robe above its hem (m: "they go through his
+ *  clothing when walking") */
+const JOINT_MOST = 8;
+const HEAD_OFF_MOST = 15;
+const WALKING = 0.45;
+/** how far his body may face off the way he goes (deg) for his walk to be read as straight */
+const STRAIGHT = 8;
+/** how near the hero may be (m) for his head to be read on his way */
+const HERO_NEAR = 2.2;
+const SHOE_OUT_MOST = 0.004;
 const GLOBE_TURNS = 1;
 
 /** Where the middle of each of his palms is (world): 7 cm down the hand from its joint at the wrist, the way his fingers
@@ -110,19 +124,96 @@ function readHold(s: Scholar): { tilt: number; off: number; palms: number[]; tip
   return { tilt, off, palms, tips, tipsOff };
 }
 
-/** What a round did, frame by frame. */
-interface Followed { frames: number; beats: string[]; farthest: number; farAt: string; tightest: number; tightAt: string; gapsAtEnd: number; satAtEnd: number }
+/** What a round did, frame by frame: also the most a joint turned in a frame (deg, which and in what beat), his head
+ *  off his way as he walked (deg) and a shoe out through his robe above its hem (m). */
+interface Followed {
+  frames: number; beats: string[]; farthest: number; farAt: string; tightest: number; tightAt: string; gapsAtEnd: number; satAtEnd: number;
+  turned: number; turnedAt: string; headOff: number; shoeOut: number; shoeAt: string;
+}
+
+/** A part of him by name, or by its parents' where it has none. */
+function partName(o: THREE.Object3D): string {
+  const path: string[] = [];
+  for (let p: THREE.Object3D | null = o; p && path.length < 4; p = p.parent) path.push(p.name || `(${p.type})`);
+  return path.join(' < ');
+}
+
+/** His head's way (world, level) against `way`, the way he went this frame: how far apart (deg). */
+function headOffWay(s: Scholar, way: THREE.Vector3): number {
+  const head = s.root.getObjectByName('scholar head')!;
+  const h = new THREE.Vector3(0, 0, 1).transformDirection(head.matrixWorld).setY(0).normalize();
+  return THREE.MathUtils.radToDeg(h.angleTo(way.clone().setY(0).normalize()));
+}
+
+/** How far out through his robe a point of a shoe is, the furthest (m, 0 for none): a point above the robe's hem, out
+ *  past its surface at its height and side. The robe's points are its rows round him (`dressRobe`: 27 rows of 41, its
+ *  top first), as his legs have pushed them out this frame. */
+export function shoeThroughRobe(s: Scholar, where?: { at: THREE.Vector3; row: number }): number {
+  const robe = s.root.getObjectByName('scholar robe') as THREE.Mesh | undefined;
+  if (!robe?.visible) return 0;
+  const pos = robe.geometry.attributes.position, N = 41, K = Math.round(pos.count / N);
+  if (K * N !== pos.count) return 0;
+  const hem = pos.getY((K - 1) * N);
+  // (the robe's radius round its middle, at row k and column i)
+  const radius = (k: number, i: number) => Math.hypot(pos.getX(k * N + i), pos.getZ(k * N + i) - 0.01);
+  let worst = 0;
+  const p = new THREE.Vector3(), toRobe = new THREE.Matrix4();
+  robe.updateWorldMatrix(true, false);
+  const inverse = robe.matrixWorld.clone().invert();
+  s.root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || m.name !== 'scholar shoe' || !m.visible) return;
+    toRobe.multiplyMatrices(inverse, m.matrixWorld);
+    const sp = m.geometry.attributes.position;
+    for (let v = 0; v < sp.count; v++) {
+      p.fromBufferAttribute(sp, v).applyMatrix4(toRobe);
+      if (p.y <= hem + 0.004 || p.y >= pos.getY(0)) continue;
+      // (the rows above and below its height, and the columns either side of its way round)
+      let k = 0;
+      while (k < K - 2 && pos.getY((k + 1) * N) > p.y) k++;
+      const y0 = pos.getY(k * N), y1 = pos.getY((k + 1) * N), ty = THREE.MathUtils.clamp((y0 - p.y) / (y0 - y1 || 1), 0, 1);
+      const th = Math.atan2(p.x, p.z - 0.01), at = ((th + Math.PI) / (Math.PI * 2)) * (N - 1), i = Math.min(N - 2, Math.floor(at)), ti = at - i;
+      const r = THREE.MathUtils.lerp(THREE.MathUtils.lerp(radius(k, i), radius(k, i + 1), ti), THREE.MathUtils.lerp(radius(k + 1, i), radius(k + 1, i + 1), ti), ty);
+      const out = Math.hypot(p.x, p.z - 0.01) - r;
+      if (out > worst) { worst = out; if (where) { where.at.copy(p); where.row = k; } }
+    }
+  });
+  return worst;
+}
 
 /** A round followed until he's back reading at his table: what he did, how far a book he held strayed from his hands,
  *  how near he came to what stands in the room. `each` runs every frame (a hero stood close, a talk). */
 async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boolean, each?: (f: number) => Promise<void> | void): Promise<Followed> {
   const beats: string[] = [];
   let farthest = 0, farAt = '', tightest = Infinity, tightAt = '', frames = 0;
+  let turned = 0, turnedAt = '', headOff = 0, shoeOut = 0, shoeAt = '';
   const obstacles = G.arena.obstacles.filter((o) => o !== rounds.body);
+  const joints = jointsOf(s), before = joints.map((o) => o.quaternion.clone());
+  const at = s.root.getWorldPosition(new THREE.Vector3()), was = at.clone(), way = new THREE.Vector3();
   for (; frames < ROUND_FRAMES; frames++) {
     await each?.(frames);
+    // (read from here: what `each` stepped (a picture's frames) isn't this frame's turn)
+    joints.forEach((o, i) => before[i].copy(o.quaternion));
+    s.root.getWorldPosition(was);
     await lab.step(1);
     if (beats[beats.length - 1] !== rounds.doing) beats.push(rounds.doing);
+    // (each joint's turn in the frame: getting up, sitting down, and where one beat hands on to the next)
+    joints.forEach((o, i) => {
+      const deg = THREE.MathUtils.radToDeg(before[i].angleTo(o.quaternion));
+      if (deg > turned) { turned = deg; turnedAt = `${partName(o)}, ${rounds.doing} (sit ${s.act.sit.toFixed(2)})`; }
+    });
+    s.root.updateMatrixWorld(true);
+    s.root.getWorldPosition(at);
+    way.subVectors(at, was);
+    // (but where the hero is near: he may look at whoever stands in his way)
+    if (s.act.walk > WALKING && way.length() > 0.003 && G.player.pos.distanceTo(at) > HERO_NEAR) {
+      const body = new THREE.Vector3(0, 0, 1).transformDirection(s.root.matrixWorld).setY(0).normalize();
+      if (THREE.MathUtils.radToDeg(body.angleTo(way.clone().setY(0).normalize())) < STRAIGHT) headOff = Math.max(headOff, headOffWay(s, way));
+    }
+    if (s.act.sit < 0.5) {
+      const out = shoeThroughRobe(s);
+      if (out > shoeOut) { shoeOut = out; shoeAt = rounds.doing; }
+    }
     if (frames > 30 && rounds.doing === 'reading at his table' && s.act.sit >= 1) break;
     // (the book he carries, but while he reads it open: the closed one waits hidden meanwhile)
     const carried = rounds.carried;
@@ -142,7 +233,7 @@ async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boolean, eac
       }
     }
   }
-  return { frames, beats, farthest, farAt, tightest, tightAt, gapsAtEnd: rounds.gaps, satAtEnd: s.act.sit };
+  return { frames, beats, farthest, farAt, tightest, tightAt, gapsAtEnd: rounds.gaps, satAtEnd: s.act.sit, turned, turnedAt, headOff, shoeOut, shoeAt };
 }
 
 /** What's wrong with a round. */
@@ -153,11 +244,16 @@ function problemsOf(name: string, r: Followed): string[] {
   if (r.tightest < CLEAR_LEAST) problems.push(`rounds (${name}): his middle ${r.tightest.toFixed(2)} m past what stands in the room's circle, ${r.tightAt} (at least ${CLEAR_LEAST} clear)`);
   if (r.gapsAtEnd && name === 'browse') problems.push(`rounds (${name}): ${r.gapsAtEnd} books still off their shelves once he's back at his table`);
   if (r.satAtEnd < 1) problems.push(`rounds (${name}): not sat at his table at its end`);
+  if (r.turned > JOINT_MOST) problems.push(`rounds (${name}): a joint turned ${r.turned.toFixed(1)}° in a frame (${r.turnedAt}; at most ${JOINT_MOST})`);
+  if (r.headOff > HEAD_OFF_MOST) problems.push(`rounds (${name}): his head ${r.headOff.toFixed(0)}° off the way he walked (at most ${HEAD_OFF_MOST})`);
+  if (r.shoeOut > SHOE_OUT_MOST) problems.push(`rounds (${name}): a shoe ${(r.shoeOut * 100).toFixed(1)} cm out through his robe above its hem, ${r.shoeAt} (at most ${SHOE_OUT_MOST * 100})`);
   return problems;
 }
 
 const lineOf = (name: string, r: Followed) => `his rounds, ${name}: ${r.beats.join(' > ')}; ${r.frames} frames; a held book at most `
-  + `${r.farthest.toFixed(2)} m from his nearer hand; his middle at least ${r.tightest.toFixed(2)} m clear of what stands in the room`;
+  + `${r.farthest.toFixed(2)} m from his nearer hand; his middle at least ${r.tightest.toFixed(2)} m clear of what stands in the room; `
+  + `a joint at most ${r.turned.toFixed(1)}° in a frame (${r.turnedAt}); his head at most ${r.headOff.toFixed(0)}° off his way walking; `
+  + `a shoe at most ${(r.shoeOut * 100).toFixed(1)} cm out through his robe`;
 
 /**
  * His rounds checked: a browse, with a hero stood close as he looks for a book (he glances up and goes on), then talked
@@ -178,12 +274,16 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
   if (canary) {
     const drawingC = lab.drawing;
     lab.drawing = false;
+    scholarPlant.noSeatBlend = true;
     const planted = await follow(lab, s, rounds, true);
+    scholarPlant.noSeatBlend = false;
     lab.drawing = drawingC;
     rounds.hold = true;
-    const caught = planted.farthest > HAND_MOST;
+    const caught = planted.farthest > HAND_MOST, jumped = planted.turned > JOINT_MOST;
     lines.push(`canary: a book he carries held half a metre off his hands ${caught ? 'caught' : 'went unseen'} (${planted.farthest.toFixed(2)} m)`);
+    lines.push(`canary: his pose jumped from sat to standing, not followed, ${jumped ? 'caught' : 'went unseen'} (${planted.turned.toFixed(1)}° in a frame, ${planted.turnedAt})`);
     if (!caught) problems.push('rounds: the canary\'s book off his hands went unseen');
+    if (!jumped) problems.push('rounds: the canary\'s jump from sat to standing went unseen');
     return { lines, problems, moments };
   }
   // (followed undrawn, a frame at a time: drawn, its 7000 frames took over three minutes; each picture draws its own)

@@ -26,22 +26,31 @@ const LINE = SCHOLAR_LOOP / 20;
 /** what happens when in the loop (s): a page turned (twice: the book looks the same after two), a pause looking up
  *  from the page, the beard stroked, the spectacles pushed up, a lean in to look closer */
 const BEATS = {
-  turnA: [20, 24.5], muse: [10, 14.5], beard: [30, 37.5], specs: [43, 47], lean: [47.5, 56], turnB: [57, 61.5],
+  turnA: [20, 24.2], muse: [10, 14.5], beard: [30, 37.5], specs: [43, 47], lean: [47.5, 56], turnB: [57, 61.2],
 } as const satisfies Record<string, readonly [number, number]>;
-/** how near a hero comes (m) before he looks up, how long he looks (s), and how long before he looks up again; and how
- *  near is close (m): a hero coming that close is looked up at again, whenever he last was (from play: "If you come
- *  close to him, he will look up at you. If you stand close to him and dont interact he will continue with his task") */
-const GLANCE = { near: 3.6, hold: 2.6, rest: 13, close: 1.8 };
+/** how near a hero comes (m) before he glances, how long he looks (s), and how long before he glances again; how near
+ *  is close (m): a hero coming that close is looked up at, whenever he last was (from play: "If you come close to him,
+ *  he will look up at you. If you stand close to him and dont interact he will continue with his task"); how far a
+ *  glance from afar turns him to the hero (a share of a look up: small), and how fast he walks (m/s) before he glances
+ *  at nothing but where he's going (from play: "looking sideways when walking forwards") */
+const GLANCE = { near: 3.6, hold: 2.6, rest: 30, close: 1.8, small: 0.4, walking: 0.25 };
 /** his nod as he says a line while talked to: how long it takes (s), how far down his head goes at its deepest (rad),
  *  and the neck's share of it */
 const NOD = { time: 0.55, pitch: 0.14, neck: 0.35 };
 /** his walk: an old man's, slow and short-stepped: how far a step takes him (m), his walking speed (m/s, the walk
  *  cycle full there), and the cycle's stride, knee and bob */
-export const WALK = { step: 0.36, speed: 0.5, stride: 0.3, knee: 0.55, bob: 0.018, arm: 0.1, hips: 0.07 };
-/** how fast his pose follows what it's set to each frame (1/s): on his feet, and sat (his fingers on the page he
- *  turns kept close). Set straight to it, each new beat of his rounds began with a jump: from play, "lagged, not
- *  smooth continuation" */
-const FOLLOW = { up: 14, settle: 0.8 };
+/** his walk (m a step, m/s, rad of each thigh's swing: a step's length is about twice his leg's 0.9 m swung through
+ *  it, so his planted foot keeps its place; knee, bob, arm and hips' swing): from play, "walks a bit too slow" */
+export const WALK = { step: 0.44, speed: 0.68, stride: Math.asin(0.44 / 1.8), knee: 0.5, bob: 0.016, arm: 0.11, hips: 0.07 };
+/** how much of the rise his sat pose still has a share in (`act.sit` from 1 down to this) */
+const SEAT_BLEND = 0.62;
+/** a harness's planted fault: his pose jumped from sat to standing, and not followed (`lab scholar --canary`) */
+export const scholarPlant = { noSeatBlend: false };
+/** how fast his pose follows what it's set to each frame (1/s): on his feet, and sat (his fingers on the page he turns
+ *  kept close); how long after he sits it's let go of (s); and the fastest a joint of him turns on his feet (rad/s:
+ *  where one hold handed on to another, a hand turned 12 to 37 degrees in a frame). Set straight to it, each new beat
+ *  of his rounds began with a jump: from play, "lagged, not smooth continuation" */
+const FOLLOW = { up: 14, settle: 0.8, most: THREE.MathUtils.degToRad(450) };
 /** how far forward he bends on his feet (rad: his spine, his chest): bent 15 degrees, he slouched, from play */
 const STOOP = { spine: 0.05, chest: 0.03 };
 /** how low a hand's aim is (m over his feet) before he bends to it, and how much lower he's bent all the way */
@@ -103,14 +112,18 @@ export interface Scholar {
   readonly hands: Hand[];
   /** how far his right hand has the page he turns in hand now (0 to 1) */
   readonly holding: number;
+  /** whether his loop is between its beats (no page being turned, no hand at his face): he gets up only then (from
+   *  play: "he is in the middle of slipping a page at a desk, then suddenly he stands up") */
+  readonly calm: boolean;
 }
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
 /** how far over the print the page he turns lies at rest (m): it's the top page, so where it lies it hides the print */
 const PAGE_LIFT = 0.0012;
-/** how far into its turn he lets go of the page (0 to 1): it falls over by itself from there */
-const LET_GO = 0.36;
+/** how far into its turn he lets go of the page (0 to 1): it falls over by itself from there. Let go of later, his hand
+ *  turned 65 degrees with it, from play: "he flicks his wrist way too much for when turning a page" */
+const LET_GO = 0.24;
 /** 0 outside [a, b], 1 inside it, eased in and out over `rise` at each end */
 const span = (t: number, a: number, b: number, rise: number): number =>
   smooth(clamp((t - a) / rise, 0, 1)) * (1 - smooth(clamp((t - (b - rise)) / rise, 0, 1)));
@@ -392,7 +405,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   function update(dt: number, heroAt: THREE.Vector3 | null, talking: boolean, said = 0): void {
     if (act.sit < 1) {
       standing(dt, heroAt, talking, said);
-      follow(dt, FOLLOW.up);
+      follow(dt, scholarPlant.noSeatBlend ? 0 : FOLLOW.up, 0, scholarPlant.noSeatBlend ? Infinity : FOLLOW.most);
       if (act.sit < 0.5) robeFollow();
       satFor = 0;
       return;
@@ -412,18 +425,24 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   // --- his pose followed: each joint (his fingers' too) turned a share of the way to where this frame set it ---
   const followed: THREE.Object3D[] = [];
   for (const o of Object.values(j)) if (o instanceof THREE.Object3D && o !== j.root && !followed.includes(o)) followed.push(o);
-  for (const hand of [j.handL, j.handR]) hand.traverse((o) => { if ((o as THREE.Bone).isBone && !followed.includes(o)) followed.push(o); });
-  const was = new Map<THREE.Object3D, THREE.Quaternion>(), bodyWas = new THREE.Vector3();
+  for (const hand of [j.handL, j.handR]) hand.traverse((o) => { if (!(o as THREE.Mesh).isMesh && !followed.includes(o)) followed.push(o); });
+  for (const e of eyes) if (!followed.includes(e)) followed.push(e);
+  const was = new Map<THREE.Object3D, THREE.Quaternion>(), bodyWas = new THREE.Vector3(), followTo = new THREE.Quaternion();
   let following = false;
   /** the pose this frame set, reached a share of the way from the last frame's (`rate` 1/s), and `then` of the rest
    *  (1: at once; let go of over a while, as stopped at once his hand caught up 24 degrees in a frame): no jump where
    *  one beat of his rounds hands on to the next */
-  function follow(dt: number, rate: number, then = 0): void {
-    const k = following && dt > 0 ? 1 - Math.exp(-rate * dt) * (1 - then) : 1;
+  function follow(dt: number, rate: number, then = 0, most = Infinity): void {
+    // (`rate` 0: at once, as a harness's planted jump has it)
+    const k = following && dt > 0 && rate > 0 ? 1 - Math.exp(-rate * dt) * (1 - then) : 1;
+    const step = following && dt > 0 && rate > 0 ? most * dt : Infinity;
     for (const o of followed) {
       let q = was.get(o);
       if (!q) was.set(o, q = o.quaternion.clone());
-      o.quaternion.copy(q.slerp(o.quaternion, k));
+      // (a share of the way there, and no faster than a joint of a man turns)
+      followTo.copy(q).slerp(o.quaternion, k);
+      if (q.angleTo(followTo) > step) q.rotateTowards(followTo, step); else q.copy(followTo);
+      o.quaternion.copy(q);
     }
     j.body.position.copy(bodyWas.lerp(j.body.position, k));
     following = dt > 0;
@@ -445,11 +464,16 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     // to him meanwhile wasn't looked at)
     const cameClose = heroClose && !wasClose && clock > gazeUntil;
     wasClose = heroClose;
+    const walking = act.walk > GLANCE.walking;
     if (talking) gazeWant = 1;
-    else if ((heroNear && clock > nextGlance) || cameClose) { gazeWant = 1; gazeUntil = clock + GLANCE.hold; nextGlance = clock + GLANCE.hold + GLANCE.rest; }
+    else if (walking) { gazeWant = 0; gazeUntil = clock; }
+    else if (cameClose) { gazeWant = 1; gazeUntil = clock + GLANCE.hold; nextGlance = clock + GLANCE.hold + GLANCE.rest; }
+    else if (heroNear && clock > nextGlance) { gazeWant = GLANCE.small; gazeUntil = clock + GLANCE.hold; nextGlance = clock + GLANCE.hold + GLANCE.rest; }
     else if (clock > gazeUntil) gazeWant = 0;
     if (!heroAt) gazeWant = 0;
-    gaze = damp(gaze, gazeWant, gazeWant > gaze ? 3.2 : 2.2, dt);
+    // (and back to his way at once as he sets off: looked back slowly, he walked on still turned to the hero who'd stood
+    // in his way)
+    gaze = damp(gaze, gazeWant, gazeWant > gaze ? 3.2 : walking ? 14 : 2.2, dt);
   };
 
   let walkPhase = 0, grip = 0;
@@ -524,8 +548,11 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     // (on his feet he looks over his shoulder, his back and chest turning with his neck: a hero come up behind him as
     // he faced a case was 114 degrees round, past a seated man's head's turn)
     const yaw = clamp(Math.atan2(tmp.x, tmp.z), -1.75, 1.75), pitch = clamp(Math.atan2(tmp.y, Math.hypot(tmp.x, tmp.z)), -0.9, 0.6);
-    lookYaw.v = damp(lookYaw.v, yaw, 5, dt);
-    lookPitch.v = damp(lookPitch.v, pitch, 5, dt);
+    // (his head quicker to where he looks as he goes: as slow as a man's turn to a book, it trailed his body by 20
+    // degrees as he set off from a turn, from play: "looking sideways when walking forwards")
+    const headRate = act.walk > 0.1 ? 14 : 5;
+    lookYaw.v = damp(lookYaw.v, yaw, headRate, dt);
+    lookPitch.v = damp(lookPitch.v, pitch, headRate, dt);
     const bodyPitch = j.spine.rotation.x + j.chest.rotation.x;
     j.spine.rotation.y += lookYaw.v * 0.1;
     j.chest.rotation.y += lookYaw.v * 0.2;
@@ -550,7 +577,12 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
         handAt.lerp(j.root.worldToLocal(tmp).add(V(sd * 0.03, 0.07, -0.04)), push);
       }
       const k = aim ? smooth(clamp(reach, 0, 1)) : 0;
-      if (aim) handAt.lerp(j.root.worldToLocal(tmp.copy(aim.at)), k);
+      if (aim) {
+        handAt.lerp(j.root.worldToLocal(tmp.copy(aim.at)), k);
+        // (out to his side and ahead in an arc on its way: straight between his side and his chest it passed by his
+        // shoulder, where his arm's bend turned over, his elbow 13 degrees in a frame)
+        handAt.add(tmp.set(sd * 0.1, 0, 0.08).multiplyScalar(Math.sin(Math.PI * k)));
+      }
       // (his elbows down at his sides, a little out: out at 0.7 they stood out as wings)
       pole.set(sd * 0.25, -1, -0.35);
       reachArm(shoulder, elbow, P.upperL, P.foreL, chestLocal(handAt.clone()), pole, 1, 0.08);
@@ -562,7 +594,11 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
         // it, a sheared turn that pulled his fingers out into strands)
         const inv = new THREE.Quaternion().copy(j.root.getWorldQuaternion(qb)).invert();
         handTurn(aimFingers.copy(aim.fingers).applyQuaternion(inv), aimPalm.copy(aim.palm).applyQuaternion(inv), qb);
-        qa.slerp(qb, k);
+        // (by way of a hand held out, palm down and fingers ahead: from hanging at his side straight to a grip on a shelf
+        // is near a half turn, and the shortest way round it changed from frame to frame, 30 degrees at once)
+        handTurn(V(0, -0.35, 1), V(-sd * 0.6, -1, 0), qp);
+        if (k < 0.5) qa.slerp(qp, k * 2);
+        else qa.copy(qp).slerp(qb, k * 2 - 1);
       }
       setHand(hand, qa.clone());
     }
@@ -570,7 +606,28 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     poseHand(handL, lerp(0.25, 0.75, grip * smooth(clamp(act.reachL, 0, 1))), 0.15, 0, clock, 0);
     poseHand(handR, lerp(0.25, 0.75, grip * smooth(clamp(act.reachR, 0, 1))), 0.15, 0, clock, 0);
     page.visible = false;
+    // (as he begins to get up, and as he settles, his sat pose the one this rises from and sinks to: his arms on the
+    // table, his loop's pose, given way over the first third of the rise. From play, "like he teleports a bit into
+    // these different poses": his arms went from the table to his knees in a frame)
+    const fromSeat = scholarPlant.noSeatBlend ? 0 : smooth(clamp((sit - SEAT_BLEND) / (1 - SEAT_BLEND), 0, 1));
+    if (fromSeat > 0) {
+      for (const o of followed) (standPose.get(o) ?? standPose.set(o, new THREE.Quaternion()).get(o)!).copy(o.quaternion);
+      const stoodBody = j.body.position.clone();
+      seatedPose(heroAt, talking, said);
+      for (const o of followed) o.quaternion.slerp(standPose.get(o)!, 1 - fromSeat);
+      j.body.position.lerp(stoodBody, 1 - fromSeat);
+      page.visible = false;
+    }
   }
+  /** each joint's turn as `standing` posed it, while it's blended with his sat pose */
+  const standPose = new Map<THREE.Object3D, THREE.Quaternion>();
+  /** his pose sat at his table at his loop's point now (its clock not moved on) */
+  const seatedPose = (heroAt: THREE.Vector3 | null, talking: boolean, said: number): void => {
+    legs();
+    j.body.position.set(0, HIPS - P.hipY, 0);
+    for (const o of [j.hips, j.spine, j.chest, j.body]) o.rotation.set(0, 0, 0);
+    seated(0, heroAt, talking, said);
+  };
 
   function seated(dt: number, heroAt: THREE.Vector3 | null, talking: boolean, said = 0): void {
     clock += dt;
@@ -738,7 +795,11 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     // edge was still 7 mm over the left page and dropped there at once)
     page.visible = turning > 0.5 && pageK > 0 && pageK < 1;
     if (page.visible) layPage(pageK);
+    calm = turning === 0 && beard === 0 && specs === 0 && muse < 0.02 && lean < 0.02 && holding === 0;
   }
+  /** whether his loop is between its beats now (a page not being turned, his hand not at his face): he gets up, or
+   *  does anything else, only then */
+  let calm = true;
 
   // (the sleeves' bells shaped as his forearms lie at rest, on the table: down from each, in its own frame)
   loop = 5;
@@ -783,6 +844,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     page,
     hands: [handL, handR],
     get holding() { return holding; },
+    get calm() { return calm; },
     update,
     get loopAt() { return loop; },
     set loopAt(v: number) { loop = ((v % SCHOLAR_LOOP) + SCHOLAR_LOOP) % SCHOLAR_LOOP; },
@@ -875,6 +937,7 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
       pts.push(V(x, 0.285 - 0.035 * Math.max(0, Math.cos(a)) ** 2 + 0.05 * Math.max(0, -Math.cos(a)) ** 1.5, z - 0.012));
     }
     add(cord(pts, 0.034, true, 60), M.habit, j.chest, 'cowl');
+    add(cord(pts.map((p) => V(p.x * 1.32, p.y + 0.012, (p.z + 0.012) * 1.32 - 0.012)), 0.004, true, 80), M.trim, j.chest, 'cowl trim', false);
     // (the hood's bag: a deep fold lying down his back, its point near his shoulder blades)
     const rows: THREE.Vector3[][] = [];
     for (let k = 0; k <= 12; k++) {
@@ -968,8 +1031,8 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
     const pouch = new THREE.LatheGeometry([[0, -0.07], [0.04, -0.065], [0.05, -0.04], [0.048, -0.005], [0.036, 0.01], [0.03, 0.012], [0, 0.012]]
       .map(([r, y]) => new THREE.Vector2(r, y)), 14).scale(1, 1, 0.55);
     const bag = add(pouch, M.shoe, j.spine, 'pouch');
-    bag.position.set(-0.165, 0.09, 0.1);
-    bag.rotation.set(0.15, 0.55, 0);
+    bag.position.set(-0.15, 0.09, -0.07);
+    bag.rotation.set(0.15, 2.0, 0);
     const flap = add(new THREE.BoxGeometry(0.075, 0.035, 0.008), M.shoe, bag, 'pouch flap');
     flap.position.set(0, -0.005, 0.03);
     flap.rotation.x = 0.15;
@@ -978,11 +1041,50 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
     bag.add(stud);
   }
   yield;
+  // --- a girdle book at his right hip, a small book in leather hung from his belt by its own long cover's tail, as a
+  // keeper of books carries one; and a string of wooden reading beads at his left with a brass medallion of the
+  // library's sign. From play: "we can improve more on his outfit" ---
+  {
+    const book = new THREE.Group();
+    book.name = 'scholar girdle book';
+    book.position.set(-0.19, 0.0, 0.03);
+    book.rotation.set(0.05, -1.35, 0.06);
+    j.spine.add(book);
+    const W = 0.075, H = 0.1, T = 0.026;
+    for (const sd of [-1, 1]) {
+      const board = add(new THREE.BoxGeometry(W, H, 0.005), M.shoe, book, 'girdle book board');
+      board.position.set(0, 0, sd * (T / 2 - 0.0025));
+    }
+    const pages = add(new THREE.BoxGeometry(W - 0.008, H - 0.008, T - 0.01), M.linen, book, 'girdle book pages');
+    pages.position.set(0.004, 0, 0);
+    const back = add(new THREE.CylinderGeometry(T / 2, T / 2, H, 10, 1, false, Math.PI, Math.PI), M.shoe, book, 'girdle book spine');
+    back.position.set(-W / 2, 0, 0);
+    // (its cover's tail, gathered into a knot and tucked under his belt)
+    add(cord([V(-0.03, H / 2, 0), V(-0.035, H / 2 + 0.04, 0.004), V(-0.025, H / 2 + 0.085, 0.01), V(-0.015, H / 2 + 0.11, 0.012)], 0.007, false, 16), M.shoe, book, 'girdle book tail');
+    const knot = add(new THREE.SphereGeometry(0.012, 10, 8).scale(1, 0.8, 0.9), M.shoe, book, 'girdle book knot');
+    knot.position.set(-0.015, H / 2 + 0.11, 0.012);
+    for (const y of [-0.03, 0.03]) {
+      const clasp = add(new THREE.BoxGeometry(0.012, 0.008, T + 0.004), M.brass, book, 'girdle book clasp', false);
+      clasp.position.set(W / 2 - 0.004, y, 0);
+    }
+    // (the beads, one strand a mesh: a loop down from his belt, a brass medallion at its foot)
+    const beads: THREE.BufferGeometry[] = [];
+    const loop = new THREE.CatmullRomCurve3([V(0.12, 0.1, 0.12), V(0.15, 0.02, 0.135), V(0.165, -0.06, 0.13), V(0.175, -0.1, 0.11), V(0.18, -0.06, 0.085), V(0.17, 0.02, 0.08), V(0.155, 0.1, 0.095)]);
+    for (let b = 0; b <= 26; b++) {
+      const p = loop.getPointAt(b / 26);
+      beads.push(new THREE.SphereGeometry(b % 9 === 0 ? 0.0075 : 0.0055, 8, 6).translate(p.x, p.y, p.z));
+    }
+    add(mergeAll(beads), M.shoe, j.spine, 'beads');
+    const medal = add(new THREE.CylinderGeometry(0.014, 0.014, 0.003, 18).rotateX(Math.PI / 2), M.brass, j.spine, 'beads medallion', false);
+    medal.position.set(0.178, -0.125, 0.11);
+    medal.rotation.y = 0.5;
+  }
+  yield;
   // --- the sleeves: close over the upper arm, a wide bell from the elbow, its lining dark; shoes under the hem ---
   for (const [shoulder, elbow, ankle, s] of [[j.shoulderL, j.elbowL, j.ankleL, 1], [j.shoulderR, j.elbowR, j.ankleR, -1]] as const) {
     void elbow; void shoulder;
     const foot = add(shoeGeometry(), M.shoe, ankle, 'shoe');
-    foot.position.set(0, -0.066, 0.055);
+    foot.position.set(0, -0.069, 0.055);
   }
 }
 
@@ -1016,35 +1118,56 @@ function dressBells(j: Joints, add: Add, M: BodyMats, upper: { L: THREE.Vector3;
   }
 }
 
-/** A soft leather shoe (its ankle's frame, toe +z): its sole flat, its toe narrowing and turned up a little. Round
- *  as a ball, it showed under his hem as a pebble, from play. */
+/** A soft leather shoe (its own frame, toe +z, its sole at -0.011): sections from heel to toe, each round over the top
+ *  and flat underneath where it stands on its sole, the sole's edge (its welt) a little wider than the upper; its heel
+ *  rounded and high at the back, the instep high, falling to a low rounded toe box. A ball flattened underneath, it
+ *  showed under his hem as a black pebble, from play: "his little pebble black toes are like spheres". */
 function shoeGeometry(): THREE.BufferGeometry {
-  const g = new THREE.SphereGeometry(1, 18, 12), p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    let x = p.getX(i), y = p.getY(i);
-    const z = p.getZ(i);
-    if (y < 0) y *= 0.3;
-    x *= 1 - 0.3 * Math.max(0, z);
-    y += 0.18 * Math.max(0, z) ** 3;
-    p.setXYZ(i, x * 0.042, y * 0.036, z * 0.115);
+  const K = 22, R = 18, rows: THREE.Vector3[][] = [], SOLE = -0.011, WELT = -0.005;
+  for (let k = 0; k <= K; k++) {
+    const t = k / K, z = lerp(-0.105, 0.12, t);
+    // (its width: the heel's, widening to the ball of the foot, rounded off at the toe and at the heel)
+    const toe = t > 0.78 ? Math.sqrt(Math.max(0, 1 - ((t - 0.78) / 0.22) ** 2)) : 1;
+    const heel = Math.sqrt(Math.max(0, 1 - Math.max(0, (0.1 - t) / 0.1) ** 2));
+    const w = 0.044 * (0.74 + 0.26 * Math.sin(Math.PI * 0.5 * Math.min(1, t / 0.66))) * toe * heel;
+    // (its top: high at the heel's back and the instep, down to the toe box)
+    const h = (t < 0.34 ? lerp(0.05, 0.062, smooth(t / 0.34)) : lerp(0.062, 0.026, smooth(clamp((t - 0.34) / 0.5, 0, 1)))) * toe * heel;
+    const row: THREE.Vector3[] = [];
+    for (let i = 0; i <= R; i++) {
+      const a = (i / R) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+      // (round over its top; under it flat, the welt's edge out past the upper)
+      const y = s >= 0 ? WELT + (h - WELT) * s ** 0.85 : WELT + (WELT - SOLE) * s;
+      row.push(V(c * w * (s < 0.15 ? 1.08 : 1), (w > 1e-4 ? y : SOLE * 0.5 + h * 0.3), z));
+    }
+    rows.push(row);
   }
-  g.computeVertexNormals();
-  return g;
+  return rowsSurface(rows, 4);
 }
 
 /** His robe, its hem's cord and his tabard pushed out by his legs as he walks (each mesh's points out from the robe's
  *  middle as far as a leg comes, near it): hung stiff from his hips, his knees and feet came through it, from play.
  *  Returns what does it, a frame. */
 function followLegs(j: Joints, meshes: THREE.Mesh[]): () => void {
+  // (each mesh's points as they hang: each's way out from the robe's middle, its distance and its height, made once; and
+  // whether any was pushed out last frame. Its light's normals made again but for the hem's thin cord)
   const sets = meshes.map((m) => {
     m.frustumCulled = false;
-    const p = m.geometry.attributes.position as THREE.BufferAttribute;
-    return { m, p, base: Float32Array.from(p.array as ArrayLike<number>) };
+    const p = m.geometry.attributes.position as THREE.BufferAttribute, base = Float32Array.from(p.array as ArrayLike<number>);
+    const count = base.length / 3, ux = new Float32Array(count), uz = new Float32Array(count), r = new Float32Array(count);
+    for (let v = 0; v < count; v++) {
+      const x = base[v * 3], z = base[v * 3 + 2] - 0.01, d = Math.hypot(x, z);
+      r[v] = d; ux[v] = d < 1e-4 ? 0 : x / d; uz[v] = d < 1e-4 ? 0 : z / d;
+    }
+    return { m, p, base, ux, uz, r, pushed: true, lit: !m.name.endsWith('hem') };
   });
-  const CLEAR = 0.07, WIDE = 0.13, TALL = 0.14;
+  const CLEAR = 0.065, WIDE = 0.2, FULL = 0.09, TALL = 0.22;
   const legs = [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const;
   const toe = new THREE.Vector3(0, -0.06, 0.17), a = new THREE.Vector3(), b = new THREE.Vector3();
-  const pts: THREE.Vector3[] = Array.from({ length: 24 }, () => new THREE.Vector3());
+  /** the shoe's outline (its ankle's frame): its toe, the balls of its sides, its heel, its instep and its top round
+   *  the ankle */
+  const SHOE = [V(0, -0.055, 0.172), V(0.046, -0.06, 0.09), V(-0.046, -0.06, 0.09), V(0, -0.06, -0.035), V(0, -0.03, 0.08),
+    V(0, -0.012, 0.05), V(0, -0.02, -0.04), V(0.04, -0.03, 0.02), V(-0.04, -0.03, 0.02)];
+  const pts: THREE.Vector3[] = Array.from({ length: 24 + SHOE.length * 2 }, () => new THREE.Vector3());
   return () => {
     j.root.updateMatrixWorld(true);
     // (each leg as points down it, in the hips' frame: hip to knee, knee to ankle, ankle to toe)
@@ -1056,14 +1179,16 @@ function followLegs(j: Joints, meshes: THREE.Mesh[]): () => void {
         a.copy(chain[c]); b.copy(chain[c + 1]);
         pts[n++].copy(a).lerp(b, (t + (c === 2 ? 1 : 0.5)) / 4);
       }
+      for (const p of SHOE) pts[n++].copy(j.hips.worldToLocal(ankle.localToWorld(p.clone())));
     }
-    for (const { m, p, base } of sets) {
+    for (const set of sets) {
+      const { m, p, base } = set;
       if (!m.visible) continue;
       const arr = p.array as Float32Array;
-      for (let i = 0; i < arr.length; i += 3) {
-        const x = base[i], y = base[i + 1], z = base[i + 2] - 0.01, r = Math.hypot(x, z);
+      let pushed = false;
+      for (let i = 0, v = 0; i < arr.length; i += 3, v++) {
+        const y = base[i + 1], r = set.r[v], ux = set.ux[v], uz = set.uz[v];
         if (r < 1e-4) { arr[i] = base[i]; arr[i + 1] = y; arr[i + 2] = base[i + 2]; continue; }
-        const ux = x / r, uz = z / r;
         let want = r;
         for (let q = 0; q < n; q++) {
           const pt = pts[q], dy = Math.abs(pt.y - y);
@@ -1072,13 +1197,19 @@ function followLegs(j: Joints, meshes: THREE.Mesh[]): () => void {
           if (d <= 0) continue;
           const e = Math.hypot(pt.x - d * ux, pt.z - 0.01 - d * uz);
           if (e > WIDE) continue;
-          const w = (1 - smooth(dy / TALL)) * (1 - smooth(e / WIDE)), need = d + CLEAR;
+          // (all the way out within a shoe's height of it, then less: pushed out a share of the way near it, a lifted
+          // toe came out through the cloth, 6.6 cm, from play: "they go through his clothing when walking")
+          const w = (1 - smooth(clamp((dy - FULL) / (TALL - FULL), 0, 1))) * (1 - smooth(e / WIDE)), need = d + CLEAR;
           if (need > r) want = Math.max(want, r + (need - r) * w);
         }
+        if (want > r) pushed = true;
         arr[i] = ux * want; arr[i + 1] = y; arr[i + 2] = uz * want + 0.01;
       }
+      // (hanging as it hangs, this frame and the last: nothing to send or light again)
+      if (!pushed && !set.pushed) continue;
+      set.pushed = pushed;
       p.needsUpdate = true;
-      m.geometry.computeVertexNormals();
+      if (set.lit) m.geometry.computeVertexNormals();
     }
   };
 }

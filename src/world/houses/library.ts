@@ -85,6 +85,27 @@ function bookGeometry(): THREE.BufferGeometry {
   return g;
 }
 
+/** A closed book for his hands, a unit box as a shelf's book is (its thickness x, its height y, its depth z, its spine
+ *  +z): two leather boards thicker than a page's edge, a rounded spine with four raised bands across it, round a block
+ *  of pages set in from the boards at its head, its foot and its fore-edge (group 1, the paper's); the spine takes the
+ *  whole spine canvas across it, the boards and bands its plain strip, as a shelf's book's other faces do. A box with
+ *  its spine painted on, it was "too basic", from play. */
+function heldBookGeometry(): THREE.BufferGeometry {
+  const BOARD = 0.13, SPINE = 0.08, IN = 0.035;
+  const plain = (g: THREE.BufferGeometry) => {
+    const uv = g.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.02 + uv.getX(i) * 0.02, 0.4 + uv.getY(i) * 0.2);
+    return g.toNonIndexed();
+  };
+  const spine = new THREE.CylinderGeometry(0.5, 0.5, 1, 18, 1, true, -Math.PI / 2, Math.PI).scale(1, 1, SPINE * 2).translate(0, 0, 0.5 - SPINE).toNonIndexed();
+  const bands = [-0.33, -0.12, 0.12, 0.33].map((y) => plain(new THREE.CylinderGeometry(0.515, 0.515, 0.035, 18, 1, true, -Math.PI / 2, Math.PI)
+    .scale(1, 1, SPINE * 2.25).translate(0, y, 0.5 - SPINE)));
+  const boards = [-1, 1].map((sd) => plain(new THREE.BoxGeometry(BOARD, 1, 1 - SPINE).translate(sd * (0.5 - BOARD / 2), 0, -SPINE / 2)));
+  const leather = mergeGeometries([spine, ...bands, ...boards])!;
+  const pages = new THREE.BoxGeometry(1 - BOARD * 2, 1 - IN * 2, 1 - SPINE - IN).translate(0, 0, (IN - SPINE) / 2).toNonIndexed();
+  return mergeGeometries([leather, pages], true)!;
+}
+
 /** A wall's books drawn, into `g`: an instanced mesh for each spine, every book its own matrix and colour, each
  *  spine's material shared by every wall's (`spineMaterial`). Returns each mesh with its books. */
 function shelve(g: THREE.Object3D, shelving: Shelving, spineMaterial: (design: number) => THREE.Material): ShelfMesh[] {
@@ -661,7 +682,7 @@ export function build(group: THREE.Group): Room {
   // (a book for his hands, its look a shelf's (its map and colour set to the book he takes), and an open one to read
   // standing: both shown in the room's warm-up, so their programs are made with the room's)
   const heldMat = (shelfMeshes[0].mesh.material as THREE.MeshStandardMaterial).clone();
-  const held = new THREE.Mesh(bookGeometry(), heldMat);
+  const held = new THREE.Mesh(heldBookGeometry(), [heldMat, M.paper]);
   held.name = 'library held book';
   held.castShadow = held.receiveShadow = true;
   held.position.set(seat.desk.position.x, 0.9, seat.desk.position.z);
@@ -671,7 +692,14 @@ export function build(group: THREE.Group): Room {
   const openHeld = new THREE.Group();
   openHeld.name = 'library open held book';
   openHeld.position.copy(held.position);
-  openBook(openHeld, M, 0, -0.02, 0, 0, 0.26, 4);
+  const opened = openBook(openHeld, M, 0, -0.02, 0, 0, 0.26, 4);
+  // (its ribbon: down the gutter from its head, over its foot and hanging past it)
+  const ribbonMat = M.leather.clone();
+  ribbonMat.color.set(0x8a1a14);
+  const ribbon = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.0012, opened.shape.depth + 0.05), ribbonMat);
+  ribbon.position.set(0.006, -0.02 + COVER + opened.shape.gutter + 0.002, -0.025);
+  ribbon.name = 'library open held book ribbon';
+  openHeld.add(ribbon);
   openHeld.visible = false;
   g.add(openHeld);
   // (both moved by his rounds, and shown and hidden: out of the room's merge)

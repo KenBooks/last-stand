@@ -43,7 +43,7 @@ import { noteBank } from './ui/choiceLesson';
 import { initHud, showHud, layOutHudAhead, slotsAhead, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, updateVillageMinimap, readyMinimap, renderSpoils } from './ui/hud';
 import { cancelProfile, profiling } from './ui/profileTab';
 import { openGuide, closeGuide, guideOpen, type GuideSection } from './ui/guide/index';
-import { stepPortraits } from './ui/guide/portraits';
+import { portrait, stepPortraits } from './ui/guide/portraits';
 import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, menuStowed, lobbyPractice, selectedWave, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { initPvp, renderPvp } from './ui/pvpMenu';
@@ -301,7 +301,9 @@ async function boot() {
   initVillage({ use: useObject, leave: leaveObject, active: villageActive, shows: objectShows });
   // (in or out of a house: what was open put away, the partners told and shown only where they stand)
   // (a talk with the village's folk: he looks up from his book while it's open, and the village forgets it as it ends)
-  onRoomChange(() => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); showMerchant(false); setVillageMap(false); closedFrom(); syncAway(); });
+  // (into the library: Brother Hollis's portrait for his talk's card made as the hero comes in, behind the lobby a piece at a
+  // time, so his face is there when he's talked to; the guide's are made only once it's opened)
+  onRoomChange((room) => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); showMerchant(false); setVillageMap(false); closedFrom(); syncAway(); if (room === 'library') void portrait('scholar'); });
   initVillageCard((o) => closedFrom(o), (id) => { G.arena.setBiome(id); sendLobbyChoice(); });
   // (a player alone at the rack is walked to the campfire, where a party is gathered)
   initPvp(() => { const fire = villageObject('campfire'); if (fire) goUse(fire); }, biomeFirst(whenWarm(['fight'], startDuel, READYING.fight), startDuel, () => setupNow().ground));

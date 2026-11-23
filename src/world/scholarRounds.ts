@@ -70,15 +70,24 @@ const HOLD = { ahead: 0.3, high: 1.24, tilt: 0.55 };
 const READ_TILT = 0.96;
 /** how long he reads at his table between rounds (s), and how long each beat of a round takes (s) */
 const READ = { least: 10, most: 12, first: 10 };
-const BEAT = { rise: 2.2, reach: 0.8, tip: 0.5, grasp: 0.45, pull: 0.6, lift: 0.9, inspect: 2.6, scan: [2.5, 4.5], read: [6, 12], open: 0.8, put: 0.9, push: 0.6, cradle: 0.7 };
+const BEAT = { release: 1.4, rise: 2.8, reach: 1.0, tip: 0.5, grasp: 0.8, pull: 0.6, lift: 1.2, inspect: 2.6, scan: [2.5, 4.5], read: [6, 12], open: 0.8, put: 1.3, push: 0.6, cradle: 1.0 };
+/** how long a hand's aim takes to go over to a new one that jumped from the last (s): from holding a book before him to
+ *  holding it to his chest, the hand turned 21 degrees in a frame */
+const AIM_BLEND = 0.35;
+/** how far a hand's aim may move in a frame, and turn (m, rad), before it's taken as a jump to blend over */
+const AIM_JUMP = { at: 0.03, turn: 0.25 };
 /** how he turns: how fast at most (rad/s), and the least a turn takes (s): each turn eased in and out */
 const TURN = { rate: 1.9, least: 0.35 };
 /** his dusting (a case's spines wiped a row at a time: each row's height (m over the floor, within his reach: a row
  *  over his head left his cloth in the air), from where to where along it (m, his right +: his right hand wipes it, and
  *  across to his left it fell short), the strokes a row and how long each takes (s), and how much closer to the case
  *  than for a book he stands (m)), and the globe set turning (rad/s, and how fast it slows: 1/s) */
-const DUST = { rows: [1.45, 1.18, 0.92], along: [-0.1, 0.34], strokes: 2, stroke: 1.4, closer: 0.17 };
+const DUST = { rows: [1.45, 1.18, 0.92], along: [-0.1, 0.34], strokes: 2, stroke: 1.7, closer: 0.17 };
 const SPIN = { speed: 2.4, slows: 0.35 };
+/** the most he waits at his table for his loop to come to rest before he gets up (s: a beat lasts 8 at most) */
+const CALM_MOST = 12;
+/** where he looks as he walks: ahead along his way (m), and down to (m over the floor) */
+const LOOK_AHEAD = { far: 2.6, high: 1.25 };
 /** where his dusting cloth is in his right hand (its frame: his fingers down -y, his palm facing -z) */
 const CLOTH_IN_HAND = new THREE.Vector3(0, -0.07, -0.022);
 /** how near the hero may stand to the way ahead of him (m) before he waits for him, how long he waits before he goes
@@ -95,6 +104,18 @@ const STACK = { most: 8, fewest: 1, stand: new THREE.Vector3(1.02, 0, 0.72) };
 /** A book on a shelf he can take: its spine's mesh and instance, where it stands, how it's turned, its size, the way
  *  its spine faces (out of the case) and where he stands for it. */
 interface Slot { shelf: number; index: number; at: THREE.Vector3; turn: THREE.Quaternion; size: THREE.Vector3; out: THREE.Vector3; stand: THREE.Vector2 }
+
+/** a hand's aim as a turn: its fingers +y, its palm +z (made square to the fingers), and back */
+function aimTurn(fingers: THREE.Vector3, palm: THREE.Vector3): THREE.Quaternion {
+  const y = fingers.clone().normalize(), z = palm.clone().addScaledVector(y, -palm.dot(y)).normalize(), x = new THREE.Vector3().crossVectors(y, z);
+  return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+}
+/** `t` of the way from aim `a` to aim `b`: its place mixed, its turn turned round the shortest way (mixed as two
+ *  directions, a palm turned far round swung through their middle, and the hand spun 33 degrees in a frame) */
+export function mixAim(a: HandAim, b: HandAim, t: number): HandAim {
+  const q = aimTurn(a.fingers, a.palm).slerp(aimTurn(b.fingers, b.palm), t);
+  return { at: a.at.clone().lerp(b.at, t), fingers: new THREE.Vector3(0, 1, 0).applyQuaternion(q), palm: new THREE.Vector3(0, 0, 1).applyQuaternion(q) };
+}
 
 export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   const { g, desk, act } = { ...room, act: s.act };
@@ -295,8 +316,11 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   function* turnTo(yaw: number, each: ((k: number) => void) | null = null): Generator<void, void, void> {
     const from = me.yaw, by = angleTo(from, yaw);
     if (Math.abs(by) < 0.02) return;
+    // (his head leading the turn, to where he turns to, unless what he holds has his eyes)
+    const to = new THREE.Vector3(me.p.x + Math.sin(yaw) * LOOK_AHEAD.far, LOOK_AHEAD.high, me.p.y + Math.cos(yaw) * LOOK_AHEAD.far);
     yield* over(TURN.least + Math.abs(by) / TURN.rate, (k) => {
       me.yaw = from + by * smooth(k);
+      look(to);
       act.walk = 0.06 + 0.12 * Math.sin(Math.PI * k);
       carry?.();
       each?.(k);
@@ -316,6 +340,8 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
         const hero2 = heroAt ? new THREE.Vector2(heroAt.x, heroAt.z) : null;
         if (hero2 && hero2.distanceTo(to) < BERTH && me.p.distanceTo(to) < NEAR_ENOUGH + BERTH) { act.walk = 0; return; }
         const yaw = Math.atan2(d.x, d.y), off = angleTo(me.yaw, yaw);
+        // (looking where he goes, ahead along his way: from play, "looking sideways when walking forwards")
+        look(new THREE.Vector3(me.p.x + (d.x / dist) * LOOK_AHEAD.far, LOOK_AHEAD.high, me.p.y + (d.y / dist) * LOOK_AHEAD.far));
         me.yaw += Math.sign(off) * Math.min(Math.abs(off), (1 + 2 * Math.abs(off)) * dt);
         // (slowed as the way turns, near still for a sharp turn, and to the end of the way: stopped dead for each turn
         // and set off again, he moved as a machine does)
@@ -352,9 +378,11 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   function* getUp(): Generator<void, void, void> {
     doing = 'getting up from his table';
     const from = new THREE.Vector2(seat.x, seat.z), to = new THREE.Vector2(exit.x, exit.z);
+    // (out from between his chair and his table as he rises, as a man gets up from one: risen in his place first, he
+    // stood in his chair)
     yield* over(BEAT.rise, (k) => {
       act.sit = 1 - smooth(k);
-      me.p.copy(from).lerp(to, smooth(clamp(k * 1.25 - 0.1, 0, 1)));
+      me.p.copy(from).lerp(to, smooth(clamp(k * 1.2 - 0.1, 0, 1)));
     });
     act.sit = 0;
   }
@@ -365,7 +393,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     const from = me.p.clone(), to = new THREE.Vector2(seat.x, seat.z);
     yield* over(BEAT.rise, (k) => {
       act.sit = smooth(k);
-      me.p.copy(from).lerp(to, smooth(clamp(k * 1.25 - 0.15, 0, 1)));
+      me.p.copy(from).lerp(to, smooth(clamp(k * 1.2 - 0.1, 0, 1)));
     });
     act.sit = 1;
     me.p.copy(to);
@@ -399,7 +427,12 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
    *  the near; as a book is held by its spine */
   const bySpine = (p: typeof pose, size: THREE.Vector3) => {
     const { out, up, at } = spineOf(p, size), l = left();
-    const across = l.clone().addScaledVector(out, -l.dot(out)).addScaledVector(up, -l.dot(up)).normalize();
+    // (his fingers round to the cover on his left; with the spine itself to his left or right, as the book is held
+    // before him, round the book's own way across: there his left left nothing across it, and his hand spun)
+    const across = l.clone().addScaledVector(out, -l.dot(out)).addScaledVector(up, -l.dot(up));
+    const own = new THREE.Vector3().crossVectors(up, out);
+    if (own.dot(l) < 0) own.negate();
+    across.lerp(own.normalize(), 1 - smooth(clamp(across.length() / 0.6, 0, 1))).normalize();
     return aim(at.addScaledVector(out, 0.03).addScaledVector(across, -0.03).addScaledVector(up, -size.y * 0.05), out.clone().negate(), across);
   };
   /** his right hand on a shelf's book's spine, the book a hair out of its gap (`outBy`) */
@@ -417,7 +450,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     yield* over(BEAT.reach, (k) => { act.handR = onTop(p, slot.size); act.reachR = smooth(k); });
     // (the book itself: its look the shelf's, in his hand where it stood)
     const { mesh, colours } = room.shelves[slot.shelf];
-    const mat = room.held.material as THREE.MeshStandardMaterial;
+    const mat = (room.held.material as THREE.Material[])[0] as THREE.MeshStandardMaterial;
     mat.map = (mesh.material as THREE.MeshStandardMaterial).map;
     mat.color.copy(colours[slot.index]);
     room.held.scale.copy(slot.size);
@@ -441,8 +474,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     act.grip = 0.85;
     yield* over(BEAT.grasp, (k) => {
       tipped(TIP, 0);
-      const a = onTop(p, slot.size), b = bySpine(p, slot.size);
-      act.handR = { at: a.at.lerp(b.at, smooth(k)), palm: a.palm.lerp(b.palm, smooth(k)).normalize(), fingers: a.fingers.lerp(b.fingers, smooth(k)).normalize() };
+      act.handR = mixAim(onTop(p, slot.size), bySpine(p, slot.size), smooth(k));
     });
     // (drawn out, straightened as it comes)
     yield* over(BEAT.pull, (k) => {
@@ -456,7 +488,9 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       p.at.copy(from.at).lerp(to.at, smooth(k));
       p.turn.copy(from.turn).slerp(to.turn, smooth(k));
       putCarried(p);
-      handsOn(p, slot.size, 1, smooth(clamp(k * 1.6 - 0.4, 0, 1)));
+      const spineHold = bySpine(p, slot.size);
+      handsOn(p, slot.size, 1, smooth(clamp(k * 1.3 - 0.2, 0, 1)));
+      act.handR = mixAim(spineHold, act.handR!, smooth(clamp(k * 2, 0, 1)));
       look(p.at);
     });
   }
@@ -485,20 +519,22 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   };
   /** each hand's aim taken `t` of the way from `from`'s to the one it has now */
   const blendHands = (from: { L: HandAim; R: HandAim }, t: number) => {
-    const mix = (a: HandAim, b: HandAim): HandAim => ({ at: a.at.clone().lerp(b.at, t), palm: a.palm.clone().lerp(b.palm, t).normalize(),
-      fingers: a.fingers.clone().lerp(b.fingers, t).normalize() });
-    act.handL = mix(from.L, act.handL!);
-    act.handR = mix(from.R, act.handR!);
+    act.handL = mixAim(from.L, act.handL!, t);
+    act.handR = mixAim(from.R, act.handR!, t);
   };
   /** A book in his hands brought from where it is (`p`, moved) to against his chest. */
   function* toCradle(p: typeof pose, size: THREE.Vector3, turned = false): Generator<void, void, void> {
     const from = { at: p.at.clone(), turn: p.turn.clone() }, to = { at: new THREE.Vector3(), turn: new THREE.Quaternion() };
+    // (his hands from where they held it, mixed over to holding it to him: set there at once, his left turned 30 degrees
+    // in a frame)
+    const held = { L: act.handL, R: act.handR };
     yield* over(BEAT.cradle, (k) => {
       cradlePose(to, size, turned);
       p.at.copy(from.at).lerp(to.at, smooth(k));
       p.turn.copy(from.turn).slerp(to.turn, smooth(k));
       putCarried(p);
       cradleHands(p, size, turned);
+      if (held.L && held.R) blendHands({ L: held.L, R: held.R }, smooth(k));
     });
   }
 
@@ -582,7 +618,9 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       p.at.copy(from.at).lerp(front, smooth(k));
       p.turn.copy(from.turn).slerp(slot.turn, smooth(k));
       putCarried(p);
-      act.handR = bySpine(p, slot.size);
+      // (from its side, where he held it, to its spine as it goes to the shelf)
+      handsOn(p, slot.size, 1);
+      act.handR = mixAim(act.handR!, bySpine(p, slot.size), smooth(k));
       act.reachR = 1;
       act.reachL = 1 - smooth(k);
     });
@@ -596,7 +634,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     shown.held = false;
     carried = null;
     act.grip = 0;
-    yield* over(BEAT.reach * 0.7, (k) => hands(1 - k));
+    yield* over(BEAT.release, (k) => hands(1 - smooth(k)));
     act.handL = act.handR = null;
   }
 
@@ -624,7 +662,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     doing = 'carrying a book to a stack';
     const held = holdPose({ at: new THREE.Vector3(), turn: new THREE.Quaternion() });
     yield* toCradle(held, slot.size);
-    carry = () => { cradlePose(held, slot.size); putCarried(held); cradleHands(held, slot.size); look(null); };
+    carry = () => { cradlePose(held, slot.size); putCarried(held); cradleHands(held, slot.size); };
     yield* walkTo(stackStand());
     yield* turnTo(faceStack());
     carry = null;
@@ -637,7 +675,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2));
     const p = cradlePose({ at: new THREE.Vector3(), turn: new THREE.Quaternion() }, slot.size), from = { at: p.at.clone(), turn: p.turn.clone() };
     look(top);
-    yield* over(BEAT.put * 1.4, (k) => {
+    yield* over(BEAT.put * 1.8, (k) => {
       p.at.copy(from.at).lerp(top, smooth(k));
       p.turn.copy(from.turn).slerp(flat, smooth(k));
       putCarried(p);
@@ -645,10 +683,11 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       cradleHands(p, slot.size);
       const toHim = { L: act.handL!, R: act.handR! };
       handsOn(p, size, 1);
-      blendHands(toHim, smooth(clamp((k - 0.15) / 0.35, 0, 1)));
+      blendHands(toHim, smooth(clamp((k - 0.1) / 0.6, 0, 1)));
     });
     // (a book of its own on the stack: the held one's mesh and look copied)
-    const kept = new THREE.Mesh(room.held.geometry, (room.held.material as THREE.Material).clone());
+    const [leather, paper] = room.held.material as THREE.Material[];
+    const kept = new THREE.Mesh(room.held.geometry, [leather.clone(), paper]);
     kept.position.copy(top);
     kept.quaternion.copy(flat);
     kept.scale.copy(size);
@@ -662,7 +701,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     shown.held = false;
     carried = null;
     act.grip = 0;
-    yield* over(BEAT.reach * 0.7, (k) => hands(1 - k));
+    yield* over(BEAT.release, (k) => hands(1 - smooth(k)));
     act.handL = act.handR = null;
   }
 
@@ -717,7 +756,6 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       cradlePose(p, shelfSize, true);
       putCarried(p);
       cradleHands(p, shelfSize, true);
-      look(null);
     };
     yield* walkTo(slot.stand);
     yield* turnTo(Math.atan2(-slot.out.x, -slot.out.z));
@@ -744,7 +782,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       putCarried(p);
       // (on the spine of the book he carries, stood up: on the shelf's own book's, his hand pushed 13 cm off it)
       act.handR = bySpine(p, stood);
-      act.reachL = 1 - smooth(k);
+      act.reachL = 0;
     });
     // (it stands in the gap now: the gap's gone)
     gaps.splice(gaps.indexOf(slot), 1);
@@ -752,7 +790,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     slots.splice(slots.indexOf(slot), 1);
     carried = null;
     act.grip = 0;
-    yield* over(BEAT.reach * 0.7, (k) => hands(1 - k));
+    yield* over(BEAT.release, (k) => hands(1 - smooth(k)));
     act.handL = act.handR = null;
   }
 
@@ -823,14 +861,14 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
         let puffed = 0;
         yield* over(DUST.stroke, (k) => {
           const along = lerp(a, b, smooth(k));
-          wipe(along, up + 0.015 * Math.sin(k * Math.PI * 6));
+          wipe(along, up + 0.008 * Math.sin(k * Math.PI * 4));
           look(onCase(slot, along * 0.6, up, 0));
           if (k > puffed) { puffed += 0.25; room.puff(onCase(slot, along, up, 0.06)); }
         });
       }
     }
     shown.cloth = false;
-    yield* over(BEAT.reach * 0.7, (k) => hands(1 - k));
+    yield* over(BEAT.release, (k) => hands(1 - smooth(k)));
     act.handR = null;
     act.grip = 0;
     yield* step(back);
@@ -856,9 +894,9 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     yield* over(BEAT.reach, (k) => press(-0.3, 0, smooth(k)));
     for (let n = 0; n < 3; n++) {
       const from = -0.3 + n * 0.3;
-      yield* over(0.7, (k) => { press(from + 0.3 * smooth(k), 0.015 * Math.sin(Math.PI * k), 1); look(onCase(slot, from, 0, 0)); });
+      yield* over(1.0, (k) => { press(from + 0.3 * smooth(k), 0.012 * Math.sin(Math.PI * k), 1); look(onCase(slot, from, 0, 0)); });
     }
-    yield* over(BEAT.reach * 0.7, (k) => hands(1 - k));
+    yield* over(BEAT.release, (k) => hands(1 - smooth(k)));
     act.handL = act.handR = null;
   }
 
@@ -880,7 +918,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       act.handR = aim(on(smooth(k)), f, l.clone().negate());
       if (k > 0.2) spin = SPIN.speed;
     });
-    yield* over(BEAT.reach * 0.7, (k) => hands(1 - k));
+    yield* over(BEAT.release, (k) => hands(1 - smooth(k)));
     act.handR = null;
     act.grip = 0;
     yield* over(4, () => look(centre));
@@ -903,6 +941,10 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       reading = lerp(READ.least, READ.most, rng());
       const task = asked ?? nextTask(), alone = asked !== null;
       asked = null;
+      // (the page he's turning turned and his hand back on the book, or his hand back from his face, before he gets up:
+      // from play, "he is in the middle of slipping a page at a desk, then suddenly he stands up")
+      doing = 'finishing at his table';
+      for (let t = 0; !s.calm && t < CALM_MOST; t += dt) yield;
       yield* getUp();
       if (task === 'restock') yield* restock();
       else if (task === 'dust') yield* dust();
@@ -912,6 +954,48 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       // (now and then a second book before he sits again; never when a harness asked for one task)
       if (!alone && rng() < 0.35) yield* browse(false);
       yield* sitDown();
+    }
+  }
+  /** each hand's aim, in his body's frame (his place and facing: a blend in it keeps up with him as he walks), the last
+   *  frame's, and the one it's blending over from with how far through */
+  type Local = { at: THREE.Vector3; palm: THREE.Vector3; fingers: THREE.Vector3 };
+  const aims = {
+    L: { last: null as Local | null, shown: null as Local | null, from: null as Local | null, t: 1 },
+    R: { last: null as Local | null, shown: null as Local | null, from: null as Local | null, t: 1 },
+  };
+  const toLocal = (a: HandAim): Local => {
+    const inv = new THREE.Matrix4().makeRotationY(me.yaw).setPosition(me.p.x, 0, me.p.y).premultiply(g.matrixWorld).invert();
+    const rot = new THREE.Matrix4().extractRotation(inv);
+    return { at: a.at.clone().applyMatrix4(inv), palm: a.palm.clone().applyMatrix4(rot), fingers: a.fingers.clone().applyMatrix4(rot) };
+  };
+  const toWorldAim = (l: Local): HandAim => {
+    const m = new THREE.Matrix4().makeRotationY(me.yaw).setPosition(me.p.x, 0, me.p.y).premultiply(g.matrixWorld);
+    const rot = new THREE.Matrix4().extractRotation(m);
+    return { at: l.at.clone().applyMatrix4(m), palm: l.palm.clone().applyMatrix4(rot).normalize(), fingers: l.fingers.clone().applyMatrix4(rot).normalize() };
+  };
+  /** Each hand's aim this frame, where it jumped from the last, blended over from the last (`AIM_BLEND`): a beat that
+   *  hands on to another holding a thing otherwise, its aims set anew, turned the hand at once. */
+  function blendAims(): void {
+    for (const side of ['L', 'R'] as const) {
+      const aim = side === 'L' ? act.handL : act.handR, b = aims[side];
+      if (!aim) { b.last = b.shown = b.from = null; b.t = 1; continue; }
+      // (a jump told by this frame's aim against the last frame's as the beat set it, not as it was shown: against the
+      // shown one, a blend under way read as a jump each frame and began again, and the hand crept 40 cm behind)
+      const raw = toLocal(aim), now = toLocal(aim);
+      if (b.last && b.shown && (raw.at.distanceTo(b.last.at) > AIM_JUMP.at || raw.palm.angleTo(b.last.palm) > AIM_JUMP.turn || raw.fingers.angleTo(b.last.fingers) > AIM_JUMP.turn)) {
+        b.from = b.shown;
+        b.t = 0;
+      }
+      if (b.from && b.t < 1) {
+        b.t = Math.min(1, b.t + dt / AIM_BLEND);
+        const k = smooth(b.t), f = b.from, q = aimTurn(f.fingers, f.palm).slerp(aimTurn(raw.fingers, raw.palm), k);
+        now.at.copy(f.at).lerp(raw.at, k);
+        now.fingers.set(0, 1, 0).applyQuaternion(q);
+        now.palm.set(0, 0, 1).applyQuaternion(q);
+        if (side === 'L') act.handL = toWorldAim(now); else act.handR = toWorldAim(now);
+      }
+      b.last = raw;
+      b.shown = now;
     }
   }
   let rounds = day();
@@ -944,6 +1028,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
           act.walk = Math.abs(off) > 0.05 ? 0.1 : 0;
         }
       } else rounds.next();
+      blendAims();
       place();
       room.held.visible = shown.held;
       room.openHeld.visible = shown.openHeld;
