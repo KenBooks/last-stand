@@ -53,7 +53,7 @@ import { initDuel, quitDuel, setupNow, type DuelSetup } from './game/duel';
 import { updateDuelHud, showDuelResult, hideDuelResult } from './ui/duelHud';
 import { standGhost, standGhostInSteps, updateGhost, ghostsWarmed, ghostBiome } from './game/ghost';
 import { showMerchant } from './ui/screens/merchant/merchant';
-import { clearPendingRoom, enterPendingRoom, enterRoom, leaveRoom, onRoomChange, updateRooms, writeRecords } from './game/rooms';
+import { clearPendingRoom, enterPendingRoom, enterRoom, everyFolkSeated, leaveRoom, onRoomChange, seatEveryFolk, updateRooms, writeRecords } from './game/rooms';
 import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt, villageReport, usedByHolding, holdUse, holdShare } from './game/village';
 import { seenShareAt } from './core/sight';
 import { initVillageMap, layOutMapAhead, setVillageMap, villageMapOpen, updateVillageMap } from './ui/villageMap';
@@ -155,10 +155,6 @@ const drawn = async (): Promise<void> => {
   await paintedFrames(DRAWN_FRAMES);
 };
 
-/** the most of a villager's build run in one task before the boot paints a frame (ms): the loading screen's bar and
- *  smoke keep moving, and a frame waited for after each costs the boot a third of the build's time at most */
-const FOLK_SLICE_MS = 50;
-
 async function boot() {
   // (a page hidden while it loads keeps the boot's pace: core/hiddenBoot.ts)
   // (`?bootPace=0` the boot as it was, the canary of `npm run stalls -- --scenario boot --covered`)
@@ -252,16 +248,8 @@ async function boot() {
   await painted();
   // (the mage's embroidery painted now, whoever's shown: painted in his build behind the lobby, it held a frame)
   coatPanels();
-  // (the houses' folk seated, the library's scholar and the merchant's Odo: their heads and hands are the heroes',
-  // made by now)
-  await loadingStep('Gathering the villagers', 0.45);
-  // (each built a piece at a time, a frame painted once a slice has gone: built whole, the scholar and Odo were two
-  // tasks of 2.7 and 4.1 s on a player's laptop, #838)
-  for (const room of Object.values(G.arena.rooms)) {
-    if (!room.seatFolk) continue;
-    await painted();
-    await builtInSlices(room.seatFolk(), painted, FOLK_SLICE_MS);
-  }
+  // (the houses' folk are built as their house is first walked into, game/rooms.ts: built here, under a step of
+  // their own, they were two tasks of 2.7 and 4.1 s on a player's laptop, #838)
   await painted();
   G.profile = loadProfile(savedClass());
   G.player = await builtInSlices(Player.inSteps(G.profile.classId, G.profile.equipped, true, profileLook(G.profile)),
@@ -368,7 +356,7 @@ async function boot() {
   // dev-only handle for debugging and automated screenshots (stripped from production builds)
   // (every build: the recorder's trace of now, for a harness to keep; it sends nothing, src/perf/AGENTS.md)
   Object.assign(window, { __traceNow: traceNow });
-  if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE, allWarm: () => isAllWarm() && everyBossWarm() && everyBiomeReady(), hurry: labHurry, holdHour, restartTraining, faceCamera,
+  if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE, allWarm: () => isAllWarm() && everyBossWarm() && everyBiomeReady() && everyFolkSeated(), hurry: labHurry, holdHour, restartTraining, faceCamera,
     village: villageReport, seen: seenShareAt } });
   // the developer mode (src/dev): a dev build's, or a PR preview's, never production's (`__DEV_TOOLS__`: vite.config.ts)
   if (import.meta.env.DEV || __DEV_TOOLS__) void loadDevMode();
@@ -853,6 +841,7 @@ function labHurry(): void {
   hurry();
   void readyEveryBoss();
   void readyEveryBiome();
+  void seatEveryFolk();
 }
 
 /** The pause menu. Solo it stops the game; in co-op the game goes on and the character stands idle. */

@@ -4,7 +4,7 @@
 // save slot's heroes' records as he comes in. A run or the hall of heroes taking the lobby from under him takes him out.
 import * as THREE from 'three';
 import { G } from '../state';
-import { HOUSES, insideOf, outsideOf, TROPHIES, type RoomId } from '../data/houses';
+import { HOUSES, insideOf, outsideOf, ROOM_IDS, TROPHIES, type RoomId } from '../data/houses';
 import { BIOMES, BIOME_IDS, rungBoss } from '../data/biomes';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { ENEMIES, type EnemyId } from '../data/enemies';
@@ -18,7 +18,9 @@ import { groundHeight } from '../world/ground';
 import { particles, col } from '../fx/particles';
 import { rand } from '../util';
 import { chronicleOf, favouriteSkill } from './chronicle';
-import { whenWarm } from './warm';
+import { readyingWhile, whenWarm } from './warm';
+import { builtInSlices } from '../entities/models/steps';
+import { painted } from '../world/arena';
 import type { Board, RecordsShown } from '../world/rooms';
 import type { Profile } from '../types';
 
@@ -61,6 +63,51 @@ const JOIN_SPOTS: readonly [number, number][] = [[-0.85, 0.25], [0.85, 0.25], [0
  *  the hall closes (`enterPendingRoom`). */
 let pendingJoin: { id: RoomId; slot: number; still: () => boolean } | null = null;
 
+/** the most of a villager's build run in one task before a frame is painted (ms): the bar keeps moving, and a frame
+ *  waited for after each costs the build a third of its time at most */
+const FOLK_SLICE_MS = 50;
+/** the houses whose folk are seated, and those being seated now */
+const seated = new Set<RoomId>();
+const seating = new Map<RoomId, Promise<void>>();
+
+/**
+ * House `id`'s folk (the library's scholar, the merchant's Odo) built, the first time it's walked into, a piece at a
+ * time under the fight's loading bar; null where there's none to build. Nothing shows a room but the hero inside it,
+ * and the engine makes a room's pipelines as it's first drawn, so nothing of a villager is needed before: built at
+ * the boot, each whole, they were two tasks of 2.7 and 4.1 s of a player's laptop's loading screen, for houses that
+ * visit may never open (#838; from the owner: "we dont need to build villagers, they are inside houses").
+ */
+function folkComing(id: RoomId, bar = true): Promise<void> | null {
+  const room = G.arena.rooms[id];
+  if (!room.seatFolk || seated.has(id)) return null;
+  let coming = seating.get(id);
+  if (!coming) {
+    const build = async (): Promise<void> => {
+      await builtInSlices(room.seatFolk!(), painted, FOLK_SLICE_MS);
+      seated.add(id);
+    };
+    coming = (bar ? readyingWhile(`Opening ${HOUSES[id].name}`, build) : build()).finally(() => seating.delete(id));
+    seating.set(id, coming);
+  }
+  return coming;
+}
+
+/** `go` once house `id`'s folk are seated: at once where they are (or it has none). */
+function withFolk(id: RoomId, go: () => void): void {
+  const coming = folkComing(id);
+  if (coming) void coming.then(go);
+  else go();
+}
+
+/** Every house's folk seated, no bar (the lab's boot, which readies everything at once: its commands walk in and
+ *  read a villager in the same task). */
+export function seatEveryFolk(): Promise<void> {
+  return Promise.all(ROOM_IDS.map((id) => folkComing(id, false))).then(() => undefined);
+}
+
+/** Whether every house's folk are seated (the lab's boot waits for it with every need). */
+export const everyFolkSeated = (): boolean => ROOM_IDS.every((id) => !G.arena.rooms[id].seatFolk || seated.has(id));
+
 /** Put the hero inside house `id` immediately (`rooms` must already be warm). `slot`: party slot (0 for solo entry). */
 function goIntoRoom(id: RoomId, slot = 0): void {
   if (G.mode !== 'menu' || roomHere() === id) return;
@@ -84,14 +131,16 @@ function goIntoRoom(id: RoomId, slot = 0): void {
 /** The hero into house `id`'s room (its programs warmed first, under the loading bar if they aren't yet). */
 export const enterRoom = whenWarm(['rooms'], (id: RoomId): void => {
   pendingJoin = null;
-  goIntoRoom(id);
+  withFolk(id, () => goIntoRoom(id));
 }, (id: RoomId) => `Opening ${HOUSES[id].name}`);
 
 const enterJoined = whenWarm(['rooms'], (id: RoomId, slot: number, still: () => boolean): void => {
-  if (!still() || G.mode !== 'menu') return;
-  if (G.arena.hallShown) { pendingJoin = { id, slot, still }; return; }
-  pendingJoin = null;
-  goIntoRoom(id, slot);
+  withFolk(id, () => {
+    if (!still() || G.mode !== 'menu') return;
+    if (G.arena.hallShown) { pendingJoin = { id, slot, still }; return; }
+    pendingJoin = null;
+    goIntoRoom(id, slot);
+  });
 }, (id: RoomId) => `Opening ${HOUSES[id].name}`);
 
 /**

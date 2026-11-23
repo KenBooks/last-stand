@@ -1336,8 +1336,8 @@ function strandMap(dense = false): THREE.DataTexture {
   const W = 128, H = 512, cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   // (drawn and read back on the CPU, `readCtx2d`: read from a canvas on the GPU, `bledMap` waited for the GPU's
-  // process, which at this point of the boot is making the village's pipelines: 0.1 to 0.2 s of the scholar's build on
-  // a desktop, and the likely bulk of two tasks of 2.7 and 4.1 s on a player's laptop, one a map, #838)
+  // process, which under the loading screen is making the village's pipelines: 117 ms of the first head's build on a
+  // desktop's first visit, as long as that process is busy on a slower device, #838)
   const c = readCtx2d(cv), rng = mulberry(dense ? 31 : 29);
   c.clearRect(0, 0, W, H);
   if (dense) {
