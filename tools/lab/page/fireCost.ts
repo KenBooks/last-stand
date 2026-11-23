@@ -24,25 +24,25 @@ export const CANARY_COST_LEAST = 2;
 
 /** The frame's median time on the GPU with `turn` given true and false, in turns (it's left true); null where the
  *  browser times nothing. `draw` renders the frame as it stands. */
-export async function turnCost(renderer: THREE.WebGLRenderer, turn: (on: boolean) => void, draw: () => void):
+export async function turnCost(turn: (on: boolean) => void, draw: () => void):
   Promise<FlameCost | null> {
-  const cost = await costInTurns(renderer, turn, draw);
+  const cost = await costInTurns(turn, draw);
   return cost && { shown: cost.on, hidden: cost.off, apart: cost.takes, error: cost.error, renders: cost.renders };
 }
 
 /** What `parts` take of the GPU as `draw` renders the frame, drawn and not in turns; null where the browser times
  *  nothing. `draw` renders the frame as it stands, its camera on the flames. */
-export function flameCost(renderer: THREE.WebGLRenderer, parts: THREE.Object3D[], draw: () => void):
+export function flameCost(parts: THREE.Object3D[], draw: () => void):
   Promise<FlameCost | null> {
   const show = (on: boolean): void => {
     for (const part of parts) part.visible = on;
   };
-  return turnCost(renderer, show, draw);
+  return turnCost(show, draw);
 }
 
 /** The canary's flames: `parts` drawn `CANARY_TIMES` over (copies sharing their geometry and material, so nothing
  *  compiles), timed as `flameCost` times them; what they took over the frame without them, or null. */
-export async function canaryCost(renderer: THREE.WebGLRenderer, parts: THREE.Object3D[], draw: () => void):
+export async function canaryCost(parts: THREE.Object3D[], draw: () => void):
   Promise<number | null> {
   const copies = parts.flatMap((part) => Array.from({ length: CANARY_TIMES - 1 }, () => {
     const copy = part.clone();
@@ -50,7 +50,7 @@ export async function canaryCost(renderer: THREE.WebGLRenderer, parts: THREE.Obj
     return copy;
   }));
   try {
-    const cost = await flameCost(renderer, [...parts, ...copies], draw);
+    const cost = await flameCost([...parts, ...copies], draw);
     return cost ? cost.shown - cost.hidden : null;
   } finally {
     for (const copy of copies) copy.removeFromParent();

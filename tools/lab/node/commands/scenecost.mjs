@@ -5,17 +5,17 @@ import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
 
 /** `lab scenecost`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
 export default {
-  summary: 'what each kind of work in the scene pass takes of the GPU at the screen\'s own pixels and a level\'s '
-    + 'other settings (the point lights, their shadows, the sun\'s, the environment, the lit shading, what\'s '
-    + 'see-through, the particles, the hero, each taken out in turns, each row with how far it may be off and "within '
+  summary: 'what each kind of work in the frame takes of the GPU at the screen\'s own pixels and a level\'s '
+    + 'other settings, by the engine\'s clock (its own parts, the profile\'s: the point lights and lamps, the sun\'s '
+    + 'shadow, the lit shading and its parts, the bloom, the depth drawn first...; and the particles, the hero, the '
+    + 'grass, what\'s cut out or blended, each taken out in turns, each row with how far it may be off and "within '
     + 'the noise" where it says nothing: run it with the GPU loaded, `--screen 2880x1800@2`, or a strong GPU reads '
     + 'its idle clock\'s wander; `--each` each see-through mesh alone; `--hero` the hero\'s parts and a change of '
-    + 'nothing; `--frame` the whole frame by the browser\'s clock, HDR\'s output and MSAA; `--biomes village` the '
-    + 'lobby\'s village where he stands, its own parts too: the lamps, their shadows, its largest parts, the hall\'s '
-    + 'heroes)',
-  help: 'what each part of the scene pass takes of the GPU at the screen\'s own pixels and a level\'s other '
-    + 'settings: the point lights, their shadows, the sun\'s, the environment, the lit shading, what\'s see-through, '
-    + 'the particles, the hero, each taken out in turns within one page',
+    + 'nothing; `--frame` the level\'s MSAA; `--biomes village` the lobby\'s village where he stands, its own parts '
+    + 'too: its largest parts, the hall\'s heroes)',
+  help: 'what each part of the frame takes of the GPU at the screen\'s own pixels and a level\'s other settings, '
+    + 'by the engine\'s clock: its own parts (the lights, the shadows, the lit shading, the bloom...), the particles, '
+    + 'the hero, what\'s cut out or blended, each taken out in turns within one page',
   options: {
     biomes: {
       kind: 'list',
@@ -59,8 +59,8 @@ export default {
     },
     frame: {
       kind: 'switch',
-      help: 'time the whole frame too, by the browser\'s clock with the GPU waited for: HDR\'s output (a WebGPU '
-        + 'copy the GPU\'s timer can\'t see) and the level\'s MSAA, each on and off in turns',
+      help: 'time the level\'s MSAA too, on and off in turns (WebGPU draws 1 or 4 samples a pixel: the engine '
+        + 'draws 2 as one, and says so)',
     },
     ...COMMON_OPTIONS,
   },

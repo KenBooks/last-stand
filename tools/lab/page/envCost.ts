@@ -47,11 +47,8 @@ function timedWith(environment: THREE.Texture, rounds: number, draws: number): P
   const change = (on: boolean) => {
     G.scene.environment = on ? environment : null;
   };
-  const draw = () => {
-    for (let render = 0; render < draws; render++) renderer.render();
-  };
   const turns: Turns = { rounds, renders: TURN_RENDERS };
-  return costInTurns(G.renderer, change, draw, turns);
+  return costInTurns(change, () => renderer.render(), turns, () => draws);
 }
 
 /** The line of a cost: the frame with the environment and without, and the difference. */

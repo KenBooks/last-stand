@@ -11,7 +11,7 @@ import { lampsHeldOut, lampShadowsOn, setLampShadows } from '../../../src/core/l
 import { qualityLevel } from '../../../src/core/quality';
 import { QUALITY } from '../../../src/data/quality';
 import { canaryCost, flameCost, turnCost } from './fireCost';
-import { medianOf, timedRenders, timerOf } from './gpuTurns';
+import { medianOf, timedRenders } from './gpuTurns';
 import type { Lab } from './lab';
 import { cpuCost, cpuLines, type CpuPart } from './renderCpu';
 
@@ -29,8 +29,6 @@ const TURN_RENDERS = 16;
 
 /** The hero turned each way, the GPU's time of the frame (ms) that way; left turned the dearest. */
 async function dearestWay(lab: Lab, lines: string[]): Promise<void> {
-  const timer = timerOf(G.renderer);
-  if (!timer) return;
   let dearest = 0;
   let most = -Infinity;
   const read: string[] = [];
@@ -42,7 +40,7 @@ async function dearestWay(lab: Lab, lines: string[]): Promise<void> {
   };
   for (let turn = 0; turn < TURNS; turn++) {
     await turnTo(turn);
-    const took = medianOf(await timedRenders(timer, () => renderer.render(), TURN_RENDERS));
+    const took = medianOf(await timedRenders(() => renderer.render(), TURN_RENDERS));
     read.push(`${((turn * 360) / TURNS).toFixed(0)}: ${took.toFixed(1)}`);
     if (took > most) {
       most = took;
@@ -199,7 +197,7 @@ function switches(): Switch[] {
 async function switchCosts(draw: () => void): Promise<string[]> {
   const lines = ['what each way of drawing takes (the frame with it, and without):'];
   for (const { name, turn } of switches()) {
-    const cost = await turnCost(G.renderer, turn, draw);
+    const cost = await turnCost(turn, draw);
     if (!cost) continue;
     const took = cost.apart.toFixed(2);
     lines.push(`  ${took} ms: ${name}, the frame ${cost.shown.toFixed(2)} with it, ${cost.hidden.toFixed(2)} without`);
@@ -261,7 +259,7 @@ export async function partCosts(lab: Lab, canary: boolean): Promise<{ lines: str
   const allButSky = shownMeshes().filter((mesh) => reachOf(mesh) < SKY);
   const everything: Part = { name: 'everything but the sky', meshes: allButSky };
   for (const { name, meshes } of [everything, ...parts]) {
-    const cost = await flameCost(G.renderer, meshes, draw);
+    const cost = await flameCost(meshes, draw);
     if (!cost) {
       lines.push(`  ${name}: untimed (the browser has no timer)`);
       continue;
@@ -271,8 +269,8 @@ export async function partCosts(lab: Lab, canary: boolean): Promise<{ lines: str
   }
   if (canary) {
     const { meshes } = parts[0];
-    const once = await flameCost(G.renderer, meshes, draw);
-    const over = await canaryCost(G.renderer, meshes, draw);
+    const once = await flameCost(meshes, draw);
+    const over = await canaryCost(meshes, draw);
     if (once && over !== null) {
       const single = once.shown - once.hidden;
       lines.push(`  canary: ${parts[0].name} once ${single.toFixed(2)} ms, four times over ${over.toFixed(2)}`);

@@ -173,6 +173,7 @@ function kitLook(kit: KitLooks, material: THREE.MeshStandardMaterial): RustLook 
     shader: KIT,
     casts: true,
     shared: NUMBERS,
+    numbersUsed: AT.loop + 4,
     moved() {
       const u = kit.u, edge = u.uEdge.value;
       now[0] = u.uDissolve.value; now[1] = u.uFrozen.value; now[2] = u.uChar.value; now[3] = u.uHit.value;

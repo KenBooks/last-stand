@@ -348,12 +348,16 @@ async function round(lab: Lab, options: GlowOptions, problems: string[]): Promis
   }
   lines.push(judgeMotion(lab, slots, options.rarity, problems));
   lines.push(judgeLoop(lab, slots, options.rarity, problems));
+  // (Very low draws by the engine's plain levels' own lit shaders, a set of pipelines made once as a level first
+  // switches to them, 72 here: the level's, not the glow's, so its step is counted apart)
+  const beforeLevel = PIPELINES.made;
   lines.push(judgeLevel(lab, slots, options.rarity, problems));
+  const levelMade = PIPELINES.made - beforeLevel;
   lines.push(judgeSetting(lab, slots, options.rarity, problems));
   const moments = options.pictures ? pictures(lab, slots, options.rarity) : [];
-  const compiled = PIPELINES.made - programs;
-  if (compiled) problems.push(`${compiled} programs compiled as the items glowed`);
-  lines.push(`programs compiled: ${compiled}`);
+  const compiled = PIPELINES.made - programs - levelMade;
+  if (compiled) problems.push(`${compiled} pipelines made as the items glowed`);
+  lines.push(`pipelines made as the items glowed: ${compiled} (and ${levelMade} by the switch to Very low's shaders)`);
   return { lines, moments };
 }
 

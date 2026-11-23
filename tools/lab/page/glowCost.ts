@@ -1,13 +1,14 @@
 // tools/lab glowcost: what the worn gear's rarity glow (`ITEM_GLOW` in core/materials.ts, #404) takes of a frame. The
 // same frame is drawn with the glow as players have it and, in turns within one page (`gpuTurns.ts`: a run's load
-// falls on both sides), each of three ways without it:
+// falls on both sides), each of two ways without it:
 //   - off by the setting (Settings' Gear glow: its strength a uniform at 0, its strands still worked out a pixel);
-//   - on plain gear (no item of a rarity that glows: its code in the programs, passed over a pixel);
-//   - gone (its code left out of every program that has it, here alone: no player's game draws so).
-// The whole frame is timed by the GPU's own timer, the post chain with it, and three's own work on the CPU by the
-// browser's clock. Each scene says what share of the screen the glow changed and proves each side: the glow seen
-// with it, and the frame the same to the pixel whichever way it's off (else the measure compared nothing). Its
-// canary draws the frame twice, which must read as more. From play: "we also need to disable clothing shader effect,
+//   - on plain gear (no item of a rarity that glows: its colour black, the pattern passed over a pixel).
+// The whole frame is timed by the engine's GPU clock, and the frame's work on the CPU by the browser's clock (with
+// the glow's copies and in the kit's own materials too: each copy a material of its own). Each scene says what share
+// of the screen the glow changed and proves each side: the glow seen with it, and the frame the same to the pixel
+// whichever way it's off (else the measure compared nothing). Its canary draws the frame twice, which must read as
+// more. A third way, the glow's code taken out of three's programs, was three's alone: the engine's kit shader is
+// one (`engine/looks/kit.ts`). From play: "we also need to disable clothing shader effect,
 // for rarity -- measure how much it would impact the performance".
 import * as THREE from 'three';
 import type { Lab, Pictured, Report } from './lab';
@@ -23,6 +24,7 @@ import { loadProfile } from '../../../src/loot/profile';
 import * as hall from '../../../src/game/hall';
 import type { Gear, GlowSlot, Model, RarityId } from '../../../src/types';
 import { costInTurns, sure, type TurnsCost, type Turns } from './gpuTurns';
+import { RUST } from '../../../src/engine';
 import { drawFrame, standIn, type Canvas } from './light';
 import { openHall, toLobby } from './hallMoves';
 
@@ -58,18 +60,15 @@ const SAME_MOST = 0.0005;
 const SETTLE = { party: 30, hall: 240, fight: 150 };
 /** the fight's foes: how many, and how far from the hero they rise (m) */
 const FOES = { count: 28, near: 4, far: 10, wave: 8 };
-/** the most looks for meshes drawn with the glow's code before the turns */
-const LOOKS_MOST = 6;
 /** the CPU's turns: rounds of this many frames a side, timed as one */
 const CPU_TURNS = { rounds: 10, frames: 20 };
 
 /** the ways the frame is drawn: as players have it, and each way without the glow */
-type Way = 'on' | 'setting' | 'plain' | 'gone' | 'own';
+type Way = 'on' | 'setting' | 'plain' | 'own';
 const WAYS: { way: Exclude<Way, 'on'>; name: string; gpu: boolean }[] = [
   { way: 'setting', name: 'off by the setting (its strength 0)', gpu: true },
   { way: 'plain', name: 'on plain gear (its code passed over)', gpu: true },
-  { way: 'gone', name: 'gone from the programs', gpu: true },
-  // (the glow's copies are three's work on the CPU, `--cpu`: the GPU draws the same either way)
+  // (the glow's copies are work on the CPU, `--cpu`: the GPU draws the same either way)
   { way: 'own', name: 'plain gear in the kit\'s own materials (no copies for the glow)', gpu: false },
 ];
 
@@ -89,98 +88,6 @@ function gearAt(gear: Gear, rarity: RarityId | null): Gear {
 /** The materials of a mesh, as a list. */
 function materialsOf(mesh: THREE.Mesh): THREE.Material[] {
   return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-}
-
-/** the glow's lines in a kit material's fragment shader, as `core/materials.ts` writes them */
-const GLOW_CODE = /if \([^\n{]*dot\(uAura, uAura\) > 0\.0\) \{[\s\S]*?\n\s*\}/;
-
-/** what the renderer keeps of a material it has drawn: its program's fragment shader as compiled */
-interface Compiled {
-  currentProgram?: { fragmentShader: WebGLShader };
-}
-
-/**
- * Whether the program `material` was last drawn with has the glow's code, read from its source as compiled. (Asked
- * of the material's hook on a shader of the lab's own, the hook ran a second time: one that keeps the shader it's
- * given, to move its uniforms each frame, moved the lab's from then on, and the mage's staff drew another way.)
- */
-function hasGlowCode(material: THREE.Material): boolean {
-  const compiled = (G.renderer.properties.get(material) as Compiled).currentProgram;
-  if (!compiled) return false;
-  return GLOW_CODE.test(G.renderer.getContext().getShaderSource(compiled.fragmentShader) ?? '');
-}
-
-/**
- * The scene's materials with the glow's code swapped for copies without it, and back. A copy runs its original's
- * hook as the original (its uniforms the original's own, so it dissolves, freezes and shades as it does), takes the
- * glow's lines out of what it wrote, and is keyed apart, a program of its own.
- */
-class WithoutGlow {
-  private readonly swaps = new Map<THREE.Mesh, { with_: THREE.Material | THREE.Material[]; without: THREE.Material | THREE.Material[] }>();
-  private readonly copies = new Map<THREE.Material, THREE.Material>();
-  private gone = false;
-  /** the programs whose glow lines were taken out as they compiled */
-  compiled = 0;
-
-  /**
-   * The scene's meshes drawn with the glow's code that aren't swapped yet taken in; how many. A material is told by
-   * the program it was last drawn with, so one not drawn yet is found only by a later look (a hero's parts first
-   * drawn a frame after he's dressed).
-   */
-  find(): number {
-    let found = 0;
-    G.scene.traverse((object) => {
-      const mesh = object as THREE.Mesh;
-      if (!mesh.isMesh || this.swaps.has(mesh) || !materialsOf(mesh).some(hasGlowCode)) return;
-      const copies = materialsOf(mesh).map((material) => (hasGlowCode(material) ? this.copyOf(material) : material));
-      const swap = { with_: mesh.material, without: Array.isArray(mesh.material) ? copies : copies[0] };
-      this.swaps.set(mesh, swap);
-      if (this.gone) mesh.material = swap.without;
-      found++;
-    });
-    return found;
-  }
-
-  private copyOf(material: THREE.Material): THREE.Material {
-    let copy = this.copies.get(material);
-    if (copy) return copy;
-    copy = material.clone();
-    // (its user data its original's own, the hood's shade among it, a uniform the hook binds: `clone` copies it
-    // through JSON, and the head's `shade` set a plain object's value)
-    copy.userData = material.userData;
-    copy.onBeforeCompile = (shader, gl) => {
-      material.onBeforeCompile.call(material, shader, gl);
-      if (!GLOW_CODE.test(shader.fragmentShader)) throw new Error('lab: glowcost: a program lost its glow lines before they were taken out');
-      shader.fragmentShader = shader.fragmentShader.replace(GLOW_CODE, '');
-      this.compiled++;
-    };
-    // (three tells programs apart by their hook's source too, and every copy's hook here reads the same: its
-    // original's goes into its key, or two originals told apart by their hooks alone would share a program, as the
-    // mage's robe did, drawn another way)
-    copy.customProgramCacheKey = () => `${material.customProgramCacheKey.call(material)}:noGlow:${material.onBeforeCompile}`;
-    this.copies.set(material, copy);
-    return copy;
-  }
-
-  get meshes(): number { return this.swaps.size; }
-  get materials(): number { return this.copies.size; }
-
-  /** (a copy takes its original's values afresh as it's put in: a glow's pulse, a fade, a dye moved on since) */
-  put(gone: boolean): void {
-    if (gone) {
-      for (const [material, copy] of this.copies) {
-        copy.copy(material);
-        copy.userData = material.userData;
-      }
-    }
-    this.gone = gone;
-    for (const [mesh, swap] of this.swaps) mesh.material = gone ? swap.without : swap.with_;
-  }
-
-  dispose(): void {
-    this.put(false);
-    for (const copy of this.copies.values()) copy.dispose();
-  }
 }
 
 /** A kit material's looks, as far as the glow goes: its own glow's colour. */
@@ -256,19 +163,6 @@ class Glows {
       else colour.setRGB(0, 0, 0);
     }
   }
-}
-
-/** The meshes shown that draw in a material whose program has the glow's code, by name (its parents' too). */
-function drawnWithGlowCode(): string[] {
-  const found: string[] = [];
-  G.scene.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh || !materialsOf(mesh).some(hasGlowCode)) return;
-    const names: string[] = [];
-    for (let at: THREE.Object3D | null = mesh; at && at !== G.scene; at = at.parent) names.unshift(at.name || at.type);
-    found.push(`${names.join('/')} in ${materialsOf(mesh).map((material) => `${material.name || material.type}#${material.id}`).join('+')}`);
-  });
-  return found;
 }
 
 /** The scene as it's measured: its heroes in glowing gear, and what takes it down. */
@@ -364,13 +258,10 @@ function apartIn(a: Canvas, b: Canvas): Apart {
 
 /** A whole frame's draws, triangles and the materials its shown meshes draw in. */
 function drawsOf(): { calls: number; triangles: number; materials: number } {
-  const info = G.renderer.info;
-  const kept = info.autoReset;
-  info.autoReset = false;
-  info.reset();
   renderer.render();
-  const { calls, triangles } = info.render;
-  info.autoReset = kept;
+  const stats = RUST.bridge!.stats;
+  const calls = stats.draws;
+  const triangles = stats.triangles;
   const materials = new Set<THREE.Material>();
   G.scene.traverseVisible((object) => {
     if ((object as THREE.Mesh).isMesh) for (const material of materialsOf(object as THREE.Mesh)) materials.add(material);
@@ -445,35 +336,19 @@ export async function glowCost(lab: Lab, command: GlowCostOptions): Promise<Repo
   const moments: Pictured[] = [];
   moments.push(await lab.screen(`${scene} ${level}: glow on`, [`every item ${rarity}`]));
   const glows = new Glows(staged.heroes.map((hero) => hero.model.root));
-  const without = new WithoutGlow();
-  // (drawn first, with the glow's code and with what was found of it gone, until a frame draws none of it: the
-  // materials to swap are told by the programs they were drawn with)
-  for (let look = 0; look < LOOKS_MOST; look++) {
-    renderer.render();
-    without.put(true);
-    if (!without.find()) break;
-  }
-  without.put(false);
   const owned = new OwnMaterials(staged.heroes.map((hero) => hero.model.root));
   /** the frame drawn `way` from here on */
   const draws = (way: Way): void => {
     setGearGlow(way !== 'setting');
     tickItemGlow(G.time);
     glows.put(way !== 'plain' && way !== 'own');
-    // (each swap puts back the materials it found: the hero's own first, then one swap at most over them. Put in
-    // any order, the copies' swap put the glow's copies back over the meshes whose code had just been taken out)
-    without.put(false);
     owned.put(way === 'own');
-    if (way === 'gone') without.put(true);
   };
   const turns: Turns = { rounds: command.rounds, renders: TURN_RENDERS };
   const lines = [name];
   const problems: string[] = [];
   try {
-    let times = 1;
-    const draw = (): void => {
-      for (let drawn = 0; drawn < times; drawn++) renderer.render();
-    };
+    const draw = (): void => renderer.render();
     // what each way draws: the glow seen, and every way without it the same frame
     draws('on');
     const lit = drawFrame(lab);
@@ -484,28 +359,18 @@ export async function glowCost(lab: Lab, command: GlowCostOptions): Promise<Repo
       frames[way] = drawFrame(lab);
       counts[way] = drawsOf();
       if (way === 'plain') moments.push(await lab.screen(`${scene} ${level}: no glow`, ['plain gear']));
-      if (way === 'gone') moments.push(await lab.screen(`${scene} ${level}: code gone`, ['the glow out of the programs']));
-    }
-    draws('gone');
-    renderer.render();
-    const left = drawnWithGlowCode();
-    if (left.length) {
-      problems.push(`${scene}: ${left.length} meshes still drew with the glow's code once it was taken out: `
-        + left.slice(0, 6).join('; '));
     }
     draws('on');
-    const seen = apartIn(lit, frames.gone).share;
+    const seen = apartIn(lit, frames.plain).share;
     lines.push(`  the glow changed ${(100 * seen).toFixed(2)}% of the screen's pixels (${glows.count} glowing `
-      + `materials); its code taken out of `
-      + `${without.compiled} programs (${without.materials} materials on ${without.meshes} meshes)`);
+      + 'materials)');
     if (glows.count < 1) problems.push(`${scene}: no material of the heroes' glows in ${rarity} gear`);
     if (seen < SEEN_LEAST) problems.push(`${scene}: the glow was never seen: the frame with it is the frame without`);
-    if (without.compiled < 1) problems.push(`${scene}: no program had the glow's code taken out`);
-    for (const way of ['setting', 'plain', 'own'] as const) {
-      const apart = apartIn(frames[way], frames.gone);
+    for (const way of ['setting', 'own'] as const) {
+      const apart = apartIn(frames[way], frames.plain);
       if (apart.share > SAME_MOST) {
-        problems.push(`${scene}: ${way}: ${(100 * apart.share).toFixed(2)}% of the pixels differ from the frame with `
-          + `the glow's code gone (${apart.where}): one of them drew something else`);
+        problems.push(`${scene}: ${way}: ${(100 * apart.share).toFixed(2)}% of the pixels differ from the frame on `
+          + `plain gear (${apart.where}): one of them drew something else`);
       }
     }
     lines.push(`  a frame's draws ${counts.on.calls} in ${counts.on.materials} materials with the glow, `
@@ -513,15 +378,15 @@ export async function glowCost(lab: Lab, command: GlowCostOptions): Promise<Repo
       + `${counts.own.materials} without the glow's ${owned.copies.size} copies (on ${owned.meshes} meshes)`);
     // the GPU: the whole frame, each way without the glow against it
     for (const { way, name: wayName } of WAYS.filter((timed) => timed.gpu)) {
-      const cost = await costInTurns(G.renderer, (on) => draws(on ? 'on' : way), draw, turns);
-      if (!cost) return { text: `${name}: untimed (the browser has no GPU timer)`, problems: [] };
+      const cost = await costInTurns((on) => draws(on ? 'on' : way), draw, turns);
+      if (!cost) return { text: `${name}: untimed (the engine has no GPU timestamps here)`, problems: [] };
       lines.push(wayLine(wayName, cost));
     }
-    const nothing = await costInTurns(G.renderer, () => {}, draw, turns);
+    const nothing = await costInTurns(() => {}, draw, turns);
     if (nothing) lines.push(wayLine('nothing changed (the measure\'s own noise)', nothing));
-    // the CPU: three's work on the frame (the glow's copies are materials of their own, each a switch for three)
+    // the CPU: the frame's work (the glow's copies are materials of their own)
     if (command.cpu >= 1) {
-      lines.push(`  three's work on the CPU a frame${command.cpu > 1 ? `, the CPU slowed ${command.cpu} times` : ''}:`);
+      lines.push(`  the frame's work on the CPU${command.cpu > 1 ? `, the CPU slowed ${command.cpu} times` : ''}:`);
       if (command.cpu > 1) await lab.throttle(command.cpu);
       try {
         lines.push(cpuLine('on plain gear', cpuInTurns((on) => draws(on ? 'on' : 'plain'), draw)));
@@ -532,7 +397,7 @@ export async function glowCost(lab: Lab, command: GlowCostOptions): Promise<Repo
       }
     }
     if (command.canary) {
-      const twice = await costInTurns(G.renderer, (on) => { times = on ? 2 : 1; }, draw, turns);
+      const twice = await costInTurns(() => {}, draw, turns, (on) => (on ? 2 : 1));
       const read = twice ? twice.on / twice.off : 0;
       lines.push(`  canary: the frame drawn twice read ${read.toFixed(2)} times once`);
       if (read < CANARY_LEAST) problems.push(`${scene}: canary: the frame drawn twice went unseen`);
@@ -541,7 +406,6 @@ export async function glowCost(lab: Lab, command: GlowCostOptions): Promise<Repo
   } finally {
     draws('on');
     setGearGlow(setting);
-    without.dispose();
     staged.leave();
     lab.drawing = drawing;
   }

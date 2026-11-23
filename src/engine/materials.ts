@@ -49,6 +49,8 @@ export class Materials {
   /** the engine's materials by what they hold: two of the game's that look alike are one there, and their meshes
    *  one draw call (each foe's pieces have materials of their own) */
   private shared = new Map<string, number>();
+  /** a shared look's engine material: its numbers past those that tell its materials apart, as last sent */
+  private tails = new Map<number, Float32Array>();
   private shaders = new Map<string, number>();
   private volumes = new WeakMap<THREE.Data3DTexture, { id: number; version: number; cells: number }>();
   private scratchParams = new Float32Array(32);
@@ -63,6 +65,7 @@ export class Materials {
   forget(): void {
     this.materials = new WeakMap();
     this.shared = new Map();
+    this.tails = new Map();
     this.shaders = new Map();
     this.volumes = new WeakMap();
   }
@@ -303,7 +306,10 @@ export class Materials {
     for (let index = 0; index < count; index++) {
       if (numbers[index] !== sent[index]) { sameNumbers = false; break; }
     }
-    if (sameMaps && sameParams && sameNumbers) return kept.id;
+    if (sameMaps && sameParams && sameNumbers) {
+      this.sendTail(kept.id, look);
+      return kept.id;
+    }
     kept.changes++;
     if (!kept.own && kept.changes > SHARED_CHANGES && sameMaps) {
       kept.own = true;
@@ -322,7 +328,34 @@ export class Materials {
     kept.params.set(p);
     sent.set(numbers.subarray(0, count));
     kept.key = key;
+    this.sendTail(kept.id, look);
     return kept.id;
+  }
+
+  /**
+   * A shared look's numbers past those that tell its materials apart (`RustLook.numbersUsed`: the glow's clock, shape
+   * and strength, the fur's clock), sent to the engine's material `id` when they've moved since it was last sent or
+   * made, from the scratch numbers just written. Compared with the first `shared` alone, they were written once, as
+   * the material was made: the gear's glow stood still, and Settings' Gear glow off left it drawn (`lab glowcost`).
+   */
+  private sendTail(id: number, look: RustLook): void {
+    const from = look.shared!;
+    const to = look.numbersUsed ?? from;
+    if (to <= from) return;
+    const numbers = this.scratchLook;
+    const sent = this.tails.get(id);
+    if (!sent) {
+      // (just made: made with these)
+      this.tails.set(id, numbers.slice(from, to));
+      return;
+    }
+    let same = true;
+    for (let index = from; index < to; index++) {
+      if (numbers[index] !== sent[index - from]) { same = false; break; }
+    }
+    if (same) return;
+    this.core.engine.set_material_custom(id, numbers);
+    sent.set(numbers.subarray(from, to));
   }
 
   /** A material with a look of its own: an engine material to itself, its shader's numbers sent as they move. */

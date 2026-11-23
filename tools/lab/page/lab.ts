@@ -36,7 +36,7 @@ import * as textures from '../../../src/core/textures';
 import * as anatomy from '../../../src/entities/models/anatomy';
 import * as shadowDetail from '../../../src/entities/models/shadowDetail';
 import { drawLook, jointsByObject, partName, withBones, type Look, type PartOnScreen } from './looks';
-import type { Area } from './pixels';
+import { canvasOf, readOpaque, type Area } from './pixels';
 
 /**
  * The clock the session installs before the page's own scripts (`tools/lab/node/browser.mjs`). While its mode is
@@ -1262,7 +1262,7 @@ export class Lab {
       } finally {
         G.scene.fog = fog;
       }
-      const canvas = cropOf(G.renderer.domElement, area);
+      const canvas = shownIn(area);
       return { view, canvas: look === 'bones' ? withBones(canvas, this.joints, area) : canvas };
     }
     const joints = jointsByObject(this.joints);
@@ -1553,21 +1553,17 @@ function areaOf(crop: Crop): Area {
 }
 
 /** `area` of the game's canvas (as its own chain drew it) on a canvas of its own. */
-function cropOf(source: HTMLCanvasElement, area: Area): HTMLCanvasElement {
+/**
+ * `area` of the frame just drawn, as an opaque picture `area`'s size (css px): read off the engine's canvas in the task
+ * that drew it (`readOpaque`). Read off three's canvas, which stays blank under the engine, every lit close-up was
+ * empty: `lab glow` read no glow on any item, and its every reading passed over nothing.
+ */
+function shownIn(area: Area): HTMLCanvasElement {
+  const shown = canvasOf(readOpaque(area));
   const canvas = document.createElement('canvas');
   canvas.width = area.width;
   canvas.height = area.height;
-  const frame = renderer.frameRect();
-  const ratio = frame.width / innerWidth;
-  const { left, top, width, height } = area;
-  canvas.getContext('2d')!.drawImage(
-    source,
-    frame.left + Math.round(left * ratio),
-    frame.top + Math.round(top * ratio),
-    Math.round(width * ratio),
-    Math.round(height * ratio),
-    0, 0, width, height,
-  );
+  canvas.getContext('2d')!.drawImage(shown, 0, 0, shown.width, shown.height, 0, 0, area.width, area.height);
   return canvas;
 }
 
