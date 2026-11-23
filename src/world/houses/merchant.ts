@@ -15,7 +15,7 @@ import {
 } from '../rooms';
 import { G } from '../../state';
 import { blockGeometry, bookShape, pageHeight, printGeometry } from '../../entities/models/book';
-import { buildOdo, coinGeometry, odoTrading, ODO_FAR, type Odo } from '../../entities/models/merchant';
+import { odoSteps, coinGeometry, odoTrading, ODO_FAR, type Odo } from '../../entities/models/merchant';
 import { gripOf, type OdoShop, type Thing } from '../../entities/models/odoLife';
 import { particles, col } from '../../fx/particles';
 import { rand } from '../../util';
@@ -798,9 +798,9 @@ export function build(group: THREE.Group): Room {
   // the one at -0.5, `lab houses`)
   chandelier(g, M, -0.5, high, 1.5, high - CROSS_UNDER);
   return finish(id, b, {
-    seatFolk() {
+    *seatFolk() {
       if (odo) return;
-      odo = buildOdo(plan);
+      odo = yield* odoSteps(plan);
       g.add(odo.root);
     },
     odo: () => odo,

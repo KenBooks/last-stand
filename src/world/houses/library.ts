@@ -11,7 +11,7 @@ import { canvasOf, ctx2d, textureFromCanvas } from '../../core/textures';
 import { mulberry, rand } from '../../util';
 import { particles, col } from '../../fx/particles';
 import { G } from '../../state';
-import { buildScholar, type Scholar } from '../../entities/models/scholar';
+import { scholarSteps, type Scholar } from '../../entities/models/scholar';
 import { blockGeometry, bookShape, printGeometry, type BookShape } from '../../entities/models/book';
 import { SCHOLAR_DESK } from '../../data/houses/library';
 import { chairSeat } from '../seats';
@@ -421,7 +421,7 @@ export const scholarTalk = { talking: false };
  *  where he sits, the table before it, his book open on it facing him, a candle (its light one of the room's ten, the
  *  reading desk's he took the place of), a stack of books, his inkwell and quill, a scroll. He himself is seated later
  *  (`seat`): his head and hands are the heroes', made in workers as the game loads, after the rooms are built. */
-function scholarDesk(g: THREE.Group, M: Mats, b: Build): () => Scholar {
+function scholarDesk(g: THREE.Group, M: Mats, b: Build): () => Generator<void, Scholar, undefined> {
   const { x, z, turn } = SCHOLAR_DESK;
   const d = new THREE.Group();
   d.position.set(x, 0, z);
@@ -471,12 +471,12 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): () => Scholar {
     const at = new THREE.Vector3(o.x, 0, o.z).applyMatrix4(d.matrix);
     b.obstacles.push({ x: at.x, z: at.z, r: o.r, h: o.h });
   }
-  return () => {
+  return function* seat(): Generator<void, Scholar, undefined> {
     const table = { x0: -TABLE.w / 2, x1: TABLE.w / 2, z0: TABLE.z - TABLE.d / 2 - SAT, z1: TABLE.z + TABLE.d / 2 - SAT, top: TABLE.top };
     // (the page he turns turns about the spine's foot in the gutter, the top page of the half on his right: its blocks
     // in their frames, the book's shape)
     const shape = book.shape, spine = new THREE.Vector3(0, BOOK.y + COVER + shape.gutter, BOOK.z - SAT);
-    const s = buildScholar({ spine, shape, table, blocks: book.blocks, prints: book.prints,
+    const s = yield* scholarSteps({ spine, shape, table, blocks: book.blocks, prints: book.prints,
       printTop: BOOK.y + COVER + shape.edge + shape.printed });
     s.root.position.set(0, 0, SAT);
     d.add(s.root);
@@ -599,9 +599,9 @@ export function build(group: THREE.Group): Room {
   });
   const room = finish(id, b, {
     look: libraryLook(),
-    seatFolk() {
+    *seatFolk() {
       if (scholar) return;
-      scholar = seat();
+      scholar = yield* seat();
       // (posed once now: its first frame drawn, a warm-up's, is as he reads)
       scholar.update(0, null, false);
     },

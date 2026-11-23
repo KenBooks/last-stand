@@ -14,7 +14,8 @@ import { createKit } from '../../core/materials';
 import { cloth as clothMaps, felt as feltMaps, leather as leatherMaps, wool as woolMaps, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, reachArm, updateJoints, type Joints } from './rig';
 import { stripRig } from './shapes';
-import { buildHead, buildNeck, handSkin, toGroup, HERO_HEADS, type Head } from './head';
+import { buildNeck, handSkin, headSteps, toGroup, HERO_HEADS, type Head } from './head';
+import { built } from './steps';
 import { buildHand, bare, poseHand, type Digit, type Hand } from './hands';
 import { clamp, damp, lerp, mulberry, smooth } from '../../util';
 import { OdoLife, handTurn, type OdoScene, type OdoShop } from './odoLife';
@@ -179,6 +180,11 @@ type Add = (g: THREE.BufferGeometry, m: THREE.Material, on: THREE.Object3D, name
  * (`preloadHeads`, `preloadHands`), or they're sculpted here on the page.
  */
 export function buildOdo(shop: OdoShop): Odo {
+  return built(odoSteps(shop));
+}
+
+/** `buildOdo` a piece at a time (models/steps.ts), so the boot paints between them, as the scholar's is (#838). */
+export function* odoSteps(shop: OdoShop): Generator<void, Odo, undefined> {
   const kit = createKit(0xffc27a);
   const tex = (maps: ReturnType<typeof woolMaps>, ns = 1) => {
     const m = pbrMaterialMaps(maps, 1, ns);
@@ -215,7 +221,9 @@ export function buildOdo(shop: OdoShop): Odo {
   const P = j.P;
 
   // --- the head: the ranger's bearded face, his hair and beard darkened, his hair under his hat ---
-  const head: Head = buildHead(j.head, kit, HERO_HEADS.ranger.who, HERO_HEADS.ranger);
+  yield;
+  const head: Head = yield* headSteps(j.head, kit, HERO_HEADS.ranger.who, HERO_HEADS.ranger);
+  yield;
   buildNeck(j.neck, kit, 'ranger', P.neckL, j.head);
   const darken = (m: THREE.Material | THREE.Material[] | undefined, k: number) => {
     const s = (Array.isArray(m) ? m[0] : m) as THREE.MeshStandardMaterial | undefined;
@@ -228,12 +236,15 @@ export function buildOdo(shop: OdoShop): Odo {
   // (a ruddy, weathered face: a man on the roads)
   (head.face.material as THREE.MeshStandardMaterial).color.multiply(new THREE.Color(1.04, 0.94, 0.86));
   dressHead(head, hatFelt, band, feather, brass);
+  yield;
   seatEars(head);
+  yield;
 
   // --- the hands: the heroes' own, bare ---
   const skin = handSkin(kit, 'ranger');
   const handL = buildHand(j.handL, 1, skin, skin, 1.08, skin), handR = buildHand(j.handR, -1, skin, skin, 1.08, skin);
   bare(handL, true); bare(handR, true);
+  yield;
 
   // --- his clothes ---
   const parts: THREE.Mesh[] = [];
@@ -245,8 +256,9 @@ export function buildOdo(shop: OdoShop): Odo {
     parts.push(m);
     return m;
   };
-  dressBody(j, add, { shirt, waistcoat, apron, belt, pouch, arm, brass, iron, trousers, boot, bootCuff, sole, thread });
+  yield* dressBody(j, add, { shirt, waistcoat, apron, belt, pouch, arm, brass, iron, trousers, boot, bootCuff, sole, thread });
 
+  yield;
   // --- what he holds of his own: a coin from his scale, a quill as he writes (at no size while not held: a hidden mesh
   // compiles nothing in the room's warm-up, and would at his first use of it) ---
   // (its faces along its own z: pinched by them, `placeCoin`)
@@ -494,7 +506,7 @@ export function buildOdo(shop: OdoShop): Odo {
  *  leather apron from the belt to above his knees; knee breeches and tall riding boots under; his shirt's sleeves rolled
  *  up to just above the elbow, round elbows and bare forearms below. Nothing hangs past his hips but the apron: no coat
  *  skirt, no bib (both read as a habit). */
-function dressBody(j: Joints, add: Add, M: Mats): void {
+function* dressBody(j: Joints, add: Add, M: Mats): Generator<void, void, undefined> {
   const N = 40;
   /** the body's section at a height: across, deep, how deep its folds, how far the belly comes forward */
   const ring = (y: number, w: number, d: number, fold: number, belly: number, seed: number) => {
@@ -536,6 +548,7 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
     const { w, d, b } = front(rows, y), a = Math.asin(clamp(x / (w + 0.01), -1, 1)), [, z] = oval(a, w, d);
     return V(x, y, z + b * Math.cos(a) ** 2 + lift);
   };
+  yield;
   // --- the waistcoat's front: its open V over the shirt at the chest, buttoned in brass down to the belt ---
   {
     const rows: THREE.Vector3[][] = [];
@@ -554,6 +567,7 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
     for (const y of [0.1, 0.03, -0.05]) add(button.clone(), M.brass, j.chest, 'button', false).position.copy(onFront(chestRows, 0, y, 0.008));
     for (const y of [0.16, 0.08]) add(button.clone(), M.brass, j.spine, 'button', false).position.copy(onFront(waistRows, 0, y, 0.008));
   }
+  yield;
   // --- the belt: wide, stitched along both edges, a brass buckle with its tongue and a keeper; two pouches, a coin
   // purse and a ring of keys hung from it ---
   const BELT = -0.02;
@@ -614,6 +628,7 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
       bow.position.copy(key.position).add(V(0, -0.002, 0));
     }
   }
+  yield;
   // --- the apron: a short apron of soft leather from the belt to above his knees, flaring a little at its hem, bound
   // in darker leather round its edge, stitched inside it, a pocket on it, tied at his sides ---
   {
@@ -658,6 +673,7 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
       add(cord(tie, 0.006, false, 12), M.apron, j.hips, 'apron tie', false);
     }
   }
+  yield;
   // --- breeches: a seat round his hips, each thigh full, creased and seamed down its outside, a round knee, buckled
   // in a band below it; tall riding boots over the calf, their tops turned down, soled and heeled ---
   {
@@ -717,6 +733,7 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
     add(soleGeo, M.sole, ankle, 'boot sole').position.set(0, -0.074, 0);
     add(new THREE.BoxGeometry(0.066, 0.026, 0.064), M.sole, ankle, 'boot heel').position.set(0, -0.073, -0.04);
   }
+  yield;
   // --- the sleeves: the shirt's, full and gathered, rolled up in a soft band that sits just above the elbow; a round
   // elbow and his bare forearm below, shaped as an arm is (wider by the elbow, flatter toward the wrist), in his
   // hands' skin. The roll on the elbow's own joint stood out as a hard cylinder pinched in at every bend ---
