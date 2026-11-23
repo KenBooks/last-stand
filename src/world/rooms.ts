@@ -9,6 +9,9 @@
 // (`cutAway`): from above the room is seen as a dollhouse, and over the shoulder the camera's boom stops at the walls
 // (`Room.wall`).
 import * as THREE from 'three';
+import type { TavernKeeper } from './tavernKeeper';
+import type { Keeper } from '../entities/models/keeper';
+import type { Player } from '../entities/player';
 import type { Scholar } from '../entities/models/scholar';
 import type { Rounds } from './scholarRounds';
 import { HOUSES, ROOM_IDS, type RoomId, type TrophyKind, type TrophyPlace } from '../data/houses';
@@ -82,6 +85,14 @@ export interface Room {
   odo?(): Odo | undefined;
   /** his rounds through the room, once he's seated (world/scholarRounds.ts; tools/lab `scholar`) */
   rounds?(): Rounds | undefined;
+  /** the tavern's keeper, once seated (tools/lab `tavern`) */
+  keeper?(): Keeper | undefined;
+  /** ale asked of the tavern's keeper by `hero` (world/tavernKeeper.ts): false if he isn't seated */
+  serveAle?(hero: Player): boolean;
+  /** the tavern's keeper and his mugs, whole (tools/lab `tavern`) */
+  tavern?(): TavernKeeper;
+  /** what goes on in it whether it's shown or not (the tavern's keeper at work, his mugs), every frame */
+  always?(dt: number): void;
 }
 
 /**

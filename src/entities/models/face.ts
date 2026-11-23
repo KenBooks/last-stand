@@ -815,6 +815,13 @@ const VARIANTS = {
   // an elder of the woods: greying, lined, his beard grown long
   'ranger-elder': { base: 'ranger', F: { beardFull: 22, beardUnder: -42 },
     L: { grey: 0.35, age: 1, folds: 0.6, hair: [0.22, 0.2, 0.18], streak: [0.45, 0.43, 0.4], beardHair: [0.3, 0.28, 0.26] } },
+  // the tavern's keeper (entities/models/keeper.ts; from play, his first face "bad... work on his face, mouth"): drawn
+  // from the warrior's fitted skull and mask, older and fuller, a broad, bulbous nose, fuller lips, his eyes a little
+  // narrower under heavy brows, a full beard trimmed short with its moustache over the lip; ruddy, a drinker's nose,
+  // copper hair and beard greying. Not a hero's look: painted and made only where the village is (world/tavern.ts)
+  keeper: { base: 'warrior', F: { jaw: 50, chin: 7, noseLen: 52, noseW: 16.5, nosePro: 1.75, hump: 0.25, tip: 1.35, lips: 1.0,
+      eyeOpen: 2.9, browDrop: 3.4, cheek: 1.15, beardDepth: 6, beardFull: 15, beardLine: 13, beardUnder: -22, stacheCurve: 10 },
+    L: { skin: [0.84, 0.6, 0.52], hair: [0.3, 0.15, 0.075], streak: [0.56, 0.34, 0.18], ao: 0.55, beardHair: [0.38, 0.19, 0.09], eyeShade: 0.55, flush: 1.7, noseWarm: 0.4, lipGloss: 0.3, grey: 0.12, beard: 1, age: 0.75, brows: 1.1, hairDrop: 14, nape: 45, cheekShade: 0.45, stubble: 0.6, beardClump: 1, contour: 0.55, browArch: 0.08, pores: 0.95, lipTint: 1.25, lipColor: [0.72, 0.42, 0.38], nostrils: 1.15, alar: 1.1, browTail: 0, browFill: 0.45, browEven: 1, under: 0.95, browLift: 2.5, browY: -5.5, browIn: 10, templeDrop: 18 } },
 } as const satisfies Record<string, { base: BaseFace; F: Partial<FaceShape>; L: Partial<FaceLook> }>;
 
 /** a face: a hero's own, or one of the other looks (`VARIANTS`) */

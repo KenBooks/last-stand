@@ -1401,9 +1401,11 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
           // two edges, their strands across the whole of it)
           if (both) { j.spine.rotation.x += BOTH.lean; j.neck.rotation.x += -BOTH.lean * BOTH.chin; bothHands(BOTH.reach - kick * (fp ? 0.02 : 0.08)); }
         }
-      } else if (a.name === 'drink' && !fp) {
+      } else if (a.name === 'drink' && (!fp || a.ale)) {
+        // (the tavern's ale through the eyes too, held up in the view: left out there, he drank from no mug, from
+        // Victor's review of the keeper, "no mug in 1st person", `lab tavern --class mage`)
         // the healing draught: taken from the belt and drunk (models/flask.ts)
-        flaskWant = drink(j, k, mouth, handL, flask, fp ? undefined : body); drinkLift = drinkUp(k);
+        flaskWant = drink(j, k, mouth, handL, flask, fp ? undefined : body, a.ale, fp); drinkLift = drinkUp(k, a.ale);
       } else if (a.name === 'summon' && !fp) {
         const w = ramp(k, 0, 0.15), rise = ramp(k, 0, 0.45) * (1 - ramp(k, 0.5, 0.62)), pull = ramp(k, 0.5, 0.62);
         j.shoulderL.rotation.x = lerp(j.shoulderL.rotation.x, curve(SU_ARM_X, k), w); j.shoulderL.rotation.z = lerp(j.shoulderL.rotation.z, curve(SU_ARM_Z, k), w);

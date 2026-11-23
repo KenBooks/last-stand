@@ -10,6 +10,7 @@ import { BIOMES } from './biomes';
 import { ENEMIES } from './enemies';
 import type { ClassDef, Profile } from '../types';
 import type { FolkId } from '../ui/guide/folkPortraits';
+import { KEEPER } from './tavern';
 
 /** What a talk knows as it's had: whether this is the first meeting, how many times they've talked before, whether a
  *  node was heard (in an earlier talk or this one), the hero's class and his records. */
@@ -22,8 +23,11 @@ export interface TalkContext {
 }
 /** A line, as it is or as the talk's context has it. */
 export type Said = string | ((c: TalkContext) => string);
-/** A reply the hero can pick: what he says, the node it leads to (none: the talk ends), and when it's offered. */
-export interface TalkReply { text: Said; to: string | null; when?: (c: TalkContext) => boolean }
+/** What a reply does besides leading on (ui/talk.ts tells main.ts): `ale`, the tavern's keeper pours one. */
+export type TalkAct = 'ale';
+/** A reply the hero can pick: what he says, the node it leads to (none: the talk ends), when it's offered, and what it
+ *  does. */
+export interface TalkReply { text: Said; to: string | null; when?: (c: TalkContext) => boolean; act?: TalkAct }
 /** A node of a talk: what's said (`again` instead when it was heard before), and the replies to it. */
 export interface TalkNode { says: Said[]; again?: Said[]; replies: TalkReply[] }
 /** Someone talked to: his name, what he is, the node his talk starts at, and his nodes. */
@@ -197,4 +201,31 @@ export const HOLLIS: Speaker = {
   },
 };
 
-export const SPEAKERS: Record<string, Speaker> = { scholar: HOLLIS };
+/** The tavern's keeper (entities/models/keeper.ts): a free ale offered, and a word about himself and his house. */
+const BEER: TalkReply = { text: 'A free beer? Aye, pour me one!', to: null, act: 'ale' };
+const DONE: TalkReply = { text: 'Another time, Bertram.', to: null };
+export const TUNWELL: Speaker = {
+  id: 'keeper',
+  name: KEEPER.name,
+  title: KEEPER.title,
+  start: () => 'start',
+  nodes: {
+    start: {
+      says: ['Well now! Come in, come in, shut that door on the cold.',
+        'You\'ve the look of someone just back through a portal. First one\'s on the house: a free beer?'],
+      replies: [BEER, { text: 'Who are you?', to: 'who' }, { text: 'Tell me about this place.', to: 'house' }, DONE],
+    },
+    who: {
+      says: ['Bertram Tunwell. Twenty winters behind this bar, and my father thirty before me.',
+        'Heroes come in muddy and go out singing. Keeping it that way is the whole of the job.'],
+      replies: [BEER, { text: 'Tell me about this place.', to: 'house' }, DONE],
+    },
+    house: {
+      says: ['The Ember & Oak. The fire\'s never once gone out, and the oak is the bar you\'re leaning on.',
+        'Parties gather at the round table by the hearth, and the board by the door has their notices. And the ale is my own brew.'],
+      replies: [BEER, { text: 'Who are you?', to: 'who' }, DONE],
+    },
+  },
+};
+
+export const SPEAKERS: Record<string, Speaker> = { scholar: HOLLIS, keeper: TUNWELL };

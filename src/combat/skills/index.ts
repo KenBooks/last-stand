@@ -14,6 +14,7 @@ import cinderburst from './cinderburst';
 import stormcall from './stormcall';
 import lifethread from './lifethread';
 import potion from './potion';
+import ale from './ale';
 import cleave from './cleave';
 import crescent from './crescent';
 import tempest from './tempest';
@@ -37,7 +38,7 @@ import hedgeward from './hedgeward';
 import type { SkillImpl } from './types';
 
 export const SKILL_IMPLS: Record<string, SkillImpl> = {
-  splinterBolt, cinderburst, stormcall, lifethread, starfall, voidLance, glacialNova, maelstrom, blink, potion,
+  splinterBolt, cinderburst, stormcall, lifethread, starfall, voidLance, glacialNova, maelstrom, blink, potion, ale,
   cleave, crescent, raiseShield, tempest, bullRush, powerStrike, ironBellow, twinFangs,
   savageFists, pounce, rampage, bloodrush, wrath, unchained,
   nockShot: bowShot, fanShot: bowShot, piercingShot, arrowRain, quarryMark, strawman, hedgeward,

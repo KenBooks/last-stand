@@ -452,6 +452,8 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
         applyShade();
       }
       if (import.meta.env.DEV) checkPlaces();
+      // (what goes on in the houses whether they're shown or not: the tavern's keeper at his work)
+      for (const r of Object.values(rooms)) r.always?.(dt);
       if (room) rooms[room].update(dt, t);
       else if (hallShown) hall.update(dt, t); else active.update(dt, t);
       if (shown === 'village' && !hallShown && !room) {

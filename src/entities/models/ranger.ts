@@ -1027,7 +1027,7 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     // carrying the bow: the arm a little out from the side and the elbow a little bent (the walk swings it)
     j.shoulderL.rotation.z += CARRY_RAISE; j.elbowL.rotation.x -= CARRY_BEND;
     hook(handR, 0, 0);
-    const drinkOut = drinking ? drink(j, a.t, mouth, handR, flask, fp ? undefined : body) : 0;
+    const drinkOut = drinking ? drink(j, a.t, mouth, handR, flask, fp ? undefined : body, a.ale, fp) : 0;
     flaskOut = damp(flaskOut, drinkOut, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
     const legW = sitPose(j, st.sit, st.t);
     // (sat on the floor, the quiver's foot tipped back off it: hung as it stands, it stood on the floor)

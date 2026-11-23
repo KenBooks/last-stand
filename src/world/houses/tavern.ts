@@ -10,6 +10,7 @@ import {
   writing,
 } from '../rooms';
 import { lengthSeat } from '../seats';
+import { keeperTalk, tavernKeeper } from '../tavernKeeper';
 
 /** Two axes crossed behind a round shield on a wall (its frame, facing +z), centred at (x, y). */
 function crossedAxes(g: THREE.Object3D, M: Mats, x: number, y: number): void {
@@ -113,7 +114,8 @@ export function build(group: THREE.Group): Room {
   for (let z = barFrom + 0.4; z < barTo; z += 0.75) box(g, 0.04, 0.85, 0.08, barX - 0.29, 0.08, z, M.timber);
   for (let z = barFrom + 0.3; z < barTo - 0.2; z += 0.8) obstacles.push({ x: barX, z, r: 0.42, h: 1.07 });
   obstacles.push({ x: barX, z: barTo - 0.2, r: 0.42, h: 1.07 });
-  for (const [z, metal] of [[-1.9, false], [-1.2, true], [-0.1, false], [0.6, false]] as const) tankard(g, M, barX - 0.1, 1.07, z, metal);
+  // (the keeper's place clear: his cask stands at his left, his mug slides across before him)
+  for (const [z, metal] of [[-1.9, false], [-1.4, true], [0.25, false], [0.6, false]] as const) tankard(g, M, barX - 0.1, 1.07, z, metal);
   // (no seats: at 0.72 m his feet reached the floor only with his legs near straight, as a man stood, from review; a
   // bar stool's sit wants a rung for his feet)
   for (const z of [-2.2, -1.2, -0.2, 0.7]) stool(g, T, barX - 0.75, z, 0.72);
@@ -206,7 +208,12 @@ export function build(group: THREE.Group): Room {
   // (under the ridge beam and hung from it, as the house of records' is: at 0.4 off it, the beam ran through its wheel)
   chandelier(g, M, -0.4, high - CHANDELIER_DROP, 0.05, high - RIDGE_UNDER);
   rug(g, M, 0.2, 2.2, 2.0, 1.4, ['#3a2414', '#a07030', '#5a1a14'], 77);
-  return finish(id, b);
+  // (its keeper behind the bar, his cask, his mugs and his ale: world/tavernKeeper.ts)
+  const keep = tavernKeeper(b, () => keeperTalk.talking);
+  return finish(id, b, {
+    *seatFolk() { yield* keep.seatSteps(); },
+    keeper: keep.keeper, serveAle: keep.serve, always: keep.always, tavern: () => keep,
+  });
 }
 
 /** The map spread on the party's table: the village, its two ways out, the roads, inked on parchment. */

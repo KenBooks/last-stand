@@ -48,6 +48,15 @@ of the campfire's logs; the host, stood by it, points at it as a cursor over its
 for him while the guest's game reports him sat, a free log beside it must be, and once the guest is up his log must be
 again. `--canary` clears the host's copy of the guest's sit just before it points, which must read as the log free.
 
+`coop --scenarios tavern` runs alone, in the village with no run (`node/coopTavern.mjs`, `page/coopTavern.ts`): the
+tavern's keeper and his mugs as two games share them (`src/world/tavern.ts`, `src/game/mugs.ts`, `tv`/`tv?` in
+`src/net/session.ts`). The host's game runs the keeper and rules the mugs; a guest's asks of it and takes its word.
+Both heroes stand at the bar; the guest asks for ale, and the host's keeper must serve it, the guest drink it and the
+host see him drinking. Then both ask at once: each must drink a mug of his own, never the same one, and every mug
+must come back to the back counter on both games. At every look both games' mugs must add up to their count, and once
+settled (a second on) agree mug for mug. `--pictures` takes the guest drinking (`out/coop/tavern-*.png`); `--canary`
+stops the host telling its guest of the mugs (`mute`), so the guest's mug never reaches him, which must be found.
+
 `coop --scenarios looks` (alone, as `colours`) checks a hero's look across the room (`data/heroLooks.ts`, `Look.hl` in
 `src/net/session.ts`): the host opens its hero selection screen and picks another look and a hair colour on its Look
 page (`coopPickLook`: the hall's hero built again in it, the screen closed), and every partner must build its copy of
