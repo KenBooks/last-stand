@@ -10,6 +10,7 @@ import { G } from '../state';
 import { holdFrames } from '../core/frameLoop';
 import { render } from '../core/renderer';
 import { RUST } from '../engine';
+import { gpuParts, type GpuParts } from './gpuParts';
 import { gpuDone, holdPipelines, pipelinesMade } from '../core/webgpu';
 import { frameParts, type ScenePart } from './sceneParts';
 
@@ -68,6 +69,8 @@ export interface Profile {
    *  and hidden (`ProfileOptions.pageParts`): what putting the page together costs, which a draw waited for leaves
    *  out */
   shown?: { frame: number; parts: PartCost[] };
+  /** on the Rust engine: the frame's time by its parts, each timed within the one frame (`gpuParts.ts`) */
+  byParts?: GpuParts;
 }
 
 /** the turns of a page's part: its frames' intervals step by the display's refresh, so more of them, and averaged */
@@ -350,6 +353,11 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
     const timed: Took[] = [];
     for (let frame = 0; frame < turns.frames * 2; frame++) timed.push(await timedFrame());
     const frames = await Promise.all(timed);
+    progress.part = 'the frame by its parts';
+    const byParts = engineTimed
+      ? await gpuParts(once, options.nextFrame ?? browserFrame, () => options.cancelled?.() ?? false)
+      : undefined;
+    if (options.cancelled?.()) throw new ProfileCancelled();
     costs.sort((a, b) => (b.on - b.off) - (a.on - a.off));
     const shownFrame = shownTiming(draw, options, counted);
     const shown = pageParts.length ? await shownCosts(pageParts, shownFrame, progress) : undefined;
@@ -359,7 +367,7 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
     const renderer = RENDERER_NAME;
     const found = { frame: medianOf(frames), seconds, compiled, compiledAtDraw, renderer, parts: costs, untimed, shown };
     const idle = engineTimed ? ENGINE_FRAMES.idle / Math.max(ENGINE_FRAMES.waited, 1) : undefined;
-    return { ...found, gpuTimed, idle };
+    return { ...found, gpuTimed, idle, byParts };
   } finally {
     holdPipelines(G.renderer, false);
     holdFrames(false);

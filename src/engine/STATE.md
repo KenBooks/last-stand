@@ -358,3 +358,16 @@ not intend to support the old way of rendering".
   taken into the engine can't move it by more, here or by a few times that on a phone whose frame is its GPU's
   (14.7 ms, G82F-ZNNE). Not built for that reason. The engine owning a body's joints is still what animation in
   the engine needs: build it when that is the piece, not for the frame.
+
+## 2026-11-23, the frame by its parts
+
+- [x] Bulwark 569b454: `set_breakdown`, `breakdown`, `breakdown_names` (gpu/parts.rs). A frame asked for stamps
+  every pass at its start and end, draws the scene as a pass for each run of its draws of one kind, and gives what
+  runs between two stamped passes to the part that claimed it. `lab parts` there: 96 walls, opaque then blended,
+  99% of the frame in their own part, the parts adding up to the frame (29.0 ms against 28.9).
+- [x] Here: `src/perf/gpuParts.ts` reads it (the median of 24 frames), a profile's report leads with it, `lab rust
+  --parts` prints it. `lab rustcheck` 42 of 42: a frame broken down, 15 passes, is the frame as it is to the pixel.
+- The village at night, Very low, the ranger at -0.7, -10.5, 2880 by 1800 at 2 on the 4070 Ti (3.1 ms): opaque
+  still meshes 40%, blended and added 16%, the page's shaders 12%, the grade 11%, the depth drawn first 8%, bloom
+  4%, counted instances 3%. A phone's is the one to act on: its next profile carries it.
+- [ ] Not in it: the lamps' shadows and the light cache's bake, the sight map, and the page's shaders each by name.

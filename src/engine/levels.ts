@@ -34,6 +34,21 @@ export class Levels {
     return { reads: stats[6], busy: stats[7] > 0, ms: stats[5] };
   }
 
+  /** The frames broken down by their parts from now on, or drawn as they are (Bulwark gpu/parts.rs): a
+   *  profile's. A frame broken down isn't timed whole: `gpuClock` stays the last whole frame's. */
+  setBreakdown(on: boolean): void { this.core.engine.set_breakdown(on); }
+
+  /** The parts' names, in the order `breakdown` has their times. */
+  breakdownNames(): string[] { return this.core.engine.breakdown_names().split('\n'); }
+
+  /** Each part's time in the last frame broken down whose stamps have come back (ms), the passes it was stamped in, how many
+   *  have, and whether one's are on their way; asked with no frame drawn. */
+  breakdown(): { ms: number[]; passes: number; reads: number; busy: boolean } {
+    const told = Array.from(this.core.engine.breakdown());
+    const [passes, reads, busy] = told.slice(-3);
+    return { ms: told.slice(0, -3), passes, reads, busy: busy > 0 };
+  }
+
   /** The engine told the quality level's samples and shadow map, when they change: it drew 4 samples a pixel
    *  and a map of 2048 at every level, a phone's Very low among them (26 ms a frame on its GPU, from play). */
   private quality(samples: number, shadowSize: number): void {

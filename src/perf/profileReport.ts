@@ -1,5 +1,6 @@
 // A profile as its report reads (`profiler.ts`'s result): each part's cost with how far it's known, its share of
 // the frame it was timed in, and how far the frame's own time moved from part to part.
+import { gpuPartsLines } from './gpuParts';
 import type { PartCost, Profile } from './profiler';
 
 /** Whether a part's cost is told apart from nothing: over twice how far it's known. */
@@ -45,7 +46,10 @@ export function profileLines(found: Profile): string[] {
   const frame = `the frame ${found.frame.toFixed(1)} ms (${fps} fps), each frame ${timed}; `
     + `profiled in ${found.seconds.toFixed(1)} s, ${made}`
     + (found.idle === undefined ? '' : `, the GPU kept drawing in ${((1 - found.idle) * 100).toFixed(0)}% of the frames between`);
-  const lines = [frame, ...driftLine(found.parts), ...found.parts.map((part) => partLine(part, onWebGPU))];
+  const lines = [frame];
+  if (found.byParts) lines.push(...gpuPartsLines(found.byParts, found.frame));
+  if (found.byParts) lines.push('each part taken out and put back in turns (these overlap, and don\'t add up):');
+  lines.push(...driftLine(found.parts), ...found.parts.map((part) => partLine(part, onWebGPU)));
   lines.push(...(found.untimed ?? []).map((part) => `${part.name}: ${part.why}`));
   if (!found.shown) return lines;
   const shownFps = found.shown.frame > 0 ? Math.round(1000 / found.shown.frame) : 0;
