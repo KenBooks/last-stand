@@ -16,6 +16,9 @@ import { RUST } from '../engine';
 export interface ScenePart {
   name: string;
   change: (on: boolean) => void;
+  /** puts the part back as the game had it before the profile, where that isn't `change(true)`: a part timed as
+   *  the old way against the new has the old way as its "with" */
+  restore?: () => void;
   /** why it can't be timed here, where it can't (the report says so in its place) */
   untimed?: string;
 }
@@ -83,10 +86,17 @@ function pixelsPart(): ScenePart {
 type EngineSwitch = 'points' | 'ownPoints' | 'nearLamps' | 'lampShadows' | 'bloom' | 'shadows' | 'see' | 'debug' | 'nearFirst' | 'shine' | 'solidSee' | 'shadowTurns' | 'lowRes'
   | 'depthFirst' | 'scene' | 'fieldsFirst' | 'fieldsPlaced' | 'grassShaded' | 'sightFog' | 'overCleared';
 
-/** A part of the Rust engine's frame, switched by one of its tuned numbers (`TUNE` in engine/globals.ts). */
+/** A part of the Rust engine's frame, switched by one of its tuned numbers (`TUNE` in engine/globals.ts), and put
+ *  back to the number it found: a part whose "with" is the old way (`fieldsPlaced`, `overCleared`) left the game
+ *  on it after a profile, and every part timed after it too. */
 function tunedPart(name: string, key: EngineSwitch, off: number,
   on = RUST.tune[key]): ScenePart {
-  return { name, change: (put) => { RUST.tune[key] = put ? on : off; } };
+  const found = RUST.tune[key];
+  return {
+    name,
+    change: (put) => { RUST.tune[key] = put ? on : off; },
+    restore: () => { RUST.tune[key] = found; },
+  };
 }
 
 /**

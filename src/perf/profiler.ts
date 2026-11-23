@@ -231,7 +231,27 @@ function shownTiming(draw: Draw, options: ProfileOptions, counted: () => void): 
 
 /** The frames a profile draws: each part's turns, then the frame alone. */
 function framesOf(parts: number, turns: ProfileTurns): number {
-  return parts * turns.rounds * 2 * (turns.settle + turns.frames) + turns.frames * 2;
+  return parts * (1 + turns.rounds * 2 * (turns.settle + turns.frames)) + turns.frames * 2;
+}
+
+/** the most waits of `PIPELINE_LOOK_MS` for a part's own pipelines before it's timed (about 5 s) */
+const PIPELINE_LOOKS = 160;
+const PIPELINE_LOOK_MS = 30;
+
+/**
+ * The frame drawn once without `part`, and the engine's pipelines it asked for waited for: a part that draws with
+ * pipelines of its own (the depth drawn first taken out: each opaque thing drawn whole, which the engine makes only
+ * as a place is first asked for, Bulwark c9e506c) made them in its first turns, and the draws left out while they
+ * compiled were timed as the part's saving. Waited by the browser's timers, never the page's clock (the lab's
+ * stands still within a frame).
+ */
+async function partPipelinesMade(part: ScenePart, timedFrame: TimedDraw): Promise<void> {
+  part.change(false);
+  await timedFrame();
+  if (!RUST.bridge) return;
+  for (let look = 0; look < PIPELINE_LOOKS && RUST.pipelines.compiling > 0; look++) {
+    await new Promise((done) => setTimeout(done, PIPELINE_LOOK_MS));
+  }
 }
 
 /** `part`'s cost in turns: settled after each change, then timed (`average`: the median of a draw waited for, the
@@ -241,6 +261,7 @@ async function costOf(part: ScenePart, timedFrame: TimedDraw, turns: ProfileTurn
   const on: Took[] = [];
   const off: Took[] = [];
   try {
+    await partPipelinesMade(part, timedFrame);
     for (let round = 0; round < turns.rounds; round++) {
       for (const state of [true, false]) {
         part.change(state);
@@ -250,7 +271,8 @@ async function costOf(part: ScenePart, timedFrame: TimedDraw, turns: ProfileTurn
       }
     }
   } finally {
-    part.change(true);
+    if (part.restore) part.restore();
+    else part.change(true);
   }
   return { name: part.name, on: average(await Promise.all(on)), off: average(await Promise.all(off)) };
 }
