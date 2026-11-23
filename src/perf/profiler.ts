@@ -10,6 +10,7 @@ import { G } from '../state';
 import { holdFrames } from '../core/frameLoop';
 import { render } from '../core/renderer';
 import { RUST } from '../engine';
+import { keepAwake } from './awake';
 import { gpuParts, type GpuParts } from './gpuParts';
 import { gpuDone, holdPipelines, pipelinesMade } from '../core/webgpu';
 import { frameParts, type ScenePart } from './sceneParts';
@@ -339,6 +340,8 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
   ENGINE_FRAMES.waited = ENGINE_FRAMES.idle = 0;
   holdFrames(true);
   holdPipelines(G.renderer, true);
+  // (the screen kept on: a phone left alone through it dims and locks, and its frames stop)
+  keepAwake('profile', true);
   try {
     const costs: PartCost[] = [];
     for (const part of parts) {
@@ -369,6 +372,7 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
     const idle = engineTimed ? ENGINE_FRAMES.idle / Math.max(ENGINE_FRAMES.waited, 1) : undefined;
     return { ...found, gpuTimed, idle, byParts };
   } finally {
+    keepAwake('profile', false);
     holdPipelines(G.renderer, false);
     holdFrames(false);
   }

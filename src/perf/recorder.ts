@@ -10,6 +10,7 @@ import { framesUncapped } from '../core/frameLoop';
 import { autoTrying } from '../core/quality';
 import { sceneNote } from './sceneNote';
 import { keepBootStall, keepPlayStall, longFrameLabel } from './bootStalls';
+import { keepAwake } from './awake.ts';
 import { judge, refreshOf, slowBoot, slowReadying, type Verdict } from './detect.ts';
 import { STATE, type ColumnKind, type LongFrameRow, type MarkRow } from './traceFormat.ts';
 
@@ -232,6 +233,7 @@ export const recorder = {
     recordingFrames = 0;
     recordingResult = null;
     recordingSince = performance.now();
+    keepAwake('recording', true);
     mark('manual recording started', recordingSince);
     recordingMark = marks[marks.length - 1];
     recorder.recordingBoundary(true);
@@ -249,10 +251,11 @@ export const recorder = {
     snapshot.marks = snapshot.marks.filter(([, text]) => text !== 'manual recording started');
     snapshot.marks.unshift([0, 'manual recording started']);
     recordingSince = null;
+    keepAwake('recording', false);
     return { scene: scene(), verdict: null, tookMs: now - start, at: now, snapshot, manual: true };
   },
   /** Sending or discarding the manual result resumes the saved automatic-report policy. */
-  releaseRecording(): void { recordingSince = null; recordingResult = null; recordingMark = null; manualHeld = false; },
+  releaseRecording(): void { keepAwake('recording', false); recordingSince = null; recordingResult = null; recordingMark = null; manualHeld = false; },
   /** Call at the very start of a rAF callback. Returns the frame's place in the ring (for its GPU time). */
   begin(now: number): number {
     noteScene(now);
