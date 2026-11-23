@@ -41,6 +41,9 @@ jobs:
       - name: Say which shared files the PR touches
         run: node scripts/hubs.mjs origin/${{ github.base_ref }}
 
+      - name: Check the engine's build names its Bulwark commit
+        run: node scripts/engine-pkg.mjs origin/${{ github.base_ref }}
+
       - name: Check the marked lists are sorted
         run: npm run check:sorted
 
