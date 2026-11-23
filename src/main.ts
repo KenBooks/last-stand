@@ -104,8 +104,7 @@ import { markLoaded, pinPrograms, programsCompiledInGame } from './core/shaders'
 import { initBiome, rollBiome } from './game/biome';
 import { BIOMES, BIOME_IDS } from './data/biomes';
 import { CLASSES, CLASS_IDS } from './data/classes/index';
-import { loadingStep, loadingDone, loadingFailed, loadingLeft, lobbyLaidOut, seeThroughLoading, stillLoading } from './ui/loading';
-import { prepareWind } from './ui/logoWind';
+import { loadingStep, loadingDone, loadingFailed, loadingLeft, lobbyLaidOut, prepareExit, seeThroughLoading, stillLoading } from './ui/loading';
 import { preloadTextures } from './core/textures';
 import { tickItemGlow } from './core/materials';
 import { preloadHands } from './entities/models/hands';
@@ -174,7 +173,7 @@ async function boot() {
   const hands = preloadHands(heroDetailAtBoot() <= COARSE_HANDS_UNDER);
   preloadStump();
   preloadFlames();
-  prepareWind();
+  prepareExit();
   if (VILLAGE) prepareCrest();
   // (each long stretch of the boot under a step of its own: under four names the bar stood at one for 3 to 9 s,
   // from play, "desktop still stuck here for a bit", "can you we add more steps in loading ?")

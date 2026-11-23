@@ -92,6 +92,13 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   held 3.8 s and an Adreno 810's 7.4 (traces EP2G-9M10, 4NA2-KWVF). `npm run lab -- crest` blows it on the boot's
   context, again at High, and at Very low, where it must fade.
 - `floaters.ts`: a headshot's number (#750, `damageNumber`'s `head`) is a crit's, larger (32 against 26), with HEADSHOT in pale gold over it (17 px, about half the digits' height, its ink set a third of its size over theirs: stacked as two lines' boxes, the gap between them was larger than the label, and an adversarial review read them as two things; its offsets are px of the art, the canvas already scaled to its ratio, and scaled again they split the two at a phone's ratio 3), drawn once as it appears and gone a little later (1.3 s), as every number: nothing flashes or pulses (the owner's choice of its feedback: no hit marker or sound).
+- `logoWind.ts`: a context the wind made ahead and won't blow on is let go to the collector, never lost by hand
+  (`dropWind`, `dropCrestWind`), and the loading screen's exit makes none where the level the boot starts at fades it
+  (`prepareExit` in `loading.ts`, as the crest's `prepareCrest`). `loseContext` is a round trip to the GPU's process,
+  waiting behind everything queued there: made at every level and lost as the lobby showed, an Adreno 810's Very low
+  boot held its last task 13 s behind the pipelines still compiling, the lobby shown at 44 s (trace DMDE-1E1R), and
+  the S25's the same task 1 s (F3Y8-M4TG). Any WebGL call that reads back (a status, a parameter, a lost context)
+  waits so: a GPU-bound boot pays it in full.
 - `longPress.ts`: a finger's long press anywhere on the page never opens the browser's menu (`holdWithoutMenu`, from `initTouch`): its `contextmenu` is prevented on the window as it captures, but on text kept to be selected or typed in (a field, `user-select: text`), and in touch mode a drag's start too. The page's `-webkit-touch-callout: none` and `user-select: none` stopped the callout and the selection, not the event: holding a skill button opened Android Chrome's menu (Back, Forward, Reload, Download, Print, Share) over the game, where only the canvas and a few buttons prevented theirs. A mouse's right button keeps its own handling. `npm run lab -- longpress --class <hero>` holds every touch control, in the yard and in a run (the lab's headless browser makes no long press itself, so the menu event is sent as Chrome sends it, a finger held down).
 - `perfHud.ts`: on WebGL the GPU's name and timer were read as the renderer was made (`readGpuAhead` from `main.ts`, taken out with it), before
   anything compiles: each a round trip to the GPU's process, read in `initPerfHud` they waited 1.9 s behind the

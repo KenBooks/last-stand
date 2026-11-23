@@ -1,8 +1,8 @@
 // Loading screen. The markup and styles are inline in index.html so it paints before the
 // bundle has loaded; boot() reports its steps here and yields so each one gets painted.
 import { TIPS } from '../data/tips';
-import { dropWind, prepareBlow, logoWindOff, type LogoBlow } from './logoWind';
-import { qualityLevel } from '../core/quality';
+import { dropWind, prepareBlow, prepareWind, logoWindOff, type LogoBlow } from './logoWind';
+import { levelAtBoot, qualityLevel } from '../core/quality';
 import { hasWebGpu } from '../core/rendererChoice';
 import { recorder } from '../perf/recorder';
 import { sfx } from '../core/audio';
@@ -39,7 +39,17 @@ const SMOOTH_FRAMES = 8, SMOOTH_MS = 70, MAX_WAIT_MS = 4000;
 // has none: it blows away). A plain fade instead with reduced motion, on low
 // graphics quality and under (picked, or where Auto settled last time), and on a device where the particles were too slow
 // before
-const plainExit = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches || (qualityLevel() === 'low' || qualityLevel() === 'verylow') || logoWindOff();
+const plainExit = (level = qualityLevel()): boolean =>
+  matchMedia('(prefers-reduced-motion: reduce)').matches || level === 'low' || level === 'verylow' || logoWindOff();
+
+/** The exit's context made at the boot's start, while the GPU's process is idle, where the level the boot starts at
+ *  blows the logo away (`prepareWind`): at Low and Very low, where it fades, none, as the crest's (`prepareCrest`).
+ *  Made at every level, an Adreno 810's Very low boot made one for nothing, and let it go as the lobby showed with
+ *  the boot's last task waiting 13 s on the GPU's process behind the pipelines it was still compiling (trace
+ *  DMDE-1E1R: shown at 44 s; the S25's same task 1 s, F3Y8-M4TG). */
+export function prepareExit(): void {
+  if (!plainExit(levelAtBoot())) prepareWind();
+}
 /** the logo's exit, made ready from when the lobby is laid out (`lobbyLaidOut`) */
 let exit: Promise<LogoBlow | null> | null = null;
 const blowFor = (l: HTMLElement): Promise<LogoBlow | null> => {
