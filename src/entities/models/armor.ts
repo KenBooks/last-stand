@@ -2,6 +2,7 @@
 // wrap round the body, fur tufts, studs, medallions, gloved fingers, and a skirt of cloth or mail that
 // swings with the legs. Static pieces go through `Sculpt` (entities/models/shapes.ts) to merge per joint.
 import * as THREE from 'three';
+import { freshLocal, freshPass, freshWorld } from './freshWorld';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { taperTube, twist } from './shapes';
 import { part, joint } from './rig';
@@ -366,9 +367,13 @@ export class SkirtLimbs {
     return s;
   }
   place(space: THREE.Object3D): void {
+    // (each joint's world matrix made once, the skirt's space inverted once: `freshWorld.ts`)
+    freshPass();
+    const local = freshLocal(space);
     for (let k = 0; k < this.list.length; k++) {
       const [[oa, pa], [ob, pb]] = this.ends[k], s = this.list[k];
-      space.worldToLocal(oa.localToWorld(s.a.copy(pa))); space.worldToLocal(ob.localToWorld(s.b.copy(pb)));
+      s.a.copy(pa).applyMatrix4(freshWorld(oa)).applyMatrix4(local);
+      s.b.copy(pb).applyMatrix4(freshWorld(ob)).applyMatrix4(local);
     }
   }
 }
@@ -385,11 +390,14 @@ export function armOffThigh(space: THREE.Object3D, shoulder: THREE.Object3D, sid
   const L2 = Math.max(1e-9, _sab.lengthSq());
   for (let it = 0; it < 3; it++) {
     let deep = 0, at = 0;
+    // (each pass after the shoulder's turn: its arm's matrices made again)
+    freshPass();
+    const local = freshLocal(space);
     for (const [[o, p], r] of pts) {
-      space.worldToLocal(o.localToWorld(_sp.copy(p)));
+      _sp.copy(p).applyMatrix4(freshWorld(o)).applyMatrix4(local);
       const u = clamp(_sq.subVectors(_sp, thigh.a).dot(_sab) / L2, 0, 1);
       const d = thigh.ra + (thigh.rb - thigh.ra) * u + cloth + r - _sp.distanceTo(_sq.copy(thigh.a).addScaledVector(_sab, u));
-      if (d > deep) { deep = d; at = _sp.distanceTo(space.worldToLocal(shoulder.getWorldPosition(_sn))); }
+      if (d > deep) { deep = d; at = _sp.distanceTo(_sn.setFromMatrixPosition(freshWorld(shoulder)).applyMatrix4(local)); }
     }
     if (deep <= 0.001) return;
     shoulder.rotation.z += side * weight * Math.min(0.12, deep / Math.max(0.2, at));
