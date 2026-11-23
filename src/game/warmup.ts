@@ -137,12 +137,58 @@ const shownNow = (): THREE.Object3D => G.arena.shownGroup();
  * lobby's warm-up waited for them after (a first visit's: 3.5 s of the 14 s of compiles it waited 2.3 s on). The
  * post chain's and the overlay's too, which the lobby's first full frame linked one after another.
  */
-export async function compileTheBiome(): Promise<void> {
+export async function compileTheBiome(villageFirst = true): Promise<void> {
+  sceneAheadOn = villageFirst;
   const { staff, hand } = heroLights();
   G.scene.add(staff, hand);
-  // (nothing of the scene is three's to compile ahead: the engine takes each mesh as it's first shown; the page let go)
+  // (nothing of the scene is three's to compile ahead; the page let go)
   await nextTask();
   compilePasses([labelsScene()]);
+  await sceneAhead();
+}
+
+/** Whether the boot hands the scene over as it's built (`sceneAhead`): not a first visit's, which opens on the
+ *  hall of heroes with the village hidden behind it. Handed over there, the village was 6 s more of the GPU's
+ *  process's work under the loading screen (31.4 s to 37.8 s on a CPU, `npm run stalls -- --scenario boot`), for a
+ *  place the first frames don't draw; the engine's own walk hands it over behind the hall, as before. */
+let sceneAheadOn = true;
+
+/** the meshes `sceneAhead` has handed over: the boot calls it as the scene grows, and each call walks it all */
+const handedAhead = new WeakSet<THREE.Object3D>();
+
+/** how long `sceneAhead` hands the scene over before it lets the page go (ms) */
+const AHEAD_SLICE_MS = 12;
+
+/**
+ * All the scene shows handed to the engine now, with the pipelines it will draw with, and none of them waited
+ * for: they compile on the GPU's threads while the boot's next steps build. A warm-up hands over its own samples
+ * alone, and the engine met the village only as the lobby's first frame was drawn, in the boot's last step: 16 of
+ * that frame's pipelines were first asked for there, and a laptop's boot waited 2.6 s for them with nothing else
+ * left to do (trace 1FJ3-5Z5H; `npm run lab -- pipelines`). What it has met already costs a lookup. What's hidden
+ * (the houses' rooms, the hall) is left to the engine's own walk behind the lobby, as it was: the first frame
+ * never handed it over, and handed over here it's boot time the lobby doesn't need. The fight's foes handed over
+ * as each is built (`buildAhead`) were tried too and left as they were: with the lobby's pipelines asked for this
+ * early there's little wait left for theirs to compile beside, and it was 1.3 s more of the page's tasks with the
+ * CPU 4 times slower.
+ */
+export async function sceneAhead(): Promise<void> {
+  if (!AHEAD.prepare || !sceneAheadOn) return;
+  const handed = handedAhead;
+  const stack: THREE.Object3D[] = [G.scene];
+  let from = performance.now();
+  while (stack.length) {
+    const object = stack.pop()!;
+    if (!object.visible) continue;
+    // (a mesh with all under it at once, as `prepare` walks it; one handed over by a call before is passed by)
+    if (!(object as THREE.Mesh).isMesh) stack.push(...object.children);
+    else if (!handed.has(object)) {
+      handed.add(object);
+      AHEAD.prepare([object]);
+    }
+    if (performance.now() - from < AHEAD_SLICE_MS) continue;
+    await nextTask();
+    from = performance.now();
+  }
 }
 
 /** `objects` named `name` where they have none of their own: what uses a program, as `lab programs` lists them. */
@@ -196,6 +242,10 @@ export async function compileTheLobby(): Promise<void> {
   await nextTask();
   // (the outline's edge: the dummies' masks are the lobby's warm-up's, as they spawn when the lobby is entered)
   compileOutline([]);
+  // (the hero, the effects and the samples handed to the engine now, none waited for: the lobby's warm-up, after
+  // the page is laid out and the dummies stand, finds most of their pipelines made)
+  if (sceneAheadOn) AHEAD.prepare?.(extra);
+  await sceneAhead();
 }
 
 /** the lobby's dummies' bodies, which its warm-up outlines, and every place's seats, outlined as E would sit on
@@ -221,6 +271,8 @@ export async function warmLobby(hall = false, step: WarmStep = async () => undef
   const start = performance.now();
   // (the dummies' crowd, shown from the first frame: hidden till then, its programs were made at the lobby's draws)
   for (const dummy of G.enemies) for (const slot of crowdSlots(dummy.model)) slot.visible = true;
+  // (the hero, the dummies and what else the scene has gained since the village was handed over)
+  await sceneAhead();
   const warming = warmUp(G.renderer, G.scene, G.camera, sceneTarget(), {
     // (the hero's masks too: the hero selection screen outlines the hero under the mouse)
     objects: extra, leaveOut, before: mapsArrived, also: () => compileOutline([...outlined(), hero.root]),

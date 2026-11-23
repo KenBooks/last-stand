@@ -178,6 +178,16 @@ test('counts each task\'s own time, less the work the trace kept inside it', () 
   assert.deepEqual(own, { RunTask: 3, Paint: 3, Layerize: 1, Commit: 3, DrawFrame: 5 });
 });
 
+test('counts each task\'s own time on a CPU, where the trace has its thread\'s', () => {
+  const tasks = [
+    { name: 'RunTask', ...PAGE, ts: 0, dur: 10_000, tdur: 6_000 },
+    { name: 'Paint', ...PAGE, ts: 1_000, dur: 4_000, tdur: 2_000 },
+    { name: 'DrawFrame', ...GPU, ts: 1_000, dur: 5_000 },
+  ];
+  const cpu = Object.fromEntries(selfTimes(tasks).map((own) => [own.task.name, own.cpu]));
+  assert.deepEqual(cpu, { RunTask: 4, Paint: 2, DrawFrame: null });
+});
+
 test('lists what each phase\'s threads spent a frame\'s time on', () => {
   const record = {
     start: 1000,

@@ -228,7 +228,7 @@ async function boot() {
   const engraving = textures.ready('steel').then(preloadEngraving);
   // the village shown, and its programs compiled while the hero is built (game/warmup.ts)
   await loadingStep('Kindling the lamps', 0.24);
-  await compileTheBiome();
+  await compileTheBiome(hasSavedClass());
   // (the lobby's panels rastered under the loading screen while the hero is built: ui/menus.ts)
   // (the loading screen seen through by a thousandth while the lobby's UI is rehearsed under it: opaque, Chrome
   // rastered and drew none of what it covered, ui/loading.ts)

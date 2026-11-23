@@ -24,8 +24,9 @@ export interface PipelinesOptions {
 /** How many of a kind were asked for, and how many of those a pass has set since. */
 interface Tally { asked: number; drawn: number }
 
-/** the most scene pipelines asked for before the boot's last step (47 at Very low and at High, cold) */
-const UNDER_LOADING_MOST = 64;
+/** the most scene pipelines asked for before the boot's last step (66 at High, cold: the lobby's own, the
+ *  fight's and what stands hidden in the scene, all asked for as they're built) */
+const UNDER_LOADING_MOST = 80;
 
 /** the name of the time after the boot's last step was shown */
 const IN_LAST_STEP = 'in the last step and after it';
@@ -91,6 +92,9 @@ export async function pipelinesCensus(lab: Lab, options: PipelinesOptions): Prom
   const underLoading = asked.filter((pipeline) => pipeline.at < lastStep.at);
   const drawn = asked.filter((pipeline) => pipeline.drawn);
   const unseen = underLoading.filter((pipeline) => !pipeline.drawn);
+  // (what the lobby's frames draw with, first asked for in the boot's last step: that step waits for each with
+  // nothing else left to do, where one asked for as its thing is built compiles beside the steps between)
+  const drawnLate = asked.filter((pipeline) => pipeline.at >= lastStep.at && pipeline.drawn);
   const lines = [
     `${asked.length} scene pipelines asked for by the end of the boot, ${underLoading.length} of them before its `
       + `last step ("${lastStep.label}"); ${options.canary ? 'no' : options.frames} frames of the lobby drawn`,
@@ -98,6 +102,7 @@ export async function pipelinesCensus(lab: Lab, options: PipelinesOptions): Prom
     ...stepLines(tallied(asked, lastStep.at)),
     `asked before the last step and never drawn in the lobby: ${unseen.length} of ${underLoading.length}`,
     ...stepLines(tallied(unseen, lastStep.at)),
+    `drawn in the lobby and first asked for in the boot's last step: ${drawnLate.length}`,
   ];
   const problems: string[] = [];
   if (options.canary) {
@@ -107,6 +112,10 @@ export async function pipelinesCensus(lab: Lab, options: PipelinesOptions): Prom
       : `the canary missed: ${drawn.length} read as drawn with no frame drawn`);
   } else if (drawn.length === 0) {
     problems.push('the lobby drew with none of the pipelines asked for: nothing was measured');
+  }
+  if (drawnLate.length > 0 && !options.canary) {
+    problems.push(`${drawnLate.length} pipelines the lobby draws with were first asked for in the boot's last `
+      + 'step, which waits for them: what draws with them is to be handed to the engine as it is built');
   }
   if (underLoading.length > UNDER_LOADING_MOST) {
     problems.push(`${underLoading.length} scene pipelines asked for under the loading screen, over its `
