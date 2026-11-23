@@ -53,11 +53,9 @@ export function prepareExit(): void {
 /** the logo's exit, made ready from when the lobby is laid out (`lobbyLaidOut`) */
 let exit: Promise<LogoBlow | null> | null = null;
 const blowFor = (l: HTMLElement): Promise<LogoBlow | null> => {
-  // (the panels' lobby's hero selection screen has a logo of its own to gather into; the village's has none, and the
-  // letters blow away)
+  // (the hero selection screen has no logo to gather into: the letters blow away)
   const onHeroes = document.querySelector('#heroes:not(.hidden)') !== null;
-  const target = document.querySelector<HTMLElement>('#heroes:not(.hidden) .logo-art')
-    ?? (onHeroes ? null : document.querySelector<HTMLElement>('#menu .logo-art'));
+  const target = onHeroes ? null : document.querySelector<HTMLElement>('#menu .logo-art');
   return prepareBlow(l.querySelector<HTMLElement>('.ld-logo')!, target);
 };
 

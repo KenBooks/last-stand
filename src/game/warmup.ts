@@ -14,7 +14,6 @@ import { AHEAD } from '../engine/pipelinesAside';
 import { isLazyFoe, loadFoe } from '../entities/bosses';
 import { lampsLetGo } from './village';
 import * as THREE from 'three';
-import { VILLAGE } from '../core/beta';
 import { G } from '../state';
 import { behindTheLobby, warmUp, type Swap, type WarmedUp } from '../core/shaders';
 import { compilePasses, sceneTarget } from '../core/renderer';
@@ -122,13 +121,10 @@ function* heroAllWornSteps(model: string, at?: THREE.Vector3): Generator<void, M
   return m;
 }
 
-/** the biomes the lobby doesn't show that are built: all of them where it stands in the village (none at boot: each
- *  is built and warmed as a run first needs it, `warmBiome`), else all but its own */
-const otherBiomes = (): BiomeId[] => (VILLAGE ? BIOME_IDS : BIOME_IDS.filter((id) => id !== G.arena.biome))
-  .filter((id) => G.arena.biomeBuilt(id));
+/** the biomes built, none of which the lobby shows (none at boot: each is built and warmed as a run first needs it,
+ *  `warmBiome`) */
+const otherBiomes = (): BiomeId[] => BIOME_IDS.filter((id) => G.arena.biomeBuilt(id));
 
-/** what the lobby shows, which a warm-up hides to show another place: the village, or its biome */
-const lobbyGroup = (): THREE.Group => G.arena.groupOf(VILLAGE ? 'village' : G.arena.biome);
 /** What the lobby shows at this moment, read as a warm-up draws (`Swap.hide`'s getter): a house's room or the hall of
  *  heroes may stand in the village's place by then (a part built, then compiled and drawn frames later behind the
  *  lobby), and hidden in the village's stead, the room stayed lit beside what was drawn: as many lights again. The
@@ -303,7 +299,7 @@ function biomePart(id: BiomeId): Part {
   return {
     name: id,
     build() {
-      const swap: Swap = { show: G.arena.groupOf(id), get hide() { return shownNow(); }, alone: VILLAGE ? lampsLetGo : undefined };
+      const swap: Swap = { show: G.arena.groupOf(id), get hide() { return shownNow(); }, alone: lampsLetGo };
       return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
     },
   };
@@ -311,8 +307,8 @@ function biomePart(id: BiomeId): Part {
 
 /** the biomes built and warmed as a run first needed them (`warmBiome`) */
 const biomesWarmed = new Set<BiomeId>();
-/** Whether biome `id`'s programs are warm: with the fight's need where the boot built it, else once `warmBiome` has. */
-export const biomeWarm = (id: BiomeId): boolean => (VILLAGE ? biomesWarmed.has(id) : isWarm('fight'));
+/** Whether biome `id`'s programs are warm: once `warmBiome` has warmed them. */
+export const biomeWarm = (id: BiomeId): boolean => biomesWarmed.has(id);
 
 /**
  * Biome `id`, built as a run first needs it (world/arena.ts `buildBiome`), warmed in its turn after the warm-ups
@@ -433,21 +429,12 @@ const heroParts = (): Part[] => [...(hallWarm ? [] : [hallPart()]), ...heroModel
 /** whether the hall of heroes' room was warmed with the lobby (a first visit's) */
 let hallWarm = false;
 
-/** With no village, the hall of heroes' look put on the scene, and its undoing: the look it's shown in, which WebGPU
- *  keys its pipelines by (`Swap.look`). */
-function hallLook(): () => void {
-  const shown = G.arena.hallShown;
-  G.arena.showHall(true);
-  return () => G.arena.showHall(shown);
-}
-
 /** The hall of heroes' room, shown in the village's place (world/heroHall.ts). */
 function hallPart(): Part {
   return {
     name: 'hall',
     build() {
-      const swap: Swap = VILLAGE ? { show: G.arena.hallGroup, get hide() { return shownNow(); }, alone: lampsLetGo }
-        : { show: G.arena.hallGroup, get hide() { return shownNow(); }, look: hallLook };
+      const swap: Swap = { show: G.arena.hallGroup, get hide() { return shownNow(); }, alone: lampsLetGo };
       return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
     },
   };
@@ -455,7 +442,7 @@ function hallPart(): Part {
 
 /** The village's houses' rooms, each drawn in the village's place with every part of it shown (world/rooms.ts). */
 function roomParts(): Part[] {
-  return Object.values(G.arena.rooms ?? {}).map((room): Part => ({
+  return Object.values(G.arena.rooms).map((room): Part => ({
     name: `room ${room.id}`,
     build() {
       room.showAll();
@@ -623,7 +610,7 @@ async function warmAtOnce(need: Need, parts: Part[], progress: (share: number) =
  * them) `BAR_SLICE_MS`, behind the live lobby the lobby's own budget (`BEHIND.ms`). At 12 ms behind the lobby, a return's
  * heroes' warm-up (their spares, the hall's heroes) held the village at 37 to 70 frames a second for its first 10 s on
  * a 143 Hz screen, where the queue behind it keeps to 2 ms a frame (from play, "should start above 100 FPS"; trace
- * Z7FP-MNKT, `npm run stalls -- --scenario boot --url "this?village=1" --warm-behind --js`).
+ * Z7FP-MNKT, `npm run stalls -- --scenario boot --warm-behind --js`).
  */
 const behindSlice = (): number => (isReadying() || hallOpen() ? BAR_SLICE_MS : BEHIND.ms);
 
@@ -841,8 +828,6 @@ export function warmTheRest(left: Promise<void>): { fight: Promise<void>; all: P
   });
   // (the heroes' behind the fight's: they stand in the hall of heroes, which the hero walks to after)
   const heroesBehind = async (): Promise<void> => {
-    // (with no village the hall is a screen opened from the lobby: its heroes are warmed once something needs them)
-    if (!VILLAGE) return;
     await behind();
     await Promise.race([fightWarm, approached('heroes')]);
   };

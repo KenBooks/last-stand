@@ -573,8 +573,8 @@ export function prepareWind(): void { ahead ??= makeContext(); }
 /**
  * The lobby crest's first blow's context made now too, at the boot's start (ui/crestBlow.ts): made as the crest was
  * found, half way through the boot, the context waited on the GPU's process, busy with the lobby's compiles, in a
- * task of 3.7 s on a CPU slowed four times (`npm run stalls -- --scenario boot --url "this?village=1"
- * --cpu-slowdown 4 --js`), as a laptop's AMD Radeon and an Adreno 810 held theirs 3.8 and 7.4 s (traces EP2G-9M10,
+ * task of 3.7 s on a CPU slowed four times (`npm run stalls -- --scenario boot --cpu-slowdown 4
+ * --js`), as a laptop's AMD Radeon and an Adreno 810 held theirs 3.8 and 7.4 s (traces EP2G-9M10,
  * 4NA2-KWVF).
  */
 export function prepareCrestWind(): void { crestAhead ??= makeContext(); }

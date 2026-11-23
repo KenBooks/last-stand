@@ -38,11 +38,6 @@
 #lo-toggle svg { width: 14px; height: 9px; transition: transform .2s; }
 #lo-toggle:hover { background: rgba($frame, .15); }
 #loadout.open #lo-toggle svg { transform: rotate(180deg); }
-/* its fold tab (see .fold-tab) is on the top edge; folded, it names the panel beside the chevron */
-#skills-fold { bottom: calc(100% - 1px); left: 50%; translate: -50% 0; min-width: 40px; height: 18px; gap: 8px; border: none; border-radius: 6px 6px 0 0; background: rgba(8,7,9,.8); }
-#skills-fold svg { width: 14px; height: 9px; flex: none; }
-#loadout.folded #skills-fold { height: 22px; padding: 0 14px; }
-#loadout.folded { translate: 0 100%; }
 #loadout-bar .slot { cursor: $cursor-hand; }
 #loadout-bar .slot[draggable="true"] { cursor: $cursor-hand; }
 /* a key picked to take the next skill clicked (or tapped) in the book */
@@ -53,6 +48,6 @@
 .slot.empty { background: radial-gradient(circle, #151315, #070607 75%); }
 @media (prefers-reduced-motion: reduce) {
   .lo-book { animation: none; }
-  #lo-toggle svg, .fold-tab svg { transition: none; }
-  #menu .panel { transition: opacity .35s ease, transform .35s ease; }   /* folding is instant */
+  #lo-toggle svg { transition: none; }
+  #menu .panel { transition: opacity .35s ease, transform .35s ease; }
 }

@@ -1,6 +1,6 @@
 // The fight's loading bar from a portal's Start to the run, read every frame from the page alone, so any build takes
-// it: `--before @tools/stalls/walks/barClimb.js` with `--scenario boot --cold-return --warm-behind` (the village on,
-// `?village=1`): the boot presses Start before the walk wherever it isn't told to stay in the lobby, and the page is
+// it: `--before @tools/stalls/walks/barClimb.js` with `--scenario boot --cold-return --warm-behind`:
+// the boot presses Start before the walk wherever it isn't told to stay in the lobby, and the page is
 // in a run there (`--cold-return` leaves the first visit in the lobby, `--warm-behind` the return; a walk that finds
 // a run says so). The training
 // skipped, the Crypt's portal picked on the map, Start pressed, and then each frame till the run shows: the fill's

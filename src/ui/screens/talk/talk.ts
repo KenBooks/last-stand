@@ -95,5 +95,5 @@ function talkChanged(on: boolean): void {
   if (!on) closedFrom(villageObject('scholar'));
 }
 
-// (a screen of its own, started in the village by ui/screens.ts)
-screen({ village: true, init: () => initTalk(talkChanged) });
+// (a screen of its own, started by ui/screens.ts)
+screen({ init: () => initTalk(talkChanged) });

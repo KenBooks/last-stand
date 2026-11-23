@@ -12,8 +12,6 @@ import { BIOMES } from '../../../src/data/biomes';
 import { FADES } from '../../../src/data/music';
 import { RUN } from '../../../src/data/balance';
 import { musicShown } from '../../../src/core/music';
-// (an older tree's lobby stood in a biome picked by its setting; this one's, in the village, by the portal's)
-const BIOME_SETTING = import.meta.glob<{ setBiomeSetting(b: BiomeId): void }>('../../../src/game/biome.ts');
 import { MusicJudge, type Wanted } from './musicJudge';
 import { realWait } from './lab';
 import { holdHour } from '../../../src/game/clock';
@@ -33,7 +31,7 @@ const EXPECTED: Record<BiomeId, { lobby: TrackId; battle: TrackId }> = {
 
 /** the hour the village is held at for each biome's round: its lobby's music is the hour's (`biomeOfHour` in
  *  data/village.ts, the Thornwood's by day and the crypt's at dusk and by night), and the lab's own hour left the forest's
- *  lobby playing the crypt's track (the panels' lobby plays its battleground's at any hour) */
+ *  lobby playing the crypt's track */
 const HOUR_OF: Record<BiomeId, number> = { forest: 12, crypt: 0 };
 
 /** how long each stretch runs once its moment has come (s): past the longest fade into it or out of it */
@@ -191,9 +189,8 @@ async function winTheWave(listening: Listening): Promise<void> {
 /** The biome's lobby: switched to, its track decoded and faded in. */
 async function lobby(listening: Listening, biome: BiomeId): Promise<void> {
   listening.begin(`${biome}'s lobby`);
-  const setting = Object.values(BIOME_SETTING)[0];
-  if (setting) (await setting()).setBiomeSetting(biome);
-  else G.arena.setBiome(biome);
+  // (the run's battleground as a portal's use sets it)
+  G.arena.setBiome(biome);
   await listening.decoded(EXPECTED[biome].lobby, DECODE_LIMIT_MS);
   await listening.frames(framesOf(LOBBY_SECONDS));
   await listening.listen();

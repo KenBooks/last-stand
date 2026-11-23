@@ -7,7 +7,6 @@ import { spawnEnemy } from '../entities/spawner';
 import { clearProjectiles } from '../combat/projectiles';
 import { clearEffects } from '../fx/effects';
 import { remapWaveSpawns } from '../game/run';
-import { setBiomeSetting } from '../game/biome';
 import { biomeReady, readyBiome } from '../game/biomeReady';
 import { sendBiomeSwap } from '../net/sync';
 import { renderMenu } from '../ui/menus';
@@ -25,7 +24,7 @@ export function biomeCounterpart(type: EnemyId, to: BiomeId): EnemyId {
 
 export function changeDevBiome(to: BiomeId): void {
   if (to === G.arena.biome) return;
-  // (one not built yet, where the lobby is the village: built and warmed first, game/biomeReady.ts)
+  // (one not built yet: built and warmed first, game/biomeReady.ts)
   if (!biomeReady(to)) { void readyBiome(to).then(() => changeDevBiome(to)); return; }
   const standing = G.enemies.filter((foe) => foe.alive).map((foe) => ({
     type: biomeCounterpart(foe.type, to), id: foe.id, pos: foe.pos.clone(), world: foe.obj.position.clone(), hero: foe.hero, training: foe.training,
@@ -33,7 +32,7 @@ export function changeDevBiome(to: BiomeId): void {
   }));
   for (const player of G.players) player.stopChannel();
   clearProjectiles(); clearEffects(); clearEnemies();
-  setBiomeSetting(to);
+  G.arena.setBiome(to);
   remapWaveSpawns((type) => biomeCounterpart(type, to));
   sendBiomeSwap(to);
   for (const old of standing) {

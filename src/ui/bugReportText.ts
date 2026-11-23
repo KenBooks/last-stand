@@ -6,7 +6,6 @@
 import { G } from '../state';
 import { BIOMES } from '../data/biomes';
 import type { ReportKind } from '../data/bugReport';
-import { VILLAGE } from '../core/beta';
 import { lateCompiles, shaderErrors } from '../core/shaders';
 import { hallOpen } from '../game/hall';
 import { isCoop, isHost } from '../net/role';
@@ -30,7 +29,7 @@ export interface ReportDraft {
 function where(): string {
   if (savesOpen()) return 'the save slots screen';
   if (heroSelectOpen() || hallOpen()) return 'the hero selection screen';
-  if (G.mode === 'menu') return VILLAGE ? 'the village (lobby)' : 'the lobby';
+  if (G.mode === 'menu') return 'the village (lobby)';
   const run = G.run;
   if (!run) return 'a run';
   const state = !G.player.inRun ? 'out of it, watching' : run.phase === 'cleared' ? 'choosing after it' : run.phase;

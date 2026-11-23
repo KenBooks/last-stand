@@ -1,7 +1,7 @@
 // The stalls harness's command line (tools/stalls): its options, read and checked before anything starts, so a
 // misspelt one or a bad value stops it before a build or a browser.
 import { readFileSync } from 'node:fs';
-import { SCENARIOS, STOW_PRESS_MS, SWEEP_ITEM_MS } from './scenarios.mjs';
+import { SCENARIOS, SWEEP_ITEM_MS } from './scenarios.mjs';
 import { STOPS } from './villageWalks.mjs';
 import { WEBGPU_CACHE } from './webgpuCache.mjs';
 import { AUTOPLAY } from './autoplay.mjs';
@@ -30,8 +30,6 @@ const STASH_MOST = 60;
  *  `low@518400`) */
 const QUALITIES = ['high', 'medium', 'low', 'verylow'];
 const AUTO = new RegExp(`^(${QUALITIES.join('|')})@\\d+$`);
-/** a key's tap (ms: `scenarios.mjs`'s): presses can't come closer together */
-const TAP_LEAST = 90;
 /** how many times `--resize` goes and comes back unless the command says (the owner's report: full screen and back,
  *  which the exit must follow however often) */
 const TRIPS = 5;
@@ -57,7 +55,7 @@ const HELP = {
   return: ['', 'the page loaded again before the scenario, as a player back on a build they have played: its caches '
     + 'and the saved hero kept, the fight and the other heroes warmed behind the lobby rather than under the loading '
     + 'screen'],
-  view: ['name', `the view it's played in: ${VIEWS.join(', ')} (V pressed in the lobby, its panels shown again; top; `
+  view: ['name', `the view it's played in: ${VIEWS.join(', ')} (V pressed in the lobby; top; `
     + `${BOOT}: its end pictured in it, V pressed in the fight it started)`],
   biome: ['name', `the battleground: ${BIOMES.join(', ')} (forest by default; ${BOOT}: the game's own pick, `
     + 'where given its every visit\'s, so two variants\' end pictures show the same)'],
@@ -69,7 +67,6 @@ const HELP = {
   stops: ['a,b', `walks: the places walked to in turn, by the map's names (${STOPS.join(', ')} by default): `
     + 'a stall\'s place told from what came before it'],
   'item-ms': ['ms', `how long a sweep over the stash stays over each item (${SWEEP_ITEM_MS} by default)`],
-  'press-ms': ['ms', `how often stow presses Space (${STOW_PRESS_MS} by default)`],
   scale: ['n', 'the screen\'s scaling, as the OS sets it (a report\'s devicePixelRatio: 1 by default)'],
   touch: ['', 'boot: the page a touch screen\'s, as a phone\'s (its pointer coarse, no hover: the hero selection '
     + 'screen\'s choice always shown)'],
@@ -207,7 +204,6 @@ export function readOptions(argv) {
     stash: Number(written.stash ?? 0),
     stops: written.stops ? written.stops.split(',').filter(Boolean) : null,
     itemMs: Number(written['item-ms'] ?? SWEEP_ITEM_MS),
-    pressMs: Number(written['press-ms'] ?? STOW_PRESS_MS),
     scale: Number(written.scale ?? 1),
     cpuSlowdown: Number(written['cpu-slowdown'] ?? 1),
     touch: written.touch === true,
@@ -261,9 +257,6 @@ export function readOptions(argv) {
   }
   if (!(options.seconds > 0)) throw new Error('stalls: --seconds must be a number over 0');
   if (!(options.itemMs >= 16)) throw new Error('stalls: --item-ms must be a number of ms, 16 or more (a frame)');
-  if (!(options.pressMs > TAP_LEAST)) {
-    throw new Error(`stalls: --press-ms must be a number of ms, over ${TAP_LEAST} (a key's tap)`);
-  }
   if (!(options.scale > 0)) throw new Error('stalls: --scale must be a number over 0');
   if (options.gpuMemory !== null && !(options.gpuMemory > 0)) {
     throw new Error('stalls: --gpu-memory must be a number of MB over 0');

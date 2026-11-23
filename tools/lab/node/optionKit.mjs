@@ -95,11 +95,6 @@ export const COMMON_OPTIONS = {
       + 'it) and opens on the hero selection screen, cold as --cold leaves it (programs --first: what its first '
       + 'frames compile at a draw)',
   },
-  panels: {
-    kind: 'switch',
-    help: 'the page booted with the lobby as it is without the village beta (its panels over the battleground: '
-      + 'src/core/beta.ts); by default the lab boots the village, which its lobby\'s commands measure',
-  },
   screen: {
     kind: 'screen',
     usage: 'WxH[@ratio]',

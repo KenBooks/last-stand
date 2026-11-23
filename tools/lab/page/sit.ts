@@ -1026,7 +1026,7 @@ export async function showPlace(lab: Lab, c: SeatCase, fixture: Fixture): Promis
     // (set up for each case: his gear is the set-up's, and `--poses` asks every weapon style in turn)
     await lab.setup(fixture);
     await toLobby(lab);
-    if (G.arena.place !== 'village') throw new Error('lab: sit: the village never showed (booted with --panels?)');
+    if (G.arena.place !== 'village') throw new Error('lab: sit: the village never showed');
     // (the lobby dresses him in his profile's gear as it shows)
     lab.wield(fixture);
     if (c.room) await intoRoom(lab, c.room);

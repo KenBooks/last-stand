@@ -189,5 +189,5 @@ function fill(el: HTMLElement, cells: HTMLElement[], slots: number): void {
   }
 }
 
-// (a screen of its own, in both lobbies, started and stepped each frame by ui/screens.ts)
+// (a screen of its own, started and stepped each frame by ui/screens.ts)
 screen({ init: initTrade, frame: updateTradeUi });

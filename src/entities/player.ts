@@ -1,7 +1,6 @@
 // The player character: input -> movement/skills, resources, damage, animation.
 import { countCast } from '../game/chronicle';
 import * as THREE from 'three';
-import { VILLAGE } from '../core/beta';
 import { gaitRate, legLength, LookAt, type LegIK } from './models/ik';
 import { stepVelocity } from './movement';
 import { foeNear, Sitting } from './sitting';
@@ -183,7 +182,7 @@ export function heroLights(): { staff: THREE.PointLight; hand: THREE.PointLight 
 /** how soft the hero's own lights are close to (m squared, added to the square of the distance, as `LAMP_SOFT` is a
  *  lamp's; carried in their decay past 2, so nothing compiles): by the square alone, the mage's staff a hand's breadth
  *  from a cottage's plaster burned a white disc on it, "too bright, right?" */
-const HELD_SOFT = VILLAGE ? 0.15 : 0;
+const HELD_SOFT = 0.15;
 
 export class Player {
   readonly cls: ClassDef;

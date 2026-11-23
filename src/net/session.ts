@@ -15,7 +15,6 @@ import { openLink, RoomRefused, ServerDown, SERVER_DOWN, type Link, type Refused
 import { netLog, serverPings } from './netlog';
 import { mine, freshNumbers, type RunNumbers } from '../game/stats';
 import { readying, role } from './role';
-import { VILLAGE } from '../core/beta';
 import { ownOffset, setHostOffset } from '../game/clock';
 import { clearPendingRoom, joinInRoom } from '../game/rooms';
 import { hostSync, stopSync, onWorld, onGuestControl, sendWorld, playWorld, onGuestHits, takeHits, foesAsked, foesTold, setFoeAsk, type HitReport, type SpawnEvent, type WorldMessage } from './sync';
@@ -26,7 +25,6 @@ import { changedColour, colourOf, freeColour, ownColour, saveColour, savedColour
 import type { HeroColourId } from '../data/heroColours';
 import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGround, type GroundDrop } from '../game/groundItems';
 import { setPingNet, clearPings } from '../game/ping';
-import { showBiomeSetting } from '../game/biome';
 import {
   answerPlace, duelQuit, duelSetup, duelWord, readSetup, setDuelNet, setupNow, takeSetup, wantPlace,
   type AskRefusal, type DuelPart, type DuelSetup,
@@ -120,9 +118,6 @@ export const session = {
   error: '',
   /** joining failed as the room already has our name tag: we're asked for another */
   renameAsked: false,
-  /** joining failed as the room is in the other lobby (the village beta on there and off here, or the other way):
-   *  whether the room's is the village, for the switch offered; null otherwise */
-  lobbyAsked: null as boolean | null,
   /** joining failed as the room is locked and we gave no password, or a wrong one: the dialog asks for it */
   passwordAsked: false,
   /** the room as its host opened it: listed or not, locked or not, its name and how many it holds (a guest knows the
@@ -279,7 +274,7 @@ function roomCard(): RoomCard {
   return {
     name: session.roomName, tag: session.tag, cls: G.profile.classId, map: G.arena.biome,
     wave: G.run && !G.run.duel ? G.run.wave : session.wave, run: Boolean(G.run && !G.run.training && !G.run.duel),
-    lobby: VILLAGE ? 'village' : 'panels', v: PROTOCOL,
+    v: PROTOCOL,
   };
 }
 let cardTimer: ReturnType<typeof setInterval> | undefined;
@@ -306,7 +301,6 @@ export async function hostRoom(tag: string, plan: RoomPlan = { kind: 'private', 
   session.error = '';
   session.renameAsked = false;
   session.passwordAsked = false;
-  session.lobbyAsked = null;
   session.kind = plan.kind;
   session.roomName = roomNameOf(plan.name, session.tag);
   session.max = Math.max(2, Math.min(COOP.maxPlayers, Math.round(plan.max)));
@@ -354,7 +348,6 @@ export async function joinRoom(code: string, tag: string, password = ''): Promis
   session.error = '';
   session.renameAsked = false;
   session.passwordAsked = false;
-  session.lobbyAsked = null;
   session.kind = password ? 'password' : 'private';
   session.roomName = '';
   hooks.changed();
@@ -416,8 +409,6 @@ export function leaveRoom(): void {
   placeSpawns();
   // (the village lit by our own clock again)
   setHostOffset(null);
-  // (the panels' lobby back on its own battleground: a guest stood on the host's)
-  if (!VILLAGE) showBiomeSetting();
   // an invite link in the address bar would join again on reload (the room alone taken off it: the rest is how
   // this game was opened, the relay tried by `?server=` among it, which the dialog's check of the server reads)
   if (invitedRoom()) history.replaceState(null, '', addressWithoutRoom());
@@ -431,7 +422,6 @@ function fail(why: string, rename = false): void {
   session.error = why;
   session.renameAsked = rename;
   session.passwordAsked = false;
-  session.lobbyAsked = null;
   hooks.changed();
 }
 
@@ -493,8 +483,6 @@ function wire(l: Link): void {
  *  the host's slot). */
 const hello = () => ({
   v: PROTOCOL, look: myLook(), tag: session.tag, host: role.current === 'host', col: ownColour() ?? '',
-  // (the lobby this game stands in: a room is its host's, the village beta's or the panels', core/beta.ts)
-  village: VILLAGE,
   slot: session.status === 'joining' ? -1 : G.player.slot,
 });
 
@@ -510,12 +498,6 @@ function onHello(from: string, m: Record<string, unknown>): void {
   netLog(`hello from ${from.slice(0, 6)} (protocol ${String(m.v)}${m.host ? ', host' : ''})`);
   if (m.v !== PROTOCOL) {
     if (role.current === 'host') send('ctl', { t: 'refuse', why: 'version' }, from);
-    return;
-  }
-  // (a game in the other lobby: the two would stand in different places, each walking the other's hero through its
-  // own; refused, and told which lobby the room is in)
-  if (Boolean(m.village) !== VILLAGE) {
-    if (role.current === 'host') send('ctl', { t: 'refuse', why: 'lobby', village: VILLAGE }, from);
     return;
   }
   const look = m.look as Look;
@@ -607,10 +589,9 @@ function onControl(from: string, m: Record<string, unknown>): void {
       // step over to our side of the spawn (or into the host's house, if the host stands in one)
       if (G.mode === 'menu') {
         const rm = typeof m.rm === 'number' && Number.isInteger(m.rm) ? m.rm : 0;
-        const hostRoom: RoomId | null = VILLAGE && rm > 0 && rm <= ROOM_IDS.length ? ROOM_IDS[rm - 1] : null;
+        const hostRoom: RoomId | null = rm > 0 && rm <= ROOM_IDS.length ? ROOM_IDS[rm - 1] : null;
         const joinedCode = session.code;
-        if (VILLAGE) joinInRoom(hostRoom, G.player.slot, () => session.status === 'joined' && session.code === joinedCode);
-        else G.player.place(G.player.spawn, G.player.facing);
+        joinInRoom(hostRoom, G.player.slot, () => session.status === 'joined' && session.code === joinedCode);
         syncAway();
       }
       send('hello', hello());   // our slot, to everyone
@@ -619,13 +600,7 @@ function onControl(from: string, m: Record<string, unknown>): void {
       hooks.changed();
     } else if (m.t === 'refuse') {
       netLog(`refused: ${String(m.why)}`);
-      if (m.why === 'lobby') {
-        const village = Boolean(m.village);
-        fail(village ? 'That room is in the village, a beta lobby you have switched off.'
-          : 'That room is in the old lobby: its host has the village beta switched off.');
-        session.lobbyAsked = village;
-        hooks.changed();
-      } else if (m.why === 'name') fail(`Someone in that room is already called ${session.tag}: pick another name tag to join.`, true);
+      if (m.why === 'name') fail(`Someone in that room is already called ${session.tag}: pick another name tag to join.`, true);
       else fail(m.why === 'full' ? 'That room is full.' : 'That game is on another version: both reload the page to play together.');
     } else if (m.t === 'lobby') {
       session.biome = m.biome as BiomeId;

@@ -6,12 +6,10 @@ import { G } from './state';
 import { keepBootPaceHidden } from './core/hiddenBoot';
 import { pipelinesAtOnceFromNow } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
-import { CAMERA, LOBBY, COOP } from './data/balance';
-import { HALL, START_SPOTS, TERRACE, YARD_DUMMIES, biomeOfHour, inHall, type VillageObject } from './data/village';
+import { CAMERA, COOP } from './data/balance';
+import { START_SPOTS, YARD_DUMMIES, biomeOfHour, inHall, type VillageObject } from './data/village';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, escapeSpentOnLock, releaseInput } from './core/input';
 import { initAudio, sfx } from './core/audio';
-import { VILLAGE } from './core/beta';
-import { betaNoticeWhile, hideBetaNotice, oweBetaNotice } from './ui/beta';
 import { InputDelivery } from './core/inputDelivery';
 import { keyDeliveryDelay } from './core/keyDelivery';
 import { updateMusic, type MusicWanted } from './core/music';
@@ -44,7 +42,7 @@ import { initHud, showHud, layOutHudAhead, slotsAhead, buildHotbar, banner, show
 import { cancelProfile, profiling } from './ui/profileTab';
 import { openGuide, closeGuide, guideOpen, type GuideSection } from './ui/guide/index';
 import { stepPortraits } from './ui/guide/portraits';
-import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, toggleMenuStowed, menuStowed, lobbyPractice, selectedWave, startBests, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels } from './ui/menus';
+import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, menuStowed, lobbyPractice, selectedWave, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { initPvp, renderPvp } from './ui/pvpMenu';
 import { closeTalk } from './ui/screens/talk/talk';
@@ -101,9 +99,8 @@ import { framesUncapped, runFrames } from './core/frameLoop';
 import { pacedStep } from './core/framePace';
 import { updateLowLife } from './core/lowLife';
 import { markLoaded, pinPrograms, programsCompiledInGame } from './core/shaders';
-import { initBiome, rollBiome } from './game/biome';
 import { BIOMES, BIOME_IDS } from './data/biomes';
-import { CLASSES, CLASS_IDS } from './data/classes/index';
+import { CLASS_IDS } from './data/classes/index';
 import { loadingStep, loadingDone, loadingFailed, loadingLeft, lobbyLaidOut, prepareExit, seeThroughLoading, stillLoading } from './ui/loading';
 import { preloadTextures } from './core/textures';
 import { tickItemGlow } from './core/materials';
@@ -174,7 +171,7 @@ async function boot() {
   preloadStump();
   preloadFlames();
   prepareExit();
-  if (VILLAGE) prepareCrest();
+  prepareCrest();
   // (each long stretch of the boot under a step of its own: under four names the bar stood at one for 3 to 9 s,
   // from play, "desktop still stuck here for a bit", "can you we add more steps in loading ?")
   await loadingStep('Forging the arena', 0.05);
@@ -220,31 +217,25 @@ async function boot() {
   await loadingStep('Raising the walls', 0.14);
   // (built on the maps' canvases as the workers paint them: nothing is drawn till all have come)
   G.arena = await buildArena(scene, renderer);
-  if (VILLAGE) {
-    G.arena.setHour(hourNow());
-    // (and its lamps' shadows of what stands still, drawn once)
-    prepareLamps(renderer, scene.getObjectByName('village')!);
-  }
+  G.arena.setHour(hourNow());
+  // (and its lamps' shadows of what stands still, drawn once)
+  prepareLamps(renderer, scene.getObjectByName('village')!);
   initQuality();
   // (every hero's head and the engraved steel made in workers meanwhile, at the detail the heroes are built at: on a
   // phone they froze the loading screen for 4.9 s in the hero's build, "phone has freezes during loading")
   const heads = preloadHeads(heroDetail());
   const engraving = textures.ready('steel').then(preloadEngraving);
-  // the village shown (or, with no village, the lobby's biome), and its programs compiled while the hero is built
-  // (game/warmup.ts)
-  if (!VILLAGE) initBiome();
+  // the village shown, and its programs compiled while the hero is built (game/warmup.ts)
   await loadingStep('Kindling the lamps', 0.24);
   await compileTheBiome();
   // (the lobby's panels rastered under the loading screen while the hero is built: ui/menus.ts)
   // (the loading screen seen through by a thousandth while the lobby's UI is rehearsed under it: opaque, Chrome
   // rastered and drew none of what it covered, ui/loading.ts)
-  if (VILLAGE) seeThroughLoading(true);
+  seeThroughLoading(true);
   layOutMenuAhead();
   // (and the village's map over it unseen, half folded, then flat once he's built: ui/villageMap.ts)
-  if (VILLAGE) {
-    initVillageMap({ go: goUse, walk: goTo, trees: () => G.arena.village.trees });
-    layOutMapAhead('folding');
-  }
+  initVillageMap({ go: goUse, walk: goTo, trees: () => G.arena.village.trees });
+  layOutMapAhead('folding');
 
   await loadingStep('Summoning the hero', 0.35);
   await hands;
@@ -258,13 +249,11 @@ async function boot() {
   coatPanels();
   // (the houses' folk seated, the library's scholar and the merchant's Odo: their heads and hands are the heroes',
   // made by now)
-  if (VILLAGE) {
-    await loadingStep('Gathering the villagers', 0.45);
-    for (const room of Object.values(G.arena.rooms ?? {})) {
-      if (!room.seatFolk) continue;
-      await painted();
-      room.seatFolk();
-    }
+  await loadingStep('Gathering the villagers', 0.45);
+  for (const room of Object.values(G.arena.rooms)) {
+    if (!room.seatFolk) continue;
+    await painted();
+    room.seatFolk();
   }
   await painted();
   G.profile = loadProfile(savedClass());
@@ -272,17 +261,13 @@ async function boot() {
     () => new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve))));
   G.players = [G.player];
   // (a frame painted between the boot's long pieces, so the loading screen moves on)
-  if (VILLAGE) {
-    await painted();
-    layOutMapAhead('flat');
-    slideMenuAhead(true);
-  }
+  await painted();
+  layOutMapAhead('flat');
+  slideMenuAhead(true);
   // (what the lobby can do compiled with him, before its page is laid out: game/warmup.ts)
   await compileTheLobby();
-  if (VILLAGE) {
-    await painted();
-    slideMenuAhead(false);
-  }
+  await painted();
+  slideMenuAhead(false);
 
   initHud();
   initTouch({
@@ -292,7 +277,7 @@ async function boot() {
   initPerfHud(renderer);
   initTraceConsent();
   // (the slow game's prompt laid out under it too: perf/consent.ts)
-  if (VILLAGE) layOutAskAhead(true);
+  layOutAskAhead(true);
   initNetHud();
   initBattleLog();
   buildHotbar(G.player);
@@ -301,14 +286,12 @@ async function boot() {
   // (the practice's bar laid out under the loading screen too, so its first raster builds Chrome's Skia programs there:
   // shown first as the hero walked into the yard, a first visit's held Chrome's GPU process 0.25 to 0.4 s; the lobby
   // hides it as it's entered)
-  if (VILLAGE) {
-    showHud(true, true, true);
-    await painted();
-    slotsAhead(false);
-    // (and its bars' numbers, empty till the lobby's first frame: their blurred shadows' glyphs were first rastered as
-    // the hero walked into the yard, 1.2 s of a first visit's GPU process in some walks)
-    updateHud();
-  }
+  showHud(true, true, true);
+  await painted();
+  slotsAhead(false);
+  // (and its bars' numbers, empty till the lobby's first frame: their blurred shadows' glyphs were first rastered as
+  // the hero walked into the yard, 1.2 s of a first visit's GPU process in some walks)
+  updateHud();
   initRun({ banner, showDecision, hideDecision, resetDecision, showSummary });
   initDuel({ banner, name: nameOf, face: faceCamera, result: showDuelResult, back: () => toMenu() });
   // (the lobby shows before the fight's programs are warm: pressed early, what needs them goes ahead once they are)
@@ -317,20 +300,18 @@ async function boot() {
   // (the rehearsed panels given his gear while they lie over the loading screen: rendered first at the lobby's entry,
   // into panels stowed (unseen, drawn by nothing), his items were rastered at the chest's first opening, 0.4 to 1.9 s
   // of a first visit's GPU process)
-  if (VILLAGE) {
-    renderMenu();
-    initVillage({ use: useObject, leave: leaveObject, active: villageActive, shows: objectShows });
-    // (in or out of a house: what was open put away, the partners told and shown only where they stand)
-    // (a talk with the village's folk: he looks up from his book while it's open, and the village forgets it as it ends)
-    onRoomChange(() => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); showMerchant(false); setVillageMap(false); closedFrom(); syncAway(); });
-    initVillageCard((o) => closedFrom(o), (id) => { G.arena.setBiome(id); sendLobbyChoice(); });
-    // (a player alone at the rack is walked to the campfire, where a party is gathered)
-    initPvp(() => { const fire = villageObject('campfire'); if (fire) goUse(fire); }, biomeFirst(whenWarm(['fight'], startDuel, READYING.fight), startDuel, () => setupNow().ground));
-    // (how to play laid out under the loading screen: ui/menus.ts)
-    layOutHelpAhead(true);
-    initTrainingTracker();
-    initCrestBlow();
-  }
+  renderMenu();
+  initVillage({ use: useObject, leave: leaveObject, active: villageActive, shows: objectShows });
+  // (in or out of a house: what was open put away, the partners told and shown only where they stand)
+  // (a talk with the village's folk: he looks up from his book while it's open, and the village forgets it as it ends)
+  onRoomChange(() => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); showMerchant(false); setVillageMap(false); closedFrom(); syncAway(); });
+  initVillageCard((o) => closedFrom(o), (id) => { G.arena.setBiome(id); sendLobbyChoice(); });
+  // (a player alone at the rack is walked to the campfire, where a party is gathered)
+  initPvp(() => { const fire = villageObject('campfire'); if (fire) goUse(fire); }, biomeFirst(whenWarm(['fight'], startDuel, READYING.fight), startDuel, () => setupNow().ground));
+  // (how to play laid out under the loading screen: ui/menus.ts)
+  layOutHelpAhead(true);
+  initTrainingTracker();
+  initCrestBlow();
   initHeroSelect({ choose: chooseHero, closed: heroSelectClosed });
   const useSlot = whenWarm(['fight', 'heroes'], switchSaveSlot, READYING.slot);
   initSaves({ use: useSlot });
@@ -352,27 +333,21 @@ async function boot() {
   initSession({ startRun: guestStarted, startDuel: whenWarm(['fight'], guestDuel, READYING.fight), hostGone, changed: () => { renderCoop(); renderPvp(); sendLobbyChoice(); } });
   initCoop();
   // (the screens of their own, src/ui/screens/: the trade, Odo's counter, a talk)
-  initScreens(VILLAGE);
+  initScreens();
   // (a partner's Trade button in Play together's list follows the trade: off while one is under way)
   onTradeChange(() => { if (coopOpen()) renderCoop(); });
   initBugReport(reportClosed);
   for (const link of document.querySelectorAll<HTMLElement>('.report-link')) link.onclick = () => { sfx.click(); openReport(); };
   // (each look held till it's drawn: replaced after a frame, checking's still held the campfire 0.2 s)
-  if (VILLAGE) {
-    layOutCoopAhead('checking');
-    await drawn();
-    layOutCoopAhead('down');
-    await drawn();
-    layOutCoopAhead('up');
-  }
+  layOutCoopAhead('checking');
+  await drawn();
+  layOutCoopAhead('down');
+  await drawn();
+  layOutCoopAhead('up');
   // losing the pointer mid-wave (Esc, switching windows) pauses, as mouse look can't carry on
-  // (in the lobby the Esc that lets go of the mouse look brings the panels back instead)
-  // (in the village too: the Esc that lets go of the mouse look is the pause menu's)
+  // (in the village too, but under the hall of heroes' screen: the Esc that lets go of the mouse look is the pause menu's)
   onPointerLockLost(() => {
-    if (VILLAGE) {
-      if (!G.menuOpen && (G.mode === 'run' || (G.mode === 'menu' && !heroSelectOpen()))) openPause(true);
-    } else if (G.mode === 'run' && !G.menuOpen) openPause(true);
-    else if (G.mode === 'menu') toggleMenuStowed(false);
+    if (!G.menuOpen && (G.mode === 'run' || (G.mode === 'menu' && !heroSelectOpen()))) openPause(true);
   });
   initLoadoutEditor(() => buildHotbar(G.player));
   initPwa();
@@ -396,7 +371,7 @@ async function boot() {
   await spawnDummiesInSteps();
   // a first visit opens on the hero selection screen, no hero chosen yet: the logo's exit gathers into its logo
   const firstVisit = !hasSavedClass();
-  if (VILLAGE) initTraining(firstVisit);
+  initTraining(firstVisit);
   if (!firstVisit) lobbyLaidOut();
   // the lobby's shaders compiled before it shows with its own hero's alone, the fight's and the other heroes' behind it
   // (game/warmup.ts): a first visit opens on the hall of heroes, its room warmed with the lobby's and its other heroes
@@ -405,13 +380,10 @@ async function boot() {
   // laptop's froze; asked for before it left, they held its wait for smooth frames 4.1 s, a task of 2.5 s in it)
   await loadingStep(firstVisit ? 'Readying the hall' : 'Warming the hearth', 0.6);
   await warmLobby(firstVisit, loadingStep);
-  if (VILLAGE) ghostsWarmed();
+  ghostsWarmed();
   const { fight: fightWarmed } = warmTheRest(loadingLeft);
   if (firstVisit) {
     void loadingLeft.then(() => want('heroes'));
-    // (with no village, the biome's still shadows drawn now, under the loading screen: else the frame after the hero
-    // is chosen; the village's are its update's)
-    G.arena.drawStill();
     openHeroSelect(G.player.cls.id, true);
     showMenu(false);
     lobbyLaidOut();
@@ -428,32 +400,29 @@ async function boot() {
   // for: they're built beside the boot's last steps and behind the loading screen as it leaves, where waited for
   // under it a return's boot was 1.4 s longer here. A first visit opens on the hall, and readies them as its
   // screen leaves.)
-  if (VILLAGE && !firstVisit) want('heroes');
-  if (VILLAGE) {
-    await loadingStep('Setting the square', 0.78);
-    stillLoading(true);
-    await rehearseChest(drawn);
-    stillLoading(false);
-    layOutMapAhead('done');
-    layOutAskAhead(false);
-    layOutHelpAhead(false);
-    layOutCoopAhead(null);
-    seeThroughLoading(false);
-  }
+  if (!firstVisit) want('heroes');
+  await loadingStep('Setting the square', 0.78);
+  stillLoading(true);
+  await rehearseChest(drawn);
+  stillLoading(false);
+  layOutMapAhead('done');
+  layOutAskAhead(false);
+  layOutHelpAhead(false);
+  layOutCoopAhead(null);
+  seeThroughLoading(false);
   await loadingStep('Lighting the lobby', 0.85);
   render();   // one full frame compiles the post-processing passes (bloom, grade...)
-  if (VILLAGE) readyMinimap();
+  readyMinimap();
   pinPrograms(renderer);
   // (from here a program not made by a warm-up is a hitch: marked once the fight's were warm, a new build's lobby, its
   // fight cold till Start, had the perf report count every program late, `lab programs --cold`)
   markLoaded();
   // the lobby renders behind the loading screen (to settle) but only starts moving at the
   // reveal, so its opening camera zoom is seen
-  if (VILLAGE) openAtOneOfTheStarts();
+  openAtOneOfTheStarts();
   updateCamera(0, G.player.pos, G.player.model.height, floorUnder(G.player));
   loadingDone(() => {
     revealed = true;
-    oweBetaNotice();
     recorder.revealed(!navigator.serviceWorker?.controller);
     startHeartbeat();
     pipelinesAtOnceFromNow();
@@ -462,8 +431,6 @@ async function boot() {
     // an invite link: straight into the friend's room (asked for a name tag first if none is kept)
     const room = invitedRoom();
     if (room) joinInvited(room);
-    // (after the invite's dialog: the beta's notice waits a screen out)
-    betaNoticeWhile(villageClear());
     // back from Google's sign-in (loot/cloud.ts): the save slots screen, on to choosing the cloud save
     void googleLanding().then((landing) => {
       if (!landing || G.mode !== 'menu') return;
@@ -537,8 +504,8 @@ function enterMenu(keepSummary = false, dummiesLater = false) {
   G.paused = G.menuOpen = G.player.idle = false;
   releaseInput();
   runOver = false;
-  // (the village keeps the run's bar for its yard's practice and its minimap; the panels' lobby has no HUD)
-  showHud(VILLAGE, VILLAGE);
+  // (the village keeps the run's bar for its yard's practice and its minimap)
+  showHud(true, true);
   settleReadying();
   hideRunBits();
   showPause(false);
@@ -551,7 +518,7 @@ function enterMenu(keepSummary = false, dummiesLater = false) {
   updateDuelHud();
   hideDuelResult();
   // (back from a duel, by the weapons rack it was set up at, the party side by side before it)
-  const rack = VILLAGE && fromDuel ? villageObject('rack') : null;
+  const rack = fromDuel ? villageObject('rack') : null;
   fromDuel = false;
   if (rack) {
     const dx = rack.at[0] - rack.stand[0], dz = rack.at[1] - rack.stand[1], far = Math.hypot(dx, dz) || 1;
@@ -559,7 +526,7 @@ function enterMenu(keepSummary = false, dummiesLater = false) {
     const facing = Math.atan2(dx, dz);
     G.player.place(new THREE.Vector3(rack.stand[0] - (dz / far) * aside, 0, rack.stand[1] + (dx / far) * aside), facing);
     faceCamera(facing);
-  } else if (VILLAGE && cameThrough) {
+  } else if (cameThrough) {
     const exit = G.arena.village.exits[cameThrough];
     // (a party side by side across the way, by slot: each game put its hero on the one spot, all standing in one another)
     const beside = isCoop() ? (G.player.slot - (COOP.maxPlayers - 1) / 2) * EXIT_APART : 0;
@@ -580,20 +547,17 @@ function enterMenu(keepSummary = false, dummiesLater = false) {
 /** The training yard's dummies (the lobby's only foes), and the ghost by its gate (built once, with the village). */
 function spawnDummies() {
   clearEnemies();
-  for (const [x, z] of dummySpots()) spawnEnemy('dummy', new THREE.Vector3(x, 0, z));
-  if (VILLAGE) standGhost(G.arena.groupOf('village'));
+  for (const [x, z] of YARD_DUMMIES) spawnEnemy('dummy', new THREE.Vector3(x, 0, z));
+  standGhost(G.arena.groupOf('village'));
 }
-
-/** where the lobby's dummies stand: the village's yard, or the panels' lobby */
-const dummySpots = (): readonly (readonly [number, number])[] => (VILLAGE ? YARD_DUMMIES : LOBBY.dummies);
 
 /** `spawnDummies` with the ghosts a task each, a frame painted before each, as the boot enters the lobby: at once,
  *  they were one task of 0.9 s in a first visit's boot with the CPU 4 times slower (the ghosts 0.55 s of it). The
  *  dummies stand up in this task, their random numbers drawn as `spawnDummies` draws them. */
 async function spawnDummiesInSteps(): Promise<void> {
   clearEnemies();
-  for (const [x, z] of dummySpots()) spawnEnemy('dummy', new THREE.Vector3(x, 0, z));
-  if (VILLAGE) await standGhostInSteps(G.arena.groupOf('village'), painted);
+  for (const [x, z] of YARD_DUMMIES) spawnEnemy('dummy', new THREE.Vector3(x, 0, z));
+  await standGhostInSteps(G.arena.groupOf('village'), painted);
 }
 
 // --- the village ------------------------------------------------------------------
@@ -601,10 +565,6 @@ async function spawnDummiesInSteps(): Promise<void> {
 const villageActive = (): boolean =>
   revealed && G.mode === 'menu' && !G.menuOpen && !heroSelectOpen() && !savesOpen() && !villageMapOpen()
   && G.arena.place === 'village';
-/** Whether the village is all there is to see: nothing opened over it, a panel, a card or a dialog either, and no
- *  room's bar at its top (where the beta's notice stands: over a room of four's bar it hid the room's code). */
-const villageClear = (): boolean =>
-  villageActive() && !hallOpen() && !panelsOpen() && !villageCardOf() && !dialogOpen() && !isCoop();
 
 /** A village object used (game/village.ts): what it opens (game/villageUses.ts, each kind registered by its owner). */
 function useObject(o: VillageObject): void {
@@ -705,9 +665,6 @@ function biomeFirst(press: () => void, act: () => void, ground = (): BiomeId => 
 /** The lobby's start: solo, or the host (whose guests come along). A guest waits for the host. */
 function start() {
   if (isGuest() || (isHost() && partnerInRun())) return;
-  // (the panels' lobby's battleground, Random rolled now among those the starting wave is unlocked in; the village's
-  // is the portal's)
-  if (!VILLAGE) rollBiome(startBests(), selectedWave());
   // (its battleground built and warmed first, under the fight's bar, before the guests are told: game/biomeReady.ts)
   if (!biomeReady(G.arena.biome)) { void readyBiome(G.arena.biome).then(() => { if (G.mode === 'menu') start(); }); return; }
   // (the props a run shapes anew: its columns, its stumps; the guests' built from the same)
@@ -791,17 +748,14 @@ function beginRun(wave: number, seed: number, training = false, duel: DuelSetup 
     void readyBiome(G.arena.biome).then(() => { if (G.mode === 'menu') beginRun(wave, seed, training, duel); });
     return;
   }
-  hideBetaNotice();
   endTrades('a run started');   // a trade in the lobby is off, nothing moved (net/trade.ts)
   clearGround();   // what's left on the lobby floor is lost
   fromDuel = !!duel;
-  if (VILLAGE) {
-    cameThrough = G.arena.biome;
-    showVillageCard(null);
-    closedFrom();
-    clearPendingRoom();
-    leaveRoom(true);
-  }
+  cameThrough = G.arena.biome;
+  showVillageCard(null);
+  closedFrom();
+  clearPendingRoom();
+  leaveRoom(true);
   G.arena.showVillage(false);
   G.arena.rollProps(seed);
   G.arena.restoreProps();
@@ -827,7 +781,7 @@ let practising = false;
 function syncPractice() {
   // (the lobby's alone: a run begun in practice, a co-op guest's as its host starts, kept free casting through it)
   if (G.mode !== 'menu') return;
-  const now = lobbyPractice() && (!VILLAGE || (inYard(G.player.pos.x, G.player.pos.z) && !heroSelectOpen()));
+  const now = lobbyPractice() && inYard(G.player.pos.x, G.player.pos.z) && !heroSelectOpen();
   if (now === practising) return;
   practising = now;
   const p = G.player;
@@ -838,8 +792,7 @@ function syncPractice() {
     p.cooldowns.clear();
     p.energy = p.stats.maxEnergy;
   }
-  if (VILLAGE) showHud(true, true, now);
-  else showHud(now, true);
+  showHud(true, true, now);
 }
 
 function toMenu(keepSummary = false) {
@@ -918,8 +871,6 @@ let reportAlone = false;
 function openReport() {
   if (bugReportOpen()) return;
   reportAlone = !G.menuOpen;
-  // (a screen over the village puts the beta's notice away; the pause menu under the form holds the frame's check of it)
-  hideBetaNotice();
   if (reportAlone) {
     G.menuOpen = true;
     G.paused = !isCoop();
@@ -962,7 +913,7 @@ function abandon() {
   playerOut(G.player, 'dead');
 }
 
-/** The panels' "Change hero", the village's hall of heroes used: the hero selection screen over the hall of heroes, the lobby's panels out of the way. */
+/** The village's hall of heroes used: the hero selection screen over the hall of heroes, the lobby's panels out of the way. */
 let preparingHeroes = false;
 async function changeHero() {
   if (G.mode !== 'menu' || heroSelectOpen() || preparingHeroes) return;
@@ -973,7 +924,7 @@ async function changeHero() {
     showMenu(false);
     // (inside the village's hall, the hero he looks at in focus, whom the hint stands before)
     const p = G.player.pos;
-    openHeroSelect(VILLAGE && inHall(p.x, p.z) ? CLASS_IDS[heroLookedAt()] : G.player.cls.id);
+    openHeroSelect(inHall(p.x, p.z) ? CLASS_IDS[heroLookedAt()] : G.player.cls.id);
   } finally { preparingHeroes = false; }
 }
 
@@ -996,7 +947,7 @@ function heroSelectClosed() {
   restyleHero();
   spawnDummies();
   showMenu(true);
-  if (VILLAGE) enterPendingRoom();
+  enterPendingRoom();
 }
 
 /** Lobby save slot pick (or the slot in play erased): the slot's last hero, or in an empty slot a
@@ -1033,12 +984,12 @@ function cloudCameDown(classes: string[], useSlot: (n: number) => void): void {
 }
 
 /** The floor the camera follows `p` on: in the village the one he stands on (its terrace, a stair). */
-const floorUnder = (p: Player): number => (VILLAGE ? p.obj.position.y : 0);
+const floorUnder = (p: Player): number => p.obj.position.y;
 
 /** The floor under what the camera follows: a hero's, or the ground under a free camera. */
 function focusFloor(focus: { pos: THREE.Vector3; player?: Player | null }): number {
   if (focus.player) return floorUnder(focus.player);
-  return VILLAGE ? groundHeight(focus.pos.x, focus.pos.z) : 0;
+  return groundHeight(focus.pos.x, focus.pos.z);
 }
 
 /** A game opens at one of the village's places, at random. */
@@ -1103,10 +1054,8 @@ let view: ViewMode = 'top';
 const crosshair = document.getElementById('crosshair')!, lookHint = document.getElementById('look-hint')!;
 
 function syncView(): void {
-  // (the panels' lobby's touch play stays top-down, as before the village)
-  const v = !VILLAGE && input.touchMode ? 'top' : view;
-  setView(v);
-  input.centerAim = v !== 'top';
+  setView(view);
+  input.centerAim = view !== 'top';
   // mouse look holds the pointer through the run, the bank-or-continue choice included (B / C
   // pick there), and lets go for the pause menu and the run's end; in the lobby, while its panels
   // are stowed and no screen of its own is up (the hall of heroes, walked to and used, kept the lock and hid the
@@ -1114,15 +1063,15 @@ function syncView(): void {
   const phase = G.run?.phase;
   const inRun = G.mode === 'run' && G.player.active && (phase === 'countdown' || phase === 'fighting' || phase === 'cleared');
   const inLobby = G.mode === 'menu' && menuStowed() && !savesOpen()
-    && (!VILLAGE || (!villageCardOf() && !villageMapOpen() && !heroSelectOpen() && !dialogOpen()));
+    && !villageCardOf() && !villageMapOpen() && !heroSelectOpen() && !dialogOpen();
   // (the run's summary is a screen of its own over either: its items' names are pointed at and scrolled, and with the
   // lock held after a run ended in a close view the pointer stayed hidden over it, from play: "After run, the mouse is
   // still locked")
   const summaryUp = !$('#summary').classList.contains('hidden');
-  const look = v !== 'top' && !G.menuOpen && !summaryUp && (inRun || inLobby) && !dev?.wantsCursor();
+  const look = view !== 'top' && !G.menuOpen && !summaryUp && (inRun || inLobby) && !dev?.wantsCursor();
   // (a finger looks by dragging over the world: no pointer to lock, ui/touch.ts)
   wantPointerLock(look && !input.touchMode);
-  crosshair.classList.toggle('hidden', v === 'top');
+  crosshair.classList.toggle('hidden', view === 'top');
   lookHint.classList.toggle('hidden', !look || pointerLocked() || input.touchMode);
   updateAltCursor();
 }
@@ -1157,17 +1106,16 @@ function handleGlobalKeys() {
     else if (!G.menuOpen) heroSelectKeys();
     return;
   }
-  if (!VILLAGE && G.mode === 'menu' && !G.menuOpen && wasPressed('space')) toggleMenuStowed();
   // (the inventory, anywhere in the village: its equipment, attributes and skills; I again puts it away)
-  if (VILLAGE && G.mode === 'menu' && !G.menuOpen && wasPressed('i')) openPanels(panelsOpen() ? null : 'inventory');
+  if (G.mode === 'menu' && !G.menuOpen && wasPressed('i')) openPanels(panelsOpen() ? null : 'inventory');
   // (the village's map, M again or Esc folding it away)
   if (G.mode === 'menu' && !G.menuOpen && G.arena.place === 'village' && !G.arena.room && wasPressed('m')) setVillageMap(!villageMapOpen());
-  if (VILLAGE && villageMapOpen() && wasPressed('escape')) { setVillageMap(false); return; }
+  if (villageMapOpen() && wasPressed('escape')) { setVillageMap(false); return; }
   // (and Play together or how to play, wherever they were opened from: from play, "esc on play together should close
   // play together, not open keys menu")
   // (each dialog registers itself, ui/dialogs.ts: Play together, how to play, a talk, a trade, Odo's counter)
-  if (VILLAGE) dialogKeys();
-  if (VILLAGE && dialogOpen() && wasPressed('escape')) {
+  dialogKeys();
+  if (dialogOpen() && wasPressed('escape')) {
     closeDialogs();
     closedFrom();
     return;
@@ -1175,7 +1123,7 @@ function handleGlobalKeys() {
   // the Esc that released the mouse-look pointer already paused the game
   if (wasPressed('escape') && escapeSpentOnLock()) return;
   // (in the village, Esc puts away what an object opened before it pauses)
-  if (VILLAGE && wasPressed('escape') && G.mode === 'menu' && !G.menuOpen && (panelsOpen() || villageCardOf())) {
+  if (wasPressed('escape') && G.mode === 'menu' && !G.menuOpen && (panelsOpen() || villageCardOf())) {
     const card = villageCardOf();
     showVillageCard(null);
     openPanels(null);
@@ -1203,11 +1151,6 @@ function handleGlobalKeys() {
  *  the pointer be taken). */
 function nextView() {
   view = VIEWS[(VIEWS.indexOf(view) + 1) % VIEWS.length];
-  if (!VILLAGE) {
-    // (the panels' lobby: a close view stows the panels, and the top view brings them back)
-    if (G.mode === 'menu' && !input.touchMode) toggleMenuStowed(view !== 'top');
-    return;
-  }
   if (G.mode === 'menu' && view !== 'top') openPanels(null);
 }
 
@@ -1260,25 +1203,22 @@ function update(dt: number): void {
 
   // co-op: the partners' reports (and on a guest the host's fight) played out to the moment shown
   playSession(dt);
-  if (VILLAGE) {
-    // (the village: what the hero is near and walks to, and whether he may cast there)
-    updateVillage(dt);
-    updateRooms();
-    updateGhost(G.time, dt);
-    // (the village's ground a hero can stand on, for his walks to a spot, made behind it once it shows: game/village.ts
-    // goTo; in the boot's task it was 120 to 176 ms of a return's loading)
-    if (revealed && villageActive()) prepareWalks(HERO_RADIUS);
-    updateVillageMap(dt);
-    const villageOut = villageActive() && !panelsOpen() && !villageCardOf() && !G.arena.room;
-    // (a tutorial's station shows with the bag or the stash open too: its steps about items are taken there)
-    updateTrainingTracker(dt, villageOut, villageActive() && !villageCardOf() && !G.arena.room, !!panelsOpen(), panelsOpen() === 'chest');
-    updateVillageMinimap(dt, villageOut);
-    betaNoticeWhile(villageClear());
-    updateCrestBlow(dt, revealed && G.mode === 'menu' && G.arena.place === 'village' && !heroSelectOpen(), villageMapOpen());
-    // (its own stage: in the player's, a report from the hall of heroes couldn't tell the lamps and the dais's heroes
-    // from the hero's own pose)
-    perfLap('village');
-  }
+  // (the village: what the hero is near and walks to, and whether he may cast there)
+  updateVillage(dt);
+  updateRooms();
+  updateGhost(G.time, dt);
+  // (the village's ground a hero can stand on, for his walks to a spot, made behind it once it shows: game/village.ts
+  // goTo; in the boot's task it was 120 to 176 ms of a return's loading)
+  if (revealed && villageActive()) prepareWalks(HERO_RADIUS);
+  updateVillageMap(dt);
+  const villageOut = villageActive() && !panelsOpen() && !villageCardOf() && !G.arena.room;
+  // (a tutorial's station shows with the bag or the stash open too: its steps about items are taken there)
+  updateTrainingTracker(dt, villageOut, villageActive() && !villageCardOf() && !G.arena.room, !!panelsOpen(), panelsOpen() === 'chest');
+  updateVillageMinimap(dt, villageOut);
+  updateCrestBlow(dt, revealed && G.mode === 'menu' && G.arena.place === 'village' && !heroSelectOpen(), villageMapOpen());
+  // (its own stage: in the player's, a report from the hall of heroes couldn't tell the lamps and the dais's heroes
+  // from the hero's own pose)
+  perfLap('village');
   // the player can move and cast in both the arena and the lobby (sandbox); co-op partners as reported
   G.player.reviving = G.mode === 'run' && !G.menuOpen && (isDown('e') || touchReviving());
   for (const p of G.players) p.update(dt);
@@ -1309,7 +1249,7 @@ function update(dt: number): void {
   frameScreens();
   syncPractice();
   updateNameTags();
-  if (VILLAGE) updateHouseMarks();
+  updateHouseMarks();
   updateSitHint();
   if (G.mode === 'run') {
     updateHud();
@@ -1323,8 +1263,7 @@ function update(dt: number): void {
   // co-op chat: in a run or the lobby, with no menu, hall or saves over it
   updateChat(!G.menuOpen && !heroSelectOpen() && !hallOpen() && !savesOpen());
   // (top-down only: a close view shifted off its middle would leave the crosshair off the aim)
-  const above = view === 'top' || (!VILLAGE && input.touchMode);
-  const vs = heroSelectOpen() ? heroSelectShift() : above ? lobbyViewShift() : { x: 0, y: 0 };
+  const vs = heroSelectOpen() ? heroSelectShift() : view === 'top' ? lobbyViewShift() : { x: 0, y: 0 };
   setViewShift(vs.x, vs.y);
   const focus = cameraFocus(dt);
   // (on the floor he stands on: the village's terrace, a stair; a free camera on the ground under it)
@@ -1340,7 +1279,7 @@ function update(dt: number): void {
 
 
 
-  if (VILLAGE) G.arena.setHour(hourNow());
+  G.arena.setHour(hourNow());
   G.arena.update(dt, G.time); perfLap('arena');
   updateEffects(dt); perfLap('effects');
   updateLights(dt); perfLap('lights');
@@ -1380,9 +1319,8 @@ function musicWanted(): MusicWanted {
   const music = BIOMES[G.arena.biome].music;
   if (!revealed) return { track: null, fade: FADES.lobby, ready: [] };
   if (G.mode === 'menu') {
-    // (the day's, the Thornwood's lobby track, or the dusk's, the crypt's: `biomeOfHour`; the panels' lobby's is its
-    // battleground's)
-    const track = VILLAGE ? BIOMES[biomeOfHour(hourNow())].music.lobby : music.lobby;
+    // (the day's, the Thornwood's lobby track, or the dusk's, the crypt's: `biomeOfHour`)
+    const track = BIOMES[biomeOfHour(hourNow())].music.lobby;
     return { track, fade: FADES.lobby, ready: [track] };
   }
   const ready = [music.lobby, music.battle];

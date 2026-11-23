@@ -1,4 +1,4 @@
-// Developer controls through their real panel: lobby tabs, flight, frozen starts, training, refills and reset.
+// Developer controls through their real panel: opened by its DEV tab, flight, frozen starts, training, refills and reset.
 import * as THREE from 'three';
 import { G } from '../../../src/state';
 import { hurtPlayer } from '../../../src/combat/damage';
@@ -81,7 +81,6 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
     control.scrollIntoView({ block: 'nearest' });
     await lab.clickOn(control);
     await lab.step(2);
-    if (control.classList.contains('fold-tab')) await realWait(350);
     refreshPanel();
   };
   const action = (name: string): Promise<void> => click(`#dev-panel [data-act=${name}]`);
@@ -95,37 +94,14 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
     for (let i = 0; G.arena.biome !== biome && i < 1000; i++) { await lab.step(1); await realWait(10); }
     check(G.arena.biome === biome, 'biome selection did not apply immediately');
   };
-  await click('[data-dev-tab=dev]');
+  // (opened by its DEV tab at the screen's edge: it floats over the village, as it does over a run)
+  await click('#dev-tab');
+  refreshPanel();
+  check(!element('#dev-panel').classList.contains('hidden'), 'the DEV tab did not open the panel');
+  check(element('#dev-panel').parentElement === document.body, 'the panel did not float over the page');
 
   await lab.showOn({ width: 1920, height: 1080, ratio: 1 });
-  await click('#hero-fold');
-  moments.push(await lab.screen('dev-folded-tabs'));
-  const heroTab = element('#hero-fold').getBoundingClientRect(), devTab = element('#dev-fold').getBoundingClientRect();
-  check(devTab.top >= heroTab.bottom && devTab.width > 0 && devTab.right <= innerWidth,
-    'collapsed Hero and Dev tabs were not stacked within the screen');
-  await click('#dev-fold');
-  check(!element('.menu-left').classList.contains('folded') && !element('#dev-panel').classList.contains('hidden'),
-    'collapsed Dev tab did not open Dev');
-  await click('#hero-fold');
-  await click('#hero-fold');
-  check(element('#dev-panel').classList.contains('hidden'), 'collapsed Hero tab did not open Hero');
-  await click('#gear-fold');
-  moments.push(await lab.screen('equipment-folded-tabs'));
-  const gearTab = element('#gear-fold').getBoundingClientRect(), attrsTab = element('#attrs-fold').getBoundingClientRect();
-  check(attrsTab.top >= gearTab.bottom && attrsTab.width > 0 && attrsTab.left >= 0,
-    'collapsed Equipment and Attributes tabs were not stacked within the screen');
-  await click('#attrs-fold');
-  check(!element('.menu-right').classList.contains('folded') && element('.menu-right [data-tab=attrs]').classList.contains('active'),
-    'collapsed Attributes tab did not open Attributes');
-  await click('#gear-fold'); await click('#gear-fold');
-  check(element('.menu-right [data-tab=gear]').classList.contains('active'), 'collapsed Equipment tab did not open Equipment');
-  await click('[data-dev-tab=dev]');
   check(!document.querySelector('#dev-panel [data-act=close]'), 'redundant panel close button remained');
-  check(element('#dev-panel').parentElement === element('.menu-left'), 'Dev did not share the left hero panel');
-  check(getComputedStyle(element('.ml-body')).display === 'none', 'Hero content remained under Dev');
-  await click('[data-dev-tab=hero]');
-  check(getComputedStyle(element('.ml-body')).display !== 'none', 'Hero tab did not restore its content');
-  await click('[data-dev-tab=dev]');
 
   const parts = [...document.querySelectorAll<HTMLInputElement>('[data-part]')];
   check(parts.length >= 7 && parts.every((part) => part.checked), 'frame parts did not start included');
@@ -392,7 +368,7 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   await action('lobby');
   await action('reset');
   check(G.mode === 'menu' && G.player.alive, 'reset did not restore the loaded lobby');
-  lines.push('tabs, frame inclusion, labels, opacity, five viewport layouts, flight speed, frozen training start, no costs, reset checked');
+  lines.push('the panel floating, frame inclusion, labels, opacity, five viewport layouts, flight speed, frozen training start, no costs, reset checked');
 
   // Walk the camera into the head at 0.1x: the head must leave the drawn layers before entry.
   await action('start');

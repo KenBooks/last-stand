@@ -1,5 +1,5 @@
 // The hero selection screen (ui/heroSelect.ts) over the hall of heroes (game/hall.ts): a cinematic shade over the
-// stage, the title at the top left (the panels' lobby's logo beside it), the arrows and the heroes' names round the
+// stage, the title at the top left, the arrows and the heroes' names round the
 // hero in focus, his card in a
 // panel at the right (at the foot on an upright screen), the choice on him, Back at the bottom left. Nothing loops: the card fades in
 // once as the focus comes to it, and the shade is painted once.
@@ -21,13 +21,10 @@ body.in-hall :is(#hud, #touch) { display: none !important; }
     radial-gradient(ellipse 34% 62% at var(--hx, 36%) 50%, transparent 45%, rgba(3,2,4,.7) 100%); }
 #heroes .hs-shade { --hx: calc((100% - var(--pw) - var(--gut) * 2) / 2); }
 
-/* ---------- the title and the logo (the panels' lobby's: the village's hall has none) ---------- */
+/* ---------- the title ---------- */
 .hs-top { position: absolute; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); top: calc(var(--gut) * .7 + env(safe-area-inset-top, 0px));
   display: flex; align-items: center; gap: ui(18px); pointer-events: none; }
-.hs-logo { width: ui(150px); flex: none; }
-.hs-logo .logo-glow { opacity: .8; }
-.hs-heading { display: flex; flex-direction: column; gap: ui(3px); padding-left: ui(18px); border-left: 1px solid rgba($frame, .45); }
-#{$village} .hs-heading { padding-left: 0; border-left: none; }
+.hs-heading { display: flex; flex-direction: column; gap: ui(3px); }
 .hs-title { font: 700 ui(26px) var(--font-display); letter-spacing: ui(5px); text-transform: uppercase; color: var(--accent);
   text-shadow: 0 0 ui(14px) rgba($accent-glow, .35), $outline; }
 /* the save slot in play, which opens the save slots */
@@ -75,7 +72,7 @@ body.touch .hs-key { font-size: 0; }
 .hs-back { position: absolute; left: calc(var(--gut) + env(safe-area-inset-left, 0px)); bottom: calc(var(--gut) + env(safe-area-inset-bottom, 0px));
   font-size: ui(15px); padding: ui(9px) ui(16px); }
 #heroes.first .hs-back { display: none; }
-/* its key in the village, where E leaves the screen as it leaves what every other object opens (from play: "lets add
+/* its key: E leaves the screen as it leaves what every other object opens (from play: "lets add
    (E) to back to lobby button, so users know about it"); none on touch, which has no keys */
 .hs-back-key { display: inline-block; margin-left: ui(9px); padding: ui(1px) ui(6px); border: 1px solid rgba($highlight, .5);
   border-radius: ui(3px); background: rgba($highlight, .08); color: var(--ink);
@@ -178,7 +175,6 @@ body.touch .hl-preset { min-height: 44px; }
   .hs-panel { gap: ui(10px); padding: ui(14px) ui(16px); }
   .hs-cards { row-gap: ui(8px); }
   .hs-tag { font-size: ui(15px); }
-  .hs-logo { width: ui(110px); }
   .hs-title { font-size: ui(20px); }
   // (held to the screen's height too: on a phone the UI's floor in css px set it wider than the button)
   .hs-choose { font-size: min(#{ui(16px)}, 4.5vh); }
@@ -197,7 +193,6 @@ body.touch .hl-preset { min-height: 44px; }
   .hs-back { top: calc(var(--gut) * .7 + env(safe-area-inset-top, 0px)); bottom: auto; left: auto;
     right: calc(var(--pw) + var(--gut) * 2 + env(safe-area-inset-right, 0px)); }
   .hs-long { display: none; }
-  .hs-logo { width: ui(100px); }
   .hs-title { font-size: ui(19px); letter-spacing: ui(3px); }
 }
 

@@ -163,7 +163,7 @@ export function updateRooms(): void {
   if (G.mode !== 'menu') { leaveRoom(true); return; }
   // (every frame: the dummies' own update shows them again)
   showFoes(false);
-  G.arena.rooms![id].cutAway(G.camera.getWorldPosition(_eye));
+  G.arena.rooms[id].cutAway(G.camera.getWorldPosition(_eye));
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -253,5 +253,5 @@ function slainBy(heroes: { p: Profile }[]): Partial<Record<EnemyId, number>> {
 
 /** The house of records' boards and trophies written afresh. */
 export function writeRecords(): void {
-  G.arena.rooms?.records.showRecords?.(recordsShown());
+  G.arena.rooms.records.showRecords?.(recordsShown());
 }

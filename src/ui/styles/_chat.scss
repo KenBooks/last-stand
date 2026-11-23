@@ -3,7 +3,7 @@
 // owner's reference picture of how it should look), the name in the colour its player picked (ui/chat.ts
 // `nameColour`; the blue here for none). Quiet a while (no line come, nothing typed: `CHAT.idle`), all of it fades
 // together by its opacity alone (the compositor's), and comes back with the next line; with the box open, every line
-// kept, to scroll back through, and the box to type in under them. In the lobby, right of the hero panel (`--clear-x`,
+// kept, to scroll back through, and the box to type in under them. In the lobby, right of a short screen's panel (`--clear-x`,
 // `clearOverlays` in ui/menus.ts).
 @use 'theme' as *;
 

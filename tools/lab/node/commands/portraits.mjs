@@ -6,7 +6,7 @@ import { COMMON_OPTIONS } from '../optionKit.mjs';
 export default {
   summary: 'optional portrait requests and the real co-op picker; no downloads before use, current class only, '
     + 'selection, peer picture rendering and clearing, a class\'s default picture shown with none chosen, no two '
-    + 'classes\' alike (run it with `--panels`: the village\'s lobby hides the party cards it pictures). `--canary` '
+    + 'classes\' alike. `--canary` '
     + 'requests another class and must detect it.',
   help: 'optional portrait picker: no image downloads at boot, current class only on open, selection and None',
   options: {

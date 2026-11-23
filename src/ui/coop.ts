@@ -9,7 +9,6 @@ import {
   type RoomPlan,
 } from '../net/session';
 import { askProblem, askTrade } from '../net/trade';
-import { reloadWithVillage, VILLAGE } from '../core/beta';
 import { whenWarm } from '../game/warm';
 import { READYING } from './readying';
 import { listRooms, serverUp, SERVER_DOWN, type RoomListing } from '../net/transport';
@@ -35,15 +34,6 @@ import { flyingFree, toggleFree, watchedPlayer, watchNext } from '../game/specta
 
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
-
-/** The switch offered where a room refused us for its lobby (`session.lobbyAsked`): this game loaded again in the
- *  room's lobby (the village beta on or off) and joined to it. */
-function lobbySwitchHtml(): string {
-  if (session.lobbyAsked === null) return '';
-  const says = session.lobbyAsked ? 'Switch to the village and join' : 'Switch to the old lobby and join';
-  return `<div class="coop-offline" role="status"><p>The game reloads to switch. You can switch back in Settings, `
-    + `under Beta.</p><button class="btn primary" id="btn-coop-lobby">${says}</button></div>`;
-}
 
 /** What a player is called in co-op: its name tag (the hero's class where it has none, solo). */
 export function nameOf(p: Player): string {
@@ -127,9 +117,9 @@ function shownRooms(): RoomListing[] {
     && (!form.notFull || r.players < r.max)
     && (!q || `${r.tag} ${r.name} ${biomeLabel(r.map)}`.toLowerCase().includes(q)));
 }
-/** a room Quick join may take: open, unlocked, in this lobby; the fullest first, as the relay lists them */
+/** a room Quick join may take: open, unlocked; the fullest first, as the relay lists them */
 const quickRoom = (): RoomListing | undefined => (Array.isArray(rooms) ? rooms : [])
-  .find((r) => r.v === PROTOCOL && !r.locked && r.players < r.max && r.lobby === (VILLAGE ? 'village' : 'panels'));
+  .find((r) => r.v === PROTOCOL && !r.locked && r.players < r.max);
 
 const biomeLabel = (id: string): string => (BIOMES as Record<string, { title: string } | undefined>)[id]?.title ?? id;
 const classOf = (id: string): { name: string; accent: string } | null => CLASSES[id] ?? null;
@@ -141,8 +131,6 @@ let tagNote = '';
 export const touchReviving = (): boolean => touchRevive;
 
 export function initCoop(): void {
-  // (the panels' link: the village's way in is its campfire)
-  if (!VILLAGE) $('#btn-coop').onclick = () => { sfx.click(); openCoop(true); };
   $('#btn-coop-close').onclick = () => { sfx.click(); openCoop(false); };
   $('#coop').onclick = (e) => { if (e.target === $('#coop')) openCoop(false); };
   const rv = $('#btn-revive');
@@ -193,10 +181,10 @@ async function checkServer(): Promise<void> {
 }
 
 /** an invite's join asked without the dialog (a name tag was kept) and not yet answered: refused, the dialog opens
- *  to say why, with the way on (another name tag, the room's lobby) */
+ *  to say why, with the way on (another name tag) */
 let invitedJoin = false;
 
-/** An invite's own join answered: joined, nothing to say; refused (the name tag taken, the room in the other lobby,
+/** An invite's own join answered: joined, nothing to say; refused (the name tag taken, the room
  *  gone or full), the dialog opened on it, where it went unsaid before: the game just stood in its lobby. Returns
  *  whether it opened the dialog (which renders it). */
 function invitedRefused(): boolean {
@@ -420,14 +408,12 @@ function roomRowHtml(r: RoomListing, open: boolean): string {
   const cls = classOf(r.cls);
   const picked = form.picked === r.code;
   const full = r.players >= r.max;
-  const otherLobby = r.lobby !== (VILLAGE ? 'village' : 'panels');
   const where = r.run ? `Wave ${r.wave}` : 'In the lobby';
   const dot = cls ? ` style="--dot:${cls.accent}"` : '';
   const join = `<button class="btn primary coop-room-join" data-code="${esc(r.code)}"${open && !full ? '' : ' disabled'}>${
     full ? 'Full' : 'Join'}</button>`;
   const detail = !picked ? '' : `<div class="coop-room-more">
-      <span>${esc(cls ? `${cls.name} host` : 'Host')} · ${r.locked ? 'Password room' : 'Public room'} · ${
-        otherLobby ? (r.lobby === 'village' ? 'In the village beta' : 'In the old lobby') : 'Your lobby'}</span>
+      <span>${esc(cls ? `${cls.name} host` : 'Host')} · ${r.locked ? 'Password room' : 'Public room'}</span>
       ${r.locked ? `<input id="coop-room-pass" type="password" maxlength="64" placeholder="Password" autocomplete="off"
         aria-label="The room's password" value="${esc(form.joinPassword)}"${open ? '' : ' disabled'}>` : ''}
     </div>`;
@@ -479,7 +465,7 @@ function createHtml(open: boolean, tag: string): string {
 }
 
 /** The dialog's status line over its pages: the server's state, the press waiting, or what went wrong (a password
- *  asked for, with its field; the room's lobby, with the switch). */
+ *  asked for, with its field). */
 function statusHtml(s: string, code: string): string {
   if (server === 'down') return `<div class="coop-offline" role="status"><p>${esc(SERVER_DOWN)}</p><button class="btn" id="btn-coop-retry">Try again</button></div>`;
   if (server === 'checking') return '<p class="coop-checking" role="status">Checking the co-op server…</p>';
@@ -491,7 +477,7 @@ function statusHtml(s: string, code: string): string {
   const pass = session.passwordAsked ? `<form class="coop-pass-ask"><input id="coop-pass" type="password" maxlength="64"
       placeholder="Room ${esc(session.code)}'s password" aria-label="The room's password" autocomplete="off">
       <button class="btn primary" type="submit">Join</button></form>` : '';
-  return `<p class="coop-error" role="alert">${esc(session.error)}</p>${pass}${lobbySwitchHtml()}`;
+  return `<p class="coop-error" role="alert">${esc(session.error)}</p>${pass}`;
 }
 
 /** The dialog out of a room: tabs over the rooms browser and the create page, the player's hero beside them (a tab
@@ -642,8 +628,6 @@ function bindOutOfRoom(body: HTMLElement, { open, rename, typingIn }: {
   } else if (session.passwordAsked && open) field('coop-pass')?.focus();
   const retry = field<HTMLElement>('btn-coop-retry');
   if (retry) retry.onclick = () => { sfx.click(); void checkServer(); };
-  const toLobby = field<HTMLElement>('btn-coop-lobby');
-  if (toLobby) toLobby.onclick = () => reloadWithVillage(session.lobbyAsked === true, session.code);
   const saves = body.querySelector<HTMLElement>('.coop-saves');
   if (saves) saves.onclick = () => { sfx.click(); openCoop(false); openSaves(true); };
   $<HTMLFormElement>('.coop-join', body).onsubmit = (e) => {
@@ -689,7 +673,6 @@ function renderBar(): void {
     : others.length ? `With ${others.map(nameOf).join(', ')}` : 'Waiting for a friend…';
   bar.innerHTML = `<span class="cb-room">Room <b>${esc(session.code)}</b></span><span class="cb-who">${esc(text)}</span>`;
   bar.onclick = () => { sfx.click(); openCoop(true); };
-  if (!VILLAGE) $('#btn-coop').textContent = isCoop() ? 'Room' : 'Play together';
 }
 
 // --- name tags over the heroes ----------------------------------------------------------------

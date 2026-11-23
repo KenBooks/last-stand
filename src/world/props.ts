@@ -1,7 +1,6 @@
 // Building blocks shared by the biome arenas: the biome contract, UV-scaled boxes, instancing
 // and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
 import * as THREE from 'three';
-import { VILLAGE } from '../core/beta';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { HERO_SHADOW_LAYER } from '../core/layers';
 import { keepMiddle, seeThroughFade, thinsByMiddle } from '../core/seeThrough';
@@ -465,9 +464,7 @@ export function boxWithUV(w: number, h: number, d: number, texel = 0.5, grained 
 /** a portal's light (each gate's one of its biome's point lights): how bright, how far it reaches (m), how far out in
  *  front of the membrane and how high it stands (over any head: at 2 m, a hand's breadth from a face beside the gate, it
  *  blew it out white, "blinding light on face"), and how much more as foes come through (`pulse`) */
-const PORTAL_LIGHT = VILLAGE ? { intensity: 12, reach: 11, out: 1.2, up: 3.4, pulse: 1.2 }
-  // (with no village, as it was before it: core/beta.ts)
-  : { intensity: 7, reach: 11, out: 1.2, up: 2.0, pulse: 1.2 };
+const PORTAL_LIGHT = { intensity: 12, reach: 11, out: 1.2, up: 3.4, pulse: 1.2 };
 
 export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { a: RGB; b: RGB; core: RGB }, updaters: Updater[], arch = false,
   place?: GatePlace): { mesh: THREE.Mesh; portal: Portal } {

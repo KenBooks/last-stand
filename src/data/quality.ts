@@ -1,6 +1,5 @@
 // Graphics quality presets. None of these settings change shader variants, so they
 // can be switched live without a compile hitch (see core/shaders.ts).
-import { VILLAGE } from '../core/beta';
 
 export type QualityLevel = 'high' | 'medium' | 'low' | 'verylow';
 export type QualitySetting = 'auto' | QualityLevel;
@@ -61,7 +60,7 @@ const SETTINGS = {
   /** character parts with a smaller bounding radius don't cast shadows (each caster is a draw call) */
   minCasterRadius: { high: 0.09, medium: 0.11, low: 0.16, verylow: 0.3 },
   /** MSAA samples on the scene render target (0 = off) */
-  msaa: { high: VILLAGE ? 2 : 4, medium: 2, low: 0, verylow: 0 },
+  msaa: { high: 2, medium: 2, low: 0, verylow: 0 },
   /** the share of the particles a burst, a puff of smoke or debris spawns (`setParticleShare` in fx/particles.ts):
    *  each is drawn over what's behind it, so fewer is less of the GPU's fill */
   particles: { high: 1, medium: 1, low: 1, verylow: 0.5 },

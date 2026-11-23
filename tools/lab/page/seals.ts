@@ -1,7 +1,7 @@
 // `lab seals`: what the village's walls cost to seal as the boot seals them (src/world/wall.ts `seal`), each timed by
 // the browser's own clock, and what each bounds, so a faster seal is held to the same answers. A seal casts rays out
 // from the middle at a body's heights, one every quarter of a degree, to the nearest surface: the houses' rooms' were
-// 2 to 5 s of a village boot on a CPU slowed four times (`npm run stalls -- --scenario boot --url "this?village=1"
+// 2 to 5 s of a village boot on a CPU slowed four times (`npm run stalls -- --scenario boot
 // --cpu-slowdown 4 --js`), on every visit, first or not. Each wall is sealed again here, and what it bounds read before
 // and after (its reach and what it met, slice by slice, as a digest), which must agree; an A/B's digests say whether
 // main's seal bounds the same. `--canary` stands a box a metre from the first room's middle before its seal: its
@@ -28,11 +28,9 @@ interface NamedWall {
   wall: Wall;
 }
 
-/** The village's wall and each room's, as the boot built them; without the village (`--panels`), the biome shown. */
+/** The village's wall and each room's, as the boot built them. */
 function wallsBuilt(): NamedWall[] {
-  const village = G.arena.village as typeof G.arena.village | null;
-  if (!village) return [{ name: G.arena.biome, wall: G.arena.wall }];
-  const walls: NamedWall[] = [{ name: 'village', wall: village.wall }];
+  const walls: NamedWall[] = [{ name: 'village', wall: G.arena.village.wall }];
   for (const [id, room] of Object.entries(G.arena.rooms ?? {})) walls.push({ name: id, wall: room.wall });
   return walls;
 }

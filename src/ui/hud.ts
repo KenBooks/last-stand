@@ -1,7 +1,6 @@
 // In-run HUD: bars, hotbar, score, target frame, minimap, spoils, decision panel.
 import { duelObjective } from './duelHud';
 import { G } from '../state';
-import { VILLAGE } from '../core/beta';
 import { input } from '../core/input';
 import { cameraYaw } from '../core/renderer';
 import { rarityCounts } from '../loot/items';
@@ -47,7 +46,7 @@ export function showHud(v: boolean, lobby = false, practice = false): void {
   $('#hud').classList.toggle('hidden', !v);
   $('#hud').classList.toggle('lobby', lobby);
   $('#hud').classList.toggle('practice', practice);
-  $('.mm-title').textContent = lobby && VILLAGE ? 'Wardenhollow' : 'The Last Stand';
+  $('.mm-title').textContent = lobby ? 'Wardenhollow' : 'The Last Stand';
   if (!lobby) minimapOut(true);
 }
 

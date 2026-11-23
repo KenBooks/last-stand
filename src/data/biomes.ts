@@ -5,8 +5,6 @@ import type { EnemyId } from './enemies';
 import type { TrackId } from './music';
 
 export type BiomeId = 'crypt' | 'forest';
-/** the player's choice in the lobby: a biome, or a random one each run */
-export type BiomeSetting = BiomeId | 'random';
 
 export interface BiomeDef {
   /** short label for the lobby picker */

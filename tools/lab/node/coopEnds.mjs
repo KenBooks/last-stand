@@ -26,8 +26,7 @@ const STEP_FRAMES = 600;
 const LEFT_AGAIN_FRAMES = 240;
 /** the frames each hero's place has to reach the other's game, back in the lobby (the link and its timeline) */
 const SETTLE_FRAMES = 120;
-/** how far apart two heroes back from a run may stand, m: each comes out by the way the party went in (the panels'
- *  lobby's spots are 1.6 m apart, a party of four's ends 4.8) */
+/** how far apart two heroes back from a run may stand, m: each comes out by the way the party went in */
 const TOGETHER_M = 6;
 /** the least two heroes back from a run stand apart, m: over a body's radius (in the village each game put its hero on
  *  the portal's one spot, 0.0 m from the other, one standing in another) */

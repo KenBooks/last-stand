@@ -193,9 +193,6 @@
   <!-- a partner asks for the local player's place in the duel set up at the weapons rack (ui/pvpMenu.ts) -->
   <!-- part: duel-ask -->
 
-  <!-- a beta is on (the village lobby): said as the game opens, with the way back (ui/beta.ts) -->
-  <!-- part: beta-notice -->
-
   <!-- the game ran slowly: may a performance report be sent? (perf/consent.ts) -->
   <!-- part: perf-ask -->
 
@@ -282,25 +279,6 @@
     <div class="ld-tip"></div>
   </div>
 
-  <!-- The lobby is the game's panels over the battleground, or the village (a beta the player opts into: the pause
-       menu's Beta tab, src/core/beta.ts): the address's `village` kept in a cookie, then the cookie. Each lobby's own
-       markup is marked `data-lobby`, and the other's is taken out here, so every id stays one element's. -->
-  <script>
-    (() => {
-      const asked = new URLSearchParams(location.search).get('village');
-      const kept = (document.cookie.match(/(?:^|; )last-stand-beta-village=([01])/) || [])[1];
-      if (asked === '1' || asked === '0') document.cookie = `last-stand-beta-village=${asked}; max-age=31536000; path=/; SameSite=Lax`;
-      // (a PR preview's, or a commit build's, opens on the village unless asked or kept otherwise: from the owner,
-      // "PR previews should default to lobby on... I mean village = default")
-      const preview = /^(pr|c)-[a-z0-9-]+\.ls\.wellscoped\.dev$/.test(location.hostname);
-      const chosen = asked === '1' || asked === '0' ? asked : kept ?? (preview ? '1' : '0');
-      const lobby = chosen === '1' ? 'village' : 'panels';
-      document.documentElement.dataset.lobby = lobby;
-      for (const part of document.querySelectorAll('[data-lobby]')) {
-        if (part !== document.documentElement && part.dataset.lobby !== lobby) part.remove();
-      }
-    })();
-  </script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

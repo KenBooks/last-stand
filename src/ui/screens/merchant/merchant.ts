@@ -168,5 +168,5 @@ function render(): void {
   go.title = o.enough ? '' : 'Offer more gear: its value must reach his price';
 }
 
-// (a screen of its own, started in the village by ui/screens.ts: Leave puts his counter's use away)
-screen({ village: true, init: () => initMerchant(() => closedFrom(villageObject('shopCounter'))) });
+// (a screen of its own, started by ui/screens.ts: Leave puts his counter's use away)
+screen({ init: () => initMerchant(() => closedFrom(villageObject('shopCounter'))) });

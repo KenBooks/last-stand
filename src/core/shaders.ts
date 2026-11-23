@@ -134,12 +134,10 @@ export interface WarmUp {
   poll?: Step;
 }
 
-/** What a warm-up shows in place of what (`WarmUp.swap`), and on WebGPU the scene's look it's shown with (`look`:
- *  put on, returning its undoing): there a pipeline is keyed by the scene's environment and fog too, so the hall of
- *  heroes compiled in the biome's look was built again in its own at its first frames (a first visit's 6 s hold).
- *  `alone`, put on as it's drawn and returning its undoing, leaves it the casting lights it will have when shown: every
- *  lit program is made for two, and more in the draw made them all afresh inside it. */
-export interface Swap { show: THREE.Object3D; hide: THREE.Object3D; look?: () => () => void; alone?: () => () => void }
+/** What a warm-up shows in place of what (`WarmUp.swap`). `alone`, put on as it's drawn and returning its undoing,
+ *  leaves it the casting lights it will have when shown: every lit program is made for two, and more in the draw made
+ *  them all afresh inside it. */
+export interface Swap { show: THREE.Object3D; hide: THREE.Object3D; alone?: () => () => void }
 
 /** What a warm-up took (ms): its compile and its draw (each one task, the compile with `step` in slices of a few ms,
  *  `compileStepMs` its longest), its wait for the maps it draws with (`WarmUp.before`) and their uploads, and the wait

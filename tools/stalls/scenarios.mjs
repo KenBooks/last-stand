@@ -1,11 +1,11 @@
 // What the player does while the stalls are measured (tools/stalls), with the page's own controls alone (real key
 // presses and mouse moves sent to the page, its buttons clicked): a production build has no dev hooks to drive it.
 import {
-  chooseIfAsked, choiceClosed, deciding, focusHero, heroesShown, inRun, itemBoxes, markPhase, menuStowed,
-  runOver, scoresShown, stowsRecorded,
+  chooseIfAsked, choiceClosed, deciding, focusHero, heroesShown, inRun, itemBoxes, markPhase,
+  runOver, scoresShown,
 } from './page.mjs';
 import { latencyLine, pressInTurn, watchLatency } from './latency.mjs';
-import { walks } from './villageWalks.mjs';
+import { goTo, skipTraining, walks } from './villageWalks.mjs';
 
 /** the keys held in turn while walking round the lobby, and how long each */
 const WALK_KEYS = ['w', 'd', 's', 'a', 'w', 'a', 's', 'd'];
@@ -43,9 +43,6 @@ export const SWEEP_ITEM_MS = 250;
 /** how long a key is held for a tap, as a person's finger holds it (ms): a press down and up again at once is
  *  shorter than a frame */
 const TAP_MS = 90;
-/** how often Space is pressed while the lobby is stowed and shown again unless the command says (`--press-ms`; ms,
- *  a press every this long: the owner's "pressing space rapidly") */
-export const STOW_PRESS_MS = 200;
 
 /** Taps `key` as a person does. */
 const tap = (page, key) => page.keyboard.press(key, { delay: TAP_MS });
@@ -134,15 +131,9 @@ const heroesGone = () => !document.getElementById('heroes').checkVisibility();
 /** how long the village's hero is given to walk to the hall's dais from anywhere in it (ms) */
 const HALL_WALK_MS = 30_000;
 
-/** The hero selection screen opened from the lobby and waited for: the panels' Change hero clicked, or, where the
- *  lobby is a village, which has no such link, its hall of heroes picked on the map (M, its name clicked: he walks
- *  to its dais the first time, and uses it where he stands after). */
+/** The hero selection screen opened from the lobby and waited for: the village's hall of heroes picked on its map
+ *  (M, its name clicked: he walks to its dais the first time, and uses it where he stands after). */
 async function openHeroes(page) {
-  if (await page.$('#btn-hero')) {
-    await page.click('#btn-hero');
-    await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
-    return;
-  }
   await tap(page, 'm');
   await page.click('.vm-name[data-use="heroes"]');
   await page.waitForFunction(heroesShown, null, { timeout: HALL_WALK_MS, polling: 100 });
@@ -151,24 +142,30 @@ async function openHeroes(page) {
 /** Whether the tree has a hero selection screen. */
 const hasHeroes = async (page) => !!(await page.$('#heroes'));
 
-/** `hero` picked in the lobby as a player picks him: on the hero selection screen its Change hero opens (his name
- *  clicked, then Enter), or by the lobby's class buttons in a tree from before it. */
+/** `hero` picked in the lobby as a player picks him: on the hero selection screen the hall's dais opens (his name
+ *  clicked, then Enter). */
 export async function pickHero(page, hero) {
-  if (await page.$('#opt-class')) {
-    await page.click(`#opt-class button[data-c="${hero}"]`);
-    return;
-  }
   await openHeroes(page);
   await page.evaluate(chooseIfAsked, hero);
   await page.waitForFunction(heroesGone, null, { timeout: HEROES_MS });
 }
 
-/** Starts a run as `hero` from the lobby; returns once it has begun. */
-async function startRun(page, hero) {
+/** how long a run may take to begin once Enter is clicked on a portal's card (ms: a cold fight warms under its bar) */
+const RUN_BEGUN_MS = 30_000;
+
+/**
+ * Starts a run as `hero` in `biome` from the village, as a player does: the hero picked in the hall, a first visit's
+ * training skipped (the portals wait for it), the battleground's portal picked on the map and walked to, and Enter
+ * clicked on its card. Returns once the run has begun; throws saying why he never reached the portal.
+ */
+async function startRun(page, hero, biome) {
   await pickHero(page, hero);
   await page.waitForTimeout(500);
+  await skipTraining(page);
+  const why = await goTo(page, `portal:${biome}`);
+  if (why) throw new Error(`stalls: no run started: ${why}`);
   await page.click('#btn-start');
-  await page.waitForFunction(inRun, null, { timeout: 30_000 });
+  await page.waitForFunction(inRun, null, { timeout: RUN_BEGUN_MS });
 }
 
 /**
@@ -201,18 +198,18 @@ async function playRun(page, ms, beat) {
 }
 
 /** Starts a run as the warrior and fights for `ms`: Steel Tempest and swings at whatever comes. */
-async function fight(page, ms) {
-  await startRun(page, 'warrior');
+async function fight(page, ms, { biome }) {
+  await startRun(page, 'warrior', biome);
   const played = await playRun(page, ms, fightBeat);
-  return ['a run started as the warrior', ...played, await scoresNote(page)];
+  return [`a run started as the warrior by the ${biome}'s portal`, ...played, await scoresNote(page)];
 }
 
 /**
  * Starts a run as the mage and, once the foes have come at him, casts Maelstrom round him as often as it's ready for
  * `ms`: its storm draws the foes in and whirls what it kills (a storm with 7 or 8 bodies in it lagged for the owner).
  */
-async function storm(page, ms) {
-  await startRun(page, 'mage');
+async function storm(page, ms, { biome }) {
+  await startRun(page, 'mage', biome);
   await page.waitForTimeout(CLOSE_IN_MS);
   const notes = ['a run started as the mage, walking away from the foes and casting Maelstrom back at them'];
   const played = await playRun(page, ms - CLOSE_IN_MS, stormBeat);
@@ -261,16 +258,19 @@ async function sweepFor(page, items, ms, itemMs) {
 }
 
 /**
- * Hovers the items in the lobby, a quarter of `ms` each phase: the mouse gliding over the world first (no tooltip: the
+ * Hovers the items in the chest's panels (the chest picked on the village's map and walked to first), a quarter of
+ * `ms` each phase: the mouse gliding over the world first (no tooltip: the
  * frames to beat), then over each of the hero's equipment slots and the stash's first items in turn, its tooltip
  * following; then swept along the stash's items, a new one every `itemMs`; then held still on one, its tooltip up (a
  * stash item's, if it has any: `--stash`). (Hovering the items dropped the owner's Chrome from 140 frames a second to
  * 44, #267, and moving between them to 34 once the glow was composited.)
  */
 async function hover(page, ms, { itemMs }) {
+  const why = await goTo(page, 'stash');
+  if (why) return [`${why}: hovered nothing`];
   const { slots, items } = await page.evaluate(itemBoxes);
   const boxes = [...slots, ...items.slice(0, STASH_HOVERED)];
-  if (boxes.length === 0) return ['no items shown in the lobby: hovered nothing'];
+  if (boxes.length === 0) return ['no items shown in the chest\'s panels: hovered nothing'];
   const world = await worldBox(page);
   await page.evaluate(markPhase, 'away');
   await glideFor(page, () => world, ms / 4);
@@ -294,6 +294,8 @@ async function hover(page, ms, { itemMs }) {
  *  between items that cost the most, measured three times as long. The first quarter the mouse glides over the world:
  *  the same run's frames to beat (a machine busy with something else slows both). */
 async function sweep(page, ms, { itemMs }) {
+  const why = await goTo(page, 'stash');
+  if (why) return [`${why}: swept nothing`];
   const { slots, items } = await page.evaluate(itemBoxes);
   if (items.length === 0) return ['no stash items shown (--stash): swept nothing'];
   const world = await worldBox(page);
@@ -305,41 +307,12 @@ async function sweep(page, ms, { itemMs }) {
     + `(the ${slots.length} slots left alone)`];
 }
 
-/**
- * The lobby's panels stowed and shown again with Space (pressed rapidly, the owner's 144 frames a second fell to
- * 70): a quarter of `ms` standing with them shown (the frames to beat), a quarter stowed (practice: the run's
- * bar at the bottom), then Space pressed every `pressMs` for the rest, the mouse over the world throughout. Its
- * notes say how often the lobby followed: a press it missed measured nothing.
- */
-async function stow(page, ms, { pressMs }) {
-  const world = await worldBox(page);
-  await page.mouse.move(world.x + world.width / 2, world.y + world.height / 2);
-  // (shown to start with, whatever a round before left)
-  if (await page.evaluate(menuStowed)) await tap(page, 'Space');
-  await page.evaluate(markPhase, 'away');
-  await page.waitForTimeout(ms / 4);
-  await tap(page, 'Space');
-  await page.evaluate(markPhase, 'stowed');
-  await page.waitForTimeout(ms / 4);
-  await page.evaluate(markPhase, 'pressing');
-  const started = Date.now();
-  let presses = 0;
-  while (Date.now() - started < ms / 2) {
-    const due = started + (presses + 1) * pressMs;
-    await tap(page, 'Space');
-    presses++;
-    await page.waitForTimeout(Math.max(0, due - Date.now()));
-  }
-  const followed = await page.evaluate(stowsRecorded);
-  return [`the lobby shown, then stowed, then Space pressed ${presses} times, one every ${pressMs} ms; `
-    + `stowed or shown again ${followed} times of ${presses + 1}`];
-}
-
 /** how many times `heroes` opens the hero selection screen and goes back */
 const HERO_TRIPS = 3;
 
 /**
- * The hero selection screen opened from the lobby by its Change hero and left by Back, `HERO_TRIPS` times (from play:
+ * The hero selection screen opened from the lobby by the hall's name on the map and left by Back, `HERO_TRIPS` times
+ * (from play:
  * "brief lag when reentering hero selection room"): a fifth of `ms` in the lobby first (the frames to beat), then
  * each trip's way in (the click, the hall built, the camera's flight) and way out a phase of its own, so the first
  * opening (its heroes perhaps warmed for it) is read apart from the ones after.
@@ -360,7 +333,7 @@ async function heroes(page, ms) {
     await page.waitForFunction(heroesGone, null, { timeout: HEROES_MS });
     await page.waitForTimeout(half);
   }
-  return [`the lobby, then the hero selection screen opened by Change hero and left by Back ${HERO_TRIPS} times, `
+  return [`the lobby, then the hero selection screen opened by the map and left by Back ${HERO_TRIPS} times, `
     + `${(half / 1000).toFixed(1)} s each way`];
 }
 
@@ -469,14 +442,26 @@ async function shootAbout(page, ms, angle) {
   return shots;
 }
 
-/** Shoots at the lobby's dummies (up the screen in the top-down view), as the owner's "when I start firing at targets". */
-async function firing(page, ms) {
-  return [`${await shootAbout(page, ms, -Math.PI / 2)} shots at the lobby's dummies`];
+/** how long the hero is given to walk into the training yard, where alone the village lets him shoot (ms: the
+ *  village is about 90 m across, he walks about 5 m a second) */
+const YARD_WALK_MS = 20_000;
+
+/** Shoots for `ms` in the village's training yard (picked on the map and walked into first), the aim about `angle`:
+ *  how many shots, or why he never walked there. */
+async function shootInYard(page, ms, angle) {
+  const why = await goTo(page, 'yard', YARD_WALK_MS);
+  if (why) return `${why}: 0`;
+  return String(await shootAbout(page, ms, angle));
 }
 
-/** The same shots down the screen, away from the dummies: what `firing` costs over this is what striking them costs. */
+/** Shoots up the screen in the training yard, as the owner's "when I start firing at targets". */
+async function firing(page, ms) {
+  return [`${await shootInYard(page, ms, -Math.PI / 2)} shots up the screen in the training yard`];
+}
+
+/** The same shots down the screen: what `firing` costs over this is what its shots strike that these don't. */
 async function firingPast(page, ms) {
-  return [`${await shootAbout(page, ms, Math.PI / 2)} shots away from the lobby's dummies`];
+  return [`${await shootInYard(page, ms, Math.PI / 2)} shots down the screen in the training yard`];
 }
 
 /** The scenarios by name: each plays the page for `ms` (as `options` say, those it reads) and returns notes of what
@@ -580,6 +565,6 @@ async function resolution(page, ms) {
 }
 
 export const SCENARIOS = {
-  fight, lobby, firing, firingPast, storm, hover, sweep, stow, heroes, switch: switchHero, pause, choosing, hall,
+  fight, lobby, firing, firingPast, storm, hover, sweep, heroes, switch: switchHero, pause, choosing, hall,
   walks, latency, resolution,
 };

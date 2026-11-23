@@ -1,67 +1,12 @@
-  <div id="menu" class="hidden" data-tab="hero">
-    <!-- short screens (phones held sideways) show one panel at a time, picked here -->
-    <nav id="lobby-rail" class="panel" aria-label="Lobby" data-lobby="panels">
-      <button data-lt="hero" class="active"><span class="ri">⚔</span>Hero</button>
-      <button data-lt="gear"><span class="ri">⛨</span>Gear</button>
-      <button data-lt="skills"><span class="ri">✦</span>Skills</button>
-      <button id="rail-practice"><span class="ri">◎</span><span class="sh-hide">Practice</span><span class="sh-show">Back</span></button>
-      <button id="rail-play" class="play"><span class="ri">▶</span>Play</button>
-    </nav>
+  <div id="menu" class="hidden">
     <!-- short screens (phones held sideways) show one panel of the inventory at a time, picked here -->
-    <nav id="lobby-rail" class="panel" aria-label="Inventory" data-lobby="village">
+    <nav id="lobby-rail" class="panel" aria-label="Inventory">
       <button data-lt="gear" class="active"><span class="ri">⛨</span>Gear</button>
       <button data-lt="skills"><span class="ri">✦</span>Skills</button>
       <button id="rail-close"><span class="ri">✕</span>Close</button>
     </nav>
     <!-- the village's crest: its name (the loading screen's logo gathers into it), and a co-op room's bar under it -->
-    <div class="menu-left panel" data-lobby="panels">
-      <!-- folds the panel away to the left, and back (the tab stays at the screen's edge) -->
-      <button id="hero-fold" class="fold-tab" aria-expanded="true" title="Hide the hero panel" aria-label="Hide the hero panel"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M8.5 3l-6 7 6 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Hero</span></button>
-      <!-- the contents scroll inside the frame (a screen too short for them), so the tab can stand outside it -->
-      <div class="ml-body">
-        <div class="logo">
-          <div class="logo-art" role="img" aria-label="Last Stand">
-            <svg class="logo-glow" viewBox="0 0 700 330" aria-hidden="true"><use href="#logo-words" fill="#e0280c" filter="url(#logo-glow-blur)"/></svg>
-            <svg viewBox="0 0 700 330" aria-hidden="true"><use href="#logo-words" fill="url(#logo-steel)" filter="url(#logo-metal)"/></svg>
-          </div>
-          <div class="logo-tag">Hold the line. Bank the spoils. Or risk it all.</div>
-        </div>
-        <div class="class-card">
-          <div class="cc-head"><div class="cc-name"></div><button class="btn" id="btn-hero">Change hero</button></div>
-          <div class="cc-tag"></div>
-          <div class="cc-strip"><button class="cc-arrow cc-prev" aria-label="Previous skills">&lsaquo;</button><div class="cc-skills"></div><button class="cc-arrow cc-next" aria-label="More skills">&rsaquo;</button></div>
-        </div>
-        <div class="records"></div>
-        <div class="biome-row"><span class="br-label">Mode</span>
-          <div class="seg" id="opt-training" aria-label="Game mode">
-            <button data-training="false" class="active">Arena</button><button data-training="true">Training grounds</button>
-          </div>
-        </div>
-        <div class="biome-row"><span class="br-label">Battleground</span>
-          <div class="seg" id="opt-biome">
-            <button data-b="random" class="dice" title="Random: a new battleground every run" aria-label="Random battleground">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/><g fill="currentColor"><circle cx="8" cy="8" r="1.6"/><circle cx="16" cy="8" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="8" cy="16" r="1.6"/><circle cx="16" cy="16" r="1.6"/></g></svg>
-            </button>
-          </div>
-        </div>
-        <div class="biome-row"><span class="br-label">Starting wave</span>
-          <div class="seg" id="opt-wave">
-            <button data-d="-1" aria-label="Earlier wave">&lsaquo;</button><span class="wv-val"></span><button data-d="1" aria-label="Later wave">&rsaquo;</button>
-          </div>
-        </div>
-        <div id="coop-bar" class="hidden" role="button" tabindex="0"></div>
-        <button class="btn primary big" id="btn-start">Enter the Arena</button>
-        <div class="menu-links">
-          <button class="link" id="btn-help">How to play</button>
-          <button class="link" id="btn-coop">Play together</button>
-          <button class="link hidden" id="btn-install">Install</button>
-          <button class="link" id="btn-saves">Save slot 1</button>
-          <button class="link report-link" id="btn-report-panel">Report a bug</button>
-          <button class="link" id="btn-reset">Reset profile</button>
-        </div>
-      </div>
-    </div>
-    <div class="menu-crest" data-lobby="village">
+    <div class="menu-crest">
       <div class="logo">
         <div class="logo-art" role="img" aria-label="Wardenhollow">
           <svg class="logo-glow" viewBox="0 0 700 150" aria-hidden="true"><use href="#village-words" fill="#e0280c" filter="url(#logo-glow-blur)"/></svg>
@@ -71,11 +16,8 @@
       <div id="coop-bar" class="hidden" role="button" tabindex="0"></div>
     </div>
     <div class="menu-center">
-      <div class="stow-hint" data-lobby="panels"><kbd>Space</kbd><span class="sh-hide">Hide the lobby to practice on the dummies</span><span class="sh-show">Show the lobby</span></div>
       <!-- the key bar; the skill book slides up over it only to remap (ui/loadoutEditor.ts) -->
       <div id="loadout" class="panel">
-        <!-- folds the panel away to the bottom, and back (the tab stays at the screen's edge) -->
-        <button id="skills-fold" class="fold-tab" data-lobby="panels" aria-expanded="true" title="Hide the skills" aria-label="Hide the skills"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 3l7 6.5 7-6.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Skills</span></button>
         <div class="lo-book" id="lo-book">
           <div class="lo-head"><div class="lo-top"><span class="lo-title">Spellbook</span>
             <span class="lo-style"><span class="lo-style-name"></span><button class="link" id="btn-lo-reset">Reset to defaults</button></span></div>
@@ -90,11 +32,6 @@
       </div>
     </div>
     <div class="menu-right panel">
-      <!-- folds the panel away to the right, and back (the tab stays at the screen's edge) -->
-      <div class="fold-tabs fold-right" data-lobby="panels">
-        <button id="gear-fold" class="fold-tab" aria-expanded="true" title="Hide the equipment" aria-label="Hide the equipment"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M3.5 3l6 7-6 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Equipment</span></button>
-        <button id="attrs-fold" class="fold-tab fold-extra" title="Show attributes" aria-label="Show attributes"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M3.5 3l6 7-6 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Attributes</span></button>
-      </div>
       <div class="tabs">
         <button class="tab active" data-tab="gear">Equipment</button>
         <button class="tab" data-tab="attrs">Attributes</button>
@@ -239,7 +176,7 @@
     </div>
     <!-- the card a village object opens (ui/villageCard.ts): a portal's starting wave and its way in, the chronicle's
          save slots -->
-    <div id="vcard" data-lobby="village" class="panel hidden" role="dialog" aria-labelledby="vc-title">
+    <div id="vcard" class="panel hidden" role="dialog" aria-labelledby="vc-title">
       <div class="vc-title" id="vc-title"></div>
       <div class="vc-sub"></div>
       <div class="vc-page" data-page="portal">

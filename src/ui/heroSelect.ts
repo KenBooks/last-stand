@@ -7,7 +7,6 @@
 // always). Every class's card is laid over the others in one cell, the one in focus shown, so
 // the panel is the largest's size and nothing moves as the focus does.
 import { G } from '../state';
-import { VILLAGE } from '../core/beta';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { saveSlot } from '../loot/saveSlots';
 import { spendPress, wasPressed } from '../core/input';
@@ -434,7 +433,7 @@ export function heroSelectKeys(): void {
   // like other E interactions"; a first visit has nothing to go back to. The press is spent: the village's update
   // comes later in the frame, and hearing it at the dais it used the hall again, the screen back up a moment after it
   // left, from play, "E in choose hero should cancel hero choosing like all other interactions in the village")
-  if (VILLAGE && !first && wasPressed('e')) {
+  if (!first && wasPressed('e')) {
     if (spendsE) spendPress('e');
     sfx.click();
     closeHeroSelect();

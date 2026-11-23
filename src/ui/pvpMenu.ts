@@ -205,9 +205,6 @@ function answer(yes: boolean): void {
 
 /** The menu drawn as the duel and the room stand. */
 export function renderPvp(): void {
-  // (nothing without the village's card: the old lobby has no way into a duel, and its page lacks the menu; its room
-  // changes reach here all the same, from the session's `changed`, which a throw here cut short)
-  if (!document.getElementById('vcard')) return;
   // (the host's parts kept up with the room whether or not his menu is open: a guest's shows them)
   if (settleParts()) sendDuelSetup();
   showAsk();

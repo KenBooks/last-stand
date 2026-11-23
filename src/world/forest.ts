@@ -2,7 +2,6 @@
 // standing over the forest beyond, with four root-arch spawn gates, a mossy stone dais ringed by
 // standing stones, glowcap mushroom clusters and two bonfires. Stumps, logs and boulders break up the floor.
 import * as THREE from 'three';
-import { VILLAGE } from '../core/beta';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { seeThrough } from '../core/seeThrough';
 import { ARENA } from '../data/balance';
@@ -54,16 +53,15 @@ const FLOOR_RELIEF = { depth: 0.045, perMetre: FLOOR_REPEAT / 220, fade: 70 };
 /** grass sways this far at its tips (m), slowly (rad/s), each tuft a little after the one upwind of it */
 const SWAY = 0.05, SWAY_RATE = 1.3;
 /** a bonfire's light (a point light's, in candela): enough for a warm pool round it, on a village's ground by night too */
-// (these are a light's under the village's soft falloff, `lightTheLamps`: with no village, core/beta.ts, the lights
-// fall by three's own square and a bonfire is as it was before it)
-export const BONFIRE_LIGHT = VILLAGE ? 110 : 12;
+// (these are a light's under the lamps' soft falloff, `lightTheLamps`)
+export const BONFIRE_LIGHT = 110;
 /** how soft close to its light is (m squared, in its decay, as `LAMP_SOFT` is a lamp's): with a lamp's, a hand beside the
  *  fire, nearer its light than the ground is, burned white by day with the sun on it too (from play, "fire blinding skin
  *  issue again"; `lab village --only heroBesideFire`) */
-const BONFIRE_SOFT = VILLAGE ? 24 : 0;
-const BONFIRE_LIGHT_UP = VILLAGE ? 1.2 : 1.3;
-const BONFIRE_COLOUR = VILLAGE ? 0xff9a48 : 0xff7a30;
-const BONFIRE_REACH = VILLAGE ? 16 : 13;
+const BONFIRE_SOFT = 24;
+const BONFIRE_LIGHT_UP = 1.2;
+const BONFIRE_COLOUR = 0xff9a48;
+const BONFIRE_REACH = 16;
 /** the bonfires' places, by the wall on the diagonal */
 const BONFIRES = [Math.PI / 4, (5 * Math.PI) / 4].map((a) => [Math.cos(a) * (WALL_R - 2.4), Math.sin(a) * (WALL_R - 2.4)]);
 /** a fire clears the ground round it (m): nothing lies within its ring of stones, and a fern's roots stand clear of

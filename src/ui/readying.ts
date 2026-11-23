@@ -4,7 +4,7 @@
 // what it readies, the latest press's: the fight, the hero picked, the save slot, the battleground, co-op. A co-op
 // guest's start shows it too, warm or not, over whatever the guest has open, until its run has begun (`showJoining`).
 import { isReadying, onReadying, readyingGlide, readyingLabel, readyingShare } from '../game/warm';
-import { BIOMES, BIOME_IDS, type BiomeSetting } from '../data/biomes';
+import { BIOMES, BIOME_IDS, type BiomeId } from '../data/biomes';
 import { SAVE_SLOTS } from '../loot/saveSlots';
 
 /** What each press readies, as the bar says it (each `whenWarm`'s label): Start the fight (a guest's start too), the
@@ -12,9 +12,7 @@ import { SAVE_SLOTS } from '../loot/saveSlots';
 export const READYING = {
   fight: 'Readying the fight',
   heroes: 'Readying the heroes',
-  biome: (setting: BiomeSetting): string => {
-    return setting === 'random' ? 'Readying the battlegrounds' : `Readying ${BIOMES[setting].title}`;
-  },
+  biome: (biome: BiomeId): string => `Readying ${BIOMES[biome].title}`,
   slot: (slot: number): string => `Readying slot ${slot}`,
   coop: 'Readying co-op',
   /** a co-op guest's, from the host's start till its run has begun (its fight's programs warm or not) */
@@ -33,7 +31,7 @@ const bossShorts = (): string[] => BIOME_IDS.flatMap((id) => [
 export const readyingLabels = (): string[] => [
   READYING.fight,
   READYING.heroes,
-  ...(['random', ...BIOME_IDS] as BiomeSetting[]).map(READYING.biome),
+  ...BIOME_IDS.map(READYING.biome),
   ...SAVE_SLOTS.map(READYING.slot),
   READYING.coop,
   READYING.join,

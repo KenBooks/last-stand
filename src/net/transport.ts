@@ -37,8 +37,8 @@ export interface RoomCard {
   tag: string; cls: string;
   /** the battleground, and the wave: the one fought in a run, else the one it starts at */
   map: string; wave: number; run: boolean;
-  /** the lobby it's in (a room is in its host's), and the game's protocol */
-  lobby: 'village' | 'panels'; v: number;
+  /** the game's protocol */
+  v: number;
 }
 
 /** A public room as the relay lists it. */

@@ -4,7 +4,6 @@
 // light and a rim light from the pool (fx/lights.ts: the count never changes), and he shows off a skill of his as it
 // arrives (`HallDef.showcase`). Every hero's programs are warm before it opens (game/warm.ts, the `heroes` need).
 import * as THREE from 'three';
-import { VILLAGE } from '../core/beta';
 import { G } from '../state';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { Player } from '../entities/player';
@@ -467,8 +466,6 @@ function* hallHeroSteps(id: string, profile: Profile, look = buildableLook(id, p
   Generator<void, Player, undefined> {
   const player = yield* Player.inSteps(id, profile.equipped, false, look);
   G.scene.remove(player.obj);
-  // (with no village there are no plinths to stand at rest on: he's posed as the hall's room opens)
-  if (!VILLAGE) return player;
   yield;
   const i = CLASS_IDS.indexOf(id);
   const at = new THREE.Vector3(TERRACE.x + HALL.plinths[i], 0, HALL.plinthZ);
