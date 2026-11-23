@@ -59,6 +59,85 @@ test('a heartbeat holds an id, a place and three flags, and nothing else', () =>
   assert.match(checkBeat({ ...beatOf(1), where: 'shop' }).error, /no such place/);
   assert.match(checkBeat({ ...beatOf(1), coop: 'yes' }).error, /coop/);
   assert.match(checkBeat([beatOf(1)]).error, /not an object/);
+  // signed in: the account's play id, the browser's own beside it as `was`
+  assert.deepEqual(checkBeat(beatOf(1, { was: idOf(2) })).beat, beatOf(1, { was: idOf(2) }));
+  assert.equal('was' in checkBeat(beatOf(1)).beat, false, 'no `was` signed out');
+  assert.match(checkBeat(beatOf(1, { was: 'short' })).error, /no browser id/);
+  assert.match(checkBeat(beatOf(1, { was: idOf(1) })).error, /no browser id/, 'never the id itself');
+});
+
+/** An account's play id (as the saves service makes one, shaped as a browser's id) and its browsers' ids. */
+const ACCOUNT = 100;
+const PHONE = 101;
+const PC = 102;
+/** A signed-in beat: the account's id, the browser's own as `was`. */
+const signedIn = (browser, extra = {}) => beatOf(ACCOUNT, { was: idOf(browser), ...extra });
+
+test('a signed-in player counts once a day over all their devices, the browser played before signing in too', async () => {
+  const clock = { now: NOON };
+  const stats = service(freshFolder(), clock);
+  await stats.load();
+  // the phone, new, plays signed out, then signs in; the PC plays signed in all along
+  stats.take(beatOf(PHONE, { start: true, first: true }), LIVE, '10.0.0.1');
+  clock.now += 20_000;
+  stats.take(signedIn(PHONE), LIVE, '10.0.0.1');
+  clock.now += 40_000;
+  stats.take(signedIn(PHONE), LIVE, '10.0.0.1');
+  stats.take(signedIn(PC, { start: true }), LIVE, '10.0.0.2');
+  const today = stats.read(1).days[0].live;
+  assert.equal(today.players, 1, 'one account: one player, not the phone, the PC and the account');
+  assert.equal(today.minutes, 2, "the minute the phone counted is not counted again as the account's");
+  assert.equal(today.sessions, 2);
+  assert.equal(today.newPlayers, 1, "a new account's first browser is a new player");
+  assert.deepEqual(stats.read(1).online, { live: 1, test: 0 });
+  const slot = Math.floor((clock.now % DAY) / (5 * MINUTE));
+  assert.equal(today.online[slot], 1, 'one online in the slot');
+  // a player signed out on a third browser is one more, as before
+  stats.take(beatOf(103), LIVE, '10.0.0.3');
+  assert.equal(stats.read(1).days[0].live.players, 2);
+});
+
+test('a browser signing in to an account seen before takes back its new player, and its past days fold in', async () => {
+  const clock = { now: NOON - 3 * DAY };
+  const stats = service(freshFolder(), clock);
+  await stats.load();
+  // the account played on the PC three days ago; the phone played signed out yesterday; today a new browser (the
+  // phone's stats turned off and on: a new id) signs in
+  stats.take(signedIn(PC, { first: true }), LIVE, '10.0.0.2');
+  clock.now = NOON - DAY;
+  stats.take(beatOf(PHONE, { first: true }), LIVE, '10.0.0.1');
+  clock.now = NOON;
+  stats.take(beatOf(104, { first: true }), LIVE, '10.0.0.1');
+  assert.equal(stats.read(1).days[0].live.newPlayers, 1);
+  stats.take(signedIn(104), LIVE, '10.0.0.1');
+  assert.equal(stats.read(1).days[0].live.newPlayers, 0, 'a known account on a new browser is no new player');
+  assert.deepEqual(stats.read(1).active.live, { day: 1, week: 2, month: 2 }, "yesterday's phone not yet signed in");
+  stats.take(signedIn(PHONE), LIVE, '10.0.0.1');
+  assert.deepEqual(stats.read(1).active.live, { day: 1, week: 1, month: 1 }, "its days are the account's now");
+  const days = stats.read(4).days.map((day) => day.live.players);
+  assert.deepEqual(days, [1, 0, 1, 1], 'each day that played still counts its one player');
+  assert.equal(stats.read(4).days[2].live.newPlayers, 1, "a past day's new player stays: only today's is known new");
+});
+
+test("a fold adds no player and keeps nothing of the pair: no browser's hash left beside the account's", async () => {
+  const folder = freshFolder();
+  const clock = { now: NOON };
+  const stats = service(folder, clock, { idsPerAddress: 3 });
+  await stats.load();
+  stats.take(beatOf(PHONE), LIVE, '10.0.0.1');
+  stats.take(signedIn(PHONE), LIVE, '10.0.0.1');
+  await stats.save();
+  const kept = JSON.parse(readFileSync(join(folder, 'stats', `${dayOf(NOON)}.json`), 'utf8'));
+  assert.equal(kept.live.ids.length, 1, "the account's hash alone");
+  // a browser id never seen folds nothing: the account's id is new, and held to the address's new ids
+  assert.equal(stats.take(beatOf(200, { was: idOf(201) }), LIVE, '10.0.0.1'), true);
+  assert.equal(stats.take(beatOf(202, { was: idOf(203) }), LIVE, '10.0.0.1'), true);
+  assert.equal(stats.take(beatOf(204, { was: idOf(205) }), LIVE, '10.0.0.1'), false, 'one new id too many');
+  assert.equal(stats.read(1).days[0].live.players, 3);
+  // a test build's browser never folds into production's account
+  stats.take(beatOf(PC), PREVIEW, '10.0.0.4');
+  stats.take(signedIn(PC), LIVE, '10.0.0.4');
+  assert.equal(stats.read(1).days[0].test.players, 1);
 });
 
 test('beats add up to players, minutes once a minute, sessions, new players and who is online', async () => {

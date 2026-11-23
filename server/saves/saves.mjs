@@ -11,6 +11,8 @@
 //   DELETE /saves/account              the account, every site's save and every way in, gone
 //   DELETE /saves/passkey/<id>         one passkey (never the last way in)
 //   POST   /saves/signout              this session ended
+//   GET    /saves/play-id              { id }: the account's play id, what the heartbeat counts it by (any site's
+//                                      session: the same id on every device, never the account's)
 //   POST   /saves/link-code            a sign-in code for another site or device: 8 letters, once, 10 minutes (a
 //                                      preview's: previews alone)
 //   POST   /saves/link                 { code } -> { token, account }: signed in here as the account that made it
@@ -658,6 +660,7 @@ async function signedInRequest(req, res, path, origin, headers) {
   }
   if (path === '/saves/google/move' && req.method === 'POST') return moveGoogle(req, res, signedIn, site, headers);
   if (path === '/saves/account' && req.method === 'GET') return answer(res, 200, accountView(account, site, signedIn.token), headers);
+  if (path === '/saves/play-id' && req.method === 'GET') return answer(res, 200, { id: store.playIdOf(account.id) }, headers);
   if (path === '/saves/signout' && req.method === 'POST') {
     await change(account.id, (changed) => {
       changed.sessions = changed.sessions.filter((s) => s.hash !== signedIn.session.hash);

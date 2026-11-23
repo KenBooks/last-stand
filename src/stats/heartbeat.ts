@@ -2,11 +2,13 @@
 // it is being played, so the dashboard can count players online, active players and playtime (server/traces
 // stats.mjs). A beat holds a random id this browser made for it alone (never an account, a name, a save or a room),
 // where the player is (the lobby or a fight), whether in co-op, and whether it starts this page's session or is the
-// browser's first. The pause menu's Anonymous play stats turns it off; a browser asking sites not to track it (Global
+// browser's first. Signed in to cloud saves, it holds the account's play id instead (the saves service makes it from
+// the account, which it never names) and the browser's id beside it, so one account on every device is one player. The pause menu's Anonymous play stats turns it off; a browser asking sites not to track it (Global
 // Privacy Control) starts with it off. The dev server and automated browsers (the lab) send nothing.
 import { G } from '../state';
 import { isCoop } from '../net/role';
 import { serverHttp } from '../net/transport';
+import { accountPlayId } from '../loot/cloud';
 
 /** the player's choice, and the browser's id */
 const CHOICE_KEY = 'last-stand-play-stats';
@@ -62,12 +64,17 @@ const sends = (): boolean => !import.meta.env.DEV && !navigator.webdriver && typ
 let sessionStarted = false;
 
 /** One beat, if the player allows it and the tab shows. Fails quietly: stats never get in the game's way. */
-function beat(): void {
+async function beat(): Promise<void> {
   if (document.visibilityState !== 'visible' || playStats() === 'off') return;
   const who = idOf();
   if (!who) return;
+  // signed in: counted as the account (the same on every device), the browser's id as `was`, which the service
+  // folds into it (its days before the sign-in count the account, never both)
+  const account = await accountPlayId().catch(() => null);
+  if (playStats() === 'off') return;
+  const ids = account && account !== who.id ? { id: account, was: who.id } : { id: who.id };
   const body = JSON.stringify({
-    id: who.id, where: G.mode === 'run' ? 'fight' : 'lobby', coop: isCoop(), start: !sessionStarted, first: who.first,
+    ...ids, where: G.mode === 'run' ? 'fight' : 'lobby', coop: isCoop(), start: !sessionStarted, first: who.first,
   });
   sessionStarted = true;
   // (a plain request: a string body, no headers of its own, no cookies, so no preflight)
@@ -79,6 +86,6 @@ function beat(): void {
 /** Starts the beats once the game shows (its loading screen gone): one now, then once a minute. */
 export function startHeartbeat(): void {
   if (!sends()) return;
-  beat();
-  setInterval(beat, EVERY_MS);
+  void beat();
+  setInterval(() => void beat(), EVERY_MS);
 }

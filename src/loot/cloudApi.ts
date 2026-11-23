@@ -124,6 +124,8 @@ export const linkCode = (): Promise<{ code: string; until: number; previewsOnly?
 export const signInWithCode = (code: string): Promise<SignedIn> => json(call('POST', '/link', { json: { code } }));
 export const account = (): Promise<CloudAccount> => json(call('GET', '/account'));
 export const signOut = async (): Promise<void> => { await call('POST', '/signout'); };
+/** The account's play id: what the play stats count it by on every device (src/stats), never the account's own. */
+export const playId = (): Promise<{ id: string }> => json(call('GET', '/play-id'));
 export const deleteAccount = async (): Promise<void> => { await call('DELETE', '/account'); };
 
 // --- Google, by redirect (#503): the page goes to Google and comes home with a one-time code ----------------
