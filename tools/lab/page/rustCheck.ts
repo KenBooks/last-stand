@@ -8,6 +8,7 @@ import { blankCanvas, lookTakesItsMapAgain, mapPaintedLate } from './rustMaps';
 import { grassPlacedOnce } from './rustFields';
 import { doorwaysLeaveTheFrame, keptSameFrame } from './rustKept';
 import { plainShaderSameFrame } from './rustPlain';
+import { sceneWaitsItsPipelines } from './rustReveal';
 import { overCanvasCleared } from './rustOver';
 import { type Checked, failed, passed } from './rustPixels';
 import { frames, THREE_DRAWS_MOST } from './rustFrames';
@@ -322,6 +323,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(await blankCanvas(lab, bridge));
       checks.push(await mapPaintedLate(lab, bridge));
       checks.push(await plainShaderSameFrame(lab));
+      checks.push(await sceneWaitsItsPipelines(lab));
       checks.push(await keptSameFrame(lab, bridge));
       checks.push(await doorwaysLeaveTheFrame(lab, bridge));
       await standIn(lab, { biome: command.biome, view: 'third', facing: 0, fresh: true });

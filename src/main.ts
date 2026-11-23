@@ -4,6 +4,7 @@ import { afterBiome, biomeReady, everyBiomeReady, readyBiome, readyEveryBiome } 
 import { bossReady, everyBossWarm, readyEveryBoss, readyNextBoss } from './game/bossReady';
 import { G } from './state';
 import { keepBootPaceHidden } from './core/hiddenBoot';
+import { sceneReady } from './engine/pipelinesAside';
 import { pipelinesAtOnceFromNow } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
 import { CAMERA, COOP } from './data/balance';
@@ -411,7 +412,9 @@ async function boot() {
   layOutCoopAhead(null);
   seeThroughLoading(false);
   await loadingStep('Lighting the lobby', 0.85);
-  render();   // one full frame compiles the post-processing passes (bloom, grade...)
+  // (one full frame compiles the post-processing passes (bloom, grade...); drawn again until none of the pipelines
+  // it draws with is still compiling, so the lobby is never shown with its ground left out: `sceneReady`)
+  await sceneReady(render);
   readyMinimap();
   pinPrograms(renderer);
   // (from here a program not made by a warm-up is a hitch: marked once the fight's were warm, a new build's lobby, its
