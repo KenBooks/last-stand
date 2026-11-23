@@ -18,6 +18,7 @@ import { recorder, type Slow } from '../../../src/perf/recorder';
 import { packTrace, sendTrace } from '../../../src/perf/upload';
 import { clearSpent, SINK, stickAt } from '../../../src/fx/stuckArrows';
 import { groundHeight } from '../../../src/world/ground';
+import { RUST } from '../../../src/engine';
 
 export interface ProfileCommand {
   biome: BiomeId;
@@ -82,8 +83,23 @@ const SHADING_PART = 'the lit shading\'s ';
 /** The programs (WebGPU's pipelines) a profile made, less those the lit shading's own parts made, as they're meant
  *  to: the frame's parts must keep the scene's. */
 function compiledByFrameParts(found: Profile): number {
-  const shading = found.parts.filter((part) => part.name.startsWith(SHADING_PART));
-  return found.compiled - shading.reduce((sum, part) => sum + (part.compiled ?? 0), 0);
+  const own = found.parts.filter(makesItsOwn);
+  return found.compiled - own.reduce((sum, part) => sum + (part.compiled ?? 0), 0);
+}
+
+/** the engine's parts that draw with pipelines of their own, made once by their first frame and waited for before
+ *  they're timed (`partPipelinesMade` in src/perf/profiler.ts): the depth drawn first taken out draws each opaque
+ *  thing whole, and the grass in it draws its blades into the depth, and the engine makes each pipeline only as a
+ *  place is first asked for (Bulwark c9e506c: 15 and 12 in the lab's village, over the 24 the rest may make) */
+const OWN_PIPELINES = [
+  'the scene\'s depth drawn first',
+  'the grass left out of the depth drawn first',
+];
+
+/** Whether a part's pipelines are its own, meant (the lit shading's own parts, the depth drawn first's). */
+function makesItsOwn(part: Profile['parts'][number]): boolean {
+  if (part.name.startsWith(SHADING_PART)) return true;
+  return OWN_PIPELINES.some((name) => part.name.startsWith(name));
 }
 
 /** the page's part the lab gives the profiler: work done in each frame while it's shown, which the frame's interval
@@ -264,6 +280,35 @@ async function idleProblems(found: Awaited<ReturnType<typeof profile>>,
   return problems;
 }
 
+/** The engine's tuned numbers a profile left other than it found them (`before`), as `key a -> b`. */
+function tuneLeft(before: Record<string, number>): string[] {
+  const now = RUST.tune as unknown as Record<string, number>;
+  const left: string[] = [];
+  for (const key of Object.keys(before)) {
+    if (now[key] !== before[key]) left.push(`${key} ${before[key]} -> ${now[key]}`);
+  }
+  return left;
+}
+
+/** The problems of the engine's tuned numbers after a profile: each must be as the game had it before (a part whose
+ *  "with" is the old way, `fieldsPlaced` and `overCleared`, left the game on that way). With the canary, a part
+ *  planted that leaves `overCleared` at its "with" must be caught. */
+async function tuneProblems(before: Record<string, number>,
+  options: Parameters<typeof profile>[0] & { canary?: boolean }): Promise<string[]> {
+  const left = tuneLeft(before);
+  const problems = left.length ? [`the engine's tuned numbers left changed by the profile: ${left.join(', ')}`] : [];
+  if (!options.canary) return problems;
+  const planted = {
+    name: 'canary: a tuned number put back as its "with"',
+    change: (on: boolean) => { RUST.tune.overCleared = on ? 0 : 1; },
+  };
+  const turns = { rounds: 1, frames: 1, settle: 0 };
+  await profile({ ...options, canary: false, parts: [planted], turns, pageParts: undefined });
+  if (tuneLeft(before).length === 0) problems.push('canary: a part leaving overCleared changed was not caught');
+  Object.assign(RUST.tune, before);
+  return problems;
+}
+
 /** `lab profile`, one place: the frame's parts timed as the pause menu's profiler times them. */
 export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Report> {
   const level = quality.qualityLevel();
@@ -278,8 +323,10 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
     const clock = window.__labClock;
     const page = pageCanary(clock.realNow);
     const options = { turns, canary: command.canary, clock: clock.realNow, nextFrame: clock.realFrame, ...page };
+    const tuned = { ...RUST.tune } as unknown as Record<string, number>;
     const found = await profile(options);
     const problems = command.canary ? canaryProblems(found) : [];
+    problems.push(...await tuneProblems(tuned, options));
     if (!(found.frame > 0)) problems.push('the frame read 0 ms: nothing was timed');
     problems.push(...(await idleProblems(found, options)));
     problems.push(...pageCanaryProblems(found));
