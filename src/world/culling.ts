@@ -74,6 +74,13 @@ export function cullInCells(mesh: THREE.InstancedMesh, _cellOf: CellOf): THREE.I
   return [mesh];
 }
 
+/** Every instance of `mesh` as built, a matrix each (16 numbers): a culled mesh's own, packed by what's in view, hold
+ *  only the instances the last render showed (a harness reading what stands, `lab village --only grassNotThroughProps`). */
+export function instancesAsBuilt(mesh: THREE.InstancedMesh): ArrayLike<number> {
+  const entry = culled.find((c) => c.mesh === mesh);
+  return entry ? entry.matrices : mesh.instanceMatrix.array.slice(0, mesh.count * 16);
+}
+
 /** the share of a clutter mesh's instances drawn (`setClutterShare`) */
 let clutterShare = 1;
 /** the floor's clutter that isn't culled in cells (`asClutter`), and each's instances as built */
