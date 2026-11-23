@@ -28,7 +28,7 @@ import { Lights } from './lights';
 import { Kept } from './kept';
 import { Maps } from './maps';
 import { Materials, type AnyMaterial } from './materials';
-import { SeeKinds } from './seeKinds';
+import { SEE_FLAGS, SeeKinds } from './seeKinds';
 import { Sprites } from './sprites';
 import { recording, Tape } from './tape';
 
@@ -38,7 +38,7 @@ export type { FrameStats } from './core';
 /** a record's flags (plan.rs) */
 /** how a record casts: as its mesh says, not at all (another record casts for it), or in the shadow alone */
 type Cast = 'own' | 'none' | 'only';
-const CASTS_SHADOW = 1, NEVER_CULLED = 2, SHADOW_ONLY = 4, ARMS = 8, SOLID = 16, LOW_RES = 32, THINNED = 64;
+const CASTS_SHADOW = 1, NEVER_CULLED = 2, SHADOW_ONLY = 4, ARMS = 8, SOLID = 16, LOW_RES = 32;
 /** where a record says how many instances its mesh draws by itself (`RAW_INSTANCES` in plan.rs) */
 const RAW_INSTANCES = 7;
 /** how far under the scene a hidden object is a place left as it stands (the biomes' roots, the village's) */
@@ -114,7 +114,7 @@ export class Bridge {
     this.lit.ownReach = this.lampShadows.ownReachOf = (light) => this.lightCache.ownReach(light);
     this.lit.ownSlot = (light) => this.lampShadows.ownSlot(light);
     this.particles = new Sprites(core);
-    this.kept = new Kept(core, this.materials, (mesh) => this.addMesh(mesh), (object) => this.visit(object));
+    this.kept = new Kept(core, this.materials, this.seeKinds, (mesh) => this.addMesh(mesh), (object) => this.visit(object));
     this.stats = core.stats;
     this.skipped = core.skipped;
     this.held = core.held;
@@ -169,11 +169,12 @@ export class Bridge {
     const still = !(mesh as THREE.SkinnedMesh).isSkinnedMesh;
     const casts = cast !== 'none' && (mesh.castShadow || (TUNE.castAll && mesh.receiveShadow && still
       && radiusOf(mesh) >= (this.grade.casterLeast ?? 0)));
+    // (its see-through's: thinned by blending, solid now, one of a thing's layers; and thinned to nothing whole,
+    // in the frame for its shadow alone, as what writes no colour is)
+    const sees = this.seeKinds.flagsOf(material);
     r[at + 6] = (casts ? CASTS_SHADOW : 0) | (mesh.frustumCulled ? 0 : NEVER_CULLED)
-      | (material.colorWrite === false || cast === 'only' ? SHADOW_ONLY : 0)
-      | (this.materials.solidNow(material) ? SOLID : 0)
-      // (what the game thins by blending: before all else that blends, the larger first, Bulwark's `THINNED`)
-      | (this.materials.thinnedByBlending(material) ? THINNED : 0)
+      | (material.colorWrite === false || cast === 'only' || sees & SEE_FLAGS.gone ? SHADOW_ONLY : 0)
+      | (sees & ~SEE_FLAGS.gone)
       // (what a game marks as costing by its pixels, `userData.lowRes`, and the fires' flames: at a share of them)
       | (TUNE.lowRes && (mesh.userData.lowRes || mesh.userData.fireFlames) ? LOW_RES : 0);
     if (r[at + 6] & SOLID) core.stats.solid++;
@@ -290,7 +291,7 @@ export class Bridge {
   shaderNames(): Map<number, string> { return this.materials.shaderNames(); }
 
   /** A harness's: whether a see-through material is drawn solid this frame, with what's opaque. */
-  drawnSolid(material: THREE.Material): boolean { return this.materials.solidNow(material as never); }
+  drawnSolid(material: THREE.Material): boolean { return (this.seeKinds.flagsOf(material) & SOLID) !== 0; }
 
   /** A harness's: how many kinds of see-through the engine holds, and how many of them thin anything this frame (a
    *  hole, a share of the whole, a door open). */

@@ -37,6 +37,7 @@ export default {
     frames: { kind: 'number', usage: 'n', help: 'the frames timed a side (60 by default)' },
     foes: { kind: 'number', usage: 'n', help: 'foes stood before the hero (none by default; not in the village)' },
     hour: { kind: 'number', usage: 'h', help: 'with --village, the hour it\'s lit for' },
+    turned: { kind: 'number', usage: 'deg', help: 'the camera turned as the Scene line of a report says (`turned 178°`)' },
     zoom: { kind: 'number', usage: 'z', help: 'with --village, the camera\'s zoom from above (1.7: the furthest out)' },
     village: { kind: 'switch', help: 'in the lobby\'s village instead' },
     skylight: {
@@ -102,6 +103,7 @@ export default {
       dying: Math.round(options.dying ?? 0),
       hour: options.hour,
       zoom: options.zoom,
+      turned: options.turned,
       skylight: Boolean(options.skylight),
       census: Boolean(options.census),
       parts: Boolean(options.parts),

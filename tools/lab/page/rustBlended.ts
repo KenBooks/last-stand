@@ -1,10 +1,12 @@
 // `lab rust --blended`: what the profiler takes out as "what's blended: smoke, glows, effects" (the shown meshes
 // with a see-through material that aren't cut out, flames or particles), by kind: how many, how the engine draws
-// each (solid with what's opaque, or blended), how many are in view, and how much of the screen their boxes cover,
-// summed (2.0: twice the screen's pixels, were each box full). A phone's profile had 237 of them at 41% of its
+// each (solid with what's opaque, or blended), how many are in view, and how much of the screen their triangles cover,
+// summed, each cut to the screen (2.0: twice the screen's pixels shaded; an instanced mesh's by its box). A phone's profile had 237 of them at 41% of its
 // frame (TPRV-JMH7) with nothing saying what they were: counted before anything is built for them.
 import * as THREE from 'three';
+import type { SeeThrough } from '../../../src/core/seeThrough';
 import { RUST } from '../../../src/engine';
+import { trianglesCover } from './screenCover';
 
 /** how many kinds are listed */
 const LISTED = 24;
@@ -13,7 +15,7 @@ const LISTED = 24;
 interface Kind {
   meshes: number;
   inView: number;
-  /** the screen covered by the boxes of those in view, summed (1: the whole screen once) */
+  /** the screen covered by the triangles of those in view, summed (1: the whole screen once) */
   cover: number;
   triangles: number;
 }
@@ -98,7 +100,8 @@ export function blendedSaid(scene: THREE.Scene, camera: THREE.Camera): string[] 
     kind.meshes++;
     if (seen) {
       kind.inView++;
-      kind.cover += coverOf(mesh, camera);
+      const both = [mesh.material].flat().some((material) => material.side === THREE.DoubleSide);
+      kind.cover += trianglesCover(mesh, camera, both) ?? coverOf(mesh, camera);
       kind.triangles += trianglesOf(mesh);
     }
     into.set(key, kind);
@@ -110,10 +113,13 @@ export function blendedSaid(scene: THREE.Scene, camera: THREE.Camera): string[] 
     const drawn = [...new Set([mesh.material].flat().filter((material) => material.transparent).map(drawnAs))].join('+');
     add(byDraw, drawn, mesh, seen);
     const materials = [...new Set([mesh.material].flat().map((material) => material.name || material.type))];
-    add(kinds, `${drawn}: ${nameOf(mesh)} (${materials.slice(0, 3).join(', ')})`, mesh, seen);
+    const sees = [mesh.material].flat().map((material) => (material as { seeThrough?: SeeThrough }).seeThrough);
+    const thinned = sees.filter((see) => see).map((see) => `thinned whole by ${see!.whole.value.toFixed(2)}`);
+    const said = [...materials.slice(0, 3), ...new Set(thinned)].join(', ');
+    add(kinds, `${drawn}: ${nameOf(mesh)} (${said})`, mesh, seen);
   });
   const line = ([key, kind]: [string, Kind]): string =>
-    `    ${kind.meshes} x ${key}: ${kind.inView} in view, their boxes ${kind.cover.toFixed(2)} of the screen, `
+    `    ${kind.meshes} x ${key}: ${kind.inView} in view, their triangles ${kind.cover.toFixed(2)} of the screen, `
     + `${Math.round(kind.triangles)} triangles`;
   const byCover = (a: [string, Kind], b: [string, Kind]): number => b[1].cover - a[1].cover || b[1].meshes - a[1].meshes;
   const all = [...byDraw.values()].reduce((sum, kind) => sum + kind.meshes, 0);

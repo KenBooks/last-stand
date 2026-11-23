@@ -93,6 +93,15 @@ export const TUNE = tunable('rust', {
   /** what a doorway hides is left out of the frame, as the game left it out of three's (`cullForEngine` in
    *  world/doorways.ts; 0: everything walked, to compare) */
   doorways: 1,
+  /** whether a thing's layers that blend (a roof's slabs, deck and beams as a ghost: `oneLayer` in
+   *  core/seeThrough.ts) are drawn the nearest alone at each pixel (Bulwark's `ONE_LAYER`), keeping the kind's
+   *  share itself; off, each is shaded and blended over the last, as it is. Off: over the village's cottages it
+   *  saved nothing (0.20 ms of blended against 0.19 of layers at 2880 by 1800 at 2) and their roofs stood darker,
+   *  a quarter thinned where three layers of 42% each had been paler; the look is the owner's to choose */
+  oneLayer: 0,
+  /** whether what's thinned to nothing whole (a roof seen from over it, `SeeKinds.gone`) is left out of the
+   *  frame's draws, kept for its shadow; off, drawn and every pixel of it dropped, as it was */
+  goneWhole: 1,
   /** the hole that keeps the hero in sight under what hides him (0: none dropped) */
   see: 1,
   /** a counted draw (the meadow's blades) in the depth drawn first too: shaded once a pixel, placed twice (a
