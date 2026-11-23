@@ -1,5 +1,6 @@
 // `lab rustcheck`'s checks of the village under the Rust engine: its lamps' shadows drawn, its light cache, the
 // hall's shelter and its roof from above, the sun's shadow in turns, a house walked into lit by its own lights.
+import { heroLights } from '../../../src/entities/player';
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
@@ -61,8 +62,11 @@ export function lightCache(bridge: Bridge): Checked {
     return failed(`the light cache: ${cache.own} of the scene's own still lights baked, ${OWN_BAKED_LEAST} at the least`);
   }
   const wide = bridge.pointLines().filter((line) => /the scene's own/.test(line) && Number(/reaching ([\d.]+)/.exec(line)?.[1]) > OWN_NEAR);
-  if (wide.length > OWN_WIDE_MOST) {
-    return failed(`the frame's loop: ${wide.length} lights of the scene's own reach past ${OWN_NEAR} m (${wide.join('; ')})`);
+  // (the hero's own two move with him and are never baked: a mage's staff and hand are lit as he stands)
+  const heros = Object.values(heroLights()).filter((light) => light.visible && light.intensity > 0).length;
+  if (wide.length > OWN_WIDE_MOST + heros) {
+    return failed(`the frame's loop: ${wide.length} lights of the scene's own reach past ${OWN_NEAR} m, ${heros} of them `
+      + `the hero's (${wide.join('; ')})`);
   }
   return passed(`the light cache: ${cache.lamps} lamps and ${cache.own} of the scene's own lights baked in `
     + `${megabytes.toFixed(1)} MB (cells of ${cache.cell.toFixed(2)} m)`);

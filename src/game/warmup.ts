@@ -16,7 +16,7 @@ import { lampsLetGo } from './village';
 import * as THREE from 'three';
 import { VILLAGE } from '../core/beta';
 import { G } from '../state';
-import { behindTheLobby, compileAhead, warmUp, type Swap, type WarmedUp } from '../core/shaders';
+import { behindTheLobby, warmUp, type Swap, type WarmedUp } from '../core/shaders';
 import { compilePasses, sceneTarget } from '../core/renderer';
 import { COMPILE_SLICE, compileSlice } from '../core/webgpu';
 import { mapsArrived } from '../core/textures';
@@ -144,7 +144,8 @@ const shownNow = (): THREE.Object3D => G.arena.shownGroup();
 export async function compileTheBiome(): Promise<void> {
   const { staff, hand } = heroLights();
   G.scene.add(staff, hand);
-  await compileAhead(G.renderer, G.scene, G.camera, sceneTarget(), otherBiomes().map((id) => G.arena.groupOf(id)));
+  // (nothing of the scene is three's to compile ahead: the engine takes each mesh as it's first shown; the page let go)
+  await nextTask();
   compilePasses([labelsScene()]);
 }
 
@@ -196,7 +197,7 @@ export async function compileTheLobby(): Promise<void> {
     ...skillSamples(G.player.cls.model), ...named('ping', pingSamples()),
   ];
   lobbyExtras = extra;
-  await compileAhead(G.renderer, G.scene, G.camera, sceneTarget(), otherBiomes().map((id) => G.arena.groupOf(id)), extra);
+  await nextTask();
   // (the outline's edge: the dummies' masks are the lobby's warm-up's, as they spawn when the lobby is entered)
   compileOutline([]);
 }

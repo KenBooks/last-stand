@@ -6,9 +6,6 @@
 import { AHEAD, pipelinesReady } from '../engine/pipelinesAside';
 import * as THREE from 'three';
 import { G } from '../state';
-import { CROWD_LAYER } from './layers';
-import { drawnInShadowsOnly } from '../world/culling';
-import { perfClock } from './perfClock';
 
 const pinned = new WeakSet<object>();
 const known: { name: string; key: string[] }[] = [];
@@ -18,9 +15,6 @@ export const lateCompiles: string[] = [];
 
 /** Programs that failed to link on this device, each with the driver's word on it: WebGL's, so none now. */
 export const shaderErrors: string[] = [];
-
-/** For a performance report as it's put together: nothing now (it asked each WebGL program whether it linked). */
-export function auditPrograms(_renderer: THREE.WebGLRenderer, _mostMs: number): void {}
 
 /** Take one extra reference on every program not seen yet, so it is never released. */
 export function pinPrograms(renderer: THREE.WebGLRenderer, context?: () => string): void {
@@ -86,39 +80,14 @@ function describeNew(name: string, key: string[]): string {
   return key.map((v, i) => (v !== best![i] ? `[${i}] ${best![i].slice(0, 30)} -> ${v.slice(0, 30)}` : '')).filter(Boolean).join('; ');
 }
 
-/** Once the game is shown: nothing now (it logged every WebGL program that failed to link). */
-export function checkPrograms(_renderer: THREE.WebGLRenderer): void {}
-
 let atLoad = 0;
 /** Call once loading is done; later compiles are counted as in-game hitches. */
 export function markLoaded(): void { atLoad = compiled; loaded = true; }
 /** Shader programs compiled since loading finished (each one was a frame hitch). */
 export const programsCompiledInGame = (): number => compiled - atLoad;
 
-/** What `compile` gives back: the materials of the scene it made programs for. */
-type Compiled = Set<THREE.Material>;
-/**
- * `compile` run with what no pass draws with its own material left out (put back after, where it was): the crowds'
- * bodies' own meshes, which their crowd draws (models/crowd.ts), and the casters the shadow map alone draws
- * (world/culling.ts: their shadows' programs are `compileShadows`'). three's compile makes a program for every mesh
- * of the scene whatever its layer or whether it's shown (17 lit programs compiled for nothing, `lab programs`; and
- * the biomes' baked casters', one).
- */
-function withoutUndrawn(root: THREE.Object3D, compile: () => Compiled): Compiled {
-  const out: THREE.Object3D[] = [];
-  root.traverse((o) => {
-    if (undrawn(o) && o.parent) out.push(o);
-  });
-  return without(out, compile);
-}
-
-/** Whether no pass draws `o` with its own material (`withoutUndrawn`): a crowd's body's own mesh, or a caster the
- *  shadow map alone draws. */
-const undrawn = (o: THREE.Object3D): boolean => o.layers.mask === 1 << CROWD_LAYER || drawnInShadowsOnly(o as THREE.Mesh);
-
 /** a step of a warm-up waited for: the next task, or behind the lobby the frame after the next (`WarmUp.step`) */
 type Step = () => Promise<void>;
-const nextTask: Step = () => new Promise((r) => setTimeout(r));
 
 /** How a warm-up goes (`warmUp`). */
 export interface WarmUp {
@@ -132,7 +101,7 @@ export interface WarmUp {
   leaveOut?: THREE.Object3D[];
   /** compiled with it, besides the scene's: what passes of their own draw (the outline's), its materials' links
    *  waited for with the rest */
-  also?: () => Compiled;
+  also?: () => Set<THREE.Material>;
   /** drawn alone, whatever the camera sees, on the warm-ups' layer (every light is on it too: their counts are the
    *  scene's, `lightThePasses` in renderer.ts), into a pixel of the target: the programs the draws make are the
    *  scene's, and its fragments none (a whole lobby drawn again for each part held its frames up); left out, the
@@ -179,108 +148,6 @@ export interface Swap { show: THREE.Object3D; hide: THREE.Object3D; look?: () =>
 export interface WarmedUp {
   compileMs: number; compileStepMs: number; mapsMs: number; uploadsMs: number; linksMs: number; drawMs: number;
   cold: boolean;
-}
-
-/** `run` with `out` taken out of their parents' lists (put back after, where they were): nothing else sees them go. */
-function without<T>(out: THREE.Object3D[], run: () => T): T {
-  const places = out.filter((o) => o.parent).map((o) => ({ parent: o.parent!, at: o.parent!.children.indexOf(o), o }));
-  for (const { parent, at } of [...places].sort((a, b) => b.at - a.at)) parent.children.splice(at, 1);
-  try {
-    return run();
-  } finally {
-    for (const { parent, at, o } of [...places].sort((a, b) => a.at - b.at)) parent.children.splice(at, 0, o);
-  }
-}
-
-/** A mesh (or line, or points) of a scene a stepped compile makes the programs of: lit where a pass draws it with its
- *  own material, its shadows' wherever it is. */
-interface ToCompile {
-  object: THREE.Object3D;
-  lit: boolean;
-}
-
-/** What of `root` has a material (`leaveOut` and all under it passed over), each lit unless it or what it's under
- *  is drawn by no pass with its own (`undrawn`, as `withoutUndrawn` leaves it out). */
-function toCompile(root: THREE.Object3D, leaveOut: Set<THREE.Object3D>, lit = true, into: ToCompile[] = []): ToCompile[] {
-  if (leaveOut.has(root)) return into;
-  const drawn = lit && !undrawn(root);
-  if ((root as THREE.Mesh).material) into.push({ object: root, lit: drawn });
-  for (const child of root.children) toCompile(child, leaveOut, drawn, into);
-  return into;
-}
-
-/** `objects` as three's compile walks what it's handed: each alone (what's under it is in the list itself), and no
- *  light counted (three counts the lights of what it's handed on top of the scene's, which are counted from the scene
- *  itself, as for a whole scene's compile). A plain object, not a three.js one: each of those draws random numbers. */
-function asLot(objects: THREE.Object3D[]): THREE.Object3D {
-  const lot = {
-    traverse: (visit: (o: THREE.Object3D) => void): void => {
-      for (const o of objects) visit(o);
-    },
-    traverseVisible: (): void => {},
-  };
-  return lot as unknown as THREE.Object3D;
-}
-
-/** the most of a stepped compile run in one task (ms, by `perfClock`), and its first lot's objects: a lot under a
- *  quarter of the slice doubles the next, one over the slice halves it. Each lot walks the whole scene for its lights
- *  (three's compile), so where the programs come from a cache (a return) lots of a fixed two dozen were 1 s more of a
- *  boot with the CPU 4 times slower; where they're compiled afresh one object may take tens of ms. */
-const COMPILE_SLICE_MS = 40;
-const COMPILE_FIRST_LOT = 16;
-
-/** The next lot's size after one of `size` objects took `took` ms. */
-function nextLot(size: number, took: number): number {
-  if (took < COMPILE_SLICE_MS / 4) return size * 2;
-  if (took > COMPILE_SLICE_MS) return Math.max(1, Math.floor(size / 2));
-  return size;
-}
-
-/**
- * `scene`'s programs (`leaveOut` left out) compiled now for `target`, ahead of the warm-up that will draw them, and
- * those of `objects` (out of the scene) as the scene lights them: the GPU's threads link them meanwhile, and the
- * warm-up's compile finds them made. A few dozen of the scene's objects a lot, lit by the scene's lights alone, as the
- * whole scene's compile lit them (`asLot`), the page let go between lots once `COMPILE_SLICE_MS` has gone: compiled
- * at once, the village's and the lobby's made one task of 3.2 and 2.4 s each in a first visit's boot with the CPU 4
- * times slower (`npm run stalls -- --scenario boot --cpu-slowdown 4 --js --url "this?village=1"`), and a phone's
- * loading screen stood still as long. Each of `objects` is compiled whole, its own lights counted with the scene's.
- */
-export async function compileAhead(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebGLRenderTarget, leaveOut: THREE.Object3D[], objects: THREE.Object3D[] = []): Promise<void> {
-  const all = toCompile(scene, new Set(leaveOut));
-  let since = perfClock.now();
-  /** `run` with the target and `leaveOut` out of the scene, as a compile of it was; the page let go after it once the
-   *  slice has gone; the time (ms) `run` took */
-  const step = async (run: () => void): Promise<number> => {
-    const start = perfClock.now();
-    const prev = renderer.getRenderTarget();
-    renderer.setRenderTarget(target);
-    try {
-      without(leaveOut, run);
-    } finally {
-      renderer.setRenderTarget(prev);
-    }
-    const end = perfClock.now();
-    if (end - since >= COMPILE_SLICE_MS) {
-      await nextTask();
-      since = perfClock.now();
-    }
-    return end - start;
-  };
-  let size = COMPILE_FIRST_LOT;
-  for (let i = 0; i < all.length;) {
-    const lot = all.slice(i, i + size);
-    i += lot.length;
-    const lit = lot.filter((o) => o.lit).map((o) => o.object);
-    const took = await step(() => {
-      if (lit.length > 0) renderer.compile(asLot(lit), camera, scene);
-    });
-    size = nextLot(size, took);
-  }
-  for (const root of objects) {
-    await step(() => {
-      withoutUndrawn(root, () => renderer.compile(root, camera, scene));
-    });
-  }
 }
 
 /** the longest a warm-up waits for the engine's pipelines to compile (ms) */

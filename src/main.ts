@@ -4,8 +4,8 @@ import { afterBiome, biomeReady, everyBiomeReady, readyBiome, readyEveryBiome } 
 import { bossReady, everyBossWarm, readyEveryBoss, readyNextBoss } from './game/bossReady';
 import { G } from './state';
 import { keepBootPaceHidden } from './core/hiddenBoot';
-import { pipelinesAtOnceFromNow, setPlainLitOnWebGPU } from './core/webgpu';
-import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
+import { pipelinesAtOnceFromNow } from './core/webgpu';
+import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
 import { CAMERA, LOBBY, COOP } from './data/balance';
 import { HALL, START_SPOTS, TERRACE, YARD_DUMMIES, biomeOfHour, inHall, type VillageObject } from './data/village';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, escapeSpentOnLock, releaseInput } from './core/input';
@@ -94,13 +94,13 @@ import {
 } from './game/warmup';
 import { hurry, isAllWarm, isReadying, isWarming, want, warmingNote, whenWarm } from './game/warm';
 import { initReadying, isJoining, joiningShare, layOutReadyingAhead, READYING, settleReadying, showJoining } from './ui/readying';
-import { hdrAllowedAtBoot, heroDetailAtBoot, holdQuality, initQuality, loadingFrame, plainLitAtBoot, sampleQuality } from './core/quality';
+import { hdrAllowedAtBoot, heroDetailAtBoot, holdQuality, initQuality, loadingFrame, sampleQuality } from './core/quality';
 /** the heroes' detail at or under which their hands are sculpted coarse (Very low's 0.2) */
 const COARSE_HANDS_UNDER = 0.2;
 import { framesUncapped, runFrames } from './core/frameLoop';
 import { pacedStep } from './core/framePace';
 import { updateLowLife } from './core/lowLife';
-import { checkPrograms, markLoaded, pinPrograms, programsCompiledInGame } from './core/shaders';
+import { markLoaded, pinPrograms, programsCompiledInGame } from './core/shaders';
 import { initBiome, rollBiome } from './game/biome';
 import { BIOMES, BIOME_IDS } from './data/biomes';
 import { CLASSES, CLASS_IDS } from './data/classes/index';
@@ -182,9 +182,6 @@ async function boot() {
   initUIScale();
   releaseClickedFocus();
   initItemIcons();
-  // (WebGPU's pipeline is made with the renderer: told first whether the boot's level is plain, as its sight is built
-  // by it)
-  setPlainLitOnWebGPU(plainLitAtBoot());
   const { scene, renderer } = await initRenderer($('#game'), hdrAllowedAtBoot());
   // (a slow frame's mark names the render's pass that held it: perf/frameParts.ts)
   markPassesWith(framePart);
@@ -410,7 +407,7 @@ async function boot() {
   await loadingStep(firstVisit ? 'Readying the hall' : 'Warming the hearth', 0.6);
   await warmLobby(firstVisit, loadingStep);
   if (VILLAGE) ghostsWarmed();
-  const { fight: fightWarmed, all: rest } = warmTheRest(loadingLeft);
+  const { fight: fightWarmed } = warmTheRest(loadingLeft);
   if (firstVisit) {
     void loadingLeft.then(() => want('heroes'));
     // (with no village, the biome's still shadows drawn now, under the loading screen: else the frame after the hero
@@ -461,8 +458,6 @@ async function boot() {
     recorder.revealed(!navigator.serviceWorker?.controller);
     startHeartbeat();
     pipelinesAtOnceFromNow();
-    setTimeout(() => checkPrograms(renderer));
-    void rest.then(() => checkPrograms(renderer));
     // the overlays down the left (performance, network, the battle log) once the loading screen is gone (_perf.scss)
     void loadingLeft.then(() => $('#diag').classList.remove('booting'));
     // an invite link: straight into the friend's room (asked for a name tag first if none is kept)

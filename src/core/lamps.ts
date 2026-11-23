@@ -40,19 +40,6 @@ lampShadowMap.needsUpdate = true;
 // (three clones a material's uniforms from `ShaderLib`'s, a texture with them: a copy would hold none of the map)
 lampShadowMap.clone = () => lampShadowMap;
 
-/** the map as WebGPU's materials read it (`core/lampNodes.ts`): a plain texture its faces are copied into, top row first.
- *  Not a render target's: three flips a read of one by a uniform of the object's, which a still material's refresh never
- *  sends, and most of the village read the map upside down, the square in hard blocks of shadow and the terrace's wall
- *  black. Made as first asked for, with data of its own: WebGPU's has no storage made with nothing in it. */
-let atlasTexture: THREE.DataTexture | null = null;
-export function lampAtlasTexture(): THREE.DataTexture {
-  if (atlasTexture) return atlasTexture;
-  const { width, height } = lampShadowMap.image;
-  atlasTexture = new THREE.DataTexture(new Uint16Array(width * height), width, height, THREE.RedFormat, THREE.HalfFloatType);
-  atlasTexture.needsUpdate = true;
-  return atlasTexture;
-}
-
 /** the list, four floats an entry: its first the shelter (its least x and z, its most), then two a lamp: its place and
  *  how far it reaches (m), and its colour times its intensity, a point light's in candela, and which side of the
  *  shelter it lights (1 inside, -1 outside; 0: out, skipped); last, whether the shadows' map is drawn (its first) */
@@ -65,7 +52,7 @@ const SHELTER_READ = SHADOWS_ON + 1;
 const SHELTER_OFF = 0.05;
 list[SHELTER_READ] = SHELTER_OFF;
 
-/** the list as it stands, for WebGPU's uniforms (`core/lampNodes.ts`) */
+/** the list as it stands (the engine reads the lamps from it: src/engine/lights.ts) */
 export const lampList = list;
 
 /** lamp `i`'s first float, and its light's */

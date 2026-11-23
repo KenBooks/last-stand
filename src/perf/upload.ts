@@ -10,7 +10,7 @@ import { qualityBudget, qualityLevel, qualitySetting } from '../core/quality';
 import { QUALITY } from '../data/quality';
 import { sceneRatio, sceneSamples, sceneSize, viewMode } from '../core/renderer';
 import { hdrActive } from '../core/hdr';
-import { auditPrograms, lateCompiles, shaderErrors } from '../core/shaders';
+import { lateCompiles, shaderErrors } from '../core/shaders';
 import { isCoop } from '../net/role';
 import { serverHttp } from '../net/transport';
 import { bootStallSummary } from './bootStalls';
@@ -71,13 +71,10 @@ export function settings(): Record<string, number | string | boolean> {
   };
 }
 
-/** the most a report's shader audit holds the page (ms): the rest is asked by the next */
-const AUDIT_MS = 40;
 /** the most programs that failed named in a report */
 const ERRORS_SENT = 6;
 
 function game(): Record<string, number | string | boolean> {
-  auditPrograms(G.renderer, AUDIT_MS);
   return {
     mode: G.mode,
     biome: G.arena.biome,

@@ -12,7 +12,6 @@
 // screen's own pixels: what's cut is other work,
 // never the resolution (from play, "I want to run the game at full phone res, if we need
 // to cut, we need to cut something else, not resolution").
-import { setPlainLitOnWebGPU } from './webgpu';
 import * as THREE from 'three';
 import { G } from '../state';
 import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualitySetting } from '../data/quality';
@@ -214,9 +213,6 @@ function bootLevel(): QualityLevel {
 export const hdrAllowedAtBoot = (): boolean => QUALITY[bootLevel()].hdr;
 /** The heroes' detail at the level the boot starts at, for what's made before `initQuality` (the hands' sculpts). */
 export const heroDetailAtBoot = (): number => QUALITY[bootLevel()].heroDetail;
-/** Whether the level the boot starts at makes WebGPU's lit shading plain, for its pipeline made before
- *  `initQuality` (`plainAtBoot` in core/webgpu.ts). */
-export const plainLitAtBoot = (): boolean => QUALITY[bootLevel()].plainLit;
 /** The level the boot starts at, for what's decided before `initQuality` (the crest's blow, ui/crestBlow.ts). */
 export const levelAtBoot = (): QualityLevel => bootLevel();
 
@@ -361,7 +357,6 @@ function apply(l: QualityLevel, most = Infinity): void {
   setParticleShare(p.particles);
   setGearGlowByLevel(p.gearGlow);
   setFlameSteps(p.flameSteps, p.flameLite);
-  setPlainLitOnWebGPU(p.plainLit);
   for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
   restart();

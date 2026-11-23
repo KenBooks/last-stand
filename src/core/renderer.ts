@@ -5,12 +5,7 @@ import * as THREE from 'three';
 import { lightTheLamps } from './lamps';
 import { aimSight } from './sight';
 import { VILLAGE } from './beta';
-import { lightTheLampsOnWebGPU } from './lampNodes';
-import {
-  drawOverScene, makeWebGPURenderer, makePipeline, renderWebGPU, setBloomShareOnWebGPU,
-  setBloomStrengthOnWebGPU, setSceneSamples,
-  setSceneShare, shadeEnvironmentNodes, webgpuSceneTarget, clearOverFrame, countOverPass, overFrameUncleared,
-} from './webgpu';
+import { clearOverFrame, countOverPass, holdSceneTarget, makeWebGPURenderer, overFrameUncleared } from './webgpu';
 import { G } from '../state';
 import { bootRust, drawRust, rustFrame, rustSamples, RUST } from '../engine';
 import { perfClock } from './perfClock';
@@ -37,13 +32,8 @@ const HI_KNEE = 1, HI_CAP = 2;
  *  highlights grow towards the peak */
 export const HDR_KNEE = 0.5;
 /**
- * Tone mapping keeps the colour of a bright pixel (brightest channel over HUE_FROM, fully over HUE_TO)
- * in a large glare (GLARE_FROM..GLARE_TO): a big bright area stays its colour, a small hot core may go white.
- */
-const HUE_FROM = 1, HUE_TO = 1.6, GLARE_FROM = 0.05, GLARE_TO = 0.4;
-/**
  * The eye adapts to how bright an area is, at two scales: where the average light over a small area (a 16x9
- * grid of the frame) or a large one (4x3) is over its target, the light above ADAPT_BASE is compressed on a
+ * grid of the frame) or a large one (4x3) is over its target, the light above a base is compressed on a
  * power curve that brings that average down to the target. The dim part of every pixel is kept, so the ground
  * round a bright effect never darkens into a shadow, and a curve (not a scale) keeps a glow's falloff instead
  * of flattening it into a disc. Measured after bloom, which then still sees the full light (the eye sees the
@@ -52,10 +42,6 @@ const HUE_FROM = 1, HUE_TO = 1.6, GLARE_FROM = 0.05, GLARE_TO = 0.4;
  * as it zooms in), which they leave untouched.
  */
 const ADAPT = { top: [0.35, 0.11], lobby: [0.45, 0.13], third: [1.2, 0.26], first: [0.5, 0.13] } as const;
-const ADAPT_BASE = 0.04;
-/** a pixel this share of its area's average light or dimmer keeps its light as the area adapts, and one as bright as
- *  the average adapts with it in full (between, in part) */
-const ADAPT_ALIKE = [0.5, 1.0] as const;
 /**
  * The top view's large target (the lobby's too, which it zooms in to) is for the night crypt; a brighter
  * biome's ordinary scenes sit higher (the daylit forest's 4x3 areas average about 2.3 times the crypt's), so
@@ -86,7 +72,6 @@ let bloomShare = 1;
  */
 export function setBloomShare(share: number): void {
   bloomShare = share;
-  setBloomShareOnWebGPU(share);
 }
 /** bloom's strength as last set (the Rust engine is told it against the game's own) */
 let bloomStrengthNow = 0.85;
@@ -94,7 +79,6 @@ let bloomStrengthNow = 0.85;
  *  compiles. */
 export function setBloomStrength(strength: number): void {
   bloomStrengthNow = strength;
-  setBloomStrengthOnWebGPU(strength);
 }
 /** Whether bloom is drawn now: Very low draws none, and a harness may hold it off. */
 export const bloomDrawn = (): boolean => !bloomHeld && bloomShare > 0;
@@ -103,13 +87,11 @@ export const bloomDrawn = (): boolean => !bloomHeld && bloomShare > 0;
 export function bloomPixels(): number {
   return 0;
 }
-/** Bloom's blur levels, tightest to widest: the halo round an effect, and only a trace of the screen-wide veil. */
-const BLOOM_LEVELS = [0.56, 0.5, 0.35, 0.12, 0.03];
 /** bloom's strength as the game draws it */
 export const BLOOM_STRENGTH = 0.85;
 /**
  * The grade's values, each `{ value }`: set here each frame and by photo mode (core/photoLook.ts), handed to the
- * engine as it draws a frame (`render`) and read by three's pipeline (core/webgpu.ts `GradeUniforms`).
+ * engine as it draws a frame (`render`).
  */
 const grade = {
   uniforms: {
@@ -259,46 +241,6 @@ function placeArmsCamera(): void {
   armsCam.updateMatrixWorld();
 }
 
-/** The world's lights' shadows held as they are for `draw` (`shadow.autoUpdate`: on WebGPU each camera's draw would
- *  draw every shadow map again). */
-function withShadowsKept(draw: () => void): void {
-  const held: THREE.LightShadow[] = [];
-  G.scene.traverse((object) => {
-    const shadow = (object as THREE.DirectionalLight).shadow;
-    if (!(object as THREE.Light).isLight || !shadow?.autoUpdate) return;
-    shadow.autoUpdate = false;
-    held.push(shadow);
-  });
-  draw();
-  for (const shadow of held) shadow.autoUpdate = true;
-}
-
-/** Draws the arms layer over the world's frame, into the scene's pass's target as it stands: its colour kept and its
- *  depth cleared first, so nothing of the world goes through them, as the post chain reads it next; the world's
- *  shadows kept, not drawn again; nothing behind them (the scene's background). */
-function drawArmsOverPass(): void {
-  if (armsFov === null) return;
-  placeArmsCamera();
-  const target = gl.getRenderTarget();
-  const clearing = gl as unknown as { autoClearColor: boolean; autoClearDepth: boolean; autoClearStencil: boolean };
-  const { autoClearColor, autoClearDepth, autoClearStencil } = clearing;
-  const { autoClear } = gl;
-  const background = G.scene.background;
-  gl.autoClear = true;
-  clearing.autoClearColor = false;
-  clearing.autoClearDepth = true;
-  clearing.autoClearStencil = false;
-  G.scene.background = null;
-  gl.setRenderTarget(webgpuSceneTarget() as THREE.WebGLRenderTarget);
-  withShadowsKept(() => gl.render(G.scene, armsCam));
-  gl.setRenderTarget(target);
-  G.scene.background = background;
-  gl.autoClear = autoClear;
-  clearing.autoClearColor = autoClearColor;
-  clearing.autoClearDepth = autoClearDepth;
-  clearing.autoClearStencil = autoClearStencil;
-}
-
 /** the frames over which the sun's shadow is drawn every other one on WebGPU: from about 90 a second (ms a frame) */
 const SHADOW_IN_TURNS_MS = 1000 / 65;
 /** how much of the frames' mean a new frame moves (about the last 10 frames') */
@@ -314,11 +256,6 @@ export function setShadowInTurns(on: boolean): void { shadowInTurns = on; }
 /** For a harness: whether the level draws the sun's shadow in turns, and the bloom's share of the pixels. */
 export const shadowInTurnsNow = (): boolean => shadowInTurns;
 export const bloomShareNow = (): number => bloomShare;
-
-let sunShadowHeld = false;
-/** The sun's shadow kept as it is (`held`) or drawn as `sunShadowInTurns` has it: the profiler's shadow maps' part
- *  on WebGPU, which draws a light's shadow by its own `autoUpdate` alone (`src/perf/sceneParts.ts`). */
-export function holdSunShadow(held: boolean): void { sunShadowHeld = held; }
 
 /**
  * The sun's shadow drawn every other frame while the frames come fast: its pass was a sixth of the frame's JS on WebGPU,
@@ -338,7 +275,7 @@ function sunShadowInTurns(): void {
   // (where the sun's shadow is the still world's alone, it's drawn with the still shadows, by no frame of its own)
   // (nor where its map is kept, the village's: set to draw here every frame, the whole map was drawn again, every
   // tree, the palisade and the hero, 430k triangles of a frame's 1.3M on High, and the kept copy then laid over it)
-  G.arena.moon.shadow.autoUpdate = !skip && !sunShadowHeld && !sunShadowStill() && !moonShadowKept();
+  G.arena.moon.shadow.autoUpdate = !skip && !sunShadowStill() && !moonShadowKept();
 }
 
 /** top-down (the default), over the shoulder, or through the character's eyes */
@@ -490,12 +427,8 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   shadeEnvironment();
   // (the village's lamps in every lit shader, and its lights' soft falloff: the village's alone, core/beta.ts)
   if (VILLAGE) lightTheLamps();
-  drawOverScene(drawArmsOverPass);
   const renderer = gl = await makeWebGPURenderer(hdrAllowed);
   takePorts(renderer as unknown as WebGPURenderer);
-  if (VILLAGE) lightTheLampsOnWebGPU();
-  // (`?envShadow=0` leaves the environment unshadowed, to compare)
-  if (!/[?&]envShadow=0/.test(location.search)) shadeEnvironmentNodes({ environment: ENV_IN_SHADOW, ambient: AMBIENT_IN_SHADOW });
   const cr = canvasRatio();
   const cw = window.innerWidth, ch = window.innerHeight;
   renderer.setPixelRatio(cr);
@@ -526,12 +459,8 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   const size = sceneSize(new THREE.Vector2());
   // (never drawn into: it holds the scene's size and samples for what reads them, `pointScale`, `sceneSamples`)
   sceneRT = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+  holdSceneTarget(sceneRT);
   grade.uniforms.tBlood.value = bloodMask;
-  const looks = {
-    highlights: { knee: HI_KNEE, cap: HI_CAP }, hdrKnee: HDR_KNEE, adaptBase: ADAPT_BASE, adaptAlike: ADAPT_ALIKE,
-    hue: [HUE_FROM, HUE_TO], glare: [GLARE_FROM, GLARE_TO], bloom: BLOOM_LEVELS,
-  } as const;
-  await makePipeline(renderer, scene, camera, looks, grade.uniforms);
   G.scene = scene; G.camera = camera; G.renderer = renderer;
   window.addEventListener('resize', fitViewport);
   fitViewport();
@@ -578,14 +507,13 @@ function samplesOn(asked: number, ratio: number): number {
   if (share >= 4) return 4;
   return share >= 2 ? 2 : 0;
 }
-/** Sets the scene's MSAA to the level's samples on this screen, three's pass's and the engine's. */
+/** Sets the scene's MSAA to the level's samples on this screen: the engine's. */
 function fitSamples(): void {
   const samples = samplesOn(askedSamples, canvasRatio());
   if (sceneRT.samples !== samples) {
     sceneRT.samples = samples;
     sceneRT.dispose();
   }
-  setSceneSamples(samples);
   rustSamples(samples);
 }
 /** The MSAA samples the scene renders with now. */
@@ -662,8 +590,9 @@ function fitViewport(): boolean {
   return true;
 }
 
-/** The offscreen target three's scene pass renders into (what its warm-ups are handed). */
-export const sceneTarget = (): THREE.WebGLRenderTarget => webgpuSceneTarget() as THREE.WebGLRenderTarget;
+/** The target that holds the scene's size and samples (what a warm-up is handed): nothing is drawn into it, the
+ *  scene being the engine's. */
+export const sceneTarget = (): THREE.WebGLRenderTarget => sceneRT;
 
 /** What a point's size (m) over its distance is multiplied by for its size in the scene's pixels: the scene's
  *  target's height over the view's height 1 m out. (Sized by the canvas's height, a point was as many times too
@@ -671,14 +600,13 @@ export const sceneTarget = (): THREE.WebGLRenderTarget => webgpuSceneTarget() as
  *  #243's phone, 9 times the pixels to fill.) */
 export const pointScale = (): number => sceneRT.height / (2 * Math.tan(THREE.MathUtils.degToRad(G.camera.fov) / 2));
 
-/** the scene's ratio three's passes were last sized at */
+/** the scene's ratio its target was last sized at */
 let appliedSceneRatio = 0;
-/** Sizes three's passes at the scene's ratio if it changed; whether it did. */
+/** Takes the scene's ratio as it is now; whether it changed. */
 function applySceneRatio(): boolean {
   const r = sceneRatio();
   if (r === appliedSceneRatio) return false;
   appliedSceneRatio = r;
-  setSceneShare(sceneShare());
   return true;
 }
 
@@ -1253,7 +1181,7 @@ export function showOverlays(on: boolean): void { overlaysShown = on; }
  */
 export const frameShot = { take: null as ((canvas: HTMLCanvasElement) => void) | null };
 /** The frame handed to the shot waiting for it, if one is. */
-function shotTaken(from: HTMLCanvasElement = gl.domElement): void {
+function shotTaken(from: HTMLCanvasElement): void {
   const take = frameShot.take;
   if (!take) return;
   frameShot.take = null;
@@ -1279,7 +1207,7 @@ export function render(): void {
   const renderBegan = perfClock.now();
   // a change the resize event missed: fit, and tell the rest of the page (UI scale...) too
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
-  // (the grade's: the engine's below, and three's pipeline's, core/webgpu.ts `graded`)
+  // (the grade's, handed to the engine below)
   grade.uniforms.uTime.value = G.time;
   grade.uniforms.uHurt.value = rig.hurt;
   const frame = frameRect();
@@ -1321,34 +1249,26 @@ export function render(): void {
     },
     edges: { mask: u.tBlood.value, reach: (u.uLow.value as number) * (1 + 0.06 * (u.uBeat.value as number)) },
   };
-  if (drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded)) {
-    // (a photo's picture: the engine's frame, taken before anything is drawn over it)
-    if (frameShot.take) {
-      const frame = rustFrame(gl.domElement, false);
-      if (frame) shotTaken(frame);
-    }
-    // (three's canvas over the engine's: clear, but for the world's overlays; left out with none to draw)
-    const none = !overlaysShown || overFrame.empty();
-    leaveOverOut(none);
-    if (!none) {
-      // (cleared by the first of the overlays' draws, as its pass begins: `clearOverFrame`; by a pass of its
-      // own only where none drew, or with the switch off, as it was: a profile's, to time the two)
-      gl.setRenderTarget(null);
-      gl.setClearColor(0x000000, 0);
-      const asItWas = RUST.tune.overCleared <= 0;
-      clearOverFrame();
-      if (asItWas) clearOverNow();
-      overFrame.draw();
-      if (overFrameUncleared()) clearOverNow();
-    }
-    framePart('render: drawn (Rust)');
-    RUST.renderMs = perfClock.now() - renderBegan;
-    return;
+  drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded);
+  // (a photo's picture: the engine's frame, taken before anything is drawn over it)
+  if (frameShot.take) {
+    const frame = rustFrame(gl.domElement, false);
+    if (frame) shotTaken(frame);
   }
-  // (the engine off: three's own pipeline draws the scene)
-  renderWebGPU();
-  framePart('render: drawn (WebGPU)');
-  shotTaken();
-  if (overlaysShown) overFrame.draw();
+  // (three's canvas over the engine's: clear, but for the world's overlays; left out with none to draw)
+  const none = !overlaysShown || overFrame.empty();
+  leaveOverOut(none);
+  if (!none) {
+    // (cleared by the first of the overlays' draws, as its pass begins: `clearOverFrame`; by a pass of its
+    // own only where none drew, or with the switch off, as it was: a profile's, to time the two)
+    gl.setRenderTarget(null);
+    gl.setClearColor(0x000000, 0);
+    const asItWas = RUST.tune.overCleared <= 0;
+    clearOverFrame();
+    if (asItWas) clearOverNow();
+    overFrame.draw();
+    if (overFrameUncleared()) clearOverNow();
+  }
+  framePart('render: drawn (Rust)');
   RUST.renderMs = perfClock.now() - renderBegan;
 }

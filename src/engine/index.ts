@@ -14,8 +14,6 @@ let loadedFrames = 0;
 
 /** How the trial went, for the lab and the console (`window.__rust`). */
 export const RUST = {
-  /** false hands the frame back to three, to compare on the same page */
-  on: true,
   bridge: null as Bridge | null,
   tune: TUNE,
   /** the boot's parts, ms: the module fetched and compiled, the device and pipelines made, the first frame (every
@@ -101,7 +99,7 @@ export async function bootRust(under: HTMLCanvasElement): Promise<void> {
  * `over`, three's canvas laid over it: the world's overlays. Null if the engine isn't drawing.
  */
 export function rustFrame(like: HTMLCanvasElement, over: boolean): HTMLCanvasElement | null {
-  if (!RUST.bridge || !canvas || !RUST.on) return null;
+  if (!RUST.bridge || !canvas) return null;
   const out = document.createElement('canvas');
   out.width = like.width;
   out.height = like.height;
@@ -112,12 +110,12 @@ export function rustFrame(like: HTMLCanvasElement, over: boolean): HTMLCanvasEle
   return out;
 }
 
-/** The frame's scene drawn by the engine at `width` by `height` pixels; false if three is to draw it. */
+/** The frame's scene drawn by the engine at `width` by `height` pixels. Nothing else draws it: with no engine
+ *  (the boot throws where it doesn't start) this throws too. */
 export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, width: number, height: number,
-  renderer: THREE.WebGLRenderer, grade?: Grade): boolean {
+  renderer: THREE.WebGLRenderer, grade?: Grade): void {
   const bridge = RUST.bridge;
-  if (!bridge || !canvas) return false;
-  if (!RUST.on) return false;
+  if (!bridge || !canvas) throw new Error('drawRust: the engine has not started');
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
@@ -139,5 +137,4 @@ export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, ti
   if (RUST.frames++ === 0) RUST.boot.firstFrameMs = perfClock.now() - began;
   // (the frame itself checked for black a few times after the load: `said.ts`)
   if (RUST.loaded) watchFrame(canvas, ++loadedFrames);
-  return true;
 }
