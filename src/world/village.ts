@@ -239,6 +239,19 @@ function block(group: THREE.Object3D, w: number, h: number, d: number, x: number
   return mesh;
 }
 
+/** `geometry` without the triangles that face up: a box open at its top. */
+function withoutTop(geometry: THREE.BufferGeometry): void {
+  const index = geometry.getIndex();
+  const normal = geometry.getAttribute('normal');
+  if (!index) throw new Error('village: a box with no index has no top to open');
+  const kept: number[] = [];
+  for (let i = 0; i < index.count; i += 3) {
+    if (normal.getY(index.getX(i)) < 0.5) kept.push(index.getX(i), index.getX(i + 1), index.getX(i + 2));
+  }
+  geometry.setIndex(kept);
+  geometry.clearGroups();
+}
+
 /** A block of walling at (x, y0, z) as `block` lays it, unturned, its courses laid by the world's place, not the block's
  *  corner (a tile `1 / texel` m): each block's own ran from its corner, and the one over the hall's door met the wings
  *  beside it a part course off, its joints across theirs ("misaligned texture"). */
@@ -2229,6 +2242,10 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
   // the empty roof and out the other side, the sky seen through it from beside the house, "should not be able to peek
   // under house roof"; `lab village --only eavesClosed`)
   const body = block(g, w, h - 0.5 + roofAtWall, d, 0, 0.5, 0, M.plaster, 1);
+  // (open at its top, which lies inside the roof: where the roof's ghost opens near him its top stood as a lid over
+  // the house, grey in the fog of what he can't see, from play, "why am I not seeing thinning on the ground under
+  // building")
+  withoutTop(body.geometry);
   // the frame: posts at the corners and between, a sill and a plate along each face
   for (const sx of [-1, -0.33, 0.33, 1]) for (const sz of [-1, 1]) block(g, 0.18, h - 0.51, 0.06, sx * (w / 2 - 0.09), 0.5, sz * (d / 2 + 0.02), M.timber);
   // (a sill and a plate stand a hair proud of the posts they cross: in one plane, the two fought where they crossed)
