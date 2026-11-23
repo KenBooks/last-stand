@@ -44,7 +44,7 @@ much each part thins is not the game's to say.
 building... we will thin whole roof no matter what"; `Kind.roofs` in `core/seeThrough.ts`, the room a roof's kind
 roofs, the hall's alone so far). By the rule alone the roof stood whole over the aisles and the walls he didn't
 see the floor under, and hid the walls ("in hall need to see full walls, like the player can see"). **Its walls
-go by where they stand then, not by what he sees** (`Kind.walls`): a wall between the camera and the room opens,
+go by where they stand then, not by what he sees** (`Kind.walls`): a wall between the camera and the room opens, gone whole as the roof is, none of either left as a ghost ("we thin the roof 100%, so player cannot even see it", "lets thin the near wall 100% too"),
 all of it, and a wall across the room stands whole, under the roof's ghost (the engine draws the layers' whole
 pixels before their ghosts then, and the ghosts last, over the braziers' flames: "also where is fire ?"). By
 what he saw, a wall stood in ragged pieces where a column hid the floor behind it, and opened on the ground he
