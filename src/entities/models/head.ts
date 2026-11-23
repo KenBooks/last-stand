@@ -8,7 +8,7 @@ import { lod, heroDetail } from './armor';
 import { part } from './rig';
 import { Sculpt } from './shapes';
 import { clamp, lerp, mulberry } from '../../util';
-import { faceCanvases, faceGrid } from '../../core/textures';
+import { faceCanvases, faceGrid, readCtx2d } from '../../core/textures';
 import { createKit, kitCopy } from '../../core/materials';
 import { FACES, LOOKS, EYE, origin, eyeOpening, headGrid, gridSize, headSDF, gridDir, scalp, hairline, PLAIN_SKIN, beardLift, mouthY, neckSeam, neckCord, type FaceId, type FaceShape, type HeadGrid } from './face';
 import { HERO_LOOKS, lookDef, looksOf, type HairStyle, type HeroLookDef } from '../../data/heroLooks';
@@ -1335,7 +1335,10 @@ function strandMap(dense = false): THREE.DataTexture {
   if (hit) return hit;
   const W = 128, H = 512, cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
-  const c = cv.getContext('2d')!, rng = mulberry(dense ? 31 : 29);
+  // (drawn and read back on the CPU, `readCtx2d`: read from a canvas on the GPU, `bledMap` waited for the GPU's
+  // process, which at this point of the boot is making the village's pipelines: 0.1 to 0.2 s of the scholar's build on
+  // a desktop, and the likely bulk of two tasks of 2.7 and 4.1 s on a player's laptop, one a map, #838)
+  const c = readCtx2d(cv), rng = mulberry(dense ? 31 : 29);
   c.clearRect(0, 0, W, H);
   if (dense) {
     // the clump's body, narrowing to the tip

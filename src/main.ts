@@ -155,6 +155,10 @@ const drawn = async (): Promise<void> => {
   await paintedFrames(DRAWN_FRAMES);
 };
 
+/** the most of a villager's build run in one task before the boot paints a frame (ms): the loading screen's bar and
+ *  smoke keep moving, and a frame waited for after each costs the boot a third of the build's time at most */
+const FOLK_SLICE_MS = 50;
+
 async function boot() {
   // (a page hidden while it loads keeps the boot's pace: core/hiddenBoot.ts)
   // (`?bootPace=0` the boot as it was, the canary of `npm run stalls -- --scenario boot --covered`)
@@ -251,10 +255,12 @@ async function boot() {
   // (the houses' folk seated, the library's scholar and the merchant's Odo: their heads and hands are the heroes',
   // made by now)
   await loadingStep('Gathering the villagers', 0.45);
+  // (each built a piece at a time, a frame painted once a slice has gone: built whole, the scholar and Odo were two
+  // tasks of 2.7 and 4.1 s on a player's laptop, #838)
   for (const room of Object.values(G.arena.rooms)) {
     if (!room.seatFolk) continue;
     await painted();
-    room.seatFolk();
+    await builtInSlices(room.seatFolk(), painted, FOLK_SLICE_MS);
   }
   await painted();
   G.profile = loadProfile(savedClass());

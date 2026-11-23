@@ -59,8 +59,9 @@ export interface Room {
   /** which bosses' trophies hang shown now (the house of records'; tools/lab `houses` reads it) */
   trophiesShown?(): Partial<Record<EnemyId, boolean>>;
   /** the folk who live in it seated (the library's scholar, the merchant's Odo): built on the heroes' heads and hands, so once their
-   *  workers have made them (main.ts, before the rooms are warmed) */
-  seatFolk?(): void;
+   *  workers have made them (main.ts, before the rooms are warmed); a piece at a time (models/steps.ts), the boot painting
+   *  between them: each built whole was one task of seconds on a player's laptop (#838) */
+  seatFolk?(): Generator<void, void, undefined>;
   /** the library's scholar, once seated (tools/lab `houses`, `scholar`) */
   folk?(): Scholar | undefined;
   /** what a hero sits on in it (from the owner: "dont forget to add sitting in houses, where possible, some houses have

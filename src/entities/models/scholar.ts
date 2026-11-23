@@ -12,10 +12,11 @@ import { createKit } from '../../core/materials';
 import { cloth as clothMaps, felt as feltMaps, leather as leatherMaps, wool as woolMaps, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, reachArm, type Joints } from './rig';
 import { stripRig } from './shapes';
-import { buildHead, buildNeck, hairCard, handSkin, toGroup, HEAD_MM, HERO_HEADS, type Head } from './head';
+import { buildNeck, hairCard, handSkin, headSteps, toGroup, HEAD_MM, HERO_HEADS, type Head } from './head';
 import { origin } from './face';
 import { buildHand, bare, poseHand, type Hand } from './hands';
 import { turnedPage, type BookShape } from './book';
+import { built } from './steps';
 import { clamp, damp, lerp, mulberry, smooth } from '../../util';
 
 /** how long his reading loop is (s): the page turns, the beard, the spectacles and the lean all come round in it */
@@ -151,6 +152,12 @@ function sleeve(profile: [number, number][], hang: Hang, folds: number, seed: nu
  * them (`preloadHeads`, `preloadHands`), or they're sculpted here on the page.
  */
 export function buildScholar(book: ScholarBook): Scholar {
+  return built(scholarSteps(book));
+}
+
+/** `buildScholar` a piece at a time (models/steps.ts), so the boot paints between them: built whole he was one task,
+ *  0.9 s with the CPU 4 times slower and 2.7 s on a player's laptop, its loading screen still (#838). */
+export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undefined> {
   const kit = createKit(0xffc27a);
   const tex = (maps: ReturnType<typeof woolMaps>, ns = 1) => {
     const m = pbrMaterialMaps(maps, 1, ns);
@@ -189,9 +196,11 @@ export function buildScholar(book: ScholarBook): Scholar {
     }
   };
   legs();
+  yield;
 
   // --- the head: the mage's face and cropped hair, his hair under the cap white ---
-  const head: Head = buildHead(j.head, kit, HERO_HEADS.mage.who, HERO_HEADS.mage);
+  const head: Head = yield* headSteps(j.head, kit, HERO_HEADS.mage.who, HERO_HEADS.mage);
+  yield;
   buildNeck(j.neck, kit, 'mage', P.neckL, j.head);
   // (the locks over the crown hidden under the cap; the shell under them and the crop's tufts white with age)
   if (head.hair[1]) head.hair[1].visible = false;
@@ -208,13 +217,15 @@ export function buildScholar(book: ScholarBook): Scholar {
   white.customProgramCacheKey = cards.customProgramCacheKey;
   (white as unknown as { litBothSides: boolean }).litBothSides = true;
   Object.defineProperty(white, 'kitLooks', { value: (cards as unknown as { kitLooks: unknown }).kitLooks, configurable: true });
-  dressHead(head, white, capFelt, brass, glass);
+  yield* dressHead(head, white, capFelt, brass, glass);
+  yield;
 
   // --- the hands: the heroes' own, bare and old ---
   const skin = handSkin(kit, 'mage');
   skin.color.multiplyScalar(0.95);
   const handL = buildHand(j.handL, 1, skin, skin, 1, skin), handR = buildHand(j.handR, -1, skin, skin, 1, skin);
   bare(handL, true); bare(handR, true);
+  yield;
 
   // --- the habit ---
   const parts: THREE.Mesh[] = [];
@@ -227,7 +238,8 @@ export function buildScholar(book: ScholarBook): Scholar {
     return m;
   };
   const M = { habit, habitD, lining, rope, shoe, tabard, trim, brass, linen };
-  dressBody(j, add, M);
+  yield* dressBody(j, add, M);
+  yield;
 
   // --- the page he turns: the top page of the half on his right (-x), from the spine to its edge and along the whole
   // depth, shaped as the book is (models/book.ts); hidden but while it's turned, the print under it the same page ---
@@ -495,12 +507,14 @@ export function buildScholar(book: ScholarBook): Scholar {
   // (the sleeves' bells shaped as his forearms lie at rest, on the table: down from each, in its own frame)
   loop = 5;
   update(0, null, false);
+  yield;
   const downFrom = (elbow: THREE.Object3D) => {
     const d = V(0, -1, 0).applyQuaternion(elbow.getWorldQuaternion(new THREE.Quaternion()).invert());
     d.y = 0;
     return d.lengthSq() > 1e-4 ? d.normalize() : V(0, 0, -1);
   };
   dressBells(j, add, M, { L: downFrom(j.shoulderL), R: downFrom(j.shoulderR) }, { L: downFrom(j.elbowL), R: downFrom(j.elbowR) });
+  yield;
   loop = 7;
   update(0, null, false);
 
@@ -543,7 +557,7 @@ function keyGeometry(len: number): THREE.BufferGeometry {
 /** His habit on the rig: its body on the spine and the chest, the skirt over his lap down to the floor on the hips, the
  *  sleeves over his upper arms, his tabard over it from the cowl to his knees, the rope belt with his keys and a
  *  pouch, the cowl, shoes. (The sleeves' bells come after his first pose: `dressBells`.) */
-function dressBody(j: Joints, add: Add, M: BodyMats): void {
+function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, undefined> {
   const N = 40;
   /** the body's section at a height: across, deep, how deep its folds */
   const ring = (y: number, w: number, d: number, fold: number, seed: number, p = 2.4) => {
@@ -565,11 +579,13 @@ function dressBody(j: Joints, add: Add, M: BodyMats): void {
     [0.268, 0.078, 0.074, 0], [0.29, 0.066, 0.066, 0], [0.31, 0.062, 0.062, 0],
   ];
   add(rowsSurface(chestRows.map(([y, w, d, f]) => ring(y, w, d, f, 1.3)), 1.2), M.habit, j.chest, 'chest');
+  yield;
   // --- the waist: from the seat up into the chest's ---
   const waistRows: [number, number, number, number][] = [
     [-0.12, 0.215, 0.16, 0.012], [-0.06, 0.2, 0.15, 0.02], [0.02, 0.182, 0.138, 0.025], [0.1, 0.172, 0.13, 0.025], [0.2, 0.17, 0.128, 0.02],
   ];
   add(rowsSurface(waistRows.map(([y, w, d, f]) => ring(y, w, d, f, 2.1)), 1.2), M.habit, j.spine, 'waist');
+  yield;
   // --- the rope belt round the waist, knotted at his left, its ends hanging down his side ---
   {
     const y = 0.11, pts: THREE.Vector3[] = [];
@@ -591,6 +607,7 @@ function dressBody(j: Joints, add: Add, M: BodyMats): void {
       j.spine.add(tassel);
     }
   }
+  yield;
   // --- the cowl: his hood down, rolled round his neck, its bag lying on his back ---
   {
     const pts: THREE.Vector3[] = [];
@@ -615,6 +632,7 @@ function dressBody(j: Joints, add: Add, M: BodyMats): void {
     }
     add(rowsSurface(rows, 1.3), M.habitD, j.chest, 'hood');
   }
+  yield;
   // --- the skirt: from round the hips over the thighs to the knees, and down from them to the floor ---
   {
     const path = new THREE.CatmullRomCurve3([V(0, 0.02, -0.08), V(0, 0.04, 0.12), V(0, 0.03, 0.36), V(0, -0.02, 0.5),
@@ -656,6 +674,7 @@ function dressBody(j: Joints, add: Add, M: BodyMats): void {
     }
     add(strip(lap, 0.53, 0), M.tabard, j.hips, 'tabard lap');
   }
+  yield;
   // --- the tabard's front: from under the cowl down his chest to the belt ---
   {
     const rows: THREE.Vector3[][] = [];
@@ -672,6 +691,7 @@ function dressBody(j: Joints, add: Add, M: BodyMats): void {
     }
     add(strip(rows, 0.53, 1), M.tabard, j.chest, 'tabard front');
   }
+  yield;
   // --- his keys on a ring at his left hip, under the knot; a leather pouch on his right ---
   {
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.0025, 6, 24), M.brass);
@@ -699,6 +719,7 @@ function dressBody(j: Joints, add: Add, M: BodyMats): void {
     stud.position.set(0, -0.018, 0.036);
     bag.add(stud);
   }
+  yield;
   // --- the sleeves: close over the upper arm, a wide bell from the elbow, its lining dark; shoes under the hem ---
   for (const [shoulder, elbow, ankle, s] of [[j.shoulderL, j.elbowL, j.ankleL, 1], [j.shoulderR, j.elbowR, j.ankleR, -1]] as const) {
     void elbow; void shoulder;
@@ -785,7 +806,9 @@ function tabardMap(): THREE.CanvasTexture {
 
 /** His head dressed: the skullcap over his crown, his brows, his moustache and long beard (cards in `white`, the beard's
  *  body under them), and his spectacles. All in the head's group, by its face's frame (mm). */
-function dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, brass: THREE.Material, glass: THREE.Material): void {
+function* dressHead(
+  head: Head, white: THREE.Material, capFelt: THREE.Material, brass: THREE.Material, glass: THREE.Material,
+): Generator<void, void, undefined> {
   const G = head.group, rng = mulberry(41);
   /** a point on the skin (mm) towards (az, el), `lift` mm off it */
   const skin = (az: number, el: number, lift = 0) => {
@@ -835,6 +858,7 @@ function dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, b
       row.push(skin(az, elAt(az, y), liftAt(az, y)));
     }
     rows.push(row);
+    yield;
   }
   // (below the chin: each point drawn in to the beard's point, its front kept ahead of the throat)
   const last = rows[rows.length - 1], TIP = -112;
@@ -853,6 +877,7 @@ function dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, b
   body.name = 'scholar beard';
   body.castShadow = true;
   G.add(body);
+  yield;
 
   // --- the beard's locks: cards from all over its body, running down it to near its point ---
   const out: THREE.BufferGeometry[] = [];
@@ -875,6 +900,7 @@ function dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, b
     }
     const w = (6 + rng() * 6) * HEAD_MM, shade = 0.72 + rng() * 0.3, axis = toG(bend(V(0, (y0 + yEnd) / 2, 30)));
     out.push(hairCard(pts, (s) => w * (1 - 0.75 * s * s), axis, 6, (rng() - 0.5) * 0.7, (s) => shade * (0.85 + 0.15 * s)));
+    yield;
   }
   // --- the moustache: from under the nose out over the corners of the mouth, down into the beard ---
   for (let c = 0; c < 70; c++) {
@@ -886,6 +912,7 @@ function dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, b
     }
     const w = (4 + rng() * 3) * HEAD_MM, shade = 0.8 + rng() * 0.25;
     out.push(hairCard(pts, (s) => w * (1 - 0.7 * s), toGroup(0, 60, 20), 4, (rng() - 0.5) * 0.5, () => shade));
+    yield;
   }
   // --- the brows: bushy, white, a few long hairs curling out ---
   for (let c = 0; c < 44; c++) {
@@ -897,12 +924,14 @@ function dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, b
     }
     const w = (3 + rng() * 2) * HEAD_MM, shade = 0.85 + rng() * 0.2;
     out.push(hairCard(pts, (s) => w * (1 - 0.6 * s), toGroup(0, 120, 0), 3, 0, () => shade));
+    yield;
   }
   const locksGeo = mergeAll(out);
   const lockMesh = new THREE.Mesh(locksGeo, white);
   lockMesh.name = 'scholar beard locks';
   lockMesh.castShadow = true;
   G.add(lockMesh);
+  yield;
 
   // --- the skullcap: a felt cap over the crown, its rim rolled ---
   {
@@ -916,6 +945,7 @@ function dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, b
         row.push(toG(skin(az, el, 9.5 + 1.5 * (k / 10))));
       }
       rowsCap.push(row);
+      yield;
     }
     // (each row runs round from behind through his right, the front and his left, bottom to top: as `rowsSurface` winds out)
     G.add(Object.assign(new THREE.Mesh(rowsSurface(rowsCap, 20), capFelt), { name: 'scholar cap', castShadow: true }));
@@ -924,6 +954,7 @@ function dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, b
     G.add(Object.assign(new THREE.Mesh(cord(rim, 3.2 * HEAD_MM, true, 80), capFelt), { name: 'scholar cap rim' }));
   }
 
+  yield;
   // --- the spectacles: round brass rims low on his nose, a bridge, the arms back to his ears ---
   {
     const R = 14, y = 110, z = 98, rimGeo = new THREE.TorusGeometry(R * HEAD_MM, 0.9 * HEAD_MM, 6, 28);
