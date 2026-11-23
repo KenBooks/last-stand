@@ -6,6 +6,7 @@
 import { plantedFaults } from './rustFaults';
 import { blankCanvas, lookTakesItsMapAgain, mapPaintedLate } from './rustMaps';
 import { grassPlacedOnce } from './rustFields';
+import { plainShaderSameFrame } from './rustPlain';
 import { overCanvasCleared } from './rustOver';
 import { type Checked, failed, passed } from './rustPixels';
 import { frames, THREE_DRAWS_MOST } from './rustFrames';
@@ -319,6 +320,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(await house(lab, bridge, command.room as RoomId));
       checks.push(await blankCanvas(lab, bridge));
       checks.push(await mapPaintedLate(lab, bridge));
+      checks.push(await plainShaderSameFrame(lab));
       await standIn(lab, { biome: command.biome, view: 'third', facing: 0, fresh: true });
       lab.drawing = true;
       await lab.step(5);

@@ -86,6 +86,8 @@ interface Pass {
   setPipeline(pipeline: object): void;
   draw(...counts: number[]): void;
   drawIndexed(...counts: number[]): void;
+  drawIndirect(buffer: object, offset: number): void;
+  drawIndexedIndirect(buffer: object, offset: number): void;
   /** the pipeline set last is still compiling: its draws are left out */
   waits?: boolean;
 }
@@ -151,7 +153,7 @@ function patchPasses(): void {
   patched = true;
   const pass = (globalThis as unknown as { GPURenderPassEncoder?: { prototype: Pass } }).GPURenderPassEncoder?.prototype;
   if (!pass) return;
-  const { setPipeline, draw, drawIndexed } = pass;
+  const { setPipeline, draw, drawIndexed, drawIndirect, drawIndexedIndirect } = pass;
   pass.setPipeline = function (this: Pass, pipeline: object): void {
     if (pipeline instanceof StandIn) {
       pipeline.asked.drawn = true;
@@ -167,6 +169,14 @@ function patchPasses(): void {
   };
   pass.drawIndexed = function (this: Pass, ...counts: number[]): void {
     if (!this.waits) drawIndexed.apply(this, counts);
+  };
+  // (a counted draw placed ahead, the meadow's blades, is drawn by a buffer's counts: left to draw with no
+  // pipeline set, the GPU refused the whole frame, every frame until its pipeline was ready)
+  pass.drawIndirect = function (this: Pass, buffer: object, offset: number): void {
+    if (!this.waits) drawIndirect.call(this, buffer, offset);
+  };
+  pass.drawIndexedIndirect = function (this: Pass, buffer: object, offset: number): void {
+    if (!this.waits) drawIndexedIndirect.call(this, buffer, offset);
   };
 }
 

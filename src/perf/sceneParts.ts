@@ -81,7 +81,8 @@ function pixelsPart(): ScenePart {
 
 /** the engine's tuned numbers a profile switches */
 type EngineSwitch = 'points' | 'ownPoints' | 'nearLamps' | 'lampShadows' | 'bloom' | 'shadows' | 'see' | 'debug' | 'nearFirst' | 'shine' | 'solidSee' | 'shadowTurns' | 'lowRes'
-  | 'depthFirst' | 'scene' | 'fieldsFirst' | 'fieldsPlaced' | 'grassShaded' | 'sightFog' | 'overCleared';
+  | 'depthFirst' | 'scene' | 'fieldsFirst' | 'fieldsPlaced' | 'grassShaded' | 'sightFog' | 'overCleared'
+  | 'plainShader';
 
 /** A part of the Rust engine's frame, switched by one of its tuned numbers (`TUNE` in engine/globals.ts). */
 function tunedPart(name: string, key: EngineSwitch, off: number,
@@ -119,6 +120,10 @@ function engineParts(): ScenePart[] {
     tunedPart('the flames at a quarter of the scene\'s pixels', 'lowRes', 0),
     tunedPart('the scene\'s depth drawn first, what\'s opaque shaded once a pixel', 'depthFirst', 0),
     tunedPart('the normal, roughness and glow maps read', 'debug', 4, 0),
+    // (at Low and Very low alone, where the two shaders draw one frame: what the whole shader's untaken
+    // branches cost a pixel. An Adreno 810's lit shading was 11.9 ms of its 38.5 ms frame at Very low, 4YT2-QTZW)
+    tunedPart('the lit shader whole, as it is (without: the one made for the plain levels alone)', 'plainShader',
+      1, 0),
     // (the lit shading's own parts, each a look of the engine that leaves one out: Bulwark, lit.wgsl `look`. The
     // S25's lit shading was 7.1 ms of a 13.8 ms frame at Low in the square, 3.4 of it the lights', the sun's shadow
     // and the maps: what the rest is, the device says)
