@@ -86,7 +86,12 @@ export class SeeKinds {
         g[at + 10] = see.reach ? Math.max(TUNE.columnLeft, 0.01) : 0;
       }
       // (its cone of his sight, and the share it thins by there: none for a kind that reads none of his sight)
-      g[at + 18] = sightOf(see); g[at + 19] = see.sight ? see.sightShare ?? 1 : 0;
+      // (a cover's second box ends in the first of these: written over, the box reached to the village's middle)
+      if (!cover) g[at + 18] = sightOf(see);
+      g[at + 19] = see.sight ? see.sightShare ?? 1 : 0;
+      // (a cover reads it as whether he stands in the room it roofs: all of it opens then, the owner's one
+      // exception to the rule, "if the player is inside a building... we will thin whole roof no matter what")
+      if (cover) g[at + 19] = this.under(see) ? 1 : 0;
       // (`rust.see` off: nothing of any kind thinned; `rust.housesWhole`: nothing of a house's, a harness's frame)
       if (!TUNE.see || (TUNE.housesWhole && see.cover)) { g[at + 2] = 0; g[at + 6] = 0; g[at + 10] = 0; g[at + 18] = 0; }
     }
@@ -97,6 +102,13 @@ export class SeeKinds {
   coverRule(): number {
     if (!TUNE.houseRule || !TUNE.see || TUNE.sightFog <= 0 || SIGHT.uSightOn.value <= 0) return 0;
     return coverRuleNow() * (1 - TUNE.houseLeft);
+  }
+
+  /** Whether the watcher stands in the room `see`'s kind roofs (`roofs`). */
+  under(see: SeeThrough): boolean {
+    const room = see.roofs;
+    const from = SIGHT.uSightFrom.value;
+    return !!room && from.x > room[0] && from.x < room[2] && from.y > room[1] && from.y < room[3];
   }
 
   /** Whether `see`'s kind is a cover now: a part of a house, with the houses' rule on. */

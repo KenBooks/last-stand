@@ -1758,7 +1758,9 @@ function hallRoof(scene: THREE.Object3D, M: Mats, eaves: number, back: number, f
     slab.position.y = eaves + ROOF.rise - Math.sin(slope) * down + Math.cos(slope) * ROOF.thick / 2;
     slab.rotation.z = -s * slope;
   }
-  block(roof, 0.4, 0.3, length, X, eaves + ROOF.rise + 0.02, mid, M.coping);
+  // (its ridge in the roof's own slate: of pale coping stone, its ghost over the room he stands in was a white bar
+  // down the middle of the floor and over him, the camera level with it, from play "where the vertical white bar end")
+  block(roof, 0.4, 0.3, length, X, eaves + ROOF.rise + 0.02, mid, M.roof);
   // the gables: a triangle of stone over each end's top, from eave to eave and up to the ridge
   const gable = new THREE.Shape();
   gable.moveTo(-half, 0);
@@ -2406,6 +2408,8 @@ function chimneySmoke(): Updater {
 /** The training yard: a fence of posts and rails round a field of trodden grass, a gate on its north side between two
  *  taller posts (from play, a fire on each read as "floating campfires"; their lights stay, of no strength). */
 function buildYard(parent: THREE.Object3D, wall: Wall, M: Mats): void {
+  // (its fence in the wood that stands free, no part of a house: a house's part, the rule that opens a house over
+  // ground he sees made a ghost of all of it, from play "why are you thinning the fence in the training area ?")
   // (laid out in its own frame: its gate side at -z, turned as the plan has it)
   const scene = new THREE.Group();
   scene.position.set(YARD.x, 0, YARD.z);
@@ -2425,11 +2429,11 @@ function buildYard(parent: THREE.Object3D, wall: Wall, M: Mats): void {
       const t = k / n, px = x0 + (x1 - x0) * t, pz = z0 + (z1 - z0) * t, place = `${px.toFixed(2)},${pz.toFixed(2)}`;
       if (posted.has(place)) continue;
       posted.add(place);
-      block(scene, 0.16, 1.25, 0.16, px, 0, pz, M.timber, 0.4);
+      block(scene, 0.16, 1.25, 0.16, px, 0, pz, M.freeTimber, 0.4);
     }
-    for (const y of [0.45, 0.95]) block(scene, len, 0.1, 0.08, mx, y, mz, M.planks, 0.4, turn);
+    for (const y of [0.45, 0.95]) block(scene, len, 0.1, 0.08, mx, y, mz, M.freePlanks, 0.4, turn);
     // (one slab the rails' height for bodies to be kept off: the rails as drawn have a man's gap under them)
-    const keep = block(scene, len, 1.1, 0.12, mx, 0, mz, M.planks, 0.4, turn);
+    const keep = block(scene, len, 1.1, 0.12, mx, 0, mz, M.freePlanks, 0.4, turn);
     keep.visible = false;
     wall.add(keep, false, 'wall', true);
   };
@@ -2442,7 +2446,7 @@ function buildYard(parent: THREE.Object3D, wall: Wall, M: Mats): void {
   side(w0, n1, w0, n0);
   for (const s of [-1, 1]) {
     const px = gateAt + s * gate;
-    block(scene, 0.26, YARD_GATE.up, 0.26, px, 0, n0, M.timber);
+    block(scene, 0.26, YARD_GATE.up, 0.26, px, 0, n0, M.freeTimber);
     const light = new THREE.PointLight(YARD_GATE.color, 0, YARD_GATE.distance, 2);
     light.position.set(px, YARD_GATE.up, n0);
     scene.add(light);

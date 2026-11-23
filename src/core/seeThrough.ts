@@ -38,6 +38,10 @@ interface Kind {
   /** of `floor`: where that floor lies when it's raised over the ground, in up to two boxes (each its least x and z,
    *  its most): past them the ground is the village's, 0 */
   floorBoxes?: readonly (readonly [number, number, number, number])[];
+  /** of `cover`, a roof: the room it roofs (its least x and z, its most). While he stands in it all of the roof
+   *  opens, the one exception to the rule: "if the player is inside a building... we will thin whole roof no
+   *  matter what" */
+  roofs?: readonly [number, number, number, number];
   /** of `blended`: whether a pale surface of it keeps less of itself than a dark one (`PALE`) */
   pale?: boolean;
   /** of `blended`: its meshes lie in layers (a roof's slabs over its deck over its beams), and the Rust engine draws
@@ -218,7 +222,8 @@ const kinds = {
     sight: true, sightOn: HALL_SIGHT_ASIDE },
   hallWest: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
     sight: true, sightOn: HALL_SIGHT_ASIDE },
-  hallRoof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS, oneLayer: true },
+  hallRoof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS, oneLayer: true,
+    roofs: [TERRACE.x - HALL.inHalf, HALL.wall, TERRACE.x + HALL.inHalf, HALL.inFront] },
   /** the other roofs: as what's built, and a ghost from above (`ROOF_GHOST_ABOVE`) */
   roof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: 0 },
   /** a house's gables from above, fainter than its roof: at the roof's own ghost, plaster that pale read as a strip
@@ -535,6 +540,7 @@ export interface SeeThrough {
   cover?: boolean;
   floor?: number;
   floorBoxes?: readonly (readonly [number, number, number, number])[];
+  roofs?: readonly [number, number, number, number];
   pale?: boolean;
   oneLayer?: boolean;
   sight?: boolean;

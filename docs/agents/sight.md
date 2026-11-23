@@ -40,6 +40,15 @@ camera and ground"; "the building geometry should not completely disappear, it s
 original building looked like". The game says which kinds are a house's parts and where each one's floor lies; how
 much each part thins is not the game's to say.
 
+**The one exception: stood inside a building, its whole roof opens** (from the owner: "if the player is inside a
+building... we will thin whole roof no matter what"; `Kind.roofs` in `core/seeThrough.ts`, the room a roof's kind
+roofs, the hall's alone so far). By the rule alone the roof stood whole over the aisles and the walls he didn't
+see the floor under, and hid the walls ("in hall need to see full walls, like the player can see"). Its walls
+still go by the rule, and stand whole under the roof's ghost: the engine draws the layers' whole pixels before
+their ghosts then. `lab houserule`'s three views inside the hall picture its roof alone and hold all of it to
+the ghost's share, and its walls to standing. What isn't a house's must not be of a house's kind: the training
+yard's fence was ("why are you thinning the fence in the training area ?"), and is free timber now.
+
 **The portico case** is the test that covers most of the rule's edges at once (from the owner: "this case when
 player stands on portico near entrance to hall of heroes should be documented, what should be expected behavior, as
 a test case... because it covers a lot of edge cases"). He stands on the hall of heroes' portico by its open door

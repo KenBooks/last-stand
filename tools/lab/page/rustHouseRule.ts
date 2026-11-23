@@ -12,6 +12,7 @@ import { standAt } from './draws';
 import { faceCamera } from '../../../src/core/renderer';
 import { seeValue, type SeeThrough } from '../../../src/core/seeThrough';
 import { seenShareAt } from '../../../src/core/sight';
+import { inHall } from '../../../src/data/village';
 import { RUST } from '../../../src/engine';
 import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
@@ -49,6 +50,8 @@ export const RULE_VIEWS: readonly RuleView[] = [
 /** the kinds of see-through a house is built of (`kinds` in core/seeThrough.ts) */
 const HOUSE_KINDS = ['built', 'roof', 'gable', 'hallFront', 'hallBack', 'hallBeam', 'hallEast', 'hallWest',
   'hallRoof'] as const;
+/** the roof of the one building he can stand in (the hall of heroes) */
+const INSIDE_ROOFS = ['hallRoof'] as const;
 /** a block's side (pixels of the picture): grass in the wind and the frame's grain average out of it */
 const BLOCK = 12;
 /** how far apart a block's colour must be with the houses whole and with them hidden to count as covered (the three
@@ -62,6 +65,11 @@ const CLEAR = 0.6;
 export const SEEN_COVER = { overLeft: 0.08, block: 0.6, blocksOver: 0.03 };
 /** the most of a house's cover gone over ground he doesn't see, likewise */
 export const UNSEEN_OPEN = { mean: 0.08, block: 0.5, blocksOver: 0.03 };
+/** stood in a building, the exception (from play, "if the player is inside a building... we will thin whole roof no
+ *  matter what"; and "in hall need to see full walls, like the player can see"): the least share of the blocks over
+ *  ground he doesn't see that must stand (its walls, by the rule), and the most of its roof, pictured alone, that
+ *  may be left over what `rust.houseLeft` leaves: on average, and the share of its blocks over `SEEN_COVER.block` */
+export const INSIDE = { stands: 0.1, roofOverLeft: 0.08, roofBlocksOver: 0.03 };
 /** the fewest covered blocks a view must have of a kind (seen, unseen) for its number to count */
 const BLOCKS_LEAST = 12;
 /** the frames a view is given to settle its fades, and a switch before its picture */
@@ -80,6 +88,12 @@ export interface RuleRead {
   openedAt: string;
   seen: { blocks: number; coverLeft: number; blocksOver: number };
   unseen: { blocks: number; opened: number; blocksOver: number };
+  /** whether he stands in a building, whose whole roof opens then: ground he doesn't see is opened under it, and
+   *  the share of those blocks that still stand (its walls) is read instead */
+  inside: boolean;
+  stands: number;
+  /** inside: its roof pictured alone, the blocks it covers, the cover left there and the share of them still covered */
+  roof?: { blocks: number; coverLeft: number; blocksOver: number };
 }
 
 /** Each block's mean colour, row by row. */
@@ -219,11 +233,40 @@ function marked(shot: Shot, read: RuleRead, columns: number): Pictured {
   return { label: `${read.view}: what breaks a rule`, tiles: [tile], notes };
 }
 
+/** How much of a cover is left at a block (the three colours from `at`), 0 to 1: null where nothing covers it. */
+function coverLeftAt(played: Float32Array, whole: Float32Array, bare: Float32Array, at: number): number | null {
+  let apart = 0;
+  let along = 0;
+  let span = 0;
+  for (let channel = 0; channel < 3; channel++) {
+    const cover = whole[at + channel] - bare[at + channel];
+    apart += Math.abs(cover);
+    along += (played[at + channel] - bare[at + channel]) * cover;
+    span += cover * cover;
+  }
+  if (apart < COVERED) return null;
+  return Math.min(1, Math.max(0, along / span));
+}
+
+/** A roof pictured alone, read: the blocks it covers, the cover left over them and the share still covered. */
+function readRoof(played: Float32Array, whole: Float32Array, bare: Float32Array): NonNullable<RuleRead['roof']> {
+  const roof = { blocks: 0, left: 0, over: 0 };
+  for (let at = 0; at < played.length; at += 3) {
+    const left = coverLeftAt(played, whole, bare, at);
+    if (left === null) continue;
+    roof.blocks++;
+    roof.left += left;
+    if (left > SEEN_COVER.block) roof.over++;
+  }
+  const blocks = Math.max(1, roof.blocks);
+  return { blocks: roof.blocks, coverLeft: roof.left / blocks, blocksOver: roof.over / blocks };
+}
+
 /** A view's blocks read: of those a house covers, the cover left over ground he sees and gone over ground he doesn't. */
-function readBlocks(view: string, played: Float32Array, whole: Float32Array, bare: Float32Array, columns: number): RuleRead {
+function readBlocks(view: RuleView, played: Float32Array, whole: Float32Array, bare: Float32Array, columns: number): RuleRead {
   const rows = played.length / 3 / columns;
   const seen = { blocks: 0, left: 0, over: 0 };
-  const unseen = { blocks: 0, opened: 0, over: 0 };
+  const unseen = { blocks: 0, opened: 0, over: 0, stands: 0 };
   const covered: number[] = [];
   const opened: number[] = [];
   const places = new Map<number, THREE.Vector2>();
@@ -232,23 +275,13 @@ function readBlocks(view: string, played: Float32Array, whole: Float32Array, bar
     return place ? ` (as at ${place.x.toFixed(1)}, ${place.y.toFixed(1)})` : '';
   };
   for (let block = 0; block < played.length / 3; block++) {
-    const at = block * 3;
-    let apart = 0;
-    let along = 0;
-    let span = 0;
-    for (let channel = 0; channel < 3; channel++) {
-      const cover = whole[at + channel] - bare[at + channel];
-      apart += Math.abs(cover);
-      along += (played[at + channel] - bare[at + channel]) * cover;
-      span += cover * cover;
-    }
-    if (apart < COVERED) continue;
+    const left = coverLeftAt(played, whole, bare, block * 3);
+    if (left === null) continue;
     const x = ((block % columns) + 0.5) / columns * 2 - 1;
     const y = 1 - (Math.floor(block / columns) + 0.5) / rows * 2;
     const place = groundThrough(x, y);
     const sees = place && seenClearly(place);
     if (sees === null || sees === undefined) continue;
-    const left = Math.min(1, Math.max(0, along / span));
     places.set(block, place!.clone());
     if (sees === 1) {
       seen.blocks++;
@@ -260,6 +293,7 @@ function readBlocks(view: string, played: Float32Array, whole: Float32Array, bar
     } else {
       unseen.blocks++;
       unseen.opened += 1 - left;
+      if (left > SEEN_COVER.block) unseen.stands++;
       if (1 - left > UNSEEN_OPEN.block) {
         unseen.over++;
         opened.push(block);
@@ -267,7 +301,7 @@ function readBlocks(view: string, played: Float32Array, whole: Float32Array, bar
     }
   }
   return {
-    view,
+    view: view.name,
     covered,
     opened,
     coveredAt: placeOf(covered),
@@ -278,6 +312,8 @@ function readBlocks(view: string, played: Float32Array, whole: Float32Array, bar
       opened: unseen.opened / Math.max(1, unseen.blocks),
       blocksOver: unseen.over / Math.max(1, unseen.blocks),
     },
+    inside: inHall(view.at[0], view.at[1]),
+    stands: unseen.stands / Math.max(1, unseen.blocks),
   };
 }
 
@@ -303,8 +339,19 @@ export async function readView(lab: Lab, view: RuleView): Promise<[RuleRead, Pic
     const bare = await shotAfter(lab, `${view.name}: the houses hidden`);
     const columns = Math.floor(played.pixels.width / BLOCK);
     const colours = [played, whole, bare].map((shot) => blockColours(shot.pixels));
-    const read = readBlocks(view.name, colours[0], colours[1], colours[2], columns);
-    return [read, [marked(played, read, columns), whole.pictured, bare.pictured]];
+    const read = readBlocks(view, colours[0], colours[1], colours[2], columns);
+    const pictures = [marked(played, read, columns), whole.pictured, bare.pictured];
+    if (read.inside) {
+      // (the roof of the building he stands in alone: all of it must be opened, whatever he sees under it)
+      show(INSIDE_ROOFS, true, true);
+      const roof = await shotAfter(lab, `${view.name}: its roof alone`);
+      RUST.tune.housesWhole = 1;
+      const roofWhole = await shotAfter(lab, `${view.name}: its roof alone, nothing thinned`);
+      RUST.tune.housesWhole = 0;
+      read.roof = readRoof(blockColours(roof.pixels), blockColours(roofWhole.pixels), colours[2]);
+      pictures.push(roof.pictured);
+    }
+    return [read, pictures];
   } finally {
     showHouses(true);
     showColumns(true);
@@ -321,16 +368,27 @@ const percent = (share: number): string => `${Math.round(share * 100)}%`;
 /** A view's read as a line, and what of the three rules it breaks. */
 export function judged(read: RuleRead): Checked {
   const { seen, unseen } = read;
+  const roof = read.roof;
+  const stood = roof
+    ? `, ${percent(read.stands)} standing; he is inside: of its roof alone ${percent(roof.coverLeft)} left `
+      + `(${percent(roof.blocksOver)} of ${roof.blocks} blocks still covered)`
+    : '';
   const line = `${read.view}: over ground he sees ${percent(seen.coverLeft)} of the cover left `
     + `(${percent(seen.blocksOver)} of ${seen.blocks} blocks still covered); over ground he doesn't `
-    + `${percent(unseen.opened)} opened (${percent(unseen.blocksOver)} of ${unseen.blocks} blocks open)`;
+    + `${percent(unseen.opened)} opened (${percent(unseen.blocksOver)} of ${unseen.blocks} blocks open${stood})`;
   const wrong: string[] = [];
   if (seen.blocks >= BLOCKS_LEAST && (seen.coverLeft > RUST.tune.houseLeft + SEEN_COVER.overLeft || seen.blocksOver > SEEN_COVER.blocksOver)) {
     wrong.push(`ground he sees is still covered${read.coveredAt}`);
   }
-  if (unseen.blocks >= BLOCKS_LEAST && (unseen.opened > UNSEEN_OPEN.mean || unseen.blocksOver > UNSEEN_OPEN.blocksOver)) {
+  const enough = unseen.blocks >= BLOCKS_LEAST;
+  if (enough && !read.inside && (unseen.opened > UNSEEN_OPEN.mean || unseen.blocksOver > UNSEEN_OPEN.blocksOver)) {
     wrong.push(`ground he does not see is opened${read.openedAt}`);
   }
+  const roofLeft = RUST.tune.houseLeft + INSIDE.roofOverLeft;
+  if (roof && (roof.blocks < BLOCKS_LEAST || roof.coverLeft > roofLeft || roof.blocksOver > INSIDE.roofBlocksOver)) {
+    wrong.push('he is inside and its roof is not opened whole');
+  }
+  if (enough && read.inside && read.stands < INSIDE.stands) wrong.push('he is inside and its walls do not stand');
   return wrong.length ? failed(`${line}: ${wrong.join(', ')}`) : passed(line);
 }
 
