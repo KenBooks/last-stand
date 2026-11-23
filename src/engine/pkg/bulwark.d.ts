@@ -49,6 +49,10 @@ export class Engine {
     static create(canvas: HTMLCanvasElement): Promise<Engine>;
     drop_instances(id: number): void;
     /**
+     * A run of kept records let go.
+     */
+    drop_kept(first: number, count: number): void;
+    /**
      * The light cache let go (`Gpu::drop_lights`).
      */
     drop_lights(): void;
@@ -63,6 +67,16 @@ export class Engine {
      * Whether the next frame leaves the sun's shadow as it was last drawn: the page draws it in turns.
      */
     hold_shadow(held: boolean): void;
+    /**
+     * `count` of the records the page wrote, from the one at `first` on, kept by the engine (kept.rs): what
+     * stands still, handed over once and drawn every frame after with no record of the page's. The id of the
+     * first, the rest following. Growing what's kept moves this module's memory, as `records` does.
+     */
+    keep(first: number, count: number): number;
+    /**
+     * How many records the engine keeps.
+     */
+    kept(): number;
     /**
      * The frame's time read if it has come back, with no frame drawn (`stats` says when it has).
      */
@@ -113,6 +127,10 @@ export class Engine {
      */
     set_instances(id: number, matrices: Float32Array | number[], tints: Float32Array | number[]): number;
     /**
+     * A kept record's flags set again: a record's own, and 128 where the game hides it.
+     */
+    set_kept_flags(id: number, flags: number): void;
+    /**
      * One baked light that's no lamp's read by a strength of its own within its reach
      * (`Gpu::set_light_of_its_own`).
      */
@@ -158,6 +176,10 @@ export class Engine {
     set_sprites(blended: Float32Array | number[], added: Float32Array | number[]): void;
     set_volume(id: number, cells: Uint8Array | number[]): void;
     /**
+     * A run of kept records shown or not, each as its own flags leave it.
+     */
+    show_kept(first: number, count: number, on: boolean): void;
+    /**
      * What the last frame drew: draw calls, the shadow's draw calls, objects, things out of view, triangles, and
      * the GPU's time for its passes (ms; 0 where the browser doesn't time them), how many frames' times have
      * come back so far, and whether one is on its way (1: a frame drawn now isn't timed); the shadow's
@@ -187,12 +209,15 @@ export interface InitOutput {
     readonly engine_bones: (a: number, b: number) => number;
     readonly engine_create: (a: any) => any;
     readonly engine_drop_instances: (a: number, b: number) => void;
+    readonly engine_drop_kept: (a: number, b: number, c: number) => void;
     readonly engine_drop_lights: (a: number) => void;
     readonly engine_drop_material: (a: number, b: number) => void;
     readonly engine_drop_mesh: (a: number, b: number) => void;
     readonly engine_drop_texture: (a: number, b: number) => void;
     readonly engine_globals: (a: number) => number;
     readonly engine_hold_shadow: (a: number, b: number) => void;
+    readonly engine_keep: (a: number, b: number, c: number) => number;
+    readonly engine_kept: (a: number) => number;
     readonly engine_poll_clock: (a: number) => void;
     readonly engine_ready_material: (a: number, b: number, c: number, d: number) => void;
     readonly engine_records: (a: number, b: number) => number;
@@ -206,6 +231,7 @@ export interface InitOutput {
     readonly engine_set_fields_first: (a: number, b: number) => void;
     readonly engine_set_fields_placed: (a: number, b: number) => void;
     readonly engine_set_instances: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
+    readonly engine_set_kept_flags: (a: number, b: number, c: number) => void;
     readonly engine_set_light_of_its_own: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly engine_set_light_strength: (a: number, b: number, c: number, d: number) => void;
     readonly engine_set_lights_apart: (a: number, b: number, c: number) => void;
@@ -219,14 +245,15 @@ export interface InitOutput {
     readonly engine_set_sight_roofs: (a: number, b: number, c: number, d: number) => void;
     readonly engine_set_sprites: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly engine_set_volume: (a: number, b: number, c: number, d: number) => void;
+    readonly engine_show_kept: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1754: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1779: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_628: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_628_50: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_628_51: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_630: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1773: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1798: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_647: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_647_55: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_647_56: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_649: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

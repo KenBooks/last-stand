@@ -117,6 +117,8 @@ export function standStill(object: THREE.Object3D): void {
   object.updateMatrixWorld(true);
   object.traverse((part) => { part.matrixAutoUpdate = false; });
   object.matrixWorldAutoUpdate = false;
+  // (the engine keeps it from then on, handed over once: `engine/kept.ts`)
+  object.userData.standsStill = true;
 }
 
 /** pooled lights casting still shadows while they're lit at a lamp (`lampShadow`), and how often one has been
@@ -956,6 +958,8 @@ function mergeUnder(root: THREE.Object3D, kept: boolean): void {
     root.add(one);
     one.updateMatrixWorld(true);
     one.matrixAutoUpdate = false;
+    // (merged of what stands still, it stands still: the engine keeps it, `engine/kept.ts`)
+    one.userData.standsStill = true;
     for (const mesh of meshes) mesh.removeFromParent();
   }
 }

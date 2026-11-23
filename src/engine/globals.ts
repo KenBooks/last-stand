@@ -87,6 +87,12 @@ export const TUNE = tunable('rust', {
   /** only what moved has its matrices made again, only a material that changed is described again (0: every
    *  object's and every material's each frame, to compare) */
   still: 1,
+  /** what the game says stands still is kept by the engine: handed over once, no walk of it and no record written
+   *  a frame (`kept.ts`, Bulwark's kept.rs; 0: walked each frame, as it was, to compare) */
+  kept: 1,
+  /** what a doorway hides is left out of the frame, as the game left it out of three's (`cullForEngine` in
+   *  world/doorways.ts; 0: everything walked, to compare) */
+  doorways: 1,
   /** the hole that keeps the hero in sight under what hides him (0: none dropped) */
   see: 1,
   /** a counted draw (the meadow's blades) in the depth drawn first too: shaded once a pixel, placed twice (a

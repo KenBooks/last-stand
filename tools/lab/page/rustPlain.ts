@@ -40,7 +40,7 @@ async function switched(lab: Lab, value: number): Promise<number> {
 }
 
 /** The share of two pictures' pixels with a channel more than `SAME_WITHIN` apart. */
-function apartShare(one: Uint8ClampedArray, other: Uint8ClampedArray): number {
+export function apartShare(one: Uint8ClampedArray, other: Uint8ClampedArray): number {
   let apart = 0;
   for (let at = 0; at < one.length; at += 4) {
     const most = Math.max(Math.abs(one[at] - other[at]), Math.abs(one[at + 1] - other[at + 1]),
@@ -50,7 +50,7 @@ function apartShare(one: Uint8ClampedArray, other: Uint8ClampedArray): number {
   return apart / (one.length / 4);
 }
 
-const percent = (share: number): string => `${(share * 100).toFixed(2)}%`;
+export const percent = (share: number): string => `${(share * 100).toFixed(2)}%`;
 
 /**
  * At Very low the plain levels' shaders draw the frame the whole ones draw: the game held still, the frame

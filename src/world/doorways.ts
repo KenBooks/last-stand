@@ -315,10 +315,30 @@ function cullFrame(camera: THREE.Camera, scene: THREE.Scene, village: THREE.Obje
   hideInside(into, scene, village);
 }
 
+/** the scene and the village the doorways cull (`cullByDoorways`) */
+let culled: { scene: THREE.Scene; village: THREE.Object3D } | null = null;
+
+/**
+ * The frame the Rust engine is about to draw by `camera` culled by the doorways, and what to call once it's drawn
+ * (what was left out shown again). The engine runs none of what the game hangs on three's render of the scene
+ * (`engine/index.ts`), and without this the heroes on the hall's dais and its room, behind its walls, were 133 of
+ * a frame's 558 records from the square, and the whole village was written looking out of the hall. What's left
+ * out casts no shadow in the engine's frame: its one walk makes the frame's list and the sun's.
+ */
+export function cullForEngine(camera: THREE.Camera): () => void {
+  if (culled) cullFrame(camera, culled.scene, culled.village);
+  return () => {
+    showHidden(true);
+    hidden.length = 0;
+    lookingOutOf = null;
+  };
+}
+
 /** Culls `village`'s parts, the foes and what stands in a building of the scene's own by every doorway added
  *  (`addDoorway`) as `scene` is drawn. */
 export function cullByDoorways(scene: THREE.Scene, village: THREE.Object3D): void {
   hideCellsWhere(cellHiddenByDoor);
+  culled = { scene, village };
   const before = scene.onBeforeRender;
   scene.onBeforeRender = (...args) => {
     // (the cone set before the cells are culled, `cullWhileDrawn`'s, which runs in `before`)
