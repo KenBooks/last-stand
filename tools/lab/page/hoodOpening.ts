@@ -12,8 +12,8 @@
 //   rim runs from the eyes, ours stood out over the brow, "do you see hood overhang in our case?")
 import * as THREE from 'three';
 import type { Lab } from './lab';
-import { G } from '../../../src/state';
 import { frameRect } from '../../../src/core/renderer';
+import { studioPicture } from './studio';
 
 export type OpeningView = 'front' | 'left';
 
@@ -201,11 +201,12 @@ function faceEdges(skinAt: (x: number) => boolean, rim: number[], view: OpeningV
 /** Where a point (world space) falls on the tile a picture from `camera` is read as (px, down from its top). */
 export function onTile(camera: THREE.Camera, tile: { width: number; height: number }):
   (point: THREE.Vector3) => THREE.Vector2 {
-  const gl = G.renderer.getContext();
+  // (the frame the studio draws: `frameRect`'s, the tile its middle)
+  const frame = frameRect();
   return (point) => {
     const ndc = point.clone().project(camera);
-    const x = ((ndc.x + 1) / 2) * gl.drawingBufferWidth - (gl.drawingBufferWidth - tile.width) / 2;
-    const y = ((1 - ndc.y) / 2) * gl.drawingBufferHeight;
+    const x = ((ndc.x + 1) / 2) * frame.width - (frame.width - tile.width) / 2;
+    const y = ((1 - ndc.y) / 2) * frame.height;
     return new THREE.Vector2(x, y);
   };
 }
@@ -282,8 +283,8 @@ type Drawn = THREE.Object3D & { material: THREE.Material | THREE.Material[] };
 
 /** `scene` drawn from `camera` flat, what `white` picks white and the rest black (`hidden` and all but meshes left
  *  out), read back as the tile `shoot` reads. */
-export function maskOf(lab: Lab, scene: THREE.Scene, camera: THREE.Camera, white: (object: THREE.Object3D) => boolean,
-  hidden: THREE.Object3D[]): Mask {
+export async function maskOf(lab: Lab, scene: THREE.Scene, camera: THREE.PerspectiveCamera,
+  white: (object: THREE.Object3D) => boolean, hidden: THREE.Object3D[]): Promise<Mask> {
   const paint = (color: number) => new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide });
   const paints = { white: paint(0xffffff), black: paint(0x000000) };
   const swapped: [Drawn, THREE.Material | THREE.Material[]][] = [];
@@ -298,41 +299,25 @@ export function maskOf(lab: Lab, scene: THREE.Scene, camera: THREE.Camera, white
     swapped.push([drawn, drawn.material]);
     drawn.material = white(object) ? paints.white : paints.black;
   });
-  const renderer = G.renderer;
   const background = scene.background;
-  const toneMapping = renderer.toneMapping;
-  const drawing = lab.drawing;
   scene.background = new THREE.Color(0x000000);
-  renderer.toneMapping = THREE.NoToneMapping;
-  lab.drawing = true;
   try {
-    renderer.setRenderTarget(null);
-    renderer.render(scene, camera);
-    return readMask();
+    return maskIn(await studioPicture(lab, scene, camera));
   } finally {
     for (const [drawn, material] of swapped) drawn.material = material;
     paints.white.dispose();
     paints.black.dispose();
     scene.background = background;
-    renderer.toneMapping = toneMapping;
-    lab.drawing = drawing;
     for (const object of shown) object.visible = true;
   }
 }
 
-/** The canvas's middle at the tile's shape (as `shoot` reads it), its white pixels covered. */
-function readMask(): Mask {
-  const gl = G.renderer.getContext();
-  const frame = frameRect();
-  const height = frame.height;
-  const width = Math.round((height * 340) / 560);
-  const left = frame.left + Math.round((frame.width - width) / 2);
-  const pixels = new Uint8Array(width * height * 4);
-  gl.readPixels(left, frame.bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-  // (read bottom up)
+/** A tile drawn white on black (rows from the top), its white pixels covered. */
+function maskIn(picture: ImageData): Mask {
+  const { width, height, data } = picture;
   const covered = (x: number, y: number) => {
     if (x < 0 || y < 0 || x >= width || y >= height) return false;
-    return pixels[((height - 1 - y) * width + x) * 4] > 128;
+    return data[(y * width + x) * 4] > 128;
   };
   return { covered, width, height };
 }

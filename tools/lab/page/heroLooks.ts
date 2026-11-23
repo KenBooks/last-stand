@@ -19,9 +19,7 @@ import { chooseLooks, lookHead, pickLook, profileLook, readyLook } from '../../.
 import { loadProfile } from '../../../src/loot/profile';
 import { saveSlot } from '../../../src/loot/saveSlots';
 import { lateCompiles, programsCompiledInGame } from '../../../src/core/shaders';
-import { frameRect } from '../../../src/core/renderer';
-import { cameraOn, countsOf, shoot, studio, type Shot } from './studio';
-import { opaqueRows } from './pixels';
+import { cameraOn, countsOf, shoot, studio, studioPicture, type Shot } from './studio';
 
 export interface HeroLooksOptions {
   /** the classes to read (every class by default) */
@@ -97,25 +95,10 @@ function meshesNamed(root: THREE.Object3D, name: string): THREE.Mesh[] {
 
 /** `scene` drawn by `camera` and read back, the middle of the canvas at a tile's shape as the studio's pictures are
  *  (rows top first, opaque). */
-function pixelsOf(lab: Lab, scene: THREE.Scene, camera: THREE.PerspectiveCamera): { data: Uint8ClampedArray; width: number; height: number } {
-  const renderer = G.renderer;
-  const toneMapping = renderer.toneMapping;
-  const drawing = lab.drawing;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  // (the lab draws nothing unless it's picturing)
-  lab.drawing = true;
-  renderer.setRenderTarget(null);
-  renderer.render(scene, camera);
-  renderer.toneMapping = toneMapping;
-  lab.drawing = drawing;
-  const gl = renderer.getContext();
-  const frame = frameRect();
-  const height = frame.height;
-  const width = Math.round(height * TILE_SHAPE);
-  const left = frame.left + Math.round((frame.width - width) / 2);
-  const raw = new Uint8Array(width * height * 4);
-  gl.readPixels(left, frame.bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, raw);
-  return { data: opaqueRows(raw, width, height).data, width, height };
+async function pixelsOf(lab: Lab, scene: THREE.Scene, camera: THREE.PerspectiveCamera):
+  Promise<{ data: Uint8ClampedArray; width: number; height: number }> {
+  const picture = await studioPicture(lab, scene, camera);
+  return { data: picture.data, width: picture.width, height: picture.height };
 }
 
 /** A band of a picture's rows and columns, as shares of its height and width. */
@@ -136,8 +119,6 @@ function changedIn(a: Uint8ClampedArray, b: Uint8ClampedArray, width: number, he
   return count ? changed / count : 0;
 }
 
-/** the studio's tile's shape (width over height: `TILE_SHAPE` in studio.ts) */
-const TILE_SHAPE = 340 / 560;
 /** the face's picture from the front cut into the brows' band, the cheeks' under the eyes and the beard's round the
  *  mouth and chin (shares of the picture: the head close-up frames the head, `HEAD_FRAME`, the eyes 0.38 down it, the
  *  mouth 0.52, the chin 0.6) */
@@ -151,26 +132,27 @@ interface HairChange { brows: number; cheeks: number; beard: number; cards: numb
 
 /** Hair colours `a` and `b` on `player` compared, his face from the front with his hair hidden, his head from behind;
  *  `breakFace` / `breakCards` plant a colour that leaves the face's paint or the cards' colour as it was. */
-function hairChange(lab: Lab, player: Player, scene: THREE.Scene, a: string, b: string, plant: { face: boolean; cards: boolean }): HairChange {
+async function hairChange(lab: Lab, player: Player, scene: THREE.Scene, a: string, b: string,
+  plant: { face: boolean; cards: boolean }): Promise<HairChange> {
   const box = headBox(player);
   const front = cameraOn(box, [0, 0, 1]);
   const behind = cameraOn(box, [0, 0, -1]);
   const cards = [...meshesNamed(player.model.root, 'hair'), ...meshesNamed(player.model.root, 'crop')];
   const beardCards = meshesNamed(player.model.root, 'beard').filter((mesh) => (mesh.material as THREE.Material).alphaTest > 0);
-  const picture = (hair: string, camera: THREE.PerspectiveCamera, bare: boolean) => {
+  const picture = async (hair: string, camera: THREE.PerspectiveCamera, bare: boolean) => {
     player.setHair(hair);
     if (plant.face) faceShift(player).set(0, 0, 0);
     if (plant.cards) for (const mesh of cards) (mesh.material as THREE.MeshStandardMaterial).color.setRGB(0.3, 0.2, 0.1);
     for (const mesh of [...cards, ...beardCards]) mesh.visible = !bare;
-    const pixels = pixelsOf(lab, scene, camera);
+    const pixels = await pixelsOf(lab, scene, camera);
     for (const mesh of [...cards, ...beardCards]) mesh.visible = true;
     return pixels;
   };
   const own = player.heroLook.hair;
-  const faceA = picture(a, front, true);
-  const faceB = picture(b, front, true);
-  const backA = picture(a, behind, false);
-  const backB = picture(b, behind, false);
+  const faceA = await picture(a, front, true);
+  const faceB = await picture(b, front, true);
+  const backA = await picture(a, behind, false);
+  const backB = await picture(b, behind, false);
   player.setHair(own);
   const { width, height } = faceA;
   return {
@@ -236,8 +218,8 @@ async function readLook(lab: Lab, id: string, def: HeroLookDef, scene: THREE.Sce
       { name: `${def.name}: back`, camera: cameraOn(headBox(player), [0, 0, -1]) },
       { name: `${def.name}: figure`, camera: cameraOn(figureBox(player), [-0.35, 0.05, 1]) },
     ];
-    const { tiles } = shoot(lab, scene, shots);
-    const change = hairChange(lab, player, scene, DARK, LIGHT, { face: canary, cards: canary });
+    const { tiles } = await shoot(lab, scene, shots);
+    const change = await hairChange(lab, player, scene, DARK, LIGHT, { face: canary, cards: canary });
     const bearded = LOOKS[head.who].beard > 0;
     const percent = (share: number) => `${(share * 100).toFixed(1)}%`;
     // (the head's triangles at the detail he's built at: Very low's heads coarse, `lod` in models/head.ts)
@@ -272,7 +254,8 @@ async function readColours(lab: Lab, id: string, def: HeroLookDef, scene: THREE.
     for (const hair of SHOWN_COLOURS) {
       player.setHair(hair);
       const label = hair ? HAIR_COLOURS.find((colour) => colour.id === hair)!.name : 'his own';
-      tiles.push(...shoot(lab, scene, [{ name: `${def.name}, ${label}`, camera: cameraOn(box, [0.45, 0, 0.9]) }]).tiles);
+      const shot = { name: `${def.name}, ${label}`, camera: cameraOn(box, [0.45, 0, 0.9]) };
+      tiles.push(...(await shoot(lab, scene, [shot])).tiles);
     }
     return tiles;
   } finally {

@@ -64,6 +64,15 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   while a frame queued still reads it holds the page. The village's frame at Very low sends some 40 KB of buffers
   in 12 calls and 60 to 200 KB of textures, standing or walking alike: the particles' pools by their live part.
 - `perf.ts`, `programSwitches.ts`, `matrixWalks.ts`: each phase counts the programs switched and the objects walked as well as the draws (`gl.useProgram` and three's `updateMatrixWorld` wrapped as the page loads; no switches on WebGPU): a switch sets again every uniform a program reads that its material's don't, and the walk went down every hidden part too. Exact counts, where the page's ms moved by a millisecond or two with the shared PC's load: compare those first, then time on the lent 4080 (`--exclusive`).
+- `studio.ts`, `looks.ts`: the studio draws by the engine (`drawRust` with a scene and a camera of its own), its
+  tile read off the engine's canvas in the task that drew it; three's `readPixels` it used before has no drawing
+  buffer under the engine, and `hood`, `hands`, `weapons`, `turnaround`, `neck`, `herolooks` and `maps --pictures`
+  stopped at their first picture. A picture is drawn again on the browser's time until no draw is left out for a
+  pipeline still compiling (the studio's lights ask for 11 of their own), with a plain grade (no vignette, no bloom)
+  and the game's particles held out (the engine draws their pools with any scene: the lobby's motes were dots on the
+  backdrop). The backdrop is read as the engine draws it, its mean over an empty studio and its grain's reach as the
+  slack. The `faces` look is a front material and a back-faces twin of each mesh: chosen by `gl_FrontFacing` in a
+  patch of three's shader, every face drew alike, and the fist read as seen through from every side.
 - `throws.ts`: the vine's shot lets the bow go `SHOT.loosedAfter` frames into the hold, drawn as far as it is: held for its whole draw and the quiver's fetch from the throw, the arrow left a frame after the vine let him go (on main too).
 - `uiCloudIdentity.ts`: the service's health is asked once a visit (`serviceHealth` in `loot/cloudApi.ts`), so the state forgets it before and after its stub answers: a state before it asked the lab's server, and Google's button stayed hidden in a run of every state, alone it passed.
 - `uiPerfAsk.ts`, `uiStates/decisionTouch.ts`: a canary's plant must land where it's judged: the prompt's moved to the window's top, onto the choice (moved down to the middle it left the choice on a 1080 screen, and went unseen on main), and the choice's padding is planted and judged on a short screen alone.

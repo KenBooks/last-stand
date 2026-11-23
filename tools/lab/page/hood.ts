@@ -448,8 +448,8 @@ function ourMarks(lab: Lab, camera: THREE.Camera, tile: { width: number; height:
 
 /** Our figure from `camera`: every mesh of his drawn flat white on black, the staff in his hand hidden (it stands up
  *  through the outline), read back as the tile `shoot` reads. */
-function ourFigure(lab: Lab, scene: THREE.Scene, camera: THREE.Camera): Mask {
-  return maskOf(lab, scene, camera, () => true, heldThings(lab));
+async function ourFigure(lab: Lab, scene: THREE.Scene, camera: THREE.PerspectiveCamera): Promise<Mask> {
+  return await maskOf(lab, scene, camera, () => true, heldThings(lab));
 }
 
 /** The rim's two edges (world space), each from the top of the face down: the drawn grid's first and last columns. */
@@ -468,18 +468,19 @@ function rimEdges(lab: Lab): THREE.Vector3[][] {
 }
 
 /** Our opening from `camera` as drawn in `scene` (the model in it). */
-function ourOpeningFrom(lab: Lab, scene: THREE.Scene, camera: THREE.Camera, view: OpeningView): Opening {
-  const skin = maskOf(lab, scene, camera, isSkinMesh, heldThings(lab));
+async function ourOpeningFrom(lab: Lab, scene: THREE.Scene, camera: THREE.PerspectiveCamera, view: OpeningView):
+  Promise<Opening> {
+  const skin = await maskOf(lab, scene, camera, isSkinMesh, heldThings(lab));
   return ourOpening(rimEdges(lab), camera, skin, ourMarks(lab, camera, skin), view);
 }
 
 /** Our opening from `view` now, read in a studio of its own (the canary's, its faults planted). */
-function openingNow(lab: Lab, view: OpeningView): Opening {
+async function openingNow(lab: Lab, view: OpeningView): Promise<Opening> {
   const scene = studio();
   const back = intoStudio(lab, scene);
   try {
     const from = VIEWS.find((each) => each.name === view)!.from;
-    return ourOpeningFrom(lab, scene, cameraFrom(lab, from), view);
+    return await ourOpeningFrom(lab, scene, cameraFrom(lab, from), view);
   } finally {
     back();
   }
@@ -581,12 +582,12 @@ function cameraFrom(lab: Lab, from: THREE.Vector3Tuple): THREE.PerspectiveCamera
 }
 
 /** Our outline from one of `VIEWS` as the hood is now, in a studio of its own (for the canaries). */
-function outlineNow(lab: Lab, view: ViewName): Outline {
+async function outlineNow(lab: Lab, view: ViewName): Promise<Outline> {
   const scene = studio();
   const back = intoStudio(lab, scene);
   try {
     const camera = cameraFrom(lab, VIEWS.find((side) => side.name === view)!.from);
-    const figure = ourFigure(lab, scene, camera);
+    const figure = await ourFigure(lab, scene, camera);
     return outlineOf(figure.covered, ourMarks(lab, camera, figure));
   } finally {
     back();
@@ -633,12 +634,12 @@ function waistLine(ours: Outline, theirs: Outline, problems: string[]): string {
 }
 
 /** His outline from a side with the hood hidden. */
-function bareOutline(lab: Lab, view: ViewName): Outline {
+async function bareOutline(lab: Lab, view: ViewName): Promise<Outline> {
   const parts = hoodParts(lab);
   const shown = parts.map((part) => part.visible);
   parts.forEach((part) => (part.visible = false));
   try {
-    return outlineNow(lab, view);
+    return await outlineNow(lab, view);
   } finally {
     parts.forEach((part, k) => (part.visible = shown[k]));
   }
@@ -710,10 +711,10 @@ async function outlines(lab: Lab, options: HoodOptions, lines: string[], problem
   const openings: Partial<Record<OpeningView, Opening>> = {};
   try {
     const shots: Shot[] = VIEWS.map((view) => ({ name: view.name, camera: cameraFrom(lab, view.from) }));
-    const { tiles } = shoot(lab, scene, shots);
+    const { tiles } = await shoot(lab, scene, shots);
     for (const [k, view] of VIEWS.entries()) {
       const camera = shots[k].camera;
-      const figure = ourFigure(lab, scene, camera);
+      const figure = await ourFigure(lab, scene, camera);
       const marks = ourMarks(lab, camera, figure);
       const ours = outlineOf(figure.covered, marks);
       read[view.name] = ours;
@@ -725,12 +726,12 @@ async function outlines(lab: Lab, options: HoodOptions, lines: string[], problem
       if (theirs) lines.push(`  the reference's:       ${readings(theirs.outline, view.name)}`);
       if (theirs) fullness(view.name, ours, theirs.outline, problems);
       if (theirs && view.name === 'left') lines.push(waistLine(ours, theirs.outline, problems));
-      const bare = view.name === 'left' ? bareOutline(lab, 'left') : null;
+      const bare = view.name === 'left' ? await bareOutline(lab, 'left') : null;
       if (bare) lines.push(overhangLine(ours, bare, problems));
       if (options.edges) lines.push(...edgeLines(ours, theirs?.outline ?? null, view.name));
       const dots = { ours: [] as [number, number][], theirs: [] as [number, number][] };
       if (view.name !== 'back') {
-        const mine = ourOpeningFrom(lab, scene, camera, view.name);
+        const mine = await ourOpeningFrom(lab, scene, camera, view.name);
         const referenceOpened = theirs ? referenceOpening(theirs.image, theirs.figure, theirs.marks, view.name) : null;
         lines.push(...openingLines(view.name, mine, referenceOpened, problems));
         openings[view.name] = mine;
@@ -918,21 +919,22 @@ function planted(lab: Lab, change: (part: THREE.Object3D) => void, undo: (part: 
 }
 
 /** How much less a view's fullness reads at a height now than `was` read it (`E`; none where either missed it). */
-function lessFull(lab: Lab, was: Outline, view: ViewName, up: number): number {
+async function lessFull(lab: Lab, was: Outline, view: ViewName, up: number): Promise<number> {
   const before = fullnessAt(was, view, up);
-  const now = fullnessAt(outlineNow(lab, view), view, up);
+  const now = fullnessAt(await outlineNow(lab, view), view, up);
   return before !== null && now !== null ? before - now : 0;
 }
 
 /** The canary for the hood's width: made narrower about the head, the rim must read nearer the cheeks, the outline
  *  narrower at the temples and, from the back, at the neck, and the opening narrower at the eyes. */
-function narrowCanary(lab: Lab, sizes: Record<Size, number>, read: ViewsRead, problems: string[]): string | null {
+async function narrowCanary(lab: Lab, sizes: Record<Size, number>, read: ViewsRead, problems: string[]):
+  Promise<string | null> {
   const undo = planted(lab, (part) => (part.scale.x *= CANARY_NARROW), (part) => (part.scale.x /= CANARY_NARROW));
   try {
     const clear = sizesOf(lab).clear;
-    const temples = lessFull(lab, read.outlines.front, 'front', 0.4);
-    const neck = lessFull(lab, read.outlines.back, 'back', levelUp('neck'));
-    const opening = (halfWidthAt(read.openings.front, 0) ?? 0) - (halfWidthAt(openingNow(lab, 'front'), 0) ?? 0);
+    const temples = await lessFull(lab, read.outlines.front, 'front', 0.4);
+    const neck = await lessFull(lab, read.outlines.back, 'back', levelUp('neck'));
+    const opening = (halfWidthAt(read.openings.front, 0) ?? 0) - (halfWidthAt(await openingNow(lab, 'front'), 0) ?? 0);
     const lost = sizes.clear - clear;
     const said = `canary, the hood ${CANARY_NARROW}x as wide: the rim ${lost.toFixed(1)} cm nearer the cheeks, `
       + `${temples.toFixed(2)} E narrower at the temples and ${neck.toFixed(2)} at the neck from the back, the `
@@ -950,17 +952,17 @@ function narrowCanary(lab: Lab, sizes: Record<Size, number>, read: ViewsRead, pr
 /** The canary for the opening from his left: the hood moved forward, its rim must read further ahead at the eyes,
  *  the face shown ahead of it less there, less of the face shown in all, and it further ahead of his body below the
  *  chin. */
-function forwardCanary(lab: Lab, read: ViewsRead, problems: string[]): string | null {
+async function forwardCanary(lab: Lab, read: ViewsRead, problems: string[]): Promise<string | null> {
   const step = CANARY_FORWARD / 100 / hoodParts(lab)[0].parent!.getWorldScale(new THREE.Vector3()).z;
   const undo = planted(lab, (part) => (part.position.z += step), (part) => (part.position.z -= step));
   try {
     const before = read.openings.left;
-    const after = openingNow(lab, 'left');
+    const after = await openingNow(lab, 'left');
     const ahead = (aheadAt(after, 0) ?? 0) - (aheadAt(before, 0) ?? 0);
     const shown = (shownAt(before, 0) ?? 0) - (shownAt(after, 0) ?? 0);
     const hidden = before.face ? 1 - after.face / before.face : 0;
-    const bare = bareOutline(lab, 'left');
-    const overhang = overhangOf(outlineNow(lab, 'left'), bare) - overhangOf(read.outlines.left, bare);
+    const bare = await bareOutline(lab, 'left');
+    const overhang = overhangOf(await outlineNow(lab, 'left'), bare) - overhangOf(read.outlines.left, bare);
     const said = `canary, the hood ${CANARY_FORWARD} cm forward: from his left its rim ${ahead.toFixed(2)} E further `
       + `ahead at the eyes, the face shown ${shown.toFixed(2)} E less ahead of it there, `
       + `${(hidden * 100).toFixed(0)}% less of the face shown, ${overhang.toFixed(2)} E further ahead of his body `
@@ -1003,10 +1005,10 @@ function dented(lab: Lab, cm: number): () => void {
 
 /** The canary for the bulge: the hood's back pressed in under the nape, the waist under its slack from his left must
  *  read deeper. */
-function waistCanary(lab: Lab, read: ViewsRead, problems: string[]): string | null {
+async function waistCanary(lab: Lab, read: ViewsRead, problems: string[]): Promise<string | null> {
   const undo = dented(lab, CANARY_DENT);
   try {
-    const deeper = waistOf(outlineNow(lab, 'left')) - waistOf(read.outlines.left);
+    const deeper = waistOf(await outlineNow(lab, 'left')) - waistOf(read.outlines.left);
     const said = `canary, the hood's back pressed ${CANARY_DENT} cm in under the nape: from his left it comes in `
       + `${deeper.toFixed(2)} E further under its slack`;
     if (deeper >= CANARY_LEAST_WAIST) return said;
@@ -1019,10 +1021,10 @@ function waistCanary(lab: Lab, read: ViewsRead, problems: string[]): string | nu
 
 /** The canary for the hood's fullness: made shallower front to back about the head, its outline from his left must
  *  read less far behind the eyes at the chin. */
-function shallowCanary(lab: Lab, read: ViewsRead, problems: string[]): string | null {
+async function shallowCanary(lab: Lab, read: ViewsRead, problems: string[]): Promise<string | null> {
   const undo = planted(lab, (part) => (part.scale.z *= CANARY_SHALLOW), (part) => (part.scale.z /= CANARY_SHALLOW));
   try {
-    const shallower = lessFull(lab, read.outlines.left, 'left', levelUp('chin'));
+    const shallower = await lessFull(lab, read.outlines.left, 'left', levelUp('chin'));
     const said = `canary, the hood ${CANARY_SHALLOW}x as deep: from his left it reaches ${shallower.toFixed(2)} E less `
       + 'far behind at the chin';
     if (shallower >= CANARY_LEAST_SHALLOWER) return said;
@@ -1044,8 +1046,10 @@ export async function hood(lab: Lab, options: HoodOptions): Promise<Report> {
   const read = await outlines(lab, options, lines, problems, moments);
   if (options.canary) {
     const canaries = [
-      narrowCanary(lab, sizes, read, problems), forwardCanary(lab, read, problems), shallowCanary(lab, read, problems),
-      waistCanary(lab, read, problems),
+      await narrowCanary(lab, sizes, read, problems),
+      await forwardCanary(lab, read, problems),
+      await shallowCanary(lab, read, problems),
+      await waistCanary(lab, read, problems),
     ];
     for (const canary of canaries) {
       if (canary) lines.push(canary);

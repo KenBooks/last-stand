@@ -71,23 +71,33 @@ function flat(colour: THREE.Color, wireframe = false, cut: Cut | null = null): T
   return material;
 }
 
-/** A face's front blue and its back red, lit by how square it faces the camera (Blender's "face orientation"). */
-function facing(): THREE.MeshNormalMaterial {
-  const material = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide });
-  // (written out as they are, before the shader's own conversion to the screen's colours: so in those already)
-  const [front, back] = [FRONT, BACK].map((colour) => {
-    const shown = colour.clone().convertLinearToSRGB();
-    return `vec3(${shown.r}, ${shown.g}, ${shown.b})`;
-  });
-  material.onBeforeCompile = (shader) => {
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <normal_fragment_maps>',
-      `#include <normal_fragment_maps>
-      gl_FragColor = vec4((gl_FrontFacing ? ${front} : ${back}) * (0.45 + 0.55 * abs(normal.z)), 1.0);
-      return;`,
-    );
+/** A face's front blue and its back red (Blender's "face orientation"): the front by the mesh's own material, the
+ *  back by a twin of it drawing its back faces alone, whichever is nearer at a pixel shown. One material choosing by
+ *  `gl_FrontFacing` was a patch of three's shader, which the engine never runs: every face drew alike, and the hands'
+ *  see-through read no skin from inside and the backdrop through the fist from every side. */
+function facing(): { front: THREE.MeshBasicMaterial; back: THREE.MeshBasicMaterial } {
+  return {
+    front: new THREE.MeshBasicMaterial({ color: FRONT, side: THREE.FrontSide }),
+    back: new THREE.MeshBasicMaterial({ color: BACK, side: THREE.BackSide }),
   };
-  return material;
+}
+
+/** A twin of `mesh` drawing its geometry in `material`, beside it under its parent (bound to its skeleton where it's
+ *  skinned): what takes it out again. */
+function twinOf(mesh: THREE.Mesh, material: THREE.Material): () => void {
+  const skinned = mesh as THREE.SkinnedMesh;
+  const twin = skinned.isSkinnedMesh
+    ? new THREE.SkinnedMesh(mesh.geometry, material)
+    : new THREE.Mesh(mesh.geometry, material);
+  if (skinned.isSkinnedMesh) (twin as THREE.SkinnedMesh).bind(skinned.skeleton, skinned.bindMatrix);
+  twin.position.copy(mesh.position);
+  twin.quaternion.copy(mesh.quaternion);
+  twin.scale.copy(mesh.scale);
+  twin.layers.mask = mesh.layers.mask;
+  twin.visible = mesh.visible;
+  mesh.parent?.add(twin);
+  twin.updateMatrixWorld(true);
+  return () => twin.removeFromParent();
 }
 
 /** Whether `object` is drawn but isn't a mesh: particles, a line, a sprite. */
@@ -166,11 +176,13 @@ export function wearLook(look: Look, meshes: THREE.Mesh[]): () => void {
   if (look === 'lit' || look === 'bones') return () => {};
   const worn = meshes.map((mesh) => mesh.material);
   const made: THREE.Material[] = [];
+  const twins: (() => void)[] = [];
   const faces = facing();
-  made.push(faces);
+  made.push(faces.front, faces.back);
   meshes.forEach((mesh, i) => {
     if (look === 'faces') {
-      mesh.material = faces;
+      mesh.material = faces.front;
+      twins.push(twinOf(mesh, faces.back));
       return;
     }
     const own = flat(partColour(i), look === 'wire', cutOf(materialsOf(mesh)[0]));
@@ -178,6 +190,7 @@ export function wearLook(look: Look, meshes: THREE.Mesh[]): () => void {
     mesh.material = own;
   });
   return () => {
+    for (const untwin of twins) untwin();
     meshes.forEach((mesh, i) => {
       mesh.material = worn[i];
     });

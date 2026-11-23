@@ -169,7 +169,7 @@ export async function turnaround(lab: Lab, options: TurnaroundOptions): Promise<
       name: view.name,
       camera: cameraOn(frameOf(lab, placed.root, view), view.from),
     }));
-    const { tiles, least } = shoot(lab, scene, shots);
+    const { tiles, least } = await shoot(lab, scene, shots);
     const { triangles, meshes } = countsOf(placed.root);
     const counts = `${triangles.toLocaleString('en')} triangles in ${meshes} meshes shown`;
     lines.push(`${lab.player.cls.id}: ${counts}`);
@@ -181,7 +181,7 @@ export async function turnaround(lab: Lab, options: TurnaroundOptions): Promise<
     }
     if (options.canary) {
       scene.remove(placed.root);
-      const { most } = shoot(lab, scene, shots);
+      const { most } = await shoot(lab, scene, shots);
       const read = `the canary's empty studio read as ${(most * 100).toFixed(1)}% drawn`;
       if (most >= LEAST_DRAWN) problems.push(read);
       else lines.push(read);
