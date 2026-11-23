@@ -501,6 +501,7 @@ export function bootText(measure, { links = false } = {}) {
     `${name}: ${notes.join('; ')}`,
     `  ${revealed}${warm}${painted}; ${files.count} files, ${megabytes(files.bytes)} over the network `
       + `(${files.later} after the reveal; the largest ${largest})`,
+    ...workRow([measure]).map((row) => row.slice(2)),
     ...(findings.maps ? [mapsLine(findings.maps)] : []),
     ...(findings.warmUps?.length ? [warmUpsLine(findings.warmUps)] : []),
     ...(findings.exit ? [`  the loading screen left: ${exitText(findings.exit)}${goneText(findings)}`] : []),
@@ -565,6 +566,29 @@ function lobbyRoundsLine(lobbies) {
     + `${rough.length} of ${lobbies.length} short of the screen's rate${tillText}${toEnd}`;
 }
 
+/** whose work a boot's is said as (`analyze.mjs` `workTill`) */
+const WORK_OF = [['page', 'the page\'s main thread'], ['workers', 'its workers'], ['gpu', 'the GPU\'s process']];
+
+/** Seconds of work over some boots: the median, and the range where there is more than one. */
+function workSeconds(values) {
+  const median = (medianOf(values) / 1000).toFixed(2);
+  if (values.length < 2) return median;
+  return `${median} (${(Math.min(...values) / 1000).toFixed(2)}–${(Math.max(...values) / 1000).toFixed(2)})`;
+}
+
+/** What `boots` worked till their reveal (`findings.work`), a row: each thread's tasks' own time, and their time on
+ *  a CPU where the trace has it. None where no boot's work was read. */
+function workRow(boots) {
+  const works = boots.map((boot) => boot.findings.work).filter(Boolean);
+  if (!works.length) return [];
+  const parts = WORK_OF.map(([who, said]) => {
+    const cpus = works.map((work) => work[who].cpu).filter((cpu) => cpu !== null);
+    const cpuText = cpus.length ? `, ${workSeconds(cpus)} s of it on a CPU` : '';
+    return `${said} ${workSeconds(works.map((work) => work[who].ms))} s${cpuText}`;
+  });
+  return [`    worked till the reveal: ${parts.join('; ')}`];
+}
+
 /** The boots by URL, variant and visit (`group`), over the rounds: when the lobby was revealed, when the fight's
  *  programs were warm behind it, when the workers' maps were done, the lobby's frames a second, and how long each
  *  step took, each the median and the range. */
@@ -610,7 +634,9 @@ export function bootRoundsText(measures) {
     const lobbies = boots.map((boot) => boot.findings.lobby).filter(Boolean);
     const lobbyRow = lobbies.length ? [lobbyRoundsLine(lobbies)] : [];
     const title = `  ${group}: ${boots.length} boots; ${head}`;
-    return [title, ...warmRow, ...mapsRow, ...exitRow, ...goneRow, ...filmRow, ...underRow, ...fitRow, ...lobbyRow, ...stepRows];
+    const marks = [...warmRow, ...mapsRow, ...exitRow, ...goneRow];
+    const checks = [...filmRow, ...underRow, ...fitRow, ...lobbyRow];
+    return [title, ...workRow(boots), ...marks, ...checks, ...stepRows];
   });
   return ['boots by URL and visit, over the rounds:', ...rows].join('\n');
 }

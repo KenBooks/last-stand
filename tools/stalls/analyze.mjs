@@ -184,6 +184,8 @@ function frameSummary(frames) {
 /**
  * Each task with its own time (ms): its length less its children's, those on its thread inside it that the trace
  * kept (work shorter than it keeps counts as its holder's). A thread's run loop holding the work keeps little.
+ * And its own time on a CPU (`cpu`, ms: its thread's, `tdur`, less its children's; null where the trace has none):
+ * a task waiting for a core or for another thread is as long as its wait, on a CPU it is only its work.
  */
 export function selfTimes(tasks) {
   const byThread = new Map();
@@ -199,13 +201,18 @@ export function selfTimes(tasks) {
     const open = [];
     for (const task of thread) {
       while (open.length && open[open.length - 1].end <= task.ts) open.pop();
-      const entry = { task, end: task.ts + task.dur, children: 0 };
+      const entry = { task, end: task.ts + task.dur, children: 0, childrenCpu: 0 };
       if (open.length) open[open.length - 1].children += task.dur;
+      if (open.length) open[open.length - 1].childrenCpu += task.tdur ?? 0;
       open.push(entry);
       owned.push(entry);
     }
   }
-  return owned.map(({ task, children }) => ({ task, ms: Math.max(0, task.dur - children) / 1000 }));
+  return owned.map(({ task, children, childrenCpu }) => ({
+    task,
+    ms: Math.max(0, task.dur - children) / 1000,
+    cpu: task.tdur === undefined ? null : Math.max(0, task.tdur - childrenCpu) / 1000,
+  }));
 }
 
 /** Whether a piece of work counts as a thread's: not Skia's builds (listed apart) nor a thread's waits. */
@@ -215,7 +222,7 @@ const isWork = ({ task, thread }) => !SKIA_EVENTS.has(task.name) && !WAITING_THR
  *  trace couldn't put on it). */
 function placedWork(owned, toPage, names) {
   return owned
-    .map(({ task, ms }) => ({ task, ms, at: toPage(task.ts), thread: threadOf(task, names) }))
+    .map(({ task, ms, cpu }) => ({ task, ms, cpu, at: toPage(task.ts), thread: threadOf(task, names) }))
     .filter((placed) => placed.at !== null && isWork(placed))
     .sort((a, b) => a.at - b.at);
 }
@@ -244,6 +251,41 @@ function workTotals(placed, spans) {
     }
   }
   return totals;
+}
+
+/** whose work a boot's is summed as (`workTill`): a thread's name begins with its process's */
+const PAGE_MAIN = 'Renderer CrRendererMain';
+const WORKERS_OF = [
+  ['page', (thread) => thread === PAGE_MAIN],
+  ['workers', (thread) => thread.startsWith('Renderer ') && thread !== PAGE_MAIN],
+  ['gpu', (thread) => thread.startsWith('GPU Process ')],
+];
+
+/**
+ * The work done from the navigation to `to` on the page's clock, by whose it is: the page's main thread, its other
+ * threads (the workers), and the GPU's process (its compiles among it). Each as its tasks' own time summed (`ms`)
+ * and as their time on a CPU (`cpu`; null where the trace has none for any of them). A boot's length on a shared
+ * machine is as much the other programs' as its own (a step of unchanged code read 4.3 s and 6.4 s in two boots of
+ * one run); what it worked changes far less, and time on a CPU leaves out what it waited.
+ */
+function workTill(placed, to) {
+  const sums = Object.fromEntries(WORKERS_OF.map(([who]) => [who, { ms: 0, cpu: 0, timed: 0, tasks: 0 }]));
+  for (const { ms, cpu, at, thread } of placed) {
+    if (at >= to) break;
+    const who = WORKERS_OF.find(([, its]) => its(thread))?.[0];
+    if (!who) continue;
+    const sum = sums[who];
+    sum.ms += ms;
+    sum.tasks++;
+    if (cpu !== null) {
+      sum.cpu += cpu;
+      sum.timed++;
+    }
+  }
+  for (const sum of Object.values(sums)) {
+    if (sum.timed === 0) sum.cpu = null;
+  }
+  return sums;
 }
 
 /** `totals` (`workTotals`) shared out `count` ways, the most first, `WORK_SHOWN` kinds of it. */
@@ -898,6 +940,7 @@ export function analyzeBoot(record, events, mark, sourceOf = () => null, listedM
     clockFound: traced.stamp !== null,
     steps,
     revealedAt,
+    work: revealedAt === null || traced.stamp === null ? null : workTill(traced.placed, revealedAt),
     painted: record.paint['first-contentful-paint'] ?? null,
     files: filesOf(record.files, revealedAt),
     maps: mapsOf(record.maps ?? []),

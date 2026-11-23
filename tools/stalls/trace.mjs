@@ -71,11 +71,12 @@ function kept(event) {
   return event.ph === 'X' && event.dur >= WORK_US;
 }
 
-/** `event` as it's kept: a piece of work by its name, thread and times alone (its arguments are most of its size). */
+/** `event` as it's kept: a piece of work by its name, thread and times alone (its arguments are most of its size):
+ *  how long it took, and where Chrome says it, how long its thread was on a CPU for it (`tdur`). */
 function slim(event) {
   if (event.ph !== 'X') return event;
-  const { ph, name, pid, tid, ts, dur } = event;
-  return { ph, name, pid, tid, ts, dur };
+  const { ph, name, pid, tid, ts, dur, tdur } = event;
+  return tdur === undefined ? { ph, name, pid, tid, ts, dur } : { ph, name, pid, tid, ts, dur, tdur };
 }
 
 /** `event` as a draw of the compositor's (`DRAWS`), or null if it's none. */
