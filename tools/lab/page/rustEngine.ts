@@ -302,6 +302,9 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   if (command.census) lines.push(...census(G.scene, G.camera), ...heaviest(G.scene, G.camera));
   if (command.census) lines.push('  the frame\'s point lights:', ...bridge.pointLines().map((line) => `    ${line}`));
   lines.push(`  the hero at ${G.player.pos.x.toFixed(1)}, ${G.player.pos.z.toFixed(1)}; the camera's layers ${G.camera.layers.mask}`);
+  // (in full: two boots of one commit a hair apart here draw a High frame's fine detail apart, and an A/B's
+  // pictures differ with no change behind them; this line says so before the pictures are read)
+  lines.push(`  the moment: the game's clock ${G.time} s, the camera at ${G.camera.position.toArray().join(', ')}`);
   const problems: string[] = [];
   const turned = sky === undefined ? undefined : skyLightLines(sky);
   if (turned) lines.push(turned.line);

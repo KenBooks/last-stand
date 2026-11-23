@@ -211,6 +211,11 @@ function inputHandled({ names, ours, what }: InputEvents): Promise<Event> {
   });
 }
 
+/** Holds the game's pacing of its step while `on` (`src/core/framePace.ts`'s hook; a tree from before it has none). */
+function holdGamePace(on: boolean): void {
+  window.__holdFramePace?.(on);
+}
+
 /** the seed each set-up starts the page's random numbers from */
 const SETUP_SEED = 0x2545f491;
 /** the seed each command starts them from */
@@ -545,7 +550,13 @@ export class Lab {
     // accumulated time started that much apart, its bursts a frame early or late)
     const paused = G.paused;
     G.paused = true;
+    // (and with the game's pacing of its step held for it, so the pacing starts again at the lab's first frame:
+    // what the browser's frames before it left owed, a boot's own few hundredths of a millisecond, was paid back
+    // over the lab's frames, a tenth a frame, and the game's clock stood that far apart from boot to boot. The
+    // frame's grain, seeded by that clock, then differed in 6 to 14% of a picture's pixels between two boots)
+    holdGamePace(true);
     this.runGameFrame();
+    holdGamePace(false);
     G.paused = paused;
     // (the game's clock from 0: the idle's sway runs on it, so a boot's first set-up is always at the same moment)
     G.time = 0;

@@ -137,7 +137,12 @@ line, and no pixel of its pictures is more than 2 levels apart (the same view dr
 out a level apart in a few pixels, the GPU's own rounding). What it takes:
 - the clock taken over at the reveal, every time on a grid of 1/1024 ms and a frame a whole number of its steps, so
   the game's frame time is exact; and one frame run with the game held still as the lab installs, so the game's timer
-  counts from a lab frame;
+  counts from a lab frame, and the game's pacing of its step held over that frame (`__holdFramePace`,
+  `src/core/framePace.ts`), so it starts again at the lab's first: what the browser's frames before the lab left
+  it owing, a few hundredths of a millisecond, it paid back a tenth a lab frame, the game's clock stood 37 µs apart
+  a minute on from one boot to the next, and the frame's grain, seeded by that clock, differed in 6 to 35% of a High
+  picture's pixels, a commit beside itself (Low and Very low, with no grain, agreed). `lab rust` says the moment its
+  picture is of in full (the game's clock, the camera), so an A/B names a clock that moved before its pictures do;
 - `Math.random` seeded, started again as each command starts (after its modules are imported, in the same task:
   each three.js object made draws a random number for its id, and textures land from the workers while a module
   loads) and at each set-up, and as a hero's profile is found missing, just before a new one rolls its gear; and at
