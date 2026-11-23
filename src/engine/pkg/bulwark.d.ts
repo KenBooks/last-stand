@@ -49,6 +49,11 @@ export class Engine {
      */
     breakdown(): Float32Array;
     /**
+     * The last frame broken down's parts' times by each shader of the page's that drew in them, three numbers
+     * each: the part's place among `breakdown_names`, the shader's id (`add_shader`'s), its time (ms).
+     */
+    breakdown_by_shader(): Float32Array;
+    /**
      * The parts' names, one a line, in the order `breakdown` has their times.
      */
     breakdown_names(): string;
@@ -222,6 +227,7 @@ export interface InitOutput {
     readonly engine_bake_lights: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => number;
     readonly engine_bones: (a: number, b: number) => number;
     readonly engine_breakdown: (a: number, b: number) => void;
+    readonly engine_breakdown_by_shader: (a: number, b: number) => void;
     readonly engine_breakdown_names: (a: number, b: number) => void;
     readonly engine_create: (a: any) => any;
     readonly engine_drop_instances: (a: number, b: number) => void;
@@ -265,12 +271,12 @@ export interface InitOutput {
     readonly engine_show_kept: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1780: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1805: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_654: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_654_58: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_654_59: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_656: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1783: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1808: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_657: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_657_59: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_657_60: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_659: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

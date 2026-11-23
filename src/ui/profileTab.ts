@@ -10,6 +10,7 @@ import {
   profile, ProfileCancelled, type PartCost, type Profile, type ProfileProgress,
 } from '../perf/profiler';
 import { costKnown, profileLines, shareOf } from '../perf/profileReport';
+import { partRows, type PartRow } from '../perf/gpuParts';
 
 /** the scene's parts listed under the button, the page's after them (the report has them all) */
 const PARTS_SHOWN = 3;
@@ -51,10 +52,20 @@ function partItem(part: PartCost): HTMLLIElement {
   return item;
 }
 
-/** The costliest of the scene's parts as list items, then the page's. */
+/** A row of the frame's breakdown as a list item: what it takes and its share of the frame. */
+function rowItem(row: PartRow): HTMLLIElement {
+  const item = document.createElement('li');
+  item.textContent = `${row.name}: ${row.ms.toFixed(1)} ms (${Math.round(row.share)}%)`;
+  return item;
+}
+
+/** The costliest of the scene's parts as list items, then the page's: the frame's own breakdown where the engine
+ *  timed one (its rows add up to the frame), else the parts taken out in turns. */
 function showParts(result: Profile): void {
   const list = $('.profile-parts');
-  const scene = result.parts.slice(0, PARTS_SHOWN).map((part) => partItem(part));
+  const scene = result.byParts
+    ? partRows(result.byParts).slice(0, PARTS_SHOWN).map(rowItem)
+    : result.parts.slice(0, PARTS_SHOWN).map((part) => partItem(part));
   const page = result.shown?.parts.map((part) => partItem(part)) ?? [];
   list.replaceChildren(...scene, ...page);
   list.classList.remove('hidden');

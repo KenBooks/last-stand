@@ -232,6 +232,11 @@ export class Materials {
     return kept.id;
   }
 
+  /** The page's shaders' names by the ids the engine gave them (a breakdown's rows: perf/gpuParts.ts). */
+  shaderNames(): Map<number, string> {
+    return new Map([...this.shaders].map(([name, id]) => [id, name]));
+  }
+
   /** A shader of the page's by its name, handed over the first time it's asked for. */
   private shaderId(look: RustLook): number {
     let id = this.shaders.get(look.shader.name);
