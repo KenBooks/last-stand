@@ -111,8 +111,11 @@ function coarseGeometry(geometry: THREE.BufferGeometry, cards: boolean): THREE.B
   coarse.setIndex(new THREE.BufferAttribute(index, 1));
   coarse.boundingSphere = geometry.boundingSphere;
   coarse.boundingBox = geometry.boundingBox;
+  // (named and marked as its own: the lab finds a piece by them, and a hero seen from above, built afresh, drew his
+  // hood's coarse one, where `lab hood` found no hood)
+  coarse.name = geometry.name;
   // (kept with the geometry it's of: let go by nothing, as a shared geometry is)
-  coarse.userData.shared = true;
+  coarse.userData = { ...geometry.userData, shared: true };
   coarseOf.set(geometry, coarse);
   return coarse;
 }

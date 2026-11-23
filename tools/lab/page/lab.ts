@@ -322,7 +322,8 @@ export interface Fixture {
   weapon?: string;
   /** the hero built afresh first, as the lobby's class switch builds him, so the run comes out the same whatever ran
    *  before it on the page (set up again over the same hero, a gait scenario's every line moved with the scenarios
-   *  run before it: his walk cycle, his leg IK's smoothed speed, turn and twist, his aim's hold all carried over) */
+   *  run before it: his walk cycle, his leg IK's smoothed speed, turn and twist, his aim's hold all carried over).
+   *  Unsaid, afresh; `false`: the boot's hero, or the one the set-up before left (#852). */
   fresh?: boolean;
   /** tunable values set before the run, by their paths (`name.field`: src/core/tuning.ts) */
   tune?: Record<string, number[]>;
@@ -655,7 +656,10 @@ export class Lab {
 
   /** Sets the run up as `fixture` says and checks that it took (throws if not). Returns what it is, for the report. */
   async setup(given: Fixture = {}): Promise<Record<string, unknown>> {
-    const fixture = this.afresh ? { ...given, fresh: true } : given;
+    // (the hero built afresh unless the command asks for the boot's own (`compiles`): the boot steps the lobby by the
+    // browser's time while its warm-ups run, and the boot's hero came to each command in a state of its own, `lab
+    // poses` giving other digests run to run, #852)
+    const fixture = this.afresh ? { ...given, fresh: true } : { fresh: true, ...given };
     // (a page's first set-up starts its run from the lobby the boot showed; afresh, a later one starts its own)
     if (this.afresh && this.setUpBefore) await this.runAfresh();
     else await this.enterRun();
