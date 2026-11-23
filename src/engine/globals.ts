@@ -116,6 +116,14 @@ export const TUNE = tunable('rust', {
    *  from over ground he saw, from play: "the building geometry should not completely disappear, it should be
    *  possible to tell what the original building looked like" */
   houseLeft: 0.3125,
+  /** the share of a column left where the rule opens it (a thing that stands as one, its foot always whole): more
+   *  than a roof's, as it is slim and hides little. Left a third, the portico's four seen along their row were
+   *  faint streaks over the paving, from play: "how many columns do you see ? I see one" */
+  columnLeft: 0.625,
+  /** whether what the rule leaves of a house's part is a smooth ghost, blended, the nearest of its layers alone
+   *  drawn (0: a fine pattern of its pixels dropped, drawn opaque; from play, "whats the deal with dots? we didn't
+   *  have them before... like perforated texture") */
+  houseSmooth: 0,
   /** a harness's: every part of a house drawn whole, nothing of it thinned by the rule or by the game's shares
    *  (`lab houserule`'s frame to set the played one against) */
   housesWhole: 0,

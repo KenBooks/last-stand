@@ -13,7 +13,7 @@ const SEE_KINDS_MOST = 32, SEE_KIND_FLOATS = 20, SEE_FLOOR_CLEAR = 0.12;
 
 /** A record's flags a material's see-through sets (Bulwark's plan.rs: `SOLID`, `THINNED`, `ONE_LAYER`), and one of
  *  the page's own: all of it is thinned to nothing, and it's in the frame for its shadow alone. */
-export const SEE_FLAGS = { solid: 16, thinned: 64, oneLayer: 256, cover: 512, gone: 1 << 20 } as const;
+export const SEE_FLAGS = { solid: 16, thinned: 64, oneLayer: 256, cover: 512, underLayers: 1024, gone: 1 << 20 } as const;
 
 /** A material as the kinds read it: three's, with the game's see-through on it. */
 type Seen = THREE.Material & { seeThrough?: unknown };
@@ -22,6 +22,8 @@ type Seen = THREE.Material & { seeThrough?: unknown };
 const GONE_REACH = -100;
 /** a kind's code as a cover (`SeeKind.b.w` in the engine's common.wgsl) */
 const COVER = 5;
+/** and of one whose share left is its alpha, blended (`rust.houseSmooth`) */
+const COVER_SMOOTH = 6;
 
 /** How far `see`'s cone of his sight is on (`uSeeSight` in core/seeThrough.ts): its own, or the hall's. */
 const sightOf = (see: SeeThrough): number => (see.sight ? (see.sightOn ?? SIGHT_CONE.on).value : 0);
@@ -64,7 +66,7 @@ export class SeeKinds {
       g[at + 8] = reach ? reach.x : 1e5; g[at + 9] = reach ? reach.y : 1e6;
       g[at + 10] = see.doorOn?.value ?? 0;
       // (3 and 4: blended, and the nearest of its layers alone drawn, which keeps the kind's share itself)
-      g[at + 11] = cover ? COVER : see.blended ? (see.pale ? 2 : 1) + (this.oneLayer(see) ? 2 : 0) : 0;
+      g[at + 11] = cover ? (TUNE.houseSmooth ? COVER_SMOOTH : COVER) : see.blended ? (see.pale ? 2 : 1) + (this.oneLayer(see) ? 2 : 0) : 0;
       const room = see.room?.value, door = see.door?.value;
       g[at + 12] = room ? room.x : -1e5; g[at + 13] = room ? room.y : -1e5;
       g[at + 14] = room ? room.z : 1e5; g[at + 15] = room ? room.w : 1e5;
@@ -77,8 +79,9 @@ export class SeeKinds {
         g[at + 8] = more ? more[0] : 0; g[at + 9] = more ? more[1] : 0;
         g[at + 17] = more ? more[2] : 0; g[at + 18] = more ? more[3] : 0;
         g[at + 16] = SEE_FLOOR_CLEAR;
-        // (what has a reach of its own stands as one, a column: judged by its foot, all of it alike)
-        g[at + 10] = see.reach ? 1 : 0;
+        // (what has a reach of its own stands as one, a column: judged by its foot, all of it alike, and the share of
+        // it left there its own)
+        g[at + 10] = see.reach ? Math.max(TUNE.columnLeft, 0.01) : 0;
       }
       // (its cone of his sight, and the share it thins by there: none for a kind that reads none of his sight)
       g[at + 18] = sightOf(see); g[at + 19] = see.sight ? see.sightShare ?? 1 : 0;
@@ -132,6 +135,12 @@ export class SeeKinds {
     const see = material.seeThrough as SeeThrough | undefined;
     if (!see) return 0;
     const whole = material.depthWrite && material.opacity >= 1 && material.blending === THREE.NormalBlending;
+    // (a cover left as a smooth ghost: blended by the share the rule leaves, whatever its material says of its own
+    // blending; the nearest of a house's layers alone drawn, a column a layer of its own under them: the nearest
+    // alone drawn, a roof over it left none of it)
+    if (this.cover(see) && TUNE.houseSmooth && material.transparent) {
+      return SEE_FLAGS.thinned | (see.reach ? SEE_FLAGS.underLayers : SEE_FLAGS.oneLayer);
+    }
     // (a cover is never blended: drawn with what's opaque and writing its depth, its pixels over ground he sees
     // dropped, whatever its material says of its depth: the hall's roof writes none, and blended whole its three
     // layers were 2.1 ms of a 5.1 ms frame)

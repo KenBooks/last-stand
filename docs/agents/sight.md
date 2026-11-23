@@ -53,7 +53,7 @@ over him, a roof in three layers, and a doorway into a room he sees a sector of.
    are a ghost over that sector alone ("player can definitely see inside the hall from where he's standing, so the
    roof should thin too (but not whole, only the sector he can see)").
 3. **The rest of the hall stands whole**: its roof and walls over floor he doesn't see.
-4. **A column is a ghost as one**, never its foot gone and its head standing ("see the step on column").
+4. **A column is a ghost as one**, never its foot gone and its head standing ("see the step on column"), and all four of the portico's can be counted from every side: each keeps five eighths of itself (`rust.columnLeft`) and its foot whole, and only the part of one that stands over him is cut away ("how many columns do you see ? I see one").
 5. **One strength however many layers** lie over a place: three layers of roof and a beam leave what one does.
 6. **A ghost keeps its shape**: about a third of it is left (`rust.houseLeft`), so the porch still reads as a porch.
    With none left the columns held up nothing and their capitals floated.
