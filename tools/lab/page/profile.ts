@@ -20,6 +20,7 @@ import { clearSpent, SINK, stickAt } from '../../../src/fx/stuckArrows';
 import { groundHeight } from '../../../src/world/ground';
 import { RUST } from '../../../src/engine';
 import { holdFrames } from '../../../src/core/frameLoop';
+import { watchWakeLock, wakeProblems } from './profileAwake';
 
 export interface ProfileCommand {
   biome: BiomeId;
@@ -380,8 +381,14 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
     const page = pageCanary(clock.realNow);
     const options = { turns, canary: command.canary, clock: clock.realNow, nextFrame: clock.realFrame, ...page };
     const tuned = { ...RUST.tune } as unknown as Record<string, number>;
+    // (the screen kept on through it, and let go after: the browser's lock counted)
+    const wake = watchWakeLock();
+    // (the canary: watched over no profile at all, it must say the screen was never kept on)
+    const unwatched = wakeProblems(wake, 'canary').length > 0;
     const found = await profile(options);
     const problems = command.canary ? canaryProblems(found) : [];
+    problems.push(...wakeProblems(wake, 'the profile'));
+    if (command.canary && !unwatched) problems.push('canary: no wake lock asked for went unseen');
     problems.push(...await tuneProblems(tuned, options));
     if (!(found.frame > 0)) problems.push('the frame read 0 ms: nothing was timed');
     problems.push(...(await idleProblems(found, options)));
@@ -397,6 +404,8 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
     }
     const cancel = await cancelProblems(lab, command.canary);
     problems.push(...cancel.problems);
+    problems.push(...wakeProblems(wake, 'the profile cancelled'));
+    wake.restore();
     const hour = command.hour === undefined ? '' : ` at ${command.hour}:00`;
     const place = command.village ? `the village${hour}` : command.biome;
     const name = `${place} ${command.view}, ${quality.qualityLevel()}`;
