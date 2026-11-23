@@ -24,6 +24,7 @@ import { blinksIn, describeBlinks } from './blinks';
 import { whatIsAt } from './whatIsAt';
 import { changeSpans, worstFlashing, type FlashCount } from './flashes';
 import { changeLine, litNow, mostOf, type Lit } from './flashSources';
+import { TUNE } from '../../../src/engine/globals';
 
 export interface CastOptions {
   /** the skill: its key (`3`), its behaviour (`maelstrom`) or its name */
@@ -334,19 +335,19 @@ async function flashSources(lab: Lab, options: CastOptions, frames: FrameCells[]
   const last = Math.max(...wanted);
   const { key, def, aim } = await castScene(lab, options);
   const holdFrames = Math.max(1, Math.round(holdFor(def) / frameTime));
-  const exposure = G.renderer.toneMappingExposure;
+  const exposure = TUNE.exposure;
   const drawing = lab.drawing;
   const lit = new Map<number, Lit>();
   lab.drawing = true;
   try {
     await lab.step(1, () => ({ aim }));
     for (let frame = 0; frame <= last; frame++) {
-      if (options.canary) G.renderer.toneMappingExposure = strobed(frame, exposure);
+      if (options.canary) TUNE.exposure = strobed(frame, exposure);
       await lab.step(1, () => pressing(key, aim, frame < holdFrames));
       if (wanted.has(frame)) lit.set(frame, litNow(lab, flashing.cell));
     }
   } finally {
-    G.renderer.toneMappingExposure = exposure;
+    TUNE.exposure = exposure;
     lab.drawing = drawing;
   }
   const time = (frame: number): string => seconds(frame * frameTime);
@@ -375,7 +376,7 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
   const pictureFrames = new Map(options.times.map((time) => [Math.round(time / frameTime), time]));
   const compiledBefore = programsCompiledInGame();
   const lateBefore = lateCompiles.length;
-  const exposure = G.renderer.toneMappingExposure;
+  const exposure = TUNE.exposure;
   const drawing = lab.drawing;
   const reader = new FrameReader();
   const moments: Pictured[] = [];
@@ -387,7 +388,7 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
     await lab.step(1, () => ({ aim }));
     reader.take();
     for (let frame = 0; frame < lookFrames; frame++) {
-      if (options.canary) G.renderer.toneMappingExposure = strobed(frame, exposure);
+      if (options.canary) TUNE.exposure = strobed(frame, exposure);
       await lab.step(1, () => pressing(key, aim, frame < holdFrames));
       reader.take();
       if (frame === whatFrame && options.what) met.push(...metAt(options.what));
@@ -399,7 +400,7 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
       }
     }
   } finally {
-    G.renderer.toneMappingExposure = exposure;
+    TUNE.exposure = exposure;
     lab.drawing = drawing;
   }
   const [before, ...frames] = reader.frames();

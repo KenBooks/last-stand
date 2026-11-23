@@ -17,6 +17,7 @@ import { drawFrame } from './light';
 import { viewBy } from './villageHallCull';
 import { grassVertices } from './grassCount';
 import type { LightsChecked } from './villageLights';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
 /** where he stands and the way he faces: open meadow ahead, the cottages off to the side */
 const STAND = new THREE.Vector3(10, 0, 4);
@@ -39,12 +40,12 @@ const percent = (share: number): string => `${(share * 100).toFixed(0)}%`;
 
 /** The frame drawn at `level`: the vertices the grass shaded, and the programs compiled for it. */
 async function drawnAt(lab: Lab, level: Level, canary: boolean): Promise<{ vertices: number; made: number }> {
-  const before = G.renderer.info.programs?.length ?? 0;
+  const before = PIPELINES.made;
   useQuality(level);
   if (canary && level !== 'high') setGrassSpread(1);
   await lab.step(SETTLE);
   drawFrame(lab);
-  return { vertices: grassVertices(), made: (G.renderer.info.programs?.length ?? 0) - before };
+  return { vertices: grassVertices(), made: PIPELINES.made - before };
 }
 
 /** The grass on Low against High in each view, its vertices counted and pictured. */

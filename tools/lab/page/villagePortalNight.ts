@@ -16,6 +16,7 @@ import { villageObject } from '../../../src/game/village';
 import { pooledLights } from '../../../src/fx/lights';
 import { groundHeight } from '../../../src/world/ground';
 import type { LightsChecked } from './villageLights';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
 /** the hour held, midnight, when the lamps cast */
 const MIDNIGHT = 0;
@@ -55,7 +56,7 @@ function watchRenders(): { most: () => number; stop: () => void } {
 }
 
 /** The programs the renderer holds now. */
-const programsNow = (): number => G.renderer.info.programs?.length ?? 0;
+const programsNow = (): number => PIPELINES.made;
 
 /** A frame at a time with the browser's tasks between them, until the run has begun. */
 async function untilTheRun(lab: Lab): Promise<void> {

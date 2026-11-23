@@ -22,6 +22,7 @@ import { webGpuPixels } from './pixels';
 import type { QualityLevel } from '../../../src/data/quality';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { WeaponStyle } from '../../../src/loot/loadout';
+import { TUNE } from '../../../src/engine/globals';
 
 /** One of the frames measured: the biome, the view and the way the view looks (degrees, 0 is +z). */
 export interface LightScenario {
@@ -487,10 +488,10 @@ async function levelsRound(lab: Lab, name: string, settings: LevelSetting[], pic
     }
   }
   if (canary && first) {
-    const exposure = G.renderer.toneMappingExposure;
-    G.renderer.toneMappingExposure = exposure * CANARY_EXPOSURE;
+    const exposure = TUNE.exposure;
+    TUNE.exposure = exposure * CANARY_EXPOSURE;
     const planted = brighterThan(first, lightOf(drawFrame(lab)));
-    G.renderer.toneMappingExposure = exposure;
+    TUNE.exposure = exposure;
     lines.push(`  canary, the last at ${CANARY_EXPOSURE} times the exposure: ${planted.join(', ') || 'not found brighter'}`);
     if (!planted.length) problems.push(`${name}: the canary's brighter setting went unseen`);
   }
@@ -500,10 +501,10 @@ async function levelsRound(lab: Lab, name: string, settings: LevelSetting[], pic
 
 /** The exposure canary: the frame drawn again at twice the exposure, a problem unless it's found brighter. */
 function exposureCanary(lab: Lab, name: string, frame: FrameLight, lines: string[], problems: string[]): void {
-  const exposure = G.renderer.toneMappingExposure;
-  G.renderer.toneMappingExposure = exposure * CANARY_EXPOSURE;
+  const exposure = TUNE.exposure;
+  TUNE.exposure = exposure * CANARY_EXPOSURE;
   const planted = lightOf(drawFrame(lab));
-  G.renderer.toneMappingExposure = exposure;
+  TUNE.exposure = exposure;
   lines.push(`  canary, at ${CANARY_EXPOSURE} times the exposure: mean ${planted.mean.toFixed(3)}`);
   if (planted.mean < frame.mean * CANARY_BRIGHTER) {
     problems.push(`${name}: the canary's brighter frame went unseen (mean ${planted.mean.toFixed(3)})`);

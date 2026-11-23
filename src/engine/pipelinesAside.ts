@@ -71,6 +71,13 @@ async function gpuAnswerMs(): Promise<number> {
   return performance.now() - began;
 }
 
+/** Resolves once the engine's device has done the work sent to it so far (at once before the engine has one): the
+ *  engine draws the game on a device of its own, which waiting on three's never waited for. */
+export async function engineWorkDone(): Promise<void> {
+  const queue = (asked as unknown as { queue?: { onSubmittedWorkDone?: () => Promise<void> } } | null)?.queue;
+  await queue?.onSubmittedWorkDone?.();
+}
+
 /** the labels of the pipelines stood in for (Bulwark's gpu/pipelines.rs) */
 const ASIDE = new Set(['scene', 'shadow', 'sprites']);
 

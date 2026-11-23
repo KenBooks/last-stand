@@ -21,6 +21,7 @@ import * as portraits from '../../../src/ui/guide/portraits';
 import { toLobby } from './hallMoves';
 import * as behind from '../../../src/game/behind';
 import { perfClock } from '../../../src/ui/perfHud';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
 /** Options of `lab guide`. */
 export interface GuideOptions {
@@ -116,7 +117,7 @@ export async function guideOpen(lab: Lab, options: GuideOptions): Promise<Report
   };
   const clock = perfClock.now;
   perfClock.now = realNow;
-  const programs = G.renderer.info.programs?.length ?? 0;
+  const programs = PIPELINES.made;
 
   try {
     // (the opening: G's frame, and the frames after it, which make what it asked for)
@@ -210,7 +211,7 @@ export async function guideOpen(lab: Lab, options: GuideOptions): Promise<Report
     // (a long task's report comes in a task after it)
     await realWait(50);
     observer.disconnect();
-    const linked = (G.renderer.info.programs?.length ?? 0) - programs;
+    const linked = PIPELINES.made - programs;
 
     // (a long task begun before G was the lobby's own, not the guide's: told apart, not judged)
     const walkFrom = frames[0]?.from ?? 0;

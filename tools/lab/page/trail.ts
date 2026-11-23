@@ -17,6 +17,7 @@ import { lookAlong } from './light';
 import { armsLens } from './inFrame';
 import { isWeapon } from './strike';
 import { clipNear, curveAt, distanceToSegment, litBetween, type Lit, type Point } from './sweptArea';
+import { webGpuPixels } from './pixels';
 
 /** A strike: its skill (its key, its behaviour or its name) and the way the hero holds his weapons for it (as the
  *  fixture holds them when not given). */
@@ -275,8 +276,6 @@ function trailMeshes(): THREE.Object3D[] {
 
 /** The frame drawn now as the player sees it, its pixels as stored (RGBA bytes, rows from the bottom). */
 function drawnBytes(lab: Lab, screen: Screen): Uint8Array {
-  const gl = G.renderer.getContext() as WebGL2RenderingContext & { drawingBufferFormat?: number };
-  if (gl.drawingBufferFormat === gl.RGBA16F) throw new Error('lab: trail: the canvas is HDR; it reads SDR frames');
   const drawing = lab.drawing;
   lab.drawing = true;
   try {
@@ -284,10 +283,14 @@ function drawnBytes(lab: Lab, screen: Screen): Uint8Array {
   } finally {
     lab.drawing = drawing;
   }
-  G.renderer.setRenderTarget(null);
+  // (read off the engine's canvas in the task that drew it, rows from the top: turned to rows from the bottom)
   const frame = renderer.frameRect();
+  const picture = webGpuPixels({ left: frame.left, top: frame.top, width: screen.width, height: screen.height });
+  const row = screen.width * 4;
   const bytes = new Uint8Array(screen.width * screen.height * 4);
-  gl.readPixels(frame.left, frame.bottom, screen.width, screen.height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+  for (let y = 0; y < screen.height; y++) {
+    bytes.set(picture.data.subarray(y * row, (y + 1) * row), (screen.height - 1 - y) * row);
+  }
   return bytes;
 }
 
@@ -504,8 +507,8 @@ async function followStrike(lab: Lab, options: TrailOptions, strike: Strike, vie
   const aim = hero.pos.clone().addScaledVector(way, AIM_AHEAD);
   const frameTime = window.__labClock.frame / 1000;
   const held = holdFrames(skill, frameTime);
-  const gl = G.renderer.getContext();
-  const screen = { width: gl.drawingBufferWidth, height: gl.drawingBufferHeight };
+  const frame = renderer.frameRect();
+  const screen = { width: frame.width, height: frame.height };
   const mask = new SweptMask(screen);
   const placed: Placed[] = [];
   const frames: TrailFrame[] = [];

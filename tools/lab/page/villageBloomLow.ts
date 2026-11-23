@@ -18,6 +18,7 @@ import { villageObject } from '../../../src/game/village';
 import { drawFrame, pixelLight, type Canvas } from './light';
 import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
 /** the frames given to settle after a move or a switch */
 const SETTLE = 30;
@@ -111,7 +112,7 @@ export async function bloomOnLow(lab: Lab, canary: boolean): Promise<LightsCheck
   const problems: string[] = [];
   const moments: Pictured[] = [];
   const was = qualityLevel();
-  const before = G.renderer.info.programs?.length ?? 0;
+  const before = PIPELINES.made;
   holdHour(0);
   useQuality('low');
   let caught = false;
@@ -134,7 +135,7 @@ export async function bloomOnLow(lab: Lab, canary: boolean): Promise<LightsCheck
     await viewBy(lab, 'top');
   }
   if (mostAdded <= 0) throw new Error('lab: village: bloom adds no light anywhere it was read');
-  const made = (G.renderer.info.programs?.length ?? 0) - before;
+  const made = PIPELINES.made - before;
   lines.push(`${made} programs compiled by the switches`);
   if (made && !canary) problems.push(`bloomOnLow: ${made} programs compiled by the switches`);
   return { lines, problems, caught: canary ? caught : null, moments };

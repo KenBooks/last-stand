@@ -14,6 +14,7 @@ import * as warm from '../../../src/game/warm';
 import * as warmup from '../../../src/game/warmup';
 import type { Need } from '../../../src/game/warm';
 import { toLobby } from './hallMoves';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
 /** what `hallnear` takes */
 export interface HallNearOptions {
@@ -37,7 +38,7 @@ const askedFor = (warm as { isAsked?: (need: Need) => boolean }).isAsked;
 
 /** The programs made so far. */
 function programsMade(): number {
-  return G.renderer.info.programs?.length ?? 0;
+  return PIPELINES.made;
 }
 
 /** A yes or a no. */

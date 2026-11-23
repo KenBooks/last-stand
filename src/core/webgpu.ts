@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import { initHdrForWebGPU } from './hdr';
 import type { KitLooks } from './materials';
+import { engineWorkDone } from '../engine/pipelinesAside';
 
 /** how long three's async compile works before it yields a frame (ms, `compileSlice`): while nothing is played (the
  *  loading screen, the fight's loading bar), and while the lobby is. Its own 8 ms kept the GPU's compilers a third
@@ -781,10 +782,11 @@ export function rigMorePointLights(group: THREE.Object3D): void {
   for (const light of lights) light.visible = false;
 }
 
-/** Waits for the GPU to be done with every command sent so far: the device's queue, or on WebGPURenderer's WebGL 2
- *  backend (`?renderer=webgpu-gl`) its context's `finish` (the profiler's frames, `src/perf/profiler.ts`). */
+/** Waits for the GPU to be done with every command sent so far: the engine's device's queue, which draws the game
+ *  (`engineWorkDone`: three's own, waited for alone, left the engine's frame out), then three's (the overlays over it:
+ *  the profiler's frames, `src/perf/profiler.ts`). */
 export async function gpuDone(renderer: THREE.WebGLRenderer): Promise<void> {
-  const backend = (renderer as unknown as { backend: { device?: GPUDevice; gl?: WebGL2RenderingContext } }).backend;
-  if (backend.device) await backend.device.queue.onSubmittedWorkDone();
-  else backend.gl?.finish();
+  await engineWorkDone();
+  const backend = (renderer as unknown as { backend: { device?: GPUDevice } }).backend;
+  await backend.device?.queue.onSubmittedWorkDone();
 }

@@ -35,6 +35,7 @@ import { startNextWave } from '../../../src/game/run';
 import { inObstacle } from '../../../src/world/collision';
 import { lineClear } from '../../../src/world/navigation';
 import { femur, forearm, humerus, jaw, pelvis, scapula, skull, sternum, tibia, twinSkull } from '../../../src/entities/models/ossuary';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
 /** The parts the command runs, in order. */
 export type TwinsPart = 'waves' | 'fight' | 'compiles' | 'pictures' | 'look';
@@ -347,7 +348,7 @@ async function compiles(lab: Lab, options: TwinsOptions, lines: string[], proble
   lab.drawing = true;
   try {
     await lab.step(2);
-    const before = (G.renderer.info.programs ?? []).length;
+    const before = PIPELINES.made;
     const hero = G.player.pos;
     fx('chainSnap', slab.id, slab.pos.x, slab.pos.z, reliquary.pos.x, reliquary.pos.z, 0);
     fx('skullVolley', reliquary.id, reliquary.pos.x, reliquary.pos.z, hero.x, hero.z, 5, 0);
@@ -365,7 +366,7 @@ async function compiles(lab: Lab, options: TwinsOptions, lines: string[], proble
       G.scene.remove(odd);
     }
     await lab.step(60);
-    const compiled = (G.renderer.info.programs ?? []).length - before;
+    const compiled = PIPELINES.made - before;
     lines.push(`compiles: ${compiled} programs compiled drawing the chain's snap, a volley, a charge, a slam, a mend and a phase`);
     if (compiled > 0) problems.push(`compiles: ${compiled} programs compiled in the Twins' fight`);
   } finally {

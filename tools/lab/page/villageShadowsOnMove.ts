@@ -19,6 +19,7 @@ import type { Spot } from '../../../src/data/village';
 import { drawFrame } from './light';
 import { changedShare, viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
 /** the frames given to settle after a move or a switch, and the frames counted standing and walking */
 const SETTLE = 30;
@@ -70,7 +71,7 @@ interface HourRead {
 
 /** One hour read on Low (`canary`: drawn every frame for the counts, never for the frame). */
 async function readHour(lab: Lab, hour: number, canary: boolean): Promise<HourRead> {
-  const before = G.renderer.info.programs?.length ?? 0;
+  const before = PIPELINES.made;
   holdHour(hour);
   standHim();
   faceCamera(Math.PI);
@@ -91,7 +92,7 @@ async function readHour(lab: Lab, hour: number, canary: boolean): Promise<HourRe
   const drawnAgain = drawFrame(lab);
   if (!canary) moments.push(await lab.screen(`hour ${hour}: Low, the shadows drawn again`, []));
   holdShadowsOnMove('level');
-  const made = (G.renderer.info.programs?.length ?? 0) - before;
+  const made = PIPELINES.made - before;
   return { standing, walking, swayed, changed: changedShare(left, drawnAgain), made, moments };
 }
 

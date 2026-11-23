@@ -26,6 +26,7 @@ import type { RarityId } from '../../../src/types';
 import { canvasSize, drawFrame, lookAlong, type Canvas } from './light';
 import { drawLook, meshesOf, partAt } from './looks';
 import { isWeapon } from './strike';
+import { TUNE } from '../../../src/engine/globals';
 
 export interface HazeOptions {
   biome: BiomeId;
@@ -137,13 +138,13 @@ function lightAt(canvas: Canvas, at: number): number {
 
 /** The frame drawn as the player sees it, then with the adaptation held off. */
 function drawBoth(lab: Lab, exposure = 1): Drawn {
-  const was = G.renderer.toneMappingExposure;
-  G.renderer.toneMappingExposure = was * exposure;
+  const was = TUNE.exposure;
+  TUNE.exposure = was * exposure;
   let seen: Canvas;
   try {
     seen = drawFrame(lab);
   } finally {
-    G.renderer.toneMappingExposure = was;
+    TUNE.exposure = was;
   }
   holdAdaptation!(true);
   try {

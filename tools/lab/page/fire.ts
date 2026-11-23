@@ -231,6 +231,9 @@ function readFire(lab: Lab, fire: Fire, shot: Shot, none = false): FireFrame {
   const restore = aim(fire, shot);
   try {
     if (none) showFire(fire, false);
+    // (the engine's first frame after the camera is aimed isn't its steady one: 77 pixels by the fire's bed read 0.09
+    // of white apart from the next, and the fire put out read as lit there; that frame is drawn and let go)
+    drawnNow(lab, closeArea());
     const shown = drawnNow(lab, closeArea());
     showFire(fire, false);
     const hidden = drawnNow(lab, closeArea());
@@ -474,7 +477,7 @@ function strobed(lights: number[][]): number[][] {
 
 /** The metres a pixel spans at `shot`'s distance, at the drawing buffer's pixels. */
 function metresPerPixel(shot: Shot): number {
-  const height = G.renderer.getContext().drawingBufferHeight;
+  const height = renderer.frameRect().height;
   return 2 * shot.distance * Math.tan(THREE.MathUtils.degToRad(FOV / 2)) / height;
 }
 
