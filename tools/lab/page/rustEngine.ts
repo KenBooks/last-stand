@@ -12,6 +12,7 @@ import { perfClock } from '../../../src/core/perfClock';
 import { RUST } from '../../../src/engine';
 import type { Bridge, FrameStats } from '../../../src/engine/bridge';
 import { canvasSaid, plainCanvasSaid } from './rustCanvas';
+import { blendedSaid } from './rustBlended';
 import { bodiesSaid, hideBodies } from './rustBodies';
 import { census, heaviest } from './rustCensus';
 import { standAt } from './draws';
@@ -50,6 +51,8 @@ export interface RustCommand {
   skylight: boolean;
   /** the scene's materials listed by their kind and what they ask of a renderer */
   census: boolean;
+  /** the blended meshes shown listed by how they're drawn and what they are */
+  blended?: boolean;
   /** every body on a skeleton hidden before the frames timed: what they cost is the difference */
   nobody?: boolean;
   /** the game's tunable values set before the stand, by their paths (`rust.shadows`: src/engine/bridge.ts `TUNE`) */
@@ -310,6 +313,7 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
     + `${(cache.cells * 16 / 1e6).toFixed(1)} MB on the GPU; baked ${cache.bakes} times, the last ${cache.ms.toFixed(0)} ms on the page; read ${cache.open.toFixed(2)} bright in the open, `
     + `${cache.sheltered.toFixed(2)} under the shelter`);
   if (command.census) lines.push(...census(G.scene, G.camera), ...heaviest(G.scene, G.camera));
+  if (command.blended) lines.push(...blendedSaid(G.scene, G.camera));
   if (command.census) lines.push('  the frame\'s point lights:', ...bridge.pointLines().map((line) => `    ${line}`));
   lines.push(`  the hero at ${G.player.pos.x.toFixed(1)}, ${G.player.pos.z.toFixed(1)}; the camera's layers ${G.camera.layers.mask}`);
   // (in full: two boots of one commit a hair apart here draw a High frame's fine detail apart, and an A/B's
