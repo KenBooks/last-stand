@@ -57,6 +57,20 @@ export function rustSamples(samples: number): void {
 /** the samples the game last asked for, for an engine not made yet */
 let samplesWanted: number | null = null;
 
+/** Whether the level is a plain one (`plainLit`), told to the engine as the game sets it, ahead of its first frame as
+ *  the samples are: a boot at Very low made the whole lit shaders' pipelines at the warm-ups and every one again for
+ *  the plain levels' as the lobby showed (`plainSet.ts`). */
+export function rustPlain(lite: boolean): void {
+  liteWanted = lite;
+  RUST.bridge?.levels.plainAhead(lite);
+}
+/** whether the level the game last asked for is a plain one, for an engine not made yet */
+let liteWanted: boolean | null = null;
+
+/** whether the engine's lit shaders are being switched to the other making, the frames still drawn by the one before
+ *  (Auto judges none of them: `main.ts`) */
+export const rustSwitching = (): boolean => RUST.bridge?.levels.plainSwitching ?? false;
+
 /** The engine made on a canvas of its own over `under`, three's. A failure throws: nothing else draws the game. */
 export async function bootRust(under: HTMLCanvasElement): Promise<void> {
   try {
@@ -78,6 +92,7 @@ export async function bootRust(under: HTMLCanvasElement): Promise<void> {
     const bridge = new Bridge(engine, wasm);
     RUST.bridge = bridge;
     if (samplesWanted !== null) bridge.levels.samplesAhead(samplesWanted);
+    if (liteWanted !== null) bridge.levels.plainAhead(liteWanted);
     AHEAD.prepare = (objects) => bridge.ahead.prepare(objects);
     AHEAD.bakeLamps = (casters, lamps) => bridge.bakeLamps(casters, lamps);
     resize = (width, height) => engine.resize(width, height);

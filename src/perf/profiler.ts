@@ -9,7 +9,7 @@
 import { G } from '../state';
 import { holdFrames } from '../core/frameLoop';
 import { render } from '../core/renderer';
-import { RUST } from '../engine';
+import { RUST, rustSwitching } from '../engine';
 import { keepAwake } from './awake';
 import { gpuParts, type GpuParts } from './gpuParts';
 import { gpuDone, holdPipelines, pipelinesMade } from '../core/webgpu';
@@ -260,8 +260,10 @@ async function partPipelinesMade(part: ScenePart, timedFrame: TimedDraw): Promis
   part.change(false);
   await timedFrame();
   if (!RUST.bridge) return;
-  for (let look = 0; look < PIPELINE_LOOKS && RUST.pipelines.compiling > 0; look++) {
+  for (let look = 0; look < PIPELINE_LOOKS && (RUST.pipelines.compiling > 0 || rustSwitching()); look++) {
     await new Promise((done) => setTimeout(done, PIPELINE_LOOK_MS));
+    // (a switch of the lit shaders' making is made by a frame once its pipelines are: `plainSet.ts`)
+    if (rustSwitching() && RUST.pipelines.compiling === 0) await timedFrame();
   }
 }
 

@@ -294,20 +294,27 @@ not intend to support the old way of rendering".
 
 ## 2026-11-22, the plain levels' own lit shader (off until a phone times it)
 
-- [ ] An Adreno 810 at Very low in the village, from above (4YT2-QTZW): 38.5 ms a frame on the GPU, the lit shading
+- [x] An Adreno 810 at Very low in the village, from above (4YT2-QTZW): 38.5 ms a frame on the GPU, the lit shading
   11.9 of it, no one part of it large. Bulwark can draw the plain levels by lit shaders made for them alone
   (`set_plain_only`, `lit_source`'s `PLAIN_ONLY`: each read of the level a constant, so the normal map, the coat and
   the sheen, a point light's shine and the shadow's three other reads are compiled out, not branched round).
-  `rust.plainShader` switches it, **0 by default**: here (a 4070 Ti) the frame costs the same, 0.38 ms against 0.37,
-  and what a phone saves only a phone says. The Performance tab's Profile this spot times it at Low and Very low
-  ("the lit shader whole, as it is"). `lab rustcheck`: the two draw Very low's frame as one (0.00% of its pixels
-  apart), with 72 pipelines of their own and none made switching back and on again; the canary, the plain ones
-  forced at High, changes 20% of the frame. Each making's pipelines are kept through the switch.
-- Before it's on by default: switched on at a level change it makes every pipeline met again (72 here), each
-  compiled aside with its draws left out meanwhile, which a phone takes seconds over. A phone's samples don't change
-  with its level, so its level switches make none today. Told ahead of the warm-ups as the samples are
-  (`rustSamples`), a boot at a plain level makes the plain ones alone; a later step up to Medium would still make the
-  whole ones then.
+  `rust.plainShader` switches it, **1 by default** since the S25's five profiles at Very low each saved 1.4 to 2.7 ms
+  by it (SBW3-8M8S 2.2, VCE0-7NZK 2.7, BVTG 1.6, MDV7 1.4, JEZY 1.4, BK2E-00NC 1.8); here (a 4070 Ti) the porch's
+  frame at 5760x3240 reads 4.62 ms against 4.87. The Performance tab's Profile this spot times it at Low and Very low
+  ("the lit shader whole"). `lab rustcheck`: the two draw Very low's frame as one (0.00% of its pixels apart), with
+  72 pipelines of their own and none made switching back and on again; the canary, the plain ones forced at High,
+  changes 23% of the frame. Each making's pipelines are kept through the switch.
+- [x] A switch of the making in play leaves nothing out (`plainSet.ts`): switched at a level change it made every
+  pipeline met again (72 here), each compiled aside with its draws left out meanwhile, which a phone takes seconds
+  over. Now the other making's pipelines are made aside first (the engine switched there and straight back in one
+  frame, `pipelinesOf` catching what that asked for), the frames drawn on by the making in use, and the switch made
+  by the first frame after they're all made; Auto judges none of the frames between (`rustSwitching`). Under the
+  loading screens it switches at once, and it's told ahead of the warm-ups as the samples are (`rustPlain`), so a
+  boot at a plain level makes the plain ones alone (`lab rust --boot verylow`: 80 pipelines, as main).
+- [ ] Bulwark clears a layer's pipelines (`ONE_LAYER`, the hall's porch roof) at every `set_plain_only`, and makes
+  them again at their next draw, compiled aside: after a switch in play the roof's layers are left out for the frames
+  they compile (two switches for the making aside, one for the switch). Kept with the spares as the scene's are, a
+  switch back would make none.
 - [x] A counted draw placed ahead (the meadow's blades) was drawn while its pipeline still compiled: the stand-in
   left out `draw` and `drawIndexed`, not the indirect draws, and the GPU refused the whole frame ("No pipeline
   set"), every frame until the pipeline was ready. Found by the check above; on main it's met where a level

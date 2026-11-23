@@ -5,6 +5,7 @@
 import { PIPELINES } from './pipelinesAside';
 import type { Core } from './core';
 import { TUNE, type Grade } from './globals';
+import { PlainSet } from './plainSet';
 import { SightFog } from './sightFog';
 
 export class Levels {
@@ -19,9 +20,12 @@ export class Levels {
 
   /** the fog over what the hero can't see, told with the frame's settings (`sightFog.ts`) */
   private readonly sight: SightFog;
+  /** which making of the lit shaders draws the scene, switched with nothing left out (`plainSet.ts`) */
+  private readonly plain: PlainSet;
 
   constructor(private readonly core: Core) {
     this.sight = new SightFog(core);
+    this.plain = new PlainSet(core);
     // (ahead of the warm-ups: a material readied then is given the pipelines of the frame's two passes)
     core.engine.set_depth_first(TUNE.depthFirst > 0 && !PIPELINES.depthRefused);
   }
@@ -73,6 +77,14 @@ export class Levels {
     this.quality(samples, this.shadowSize);
   }
 
+  /** The plain levels' lit shaders, or the whole ones, told ahead of the frame that would say so (`rustPlain`). */
+  plainAhead(lite: boolean): void {
+    this.plain.ahead(plainWanted(lite));
+  }
+
+  /** whether a switch of the lit shaders' making waits on its pipelines (Auto judges none of its frames) */
+  get plainSwitching(): boolean { return this.plain.switching; }
+
   /** A harness's: the samples and the shadow map's side the engine draws with, and the level's bloom. */
   now(): { samples: number; shadowSize: number; bloomShare: number } {
     return { samples: this.samples, shadowSize: this.shadowSize, bloomShare: this.bloomShare };
@@ -87,8 +99,7 @@ export class Levels {
     engine.hold_shadow(this.shadowHeld && TUNE.shadowTurns > 0);
     engine.set_depth_first(TUNE.depthFirst > 0 && !PIPELINES.depthRefused);
     engine.set_fields_first(TUNE.fieldsFirst > 0);
-    // (2: at every level, the canary of `lab rustcheck`'s check of it)
-    engine.set_plain_only(TUNE.plainShader > 1 || (!!grade.lite && TUNE.plainShader > 0));
+    this.plain.tell(plainWanted(!!grade.lite));
     engine.set_fields_placed(TUNE.fieldsPlaced > 0);
     // (on a dense screen, three device pixels or more to a CSS one, the bloom at half its level's share: a glow is
     // a blur, and its first level was 1560 by 720 on a phone, 2.4 ms of its 18 ms frame at Medium, PSHZ-JAWP)
@@ -98,3 +109,7 @@ export class Levels {
     this.sight.tell(!!grade.lite);
   }
 }
+
+/** whether the scene is drawn by the lit shaders made for the plain levels at a level `lite` or not (2: at every
+ *  level, the canary of `lab rustcheck`'s check of them) */
+const plainWanted = (lite: boolean): boolean => TUNE.plainShader > 1 || (lite && TUNE.plainShader > 0);
