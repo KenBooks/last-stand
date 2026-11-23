@@ -69,6 +69,7 @@ export default {
       usage: 'frames',
       help: 'with --foes, each killed and pictured this many frames on: its fall and its dissolve (40: half gone)',
     },
+    nobody: { kind: 'switch', help: 'every body on a skeleton hidden (heroes, ghost, dummies): what they cost' },
     census: { kind: 'switch', help: 'the shown meshes\' materials by kind, and what each asks beyond the engine' },
     capture: {
       kind: 'number',
@@ -101,6 +102,7 @@ export default {
       zoom: options.zoom,
       skylight: Boolean(options.skylight),
       census: Boolean(options.census),
+      nobody: Boolean(options.nobody),
       capture: Math.round(options.capture ?? 0),
       wear: options.wear?.filter((part) => part !== 'none'),
       rarity: options.rarity,
