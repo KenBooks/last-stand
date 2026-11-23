@@ -5,12 +5,53 @@
 // what was placed (`vertex_hook`). Placed at every vertex, a blade of nine was placed nine times in every pass
 // that drew it, one dropped as often as one kept: on a phone over the shoulder at Very low the grass was 8.4 ms
 // of a 16.8 ms frame, 1.7 of it its shading (J0RW-1EP5, SSB2-NWEB).
-import type * as THREE from 'three';
+import * as THREE from 'three';
 import type { BladeNumbers, BladeUniforms } from '../../world/meadowNodes';
 import type { RustLook, RustShader } from '../custom';
 import { TUNE } from '../globals';
 import { ONE_GRASS } from '../../world/meadowOne';
 import { noiseTable, noiseWgsl } from './noiseTable';
+import { SOLID_RANGE } from '../../world/meadowSolids';
+
+/** each mask with the solids' map in its green, made the first time it's asked for (both are made once, at build) */
+const packed = new WeakMap<THREE.Texture, THREE.DataTexture>();
+
+/**
+ * The meadow's softened mask (its red, as the grass reads it) with the lowest solid over each of its texels in its
+ * green: the solids' cells (12.5 cm, `SOLID_CELL`) under a texel (the mask's, 18.75 cm over the village's 96 m), their
+ * lowest, so it holds a blade under anything a finer read would. As big on the GPU as the mask alone (512 x 512, 1 MB),
+ * where a map of its own would add one the stages placing a blade can't read.
+ */
+function maskWithSolids(mask: THREE.CanvasTexture, solids: THREE.DataTexture): THREE.DataTexture {
+  let made = packed.get(mask);
+  if (made) return made;
+  const canvas = mask.image as HTMLCanvasElement;
+  const side = canvas.width;
+  const bytes = new Uint8Array(canvas.getContext('2d')!.getImageData(0, 0, side, side).data);
+  const { data, width } = solids.image as { data: Uint8Array; width: number };
+  const ratio = width / side;
+  for (let row = 0; row < side; row++) {
+    const r0 = Math.floor(row * ratio);
+    const r1 = Math.min(width - 1, Math.ceil((row + 1) * ratio) - 1);
+    for (let col = 0; col < side; col++) {
+      const c0 = Math.floor(col * ratio);
+      const c1 = Math.min(width - 1, Math.ceil((col + 1) * ratio) - 1);
+      let lowest = 255;
+      for (let r = r0; r <= r1; r++) {
+        for (let c = c0; c <= c1; c++) lowest = Math.min(lowest, data[r * width + c]);
+      }
+      bytes[(row * side + col) * 4 + 1] = lowest;
+    }
+  }
+  made = new THREE.DataTexture(bytes, side, side, THREE.RGBAFormat);
+  made.colorSpace = THREE.NoColorSpace;
+  made.minFilter = made.magFilter = THREE.LinearFilter;
+  made.wrapS = made.wrapT = THREE.ClampToEdgeWrapping;
+  made.generateMipmaps = false;
+  made.needsUpdate = true;
+  packed.set(mask, made);
+  return made;
+}
 
 /** The one grass's numbers as a ring is drawn (`world/meadowOne.ts`): the camera's height over the ground and
  *  how far from it all the grass is kept, and the least share of it kept however far. */
@@ -19,7 +60,7 @@ export interface OneNow { high: number; reach: number; least: number; tuft: numb
 /** where a ring's numbers are in `m.c`, in floats */
 const AT = { origin: 0, focus: 2, eye: 4, cell: 6, wider: 7, band: 8, combed: 12, side: 13, byStrand: 14, strandsBy: 15,
   time: 16, half: 17, widthInCells: 18, grows: 19, strandCut: 20, strandsRise: 21, cuts: 22, unshaded: 23, plain: 24,
-  one: 25, reach: 26, fall: 27, high: 28, least: 29, pixel: 30, tuft: 31 };
+  one: 25, reach: 26, fall: 27, high: 28, least: 29, pixel: 30, tuft: 31, room: 32, solidRange: 33 };
 
 /** a tuft's card as `world/meadow.ts` has it (its `TUFT_*`): the bins across it, two blades rooted in each, how far
  *  a half's blades fan out, a blade's half width at its root as a share of the card's, the card's width against a
@@ -56,6 +97,14 @@ fn meadow_at(xz: vec2f, span: f32) -> f32 {
 const BLADES: RustShader = {
   name: 'meadow-blades',
   hooks: SHARED + TUFT_WGSL + /* wgsl */ `
+/// The lowest solid over xz (m, solidsOver in world/meadowSolids.ts: the mask's green, the lowest of the solids'
+/// cells under each of its texels), read at its texel's middle as WebGL's nearest read takes it (blended between
+/// texels, a post's foot and the open air beside it made a ceiling a blade stood up through).
+fn solid_at(xz: vec2f, span: f32) -> f32 {
+  let cells = vec2f(textureDimensions(t_extra0));
+  let at = (floor((xz / (span * 2.0) + 0.5) * cells) + 0.5) / cells;
+  return textureSampleLevel(t_extra0, samp, at, 0.0).g * m.c[8].y;
+}
 fn blade_pcg(start: vec2u) -> vec2u {
   var v = start * 1664525u + 1013904223u;
   v.x += v.y * 1664525u;
@@ -117,6 +166,8 @@ fn place_hook(instance: u32, list: u32, p: ptr<function, Placed>) -> bool {
   let grass = meadow_at(root, span);
   let mask_uv = root / (span * 2.0) + 0.5;
   let grows = mask_at(mask_uv);
+  // (none grows where a solid leaves it no room: BLADE_ROOM in world/meadowSolids.ts)
+  if (solid_at(root, span) < m.c[8].x) { return false; }
   let patchy = blade_noise(root * 0.15) * 0.65 + blade_noise(root * 0.55 + 9.1) * 0.35;
   let chance = smoothstep(0.08, 0.6, grass) * smoothstep(0.3, 0.7, grows) * mix(0.75, 1.0, smoothstep(0.25, 0.7, patchy));
   // (a tuft's card, where the level draws them: thin blades cut from it as it's shaded, each its own way)
@@ -232,7 +283,16 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   // blades are left out far off goes by this)
   let pixel_wide = length(g.cam_pos.xyz - vec3f(root.x, 0.0, root.y)) * m.c[7].z;
   (*v).c2 = vec4f(in_band, by_strand, tufted, 0.75 * pixel_wide / max(width, 1e-4));
-  (*v).position = vec3f(root.x, 0.0, root.y) + bent + wind;
+  // (no part of it above the lowest solid over where that part is: rooted under a log it lies under it, and leant
+  // into a post it's bent down where it meets it; from play, "grass grows through logs". A part reaching in under
+  // a solid lower than a blade's room narrows to nothing there, never lying flat on the ground, where it fought the
+  // ground for the depth under a log: a straight ramp, as the room may come down to its foot)
+  var at = vec3f(root.x, 0.0, root.y) + bent + wind;
+  let room = m.c[8].x;
+  let solid_over = solid_at(at.xz, m.c[4].y);
+  at -= across * (side_of * w * 0.5) * (1.0 - clamp((solid_over - 0.04) / max(room - 0.04, 0.001), 0.0, 1.0));
+  at.y = min(at.y, max(solid_over - 0.01, 0.0));
+  (*v).position = at;
   (*v).color = vec4f(1.0);
 }
 
@@ -241,6 +301,13 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   let pixel_across = fwidth(in.c1.y);
   // (a profile's: the blades placed and none shaded)
   if (m.c[5].w > 0.5) { return false; }
+  // (a card or a sheet is wide: its corners held under the solids leave its middle slanting up through a log between
+  // them, short tips standing out of the seat logs' tops seen from above; where its blades are cut already, each
+  // point of it is held under the lowest solid over where it is)
+  if (m.c[5].z > 0.5) {
+    let solid_here = solid_at(in.world.xz, m.c[4].y);
+    if (in.world.y > solid_here - 0.005 || solid_here < m.c[8].x) { return false; }
+  }
   let blade = in.c1.xy;
   let strands = in.c1.zw;
   let growing = in.c2.xy;
@@ -356,7 +423,10 @@ export function bladeLook(u: BladeUniforms, combed: boolean, numbers: BladeNumbe
   one: OneNow | null): RustLook {
   return {
     shader: BLADES,
-    maps: [u.uMeadow.value, noiseTable()],
+    // (the mask with the solids' map in its green: the two maps read where a blade is placed, the compute and
+    // vertex stages, are this and the ground's noise table, #849; the look's volume is the pixel stage's alone, and
+    // read there it stopped the renderer, "Entry point's stage (Compute) is not in the binding visibility")
+    maps: [maskWithSolids(u.uMeadow.value as THREE.CanvasTexture, u.uSolid.value as THREE.DataTexture), noiseTable()],
     position: 'bv',
     before: true,
     numbers(out) {
@@ -377,6 +447,7 @@ export function bladeLook(u: BladeUniforms, combed: boolean, numbers: BladeNumbe
       out[AT.reach] = one?.reach ?? 0; out[AT.fall] = ONE_GRASS.fall; out[AT.high] = one?.high ?? 0;
       out[AT.least] = one?.least ?? 0;
       out[AT.pixel] = one?.pixel ?? 0; out[AT.tuft] = one && combed ? one.tuft : 1;
+      out[AT.room] = u.uRoom.value; out[AT.solidRange] = SOLID_RANGE;
     },
     // (the tiles drawn, a pair of floats each: any number of them, where the numbers held 80, so the tiles were
     // 9 to 21 m wide and every blade of one that touched the view was sent to be dropped as it was placed)

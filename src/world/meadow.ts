@@ -20,6 +20,7 @@ import { hiddenByDoorway } from './doorways';
 import { registerCull } from './culls';
 import { wholeView } from '../core/wholeView';
 import { frameRect } from '../core/renderer';
+import { BLADE_ROOM } from './meadowSolids';
 
 /** The rings: each cell's size (m), how far out it's drawn (m) and the segments along each blade. */
 const RINGS = [
@@ -278,6 +279,10 @@ function cardGeometry(): THREE.InstancedBufferGeometry {
 
 /** A ring's uniforms, set as it's drawn. */
 interface RingUniforms extends MaskUniforms {
+  /** the lowest solid over each cell of the meadow (meadowSolids.ts) */
+  uSolid: { value: THREE.Texture };
+  /** the least room a blade needs under a solid (m: `BLADE_ROOM`, every ring's the same; a harness's canary lowers it) */
+  uRoom: { value: number };
   uOrigin: { value: THREE.Vector2 };
   uCell: { value: number };
   uWider: { value: number };
@@ -601,13 +606,16 @@ function oneBandNow(camera: THREE.Camera, k: number): { from: number; to: number
 }
 
 /** The meadow's grass over `mask`'s square, swaying on the game's clock (an updater keeps the time). */
-export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, updaters: Updater[]): THREE.Group {
+export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, updaters: Updater[], solids: THREE.Texture): THREE.Group {
   const group = new THREE.Group();
   group.name = 'meadow';
   // (where it grows, for the lab and the village's map)
   group.userData.mask = mask;
   meadowHalf = mask.half;
   group.userData.maskTexture = maskTexture;
+  group.userData.solids = solids;
+  const room = { value: BLADE_ROOM };
+  group.userData.room = room;
   const time = { value: 0 };
   updaters.push((_dt, t) => { time.value = t; });
   // (a tile with no grass in it is never drawn: over the square, the roads and what's built, every blade of it was
@@ -640,6 +648,8 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
       uTime: time,
       uMeadow: { value: maskTexture },
       uMeadowHalf: { value: mask.half },
+      uSolid: { value: solids },
+      uRoom: room,
     };
     if (above) u.uBand.value.set(-2, -1, ring.radius - AT_ONCE, ring.radius);
     else bandOf(u.uBand.value, k, HAND_OVER);

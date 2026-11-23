@@ -1053,22 +1053,10 @@ function buildGlowcaps(scene: THREE.Object3D, x: number, z: number, rng: () => n
   });
 }
 
-export function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.Material, wood: THREE.Material, updaters: Updater[],
+export function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.Material | null, wood: THREE.Material, updaters: Updater[],
   casts = true): FireSpec {
-  // (the ring's stones merged: a mesh a stone, a bonfire's ring was 9 draws, and 9 more in the sun's shadow)
-  const ringGeo = boulderGeo(47, 0.2, 1), at = new THREE.Object3D(), stones: THREE.BufferGeometry[] = [];
-  for (let i = 0; i < 9; i++) {
-    const a = (i / 9) * TAU;
-    at.position.set(x + Math.cos(a) * 0.75, 0.08, z + Math.sin(a) * 0.75);
-    at.scale.set(1.2, 0.8, 1);
-    at.rotation.set(0.25 * Math.sin(3 * a), a * 2, 0);
-    at.updateMatrix();
-    stones.push(ringGeo.clone().applyMatrix4(at.matrix));
-  }
-  const ring = new THREE.Mesh(mergeGeometries(stones), stone);
-  ring.name = 'bonfire stones';
-  ring.castShadow = true;
-  scene.add(ring);
+  // (`stone` null: the caller lays a ring of its own, the village's campfire's, `fireRing.ts`)
+  if (stone) bonfireRing(scene, x, z, stone);
   // a teepee of logs leaning in over the bed, two more lying across it; where the flames lick them, charred and
   // glowing through their char
   // (each log's bark and char merged: drawn a mesh a part, its charred end apart, a bonfire's logs were 22 draws)
@@ -1105,6 +1093,24 @@ export function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone:
   };
   buildFire(scene, fire, updaters);
   return fire;
+}
+
+/** A bonfire's ring of stones round (x, z), merged: a mesh a stone, a bonfire's ring was 9 draws, and 9 more in the
+ *  sun's shadow. */
+function bonfireRing(scene: THREE.Object3D, x: number, z: number, stone: THREE.Material): void {
+  const ringGeo = boulderGeo(47, 0.2, 1), at = new THREE.Object3D(), stones: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * TAU;
+    at.position.set(x + Math.cos(a) * 0.75, 0.08, z + Math.sin(a) * 0.75);
+    at.scale.set(1.2, 0.8, 1);
+    at.rotation.set(0.25 * Math.sin(3 * a), a * 2, 0);
+    at.updateMatrix();
+    stones.push(ringGeo.clone().applyMatrix4(at.matrix));
+  }
+  const ring = new THREE.Mesh(mergeGeometries(stones), stone);
+  ring.name = 'bonfire stones';
+  ring.castShadow = true;
+  scene.add(ring);
 }
 
 /** A bonfire's logs, their bark's geometry and their char's, in the world's frame. */
