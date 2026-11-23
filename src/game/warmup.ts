@@ -166,10 +166,8 @@ const AHEAD_SLICE_MS = 12;
  * that frame's pipelines were first asked for there, and a laptop's boot waited 2.6 s for them with nothing else
  * left to do (trace 1FJ3-5Z5H; `npm run lab -- pipelines`). What it has met already costs a lookup. What's hidden
  * (the houses' rooms, the hall) is left to the engine's own walk behind the lobby, as it was: the first frame
- * never handed it over, and handed over here it's boot time the lobby doesn't need. The fight's foes handed over
- * as each is built (`buildAhead`) were tried too and left as they were: with the lobby's pipelines asked for this
- * early there's little wait left for theirs to compile beside, and it was 1.3 s more of the page's tasks with the
- * CPU 4 times slower.
+ * never handed it over, and handed over here it's boot time the lobby doesn't need. The fight's follow the
+ * hero's (`fightAhead`).
  */
 export async function sceneAhead(): Promise<void> {
   if (!AHEAD.prepare || !sceneAheadOn) return;
@@ -246,7 +244,21 @@ export async function compileTheLobby(): Promise<void> {
   // the page is laid out and the dummies stand, finds most of their pipelines made)
   if (sceneAheadOn) AHEAD.prepare?.(extra);
   await sceneAhead();
+  // (and the fight's begun, a return's: `fightAhead`)
+  // (the other heroes' skills and the foes' shots first: quick to make, and most of the fight's pipelines)
+  const shotsFirst = (): Part[] => [...theFight()].sort((a, b) => Number(b.name === 'shots') - Number(a.name === 'shots'));
+  if (sceneAheadOn) fightAhead = otherHeroesSkillsAhead().then(() => buildAhead(shotsFirst(), true));
 }
+
+/**
+ * A return's fight built and handed to the engine from the moment its hero is, beside the boot's steps after it
+ * (the lobby's page laid out, its dummies stood, its warm-up), none of its pipelines waited for there: the fight's
+ * warm-up finds them asked for, and the other heroes' skills' with them. Built as the lobby's warm-up waited and
+ * handed over only by their own warm-up after it, their pipelines were first asked for once the lobby's were all
+ * made, a wait after a wait: 3.3 s and then 3.2 s on a laptop (trace 1FJ3-5Z5H, #843). Null on a first visit,
+ * whose loading screen has the hall of heroes to ready first (`warmLobby` builds its fight as before).
+ */
+let fightAhead: Promise<void> | null = null;
 
 /** the lobby's dummies' bodies, which its warm-up outlines, and every place's seats, outlined as E would sit on
  *  them */
@@ -278,7 +290,7 @@ export async function warmLobby(hall = false, step: WarmStep = async () => undef
     objects: extra, leaveOut, before: mapsArrived, also: () => compileOutline([...outlined(), hero.root]),
   });
   // (its compile is made as it's called, the scene walked before the foes are built, then the hall's heroes)
-  const ahead = buildAhead(theFight()).then(() => (hall ? buildHeroesAhead() : undefined));
+  const ahead = (fightAhead ?? buildAhead(theFight())).then(() => (hall ? buildHeroesAhead() : undefined));
   const took = await warming;
   performance.measure('warm the lobby', { start, duration: performance.now() - start, detail: took });
   hero.dispose();
@@ -431,10 +443,14 @@ const theFight = (): Part[] => (fight ??= fightParts());
  * shows): a foe kind's first build is one task of 30 to 90 ms (its geometry sculpted, its crowd's merged:
  * models/shapes.ts, crowd.ts), and built behind the live lobby each held its frames up as long.
  */
-async function buildAhead(parts: Part[]): Promise<void> {
+async function buildAhead(parts: Part[], handOver = false): Promise<void> {
   for (const part of parts) {
     await nextTask();
-    part.built ??= part.build();
+    const built = part.built ??= part.build();
+    if (!handOver) continue;
+    // (handed to the engine in a task of its own, as its warm-up would hand it: `warmUp` in core/shaders.ts)
+    await nextTask();
+    AHEAD.prepare?.([...built.drawn, ...built.objects, ...(built.swap ? [built.swap.show] : [])]);
   }
 }
 
@@ -529,6 +545,9 @@ async function heroBuiltInSlices(model: string, step: () => Promise<void>): Prom
   heroesAhead.set(model, await builtInSlices(heroAllWornSteps(model, AWAY), step, behindSlice));
 }
 
+/** whether `otherHeroesSkillsAhead` has run: once a boot */
+let skillsAhead = false;
+
 /**
  * The other heroes' skills' own shaders handed to the Rust engine under the loading screen (nothing where it isn't
  * drawing): each is a shader module of the whole lit shader, made on the GPU process's main thread, and the five of
@@ -538,7 +557,8 @@ async function heroBuiltInSlices(model: string, step: () => Promise<void>): Prom
  * to 70, then recovers back to 144"). The heroes themselves still warm behind the lobby.
  */
 export async function otherHeroesSkillsAhead(): Promise<void> {
-  if (!AHEAD.prepare) return;
+  if (!AHEAD.prepare || skillsAhead) return;
+  skillsAhead = true;
   for (const model of otherHeroModels()) {
     await painted();
     AHEAD.prepare(skillSamples(model));
