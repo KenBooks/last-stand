@@ -26,7 +26,10 @@ const FRAMES_A_READ = 2;
 const GRACE_MS = 400;
 /** how long a picture waits for the dialog's fade in to end (ms of the browser's clock) */
 const FADE_MS = 500;
-const NAMES = ['Brannoch', 'Ysolde', 'Pell'];
+/** the third player's name tag: as long as a tag may be (`TAG_MAX`, 16), so every row's columns are checked against a
+ *  long name too (from Victor on the rows' alignment) */
+const PELL = 'Pellinore Ashval';
+const NAMES = ['Brannoch', 'Ysolde', PELL];
 const ROOM = { kind: 'private', name: 'Crypt run', password: '', max: 4 };
 /** the virtual passkey each page's browser has (as `lab cloud`'s devices: cloudDevice.mjs) */
 const AUTHENTICATOR = {
@@ -168,9 +171,9 @@ async function befriend(games, codes, found, dir) {
     'Brannoch and Ysolde never listed each other online');
   found.say('accepted: both list each other, online');
   await pell.call('friendsAdd', { code: codes.Brannoch });
-  await until([brannoch], (b) => rowOf(b, 'Requests', 'Pell'), 'Brannoch never saw Pell\'s request');
-  await brannoch.call('friendsAct', { name: 'Pell', act: 'accept' });
-  await until([brannoch, pell], (b, p) => rowOf(b, 'Online', 'Pell') && rowOf(p, 'Online', 'Brannoch'),
+  await until([brannoch], (b) => rowOf(b, 'Requests', PELL), 'Brannoch never saw Pell\'s request');
+  await brannoch.call('friendsAct', { name: PELL, act: 'accept' });
+  await until([brannoch, pell], (b, p) => rowOf(b, 'Online', PELL) && rowOf(p, 'Online', 'Brannoch'),
     'Brannoch and Pell never listed each other');
   found.say('Pell asked and was accepted');
 }
@@ -198,12 +201,12 @@ async function joinFromList(games, found, dir) {
 /** From the room, Brannoch invites Pell; Pell's toast shows it, and its Join takes him in. */
 async function inviteToRoom(games, code, found, dir) {
   const [brannoch, , pell] = games;
-  const [inRoom] = await until([brannoch], (b) => rowOf(b, 'Invite friends', 'Pell'), 'the room never offered to invite Pell');
+  const [inRoom] = await until([brannoch], (b) => rowOf(b, 'Invite friends', PELL), 'the room never offered to invite Pell');
   found.say(`the room's invite list: ${inRoom.rows.filter((r) => r.section === 'Invite friends').map((r) => r.name).join(', ')}`);
   await picture(brannoch, dir, '4-room-invite', found);
   // (Pell out in the village: with Play together open the invite waits in its Friends tab, not a toast)
   await pell.call('friendsClose');
-  await brannoch.call('friendsAct', { name: 'Pell', act: 'invite' });
+  await brannoch.call('friendsAct', { name: PELL, act: 'invite' });
   await until([pell], (p) => p.invites.includes('Brannoch'), 'the service never held Brannoch\'s invite for Pell');
   const [invited] = await until([pell], (p) => p.toast !== '', 'Pell\'s game held the invite and never showed it');
   found.say(`Pell's toast: "${invited.toast}"`);
