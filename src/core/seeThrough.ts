@@ -42,6 +42,10 @@ interface Kind {
    *  opens, the one exception to the rule: "if the player is inside a building... we will thin whole roof no
    *  matter what" */
   roofs?: readonly [number, number, number, number];
+  /** of `cover`, a wall: the room it walls. While he stands in it the wall opens over that room's floor alone, and
+   *  over all of it, seen or not: by what he saw it stood in ragged pieces where a column hid the floor behind it,
+   *  and opened on the ground he saw out of a window ("can see ground in hall of heroes") */
+  walls?: readonly [number, number, number, number];
   /** of `blended`: whether a pale surface of it keeps less of itself than a dark one (`PALE`) */
   pale?: boolean;
   /** of `blended`: its meshes lie in layers (a roof's slabs over its deck over its beams), and the Rust engine draws
@@ -191,6 +195,8 @@ const HALL_FLOORS = [
   // floor he saw, and the roof was a ghost over the wall in a band along it)
   [TERRACE.x - HALL.inHalf, HALL.wall - 0.6, TERRACE.x + HALL.inHalf, TERRACE.back],
 ] as const;
+/** the hall's room, between its walls' inner faces (its least x and z, its most) */
+const HALL_IN = [TERRACE.x - HALL.inHalf, HALL.wall, TERRACE.x + HALL.inHalf, HALL.inFront] as const;
 
 const kinds = {
   /** canopies: a wide hole in every view, since the tree line can hide the player top-down */
@@ -213,17 +219,17 @@ const kinds = {
   // play, "here we should not try to make transparent the side which doesn't help see the hero", "this wall should be
   // transparent but the one 90 degree to it should not", "here both should be transparent, but only 1 is")
   hallFront: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
-    sight: true, room: HALL_ROOM, door: HALL_DOOR, doorOn: HALL_DOOR_ON },
+    sight: true, room: HALL_ROOM, door: HALL_DOOR, doorOn: HALL_DOOR_ON, walls: HALL_IN },
   hallBack: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
-    sight: true, sightOn: HALL_SIGHT_ASIDE },
+    sight: true, sightOn: HALL_SIGHT_ASIDE, walls: HALL_IN },
   hallBeam: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
     sight: true, door: HALL_DOOR, doorOn: HALL_DOOR_ON },
   hallEast: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
-    sight: true, sightOn: HALL_SIGHT_ASIDE },
+    sight: true, sightOn: HALL_SIGHT_ASIDE, walls: HALL_IN },
   hallWest: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
-    sight: true, sightOn: HALL_SIGHT_ASIDE },
+    sight: true, sightOn: HALL_SIGHT_ASIDE, walls: HALL_IN },
   hallRoof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS, oneLayer: true,
-    roofs: [TERRACE.x - HALL.inHalf, HALL.wall, TERRACE.x + HALL.inHalf, HALL.inFront] },
+    roofs: HALL_IN },
   /** the other roofs: as what's built, and a ghost from above (`ROOF_GHOST_ABOVE`) */
   roof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: 0 },
   /** a house's gables from above, fainter than its roof: at the roof's own ghost, plaster that pale read as a strip
@@ -541,6 +547,7 @@ export interface SeeThrough {
   floor?: number;
   floorBoxes?: readonly (readonly [number, number, number, number])[];
   roofs?: readonly [number, number, number, number];
+  walls?: readonly [number, number, number, number];
   pale?: boolean;
   oneLayer?: boolean;
   sight?: boolean;

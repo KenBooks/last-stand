@@ -14,6 +14,7 @@ import { seeValue, type SeeThrough } from '../../../src/core/seeThrough';
 import { seenShareAt } from '../../../src/core/sight';
 import { inHall } from '../../../src/data/village';
 import { RUST } from '../../../src/engine';
+import { ROOMS } from '../../../src/engine/ahead';
 import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
 
@@ -42,6 +43,9 @@ export const RULE_VIEWS: readonly RuleView[] = [
   { name: 'just inside the door', at: [-1.5, -15.5], turned: 0, zoom: 0.5 },
   { name: 'inside the hall', at: [-1.5, -20], turned: 0, zoom: 0.5 },
   { name: 'inside the hall, camera from its far end', at: [-1.5, -20], turned: 180, zoom: 0.5 },
+  // (the eye brought down under the roof and the walls' tops: from play, "also bug at this zoom level")
+  { name: 'inside the hall, zoomed in', at: [-1.5, -22], turned: 0, zoom: 0.4 },
+  { name: 'inside the hall, zoomed in from the east', at: [-1.5, -22], turned: 90, zoom: 0.4 },
   { name: 'beside a cottage', at: [-12.6, 13.2], turned: 0, zoom: 0.5 },
   { name: 'beside a cottage, camera over it', at: [-12.6, 13.2], turned: 180, zoom: 0.5 },
   { name: 'between two cottages', at: [-15.0, 10.8], turned: 90, zoom: 0.5 },
@@ -75,6 +79,8 @@ const BLOCKS_LEAST = 12;
 /** the frames a view is given to settle its fades, and a switch before its picture */
 const SETTLE_FRAMES = 90;
 const SWITCH_FRAMES = 6;
+/** the most frames a view waits for the rooms' own pipelines to be asked for and compiled */
+const ROOMS_WAIT_FRAMES = 3000;
 
 /** What a view measures: the covered blocks over seen and unseen ground, and the cover left over each. */
 export interface RuleRead {
@@ -270,6 +276,7 @@ function readBlocks(view: RuleView, played: Float32Array, whole: Float32Array, b
   const covered: number[] = [];
   const opened: number[] = [];
   const places = new Map<number, THREE.Vector2>();
+  const inside = inHall(view.at[0], view.at[1]);
   const placeOf = (blocks: number[]): string => {
     const place = places.get(blocks[Math.floor(blocks.length / 2)]);
     return place ? ` (as at ${place.x.toFixed(1)}, ${place.y.toFixed(1)})` : '';
@@ -283,6 +290,8 @@ function readBlocks(view: RuleView, played: Float32Array, whole: Float32Array, b
     const sees = place && seenClearly(place);
     if (sees === null || sees === undefined) continue;
     places.set(block, place!.clone());
+    // (stood in a building its walls open over its own room alone: what he sees out of its door stays behind them)
+    if (sees === 1 && inside && !inHall(place!.x, place!.y)) continue;
     if (sees === 1) {
       seen.blocks++;
       seen.left += left;
@@ -312,7 +321,7 @@ function readBlocks(view: RuleView, played: Float32Array, whole: Float32Array, b
       opened: unseen.opened / Math.max(1, unseen.blocks),
       blocksOver: unseen.over / Math.max(1, unseen.blocks),
     },
-    inside: inHall(view.at[0], view.at[1]),
+    inside,
     stands: unseen.stands / Math.max(1, unseen.blocks),
   };
 }
@@ -323,6 +332,13 @@ export async function readView(lab: Lab, view: RuleView): Promise<[RuleRead, Pic
   faceCamera((view.turned * Math.PI) / 180 - Math.PI);
   const drawing = lab.drawing;
   lab.drawing = true;
+  // (a room's own pipelines are asked for behind the lobby and compile in the browser's own time: stood in the
+  // room before they have, it's drawn as from outside it)
+  for (let frame = 0; frame < ROOMS_WAIT_FRAMES && !ROOMS.ready; frame++) {
+    await lab.step(1);
+    await window.__labClock.realFrame();
+  }
+  if (!ROOMS.ready) throw new Error(`the rooms' pipelines never compiled in ${ROOMS_WAIT_FRAMES} frames`);
   await lab.step(SETTLE_FRAMES);
   const paused = G.paused;
   const tune = { debug: RUST.tune.debug };

@@ -100,6 +100,10 @@ export class Engine {
      */
     ready_material(material: number, skinned: boolean, raw: boolean): void;
     /**
+     * A material's pipelines as a layer of which the nearest alone is drawn, made ahead of its first draw.
+     */
+    ready_material_layers(material: number, skinned: boolean, raw: boolean, apart: boolean): void;
+    /**
      * Where the page writes the frame's records, with room for `count` of them. Growing it moves this module's
      * memory: the page takes its views of it again after each call.
      */
@@ -242,6 +246,7 @@ export interface InitOutput {
     readonly engine_kept: (a: number) => number;
     readonly engine_poll_clock: (a: number) => void;
     readonly engine_ready_material: (a: number, b: number, c: number, d: number) => void;
+    readonly engine_ready_material_layers: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly engine_records: (a: number, b: number) => number;
     readonly engine_render: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly engine_replace_material: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
@@ -271,12 +276,12 @@ export interface InitOutput {
     readonly engine_show_kept: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1786: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1811: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_660: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_660_59: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_660_60: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_662: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1789: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1814: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_663: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_663_60: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_663_61: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_665: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

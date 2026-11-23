@@ -6,6 +6,8 @@ import { SIGHT } from '../core/sight';
 import { HALL, TERRACE } from '../data/village';
 import type { Core } from './core';
 import { GLOBALS, TUNE } from './globals';
+import { ROOMS } from './ahead';
+import { PIPELINES } from './pipelinesAside';
 
 /** the kinds of see-through the engine holds, the floats of each (`SeeKind` in its common.wgsl), and how far under
  *  the hero's floor is still clear of his hole (`FLOOR_CLEAR` in core/seeThrough.ts) */
@@ -13,6 +15,8 @@ const SEE_KINDS_MOST = 32, SEE_KIND_FLOATS = 20, SEE_FLOOR_CLEAR = 0.12;
 
 /** A record's flags a material's see-through sets (Bulwark's plan.rs: `SOLID`, `THINNED`, `ONE_LAYER`), and one of
  *  the page's own: all of it is thinned to nothing, and it's in the frame for its shadow alone. */
+/** how long a room's roof and walls take to open as he walks in, and to close as he leaves (s) */
+const INSIDE_FADE = 0.4;
 export const SEE_FLAGS = { solid: 16, thinned: 64, oneLayer: 256, cover: 512, underLayers: 1024, gone: 1 << 20 } as const;
 
 /** A material as the kinds read it: three's, with the game's see-through on it. */
@@ -57,6 +61,10 @@ export class SeeKinds {
     // (`rust.housesWhole`: a house's parts drawn as covers still, as they are played, and the rule opening none:
     // thinned as their kinds were instead, a roof's verge and a sign were drawn in another order than played)
     g[GLOBALS.seeHall + 7] = TUNE.housesWhole ? 0 : rule;
+    if (ROOMS.asked && !ROOMS.ready && PIPELINES.compiling === 0) ROOMS.ready = true;
+    const now = performance.now();
+    const passed = Math.min(0.1, Math.max(0, (now - this.wrote) / 1000));
+    this.wrote = now;
     for (let slot = 0; slot < this.kinds.length; slot++) {
       const see = this.kinds[slot], at = GLOBALS.seeKinds + slot * SEE_KIND_FLOATS;
       const cover = rule > 0 && !!see.cover;
@@ -75,7 +83,15 @@ export class SeeKinds {
       g[at + 16] = door ? door.x : 0; g[at + 17] = door ? door.y : 0;
       // (a cover reads these as where its raised floor lies, in two boxes, and the ground's height past them)
       if (cover) {
-        const [box, more] = see.floorBoxes ?? [];
+        // (how far he stands in the room it roofs or walls, eased: from play, "lets make thinning a fade in/out...
+        // not instant appear/disappear")
+        // (and not at all till the pipelines a room is drawn with from inside have compiled, `ROOMS`)
+        const toward = ROOMS.ready && this.under(see) ? 1 : 0;
+        const was = this.inside.get(see) ?? toward;
+        const inside = was + Math.sign(toward - was) * Math.min(Math.abs(toward - was), passed / INSIDE_FADE);
+        this.inside.set(see, inside);
+        // (a wall of the room he stands in reads its room as its floor's one box)
+        const [box, more] = (inside > 0 && see.walls ? [see.walls] : see.floorBoxes) ?? [];
         g[at + 12] = box ? box[0] : -1e5; g[at + 13] = box ? box[1] : -1e5;
         g[at + 14] = box ? box[2] : 1e5; g[at + 15] = box ? box[3] : 1e5;
         g[at + 8] = more ? more[0] : 0; g[at + 9] = more ? more[1] : 0;
@@ -89,9 +105,10 @@ export class SeeKinds {
       // (a cover's second box ends in the first of these: written over, the box reached to the village's middle)
       if (!cover) g[at + 18] = sightOf(see);
       g[at + 19] = see.sight ? see.sightShare ?? 1 : 0;
-      // (a cover reads it as whether he stands in the room it roofs: all of it opens then, the owner's one
+      // (a cover reads it as how far he stands in the room it roofs: all of it opens then, the owner's one
       // exception to the rule, "if the player is inside a building... we will thin whole roof no matter what")
-      if (cover) g[at + 19] = this.under(see) ? 1 : 0;
+      // (a roof by how far he stands under it; a wall of his room the same under 0: over its room alone)
+      if (cover) g[at + 19] = see.roofs ? this.inside.get(see) ?? 0 : -(this.inside.get(see) ?? 0);
       // (`rust.see` off: nothing of any kind thinned; `rust.housesWhole`: nothing of a house's, a harness's frame)
       if (!TUNE.see || (TUNE.housesWhole && see.cover)) { g[at + 2] = 0; g[at + 6] = 0; g[at + 10] = 0; g[at + 18] = 0; }
     }
@@ -104,9 +121,13 @@ export class SeeKinds {
     return coverRuleNow() * (1 - TUNE.houseLeft);
   }
 
-  /** Whether the watcher stands in the room `see`'s kind roofs (`roofs`). */
+  /** when the kinds were last written (the page's ms), and how far he stands in each kind's room, 0 to 1 */
+  private wrote = 0;
+  private readonly inside = new Map<SeeThrough, number>();
+
+  /** Whether the watcher stands in the room `see`'s kind roofs or walls (`roofs`, `walls`). */
   under(see: SeeThrough): boolean {
-    const room = see.roofs;
+    const room = see.roofs ?? see.walls;
     const from = SIGHT.uSightFrom.value;
     return !!room && from.x > room[0] && from.x < room[2] && from.y > room[1] && from.y < room[3];
   }

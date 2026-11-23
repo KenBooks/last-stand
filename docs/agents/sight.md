@@ -43,10 +43,16 @@ much each part thins is not the game's to say.
 **The one exception: stood inside a building, its whole roof opens** (from the owner: "if the player is inside a
 building... we will thin whole roof no matter what"; `Kind.roofs` in `core/seeThrough.ts`, the room a roof's kind
 roofs, the hall's alone so far). By the rule alone the roof stood whole over the aisles and the walls he didn't
-see the floor under, and hid the walls ("in hall need to see full walls, like the player can see"). Its walls
-still go by the rule, and stand whole under the roof's ghost: the engine draws the layers' whole pixels before
-their ghosts then. `lab houserule`'s three views inside the hall picture its roof alone and hold all of it to
-the ghost's share, and its walls to standing. What isn't a house's must not be of a house's kind: the training
+see the floor under, and hid the walls ("in hall need to see full walls, like the player can see"). **Its walls
+go by where they stand then, not by what he sees** (`Kind.walls`): a wall between the camera and the room opens,
+all of it, and a wall across the room stands whole, under the roof's ghost (the engine draws the layers' whole
+pixels before their ghosts then, and the ghosts last, over the braziers' flames: "also where is fire ?"). By
+what he saw, a wall stood in ragged pieces where a column hid the floor behind it, and opened on the ground he
+saw out of a window ("can see ground in hall of heroes", "definitely have artifacts, still"). Both whatever
+the eye's height: with the view zoomed in under the roof, it stood whole ("also bug at this zoom level"). And
+both ease in and out over 0.4 s as he crosses the door ("lets make thinning a fade in/out"). `lab houserule`'s
+five views inside the hall, two of them zoomed in, picture its roof alone and hold all of it to the ghost's
+share, and its walls to standing; the flames, the fade and the ground through a wall are pictured, not measured. What isn't a house's must not be of a house's kind: the training
 yard's fence was ("why are you thinning the fence in the training area ?"), and is free timber now.
 
 **The portico case** is the test that covers most of the rule's edges at once (from the owner: "this case when
