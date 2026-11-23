@@ -113,10 +113,32 @@ function timesOf(times: number[]): string {
   return `median ${ms(quantile(sorted, 0.5))}, 90th percentile ${ms(quantile(sorted, 0.9))}, in all ${ms(total)} ms`;
 }
 
+/** the frames he's stirred through before a set-up made again: walking left, the attack held */
+const STIR_FRAMES = 37;
+const STIR: Frame = { keys: ['a'], m0: true };
+
+/**
+ * The stand's digest from a set-up made again after he's been stirred: `afresh`, as a check's kept page sets up its
+ * next job (the run left for a run of its own, the hero built afresh: `Lab.begin`), or over himself in the run as it
+ * goes (the canary: he's left as the frames before left him). Made afresh, the set-up must leave him as the page's
+ * first did: the lab's boot steps the lobby by the browser's time, and the boot's hero came to each command in a
+ * pose of his own, two runs on one tree giving other digests (#852).
+ */
+async function standAgain(lab: Lab, fixture: Fixture, afresh: boolean): Promise<string> {
+  await lab.step(STIR_FRAMES, () => STIR);
+  if (afresh) lab.begin(true);
+  await lab.setup({ ...fixture, fresh: afresh });
+  const stand = MOVES[0];
+  const digest = new Digest();
+  await lab.step(stand.frames, () => stand.input, () => addPose(digest, lab.model.root));
+  return digest.hex;
+}
+
 /** `lab poses`: the hero's pose a move at a time as digests, and what his `animate` took a frame. */
 export async function poses(lab: Lab, options: PosesOptions): Promise<Report> {
   const nocked = Boolean(lab.player.cls.quiver);
-  const setUp = await lab.setup({ nocked, ...options.fixture });
+  const fixture: Fixture = { nocked, ...options.fixture };
+  const setUp = await lab.setup(fixture);
   if (options.lobby) await toLobby(lab);
   if (options.lobby && G.mode !== 'menu') throw new Error('lab: poses: the lobby never came');
   const timing = timeCalls(lab.model, 'animate');
@@ -150,6 +172,18 @@ export async function poses(lab: Lab, options: PosesOptions): Promise<Report> {
   const problems: string[] = [];
   const caught = options.canary ? caughtLastBit(lab.model.root) : null;
   if (caught === false) problems.push('canary missed: a number moved by its last bit left the digest as it was');
+  const standDigest = digests[0].split(': ')[1];
+  // (the canary first, over himself in the run as it goes: set up afresh, the page sets every later one up afresh)
+  const overHimself = options.canary && !options.lobby ? await standAgain(lab, fixture, false) : null;
+  if (overHimself === standDigest) {
+    problems.push('canary missed: set up again over himself, not built afresh, he stood as at first');
+  }
+  // (in a run alone: the lobby's moves are made after the set-up, which a set-up made again doesn't come back to)
+  const again = options.lobby ? null : await standAgain(lab, fixture, true);
+  if (again !== null && again !== standDigest) {
+    problems.push(`set up afresh after other frames, he stood otherwise (${again}, not ${standDigest}): the set-up `
+      + 'leaves him as what ran before it left him');
+  }
   const text = [
     `set up as ${JSON.stringify(setUp)}${options.lobby ? ', then back to the lobby' : ''}`,
     'the pose, each move\'s frames as a digest (every object\'s world matrix, every moving point of cloth):',
@@ -160,7 +194,10 @@ export async function poses(lab: Lab, options: PosesOptions): Promise<Report> {
     `  in all: ${timesOf(all)}`,
     'by part, a frame over every move (his update holds his animate, his skirts\' update their drape):',
     ...byPart,
+    ...(again === standDigest ? ['set up afresh after other frames, he stands as at first'] : []),
     ...(caught ? ['canary: a number moved by its last bit moved the digest'] : []),
+    ...(overHimself !== null && overHimself !== standDigest
+      ? ['canary: set up again over himself, not built afresh, he stood otherwise'] : []),
   ].join('\n');
   return { text, problems };
 }

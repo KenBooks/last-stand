@@ -32,6 +32,10 @@ What the lab gives a probe (`page/lab.ts`):
   report. The keys go by the camera, and the top-down camera is as the boot left it unless `yaw` turns it (0: `d` runs
   +x), which differs by class: the village opens at a spot of its own, at random (the warrior's boot faces it a half turn
   round from the ranger's), so a measure whose keys must go one way in the world sets `yaw`.
+  The hero is built afresh unless the fixture says `fresh: false` (`compiles`, which measures the boot's own): the boot
+  steps the lobby by the browser's time as its warm-ups run, and the boot's hero came to a command in a state of his
+  own, `lab poses` giving other digests on one tree run to run (#852; its check sets him up again afresh after other
+  frames, and its canary sets him up over himself).
   A probe may set up many cases one after another, but each follows on from the ones before it: the hero is the same
   one, and the game's clock, which his idle runs on, only goes forward (to the next whole minute at each set-up, so
   the idle is at the same moment whatever ran before; the hero's own state still carries over). A scan is the same
