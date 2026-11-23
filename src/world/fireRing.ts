@@ -1,6 +1,8 @@
-// The village's campfire's ring of stones: rounded field stones of a dozen sizes and colours laid round the bed, each
-// lumpy in its own way, sooted on the side facing the flames and on its top toward them, darker where it sits in the
-// earth, and a few split in two by the heat, their halves leaning apart. From play, the ring the biomes' bonfires
+// The village's campfire's ring of stones: whole, rounded field stones of a dozen sizes and colours laid round the
+// bed, each lumpy in its own way, sooted on the side facing the flames and on its top toward them, darker where it
+// sits in the earth. A few were split in two by the heat, and from above each read as a round stone sliced clean
+// through, a flat cut and an even gap (from review, "why perfectly cut stones in half ?"): a ring a person lays is
+// whole stones, so they're whole. From play, the ring the biomes' bonfires
 // share read as "flat grey boxes with a cross cut in them": nine copies of one faceted rock, the village's ashlar's
 // blocks and joints mapped over it. Each stone is laid by its own width round the ring, the next beside it with a
 // finger's gap, as a ring is laid by hand: each at a set angle whatever its size, neighbours ran into each other, one
@@ -20,11 +22,6 @@ const GAP = { least: 0.012, more: 0.02 };
 const SIZE = { least: 0.12, most: 0.22 };
 const LONG = { least: 1.05, most: 1.55 };
 const HIGH = { least: 0.55, most: 0.85 };
-/** the stones split by the heat (their places in the ring), and the gap between a split stone's halves (m) */
-const SPLIT = [2, 7, 11];
-const SPLIT_GAP = 0.025;
-/** how far each half of a split stone is eased off the crack along the ground (m) */
-const SPLIT_PUSH = 0.018;
 /** the field stones' colours (linear RGB): greys, a warm brown, a bluish slate, an ochre, a dark basalt */
 const STONE_COLOURS: readonly [number, number, number][] = [
   [0.26, 0.25, 0.23], [0.32, 0.3, 0.27], [0.22, 0.18, 0.14], [0.2, 0.21, 0.23], [0.3, 0.23, 0.14], [0.12, 0.12, 0.12],
@@ -38,10 +35,9 @@ const EARTH_UP = 0.035;
 
 /**
  * A rounded stone about a unit across: an icosphere pushed in and out by two sizes of solid noise, smooth (its points
- * shared, so it shades round, not faceted), its foot flattened to sit on the ground; split along `split` (a unit
- * normal through its middle) into the half on that side, its cut face flat `SPLIT_GAP / 2` off the middle.
+ * shared, so it shades round, not faceted), its foot flattened to sit on the ground.
  */
-function stoneShape(seed: number, split?: THREE.Vector3): THREE.BufferGeometry {
+function stoneShape(seed: number): THREE.BufferGeometry {
   const sphere = new THREE.IcosahedronGeometry(1, 3);
   sphere.deleteAttribute('normal');
   sphere.deleteAttribute('uv');
@@ -55,21 +51,16 @@ function stoneShape(seed: number, split?: THREE.Vector3): THREE.BufferGeometry {
     const pit = valueNoise3(v.x * 7, v.y * 7, v.z * 7, seed + 2) - 0.5;
     v.multiplyScalar(1 + 0.42 * lump + 0.16 * knob + 0.05 * pit);
     if (v.y < -0.35) v.y = -0.35 + (v.y + 0.35) * 0.15;
-    if (split) {
-      const past = v.dot(split) - SPLIT_GAP / 2;
-      if (past < 0) v.addScaledVector(split, -past);
-    }
     p.setXYZ(i, v.x, v.y, v.z);
   }
   return g;
 }
 
 /** One stone of the ring as it lies: its shape scaled, turned along the ring and placed, in the world's frame. */
-interface Laid { shape: THREE.BufferGeometry; matrix: THREE.Matrix4; colour: THREE.Color; split?: THREE.Vector3 }
+interface Laid { shape: THREE.BufferGeometry; matrix: THREE.Matrix4; colour: THREE.Color }
 
-/** The stone at place `k` of the ring, laid at angle 0 round a fire at the origin and `grow` times its size: one
- *  stone, or a split one's two halves side by side along the ring. */
-function layStone(k: number, rng: () => number, grow: number, shapes: Map<string, THREE.BufferGeometry>): Laid[] {
+/** The stone at place `k` of the ring, laid at angle 0 round a fire at the origin and `grow` times its size. */
+function layStone(k: number, rng: () => number, grow: number, shapes: Map<number, THREE.BufferGeometry>): Laid[] {
   const out = RING.radius + (rng() - 0.5) * 2 * RING.wander;
   const size = (SIZE.least + (SIZE.most - SIZE.least) * rng() ** 1.4) * grow;
   const scale = new THREE.Vector3(
@@ -81,31 +72,15 @@ function layStone(k: number, rng: () => number, grow: number, shapes: Map<string
   // (laid along the ring, a little askew, tipped a little, sunk to sit in the earth)
   const turn = new THREE.Euler((rng() - 0.5) * 0.25, Math.PI / 2 + (rng() - 0.5) * 0.6, (rng() - 0.5) * 0.25);
   const at = new THREE.Vector3(out, scale.y * 0.3, 0);
-  const seed = 101 + k * 7;
-  if (!SPLIT.includes(k)) {
-    const matrix = new THREE.Matrix4().compose(at, new THREE.Quaternion().setFromEuler(turn), scale);
-    return [{ shape: shapeOf(shapes, seed), matrix, colour }];
-  }
-  // (split across the ring, near upright: each half leaning off the crack a little)
-  const across = new THREE.Vector3(1, (rng() - 0.5) * 0.4, (rng() - 0.5) * 0.5).normalize();
-  return [1, -1].map((side) => {
-    const half = across.clone().multiplyScalar(side);
-    const lean = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, -side), 0.06 + rng() * 0.05);
-    const turned = new THREE.Quaternion().setFromEuler(turn).multiply(lean);
-    // (eased off the crack: each half leans apart at its top, and turned about its middle its foot came in under the
-    // other's, the two halves run together there)
-    const off = half.clone().multiply(scale).applyQuaternion(turned).setY(0).setLength(SPLIT_PUSH);
-    const matrix = new THREE.Matrix4().compose(at.clone().add(off), turned, scale);
-    return { shape: shapeOf(shapes, seed, half), matrix, colour, split: half };
-  });
+  const matrix = new THREE.Matrix4().compose(at, new THREE.Quaternion().setFromEuler(turn), scale);
+  return [{ shape: shapeOf(shapes, 101 + k * 7), matrix, colour }];
 }
 
 /** A stone's shape, made once for every pass of the ring's fitting (its size is its matrix's): made afresh each pass,
  *  the ring took 40 ms at boot. */
-function shapeOf(shapes: Map<string, THREE.BufferGeometry>, seed: number, split?: THREE.Vector3): THREE.BufferGeometry {
-  const key = split ? `${seed}:${split.x},${split.y},${split.z}` : `${seed}`;
-  let shape = shapes.get(key);
-  if (!shape) shapes.set(key, shape = stoneShape(seed, split));
+function shapeOf(shapes: Map<number, THREE.BufferGeometry>, seed: number): THREE.BufferGeometry {
+  let shape = shapes.get(seed);
+  if (!shape) shapes.set(seed, shape = stoneShape(seed));
   return shape;
 }
 
@@ -127,7 +102,7 @@ function reachRound(laid: readonly Laid[]): { from: number; to: number } {
 }
 
 /** The ring's stones laid at angle 0, each with how far round it reaches, all `grow` times their size. */
-function stonesAt(grow: number, shapes: Map<string, THREE.BufferGeometry>):
+function stonesAt(grow: number, shapes: Map<number, THREE.BufferGeometry>):
   { laid: Laid[]; from: number; to: number }[] {
   const rng = mulberry(4242);
   return Array.from({ length: RING.count }, (_, k) => {
@@ -144,7 +119,7 @@ function stonesAt(grow: number, shapes: Map<string, THREE.BufferGeometry>):
 function layRing(): { laid: Laid[]; angle: number }[] {
   const gaps = Array.from({ length: RING.count }, (_, k) => (GAP.least + GAP.more * mulberry(77 + k)()) / RING.radius);
   const gapsRound = gaps.reduce((sum, gap) => sum + gap, 0);
-  const shapes = new Map<string, THREE.BufferGeometry>();
+  const shapes = new Map<number, THREE.BufferGeometry>();
   let grow = 1;
   let stones = stonesAt(grow, shapes);
   // (each stone's reach round is near its size: two rounds of shrinking settle it within a hair)
@@ -167,15 +142,6 @@ function layRing(): { laid: Laid[]; angle: number }[] {
 /** A laid stone in the world's frame: smooth normals, box-mapped uvs in metres, its colours soot and earth. */
 function finish(laid: Laid, fire: THREE.Vector3, rng: () => number): THREE.BufferGeometry {
   const g = laid.shape;
-  // (the crack darkened before it's placed, in the stone's own frame: the cut face and the rim round it)
-  const inCrack = new Float32Array(g.attributes.position.count);
-  if (laid.split) {
-    const v = new THREE.Vector3();
-    for (let i = 0; i < inCrack.length; i++) {
-      v.fromBufferAttribute(g.attributes.position, i);
-      inCrack[i] = 1 - THREE.MathUtils.smoothstep(v.dot(laid.split) - SPLIT_GAP / 2, 0, 0.12);
-    }
-  }
   g.applyMatrix4(laid.matrix);
   g.computeVertexNormals();
   const p = g.attributes.position;
@@ -196,8 +162,7 @@ function finish(laid: Laid, fire: THREE.Vector3, rng: () => number): THREE.Buffe
     const soot = Math.min(1, (facing ** 0.7 + topToward * 0.9) * (0.7 + 0.6 * patch));
     const earth = 1 - THREE.MathUtils.smoothstep(v.y, 0, EARTH_UP);
     const grain = 0.75 + 0.5 * valueNoise3(v.x * 23, v.y * 23, v.z * 23, salt + 1);
-    const lit = grain * THREE.MathUtils.lerp(1, SOOT, soot * 0.9) * THREE.MathUtils.lerp(1, EARTHED, earth)
-      * THREE.MathUtils.lerp(1, 0.25, inCrack[i]);
+    const lit = grain * THREE.MathUtils.lerp(1, SOOT, soot * 0.9) * THREE.MathUtils.lerp(1, EARTHED, earth);
     colours[i * 3] = laid.colour.r * lit;
     colours[i * 3 + 1] = laid.colour.g * lit;
     colours[i * 3 + 2] = laid.colour.b * lit;

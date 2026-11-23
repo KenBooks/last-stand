@@ -5,13 +5,14 @@
 // solid, by the count of its faces a ray out of the point crosses, each point first drawn a touch in toward its own
 // stone's middle, so stones that only touch pass. Said: the stones, their triangles, and the pairs that run into each
 // other, with the deepest point; pictured as the player sees it (the page's own screenshot, which the engine's
-// canvas gives), standing by the fire and from a seat log, at noon and midnight. `canary` tries a stone against itself
-// moved 4 cm, which must be found.
+// canvas gives), from above, standing by the fire and from a seat log, at noon and midnight. `canary` tries a stone
+// against itself moved 4 cm, which must be found.
 import * as THREE from 'three';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { CAMPFIRE } from '../../../src/data/village';
 import { holdHour } from '../../../src/game/clock';
+import * as renderer from '../../../src/core/renderer';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
 import { groundHeight } from '../../../src/world/ground';
 import { viewBy } from './villageHallCull';
@@ -32,6 +33,10 @@ const STANDS = [
   { what: 'standing by the fire', out: 1.9, round: 1.35 },
   { what: 'from a seat log', out: 2.2, round: 0.4 },
 ];
+/** how far past the fire from the camera the hero stands for the view from above (m), and the way it looks (rad, the
+ *  top-down view's yaw: 0 looks toward -z) */
+const ABOVE_PAST = 1.9;
+const ABOVE_YAW = 0;
 /** the hours pictured, and the frames he settles in at a stand */
 const HOURS = [12, 0];
 const SETTLE = 15;
@@ -174,9 +179,41 @@ function moved(stone: Stone, by: THREE.Vector3): Stone {
   return { corners, points, middle: stone.middle.clone().add(by), box: stone.box.clone().translate(by) };
 }
 
+/** The ring from above, in the lobby's own view, the hero stood past the fire from the camera so he hides none of
+ *  it (a review's own view: "why perfectly cut stones in half ?"), at each hour. */
+async function ringFromAbove(lab: Lab): Promise<Pictured[]> {
+  const moments: Pictured[] = [];
+  const was = viewMode();
+  await viewBy(lab, 'top');
+  const fire = new THREE.Vector3(CAMPFIRE[0], 0, CAMPFIRE[1]);
+  G.player.walkTo = null;
+  G.player.place(fire.clone().setY(groundHeight(fire.x, fire.z)), 0);
+  await lab.step(SETTLE);
+  // (turned to one way, so both sides of an A/B see it alike: the village opens at a spot of its own at random, the
+  // camera's turn with it)
+  renderer.settleCamera?.(fire);
+  renderer.turnBy(Math.atan2(Math.sin(ABOVE_YAW - renderer.cameraYaw()), Math.cos(ABOVE_YAW - renderer.cameraYaw())));
+  renderer.settleCamera?.(fire);
+  await lab.step(1);
+  // (the camera's way from him along the ground, then him moved that far past the fire on its other side)
+  const away = new THREE.Vector3(G.camera.position.x - fire.x, 0, G.camera.position.z - fire.z).setLength(ABOVE_PAST);
+  const x = fire.x - away.x;
+  const z = fire.z - away.z;
+  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  await lab.step(SETTLE);
+  for (const hour of HOURS) {
+    holdHour(hour);
+    await lab.step(2);
+    moments.push(await lab.screen(`the campfire's stones from above, at ${hour}h`, []));
+  }
+  holdHour(null);
+  await viewBy(lab, was);
+  return moments;
+}
+
 /** The ring as the player sees it from each stand, over the shoulder facing the fire, at each hour. */
 async function ringSeen(lab: Lab): Promise<Pictured[]> {
-  const moments: Pictured[] = [];
+  const moments: Pictured[] = [...await ringFromAbove(lab)];
   const was = viewMode();
   await viewBy(lab, 'third');
   for (const stand of STANDS) {
@@ -204,7 +241,7 @@ export async function campfireStonesApart(lab: Lab, canary: boolean): Promise<Li
   const stones = stonesOf(mesh);
   if (stones.length < 8) throw new Error(`lab: village: the campfire's ring came apart into ${stones.length} pieces`);
   const triangles = mesh.geometry.attributes.position.count / 3;
-  const lines = [`the campfire's ring: ${stones.length} stones (split halves each one), ${triangles} triangles`];
+  const lines = [`the campfire's ring: ${stones.length} stones, ${triangles} triangles`];
   if (canary) {
     const copy = moved(stones[0], new THREE.Vector3(CANARY_SHIFT, 0, 0));
     const caught = runTogether([stones[0], copy]).length > 0;
