@@ -313,8 +313,9 @@ not intend to support the old way of rendering".
   boot at a plain level makes the plain ones alone (`lab rust --boot verylow`: 80 pipelines, as main).
 - [ ] Bulwark clears a layer's pipelines (`ONE_LAYER`, the hall's porch roof) at every `set_plain_only`, and makes
   them again at their next draw, compiled aside: after a switch in play the roof's layers are left out for the frames
-  they compile (two switches for the making aside, one for the switch). Kept with the spares as the scene's are, a
-  switch back would make none.
+  they compile (two switches for the making aside, one for the switch). Bulwark d6e1c3e keeps them per making,
+  swapped with the spares, and makes a set's at the switch itself (`lab layers`: natively, 1, 1, 1 places with them
+  after a frame, a switch and back); it reaches the game with the next pkg.
 - [x] A counted draw placed ahead (the meadow's blades) was drawn while its pipeline still compiled: the stand-in
   left out `draw` and `drawIndexed`, not the indirect draws, and the GPU refused the whole frame ("No pipeline
   set"), every frame until the pipeline was ready. Found by the check above; on main it's met where a level
