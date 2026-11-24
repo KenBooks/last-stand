@@ -3,7 +3,7 @@
 One command of the lab in full, moved here from [`COMMANDS.md`](../COMMANDS.md) (which lists every command, and the
 options every command takes) for its size.
 
-`held`: every held skill of the hero's class (`SkillDef.aimed`: the ranger's Quarry Mark and Strawman, the mage's
+`held`: every held skill of the hero's class (`SkillDef.aimed`: the ranger's Hedgeward and Strawman, the mage's
 Starfall and Veilstep; `page/held.ts`, `--class`) held as the player holds it, over a training dummy the way the
 camera looks: ready, its preview shown in its own look with no countdown, and let go it casts; then held through
 its cooldown and short of energy (`page/heldCooldown.ts`, as `blink`'s), red and counting 3, 2, 1 until a release

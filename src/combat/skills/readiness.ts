@@ -58,11 +58,12 @@ export class Readiness {
   }
 
   /**
-   * Shown this frame for `player`'s `def`, its countdown at `at`: how far red it is now. Shown afresh it starts in the
+   * Shown this frame for `player`'s `def`, its countdown at `at`: how far red it is now (red too while `blocked`: where
+   * it's aimed it can't be cast, as the Hedgeward's wall with something in its way). Shown afresh it starts in the
    * look it has (pressed on cooldown, it never starts in its own).
    */
-  show(player: Player, def: SkillDef, at: At, dt: number): number {
-    const goal = readyToGo(player, def) ? 0 : 1;
+  show(player: Player, def: SkillDef, at: At, dt: number, blocked = false): number {
+    const goal = readyToGo(player, def) && !blocked ? 0 : 1;
     this.red = this.shown ? damp(this.red, goal, TURN_RATE, dt) : goal;
     this.shown = true;
     const left = player.cooldownLeft(def.impl);

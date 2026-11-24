@@ -215,11 +215,11 @@ function fly(proj: Projectile, dt: number): void {
   proj.kill();
 }
 
-/** An arrow meeting a prop: where its point crossed into the prop's circle on the step from `from`. */
-function arrowProp(o: Obstacle, proj: Projectile, from: THREE.Vector3): boolean {
-  const dx = proj.pos.x - from.x, dz = proj.pos.z - from.z;
+/** An arrow meeting a prop: where its point crossed into the prop's circle on its step from `from` to `to`. */
+function arrowProp(o: Obstacle, proj: Projectile, from: THREE.Vector3, to: THREE.Vector3): boolean {
+  const dx = to.x - from.x, dz = to.z - from.z;
   const t = Math.max(0, entry(from.x, from.z, dx, dz, o.x, o.z, o.r));
-  return intoProp(o, _p.lerpVectors(from, proj.pos, t), proj.vel);
+  return intoProp(o, _p.lerpVectors(from, to, t), proj.vel);
 }
 
 /** An arrow's way off the bow: heading `yaw`, `pitch` above level. */
@@ -262,14 +262,16 @@ function flightPath(origin: THREE.Vector3, dir: THREE.Vector3, v: number, radius
     _c.set(px, py, pz).addScaledVector(_e.copy(vel).normalize(), ARROW / 2);
     if (throughGate(_c, _b)) return { pts, end: null };
     if (G.arena.wall.cast(_c, _b, _hit)) t = Math.min(t, _hit.t);
-    const low = pos.y - radius * 0.5;
+    // (a prop by the arrow's point, `_c` to `_b`, as the arrow meets it: before its flight puts the point in the ground)
+    const low = _b.y - radius * 0.5, tx = _b.x - _c.x, tz = _b.z - _c.z;
     for (const o of G.arena.obstacles) {
       if (o.h <= low || passed.has(o)) continue;
-      const k = entry(px, pz, dx, dz, o.x, o.z, o.r + radius * 0.5);
+      const k = entry(_c.x, _c.z, tx, tz, o.x, o.z, o.r + radius * 0.5);
       if (k < 0 || k >= t) continue;
       // (as the arrow has it: past a prop whose line misses what it draws, a log's end, between a cluster's caps)
-      const c = Math.max(0, entry(px, pz, dx, dz, o.x, o.z, o.r));
-      if (!propSurface(o, _c.set(px + dx * c, py + (pos.y - py) * c, pz + dz * c), _e.copy(vel).normalize(), _wn)) { passed.add(o); continue; }
+      const c = Math.max(0, entry(_c.x, _c.z, tx, tz, o.x, o.z, o.r));
+      const at = _tip.set(_c.x + tx * c, _c.y + (_b.y - _c.y) * c, _c.z + tz * c);
+      if (!propSurface(o, at, _e.copy(vel).normalize(), _wn)) { passed.add(o); continue; }
       t = k;
     }
     // (a foe as the projectile strikes it: an arrow where its point meets its body, `strikesBody`)
@@ -387,7 +389,7 @@ export const bowShot: InstantSkill = {
       const dir = shotDir(yaw + (i - (def.missiles - 1) / 2) * def.spread, pitch);
       const mesh = arrowMesh(); mesh.quaternion.setFromUnitVectors(FWD, dir);
       spawnProjectile({
-        pos: origin, dir, speed: v, radius: 0.22, life: 4, mesh, color: 0xd3bf8d, swept: true, level: true, point: ARROW / 2, tick: fly, edge: ARROW_EDGE, onProp: arrowProp, by: player, judged,
+        pos: origin, dir, speed: v, radius: 0.22, life: 4, mesh, color: 0xd3bf8d, swept: true, level: true, point: ARROW / 2, tip: ARROW / 2, tick: fly, edge: ARROW_EDGE, onProp: arrowProp, by: player, judged,
         onHit(enemy, proj) {
           intoFoe(enemy as Enemy, proj.pos, proj.vel);
           // (one that strikes the head is a headshot, always a critical hit: #750)
@@ -433,7 +435,7 @@ export const piercingShot: InstantSkill = {
     const heads = aimsForHeads(player);
     const pr = spawnProjectile({
       // (through everything on its line, short foes too: it flies near level, and over the nearest heads a line shot missed them)
-      pos: origin, dir, speed: v, radius: 0.24, life: 3, mesh, color: 0xd3bf8d, swept: true, pierce: true, tick: fly, edge: ARROW_EDGE, onProp: arrowProp, by: player,
+      pos: origin, dir, speed: v, radius: 0.24, life: 3, mesh, color: 0xd3bf8d, swept: true, pierce: true, tip: ARROW / 2, tick: fly, edge: ARROW_EDGE, onProp: arrowProp, by: player,
       trail: { color: GLINT, colorEnd: 0x5a4020, intensity: full ? 1.3 : 0.55, size: full ? 0.13 : 0.08, rate: full ? 90 : 40, life: 0.28 },
       onHit(enemy, proj) {
         const share = def.falloff[Math.min(through++, def.falloff.length - 1)];

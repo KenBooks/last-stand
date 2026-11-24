@@ -304,9 +304,10 @@ interface Found {
   problems: string[];
 }
 
-/** What a tooltip states its skill gives the hero (Health restored, a ward's blows absorbed), and its figure. */
+/** What a tooltip states its skill gives the hero (Health restored, a ward's blows absorbed, a wall's life), and its
+ *  figure. */
 interface Given {
-  what: 'heal' | 'ward';
+  what: 'heal' | 'ward' | 'wall';
   figure: number;
 }
 
@@ -314,7 +315,7 @@ interface Given {
 function givenIn(def: SkillDef): Given | null {
   const card = document.createElement('div');
   card.innerHTML = skillTooltip(def)().html;
-  for (const what of ['heal', 'ward'] as const) {
+  for (const what of ['heal', 'ward', 'wall'] as const) {
     const figure = card.querySelector(`.tt-${what}`)?.textContent;
     if (figure) return { what, figure: Number(figure) };
   }
@@ -344,9 +345,13 @@ function catchHeals(canary: boolean): () => boolean {
   };
 }
 
-/** What a skill gave the hero as its `what` once cast: the Health it restored, or the ward it raised. */
-function gaveOf(what: Given['what']): number {
+/** What a skill gave the hero as its `what` once cast: the Health it restored, the ward it raised, or the life of the
+ *  wall it raised (the Hedgeward's: its module loaded only for it, so a tree without walls still runs the rest). */
+async function gaveOf(what: Given['what']): Promise<number> {
   if (what === 'heal') return healed.reduce((sum, amount) => sum + amount, 0);
+  // (through the lab's own module of the walls, loaded only here: one importing the game's walls itself wouldn't load
+  // in an A/B's commit from before them, and one put together by hand is a second copy of them, never raised)
+  if (what === 'wall') return (await import('./hedgeward')).lastWallLife();
   return G.player.ward?.amount ?? 0;
 }
 
@@ -365,7 +370,7 @@ async function givenRound(lab: Lab, options: TooltipsOptions): Promise<Found> {
     const given = givenIn(def);
     if (!given) continue;
     await castAt(lab, fixture, def.name, (skill) => holdFor(skill.def), catchHeals(options.canary));
-    const gave = gaveOf(given.what);
+    const gave = await gaveOf(given.what);
     found.lines.push(`  ${def.name}: states a ${given.what} of ${given.figure}, gave ${whole(gave)}`);
     if (Math.abs(gave - given.figure) > ROUNDING) {
       found.problems.push(`${def.name}: gave a ${given.what} of ${whole(gave)}, not the ${given.figure} it states`);

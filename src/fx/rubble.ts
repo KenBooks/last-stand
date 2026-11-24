@@ -13,7 +13,7 @@ import { stoneGeometry, rockBump, coalTexture, woodAtlas, flakeGeometry, mushroo
 
 type Shape = 'stone' | 'coal' | 'shell' | 'stem' | 'stub' | 'splinter' | 'chip' | 'bark';
 /** what a prop is made of: sets its pieces */
-export type RubbleKind = 'stone' | 'wood' | 'shroom' | 'ember';
+export type RubbleKind = 'stone' | 'wood' | 'shroom' | 'ember' | 'sticks';
 
 /** pool size and number of different shapes, per shape (each variant is its own mesh with `max` pieces), and roughly how
  * big its pieces are (m): a pool casts shadows only where the quality preset's caster size allows (each is a draw call
@@ -58,6 +58,22 @@ const RECIPES: Record<RubbleKind, Part[]> = {
     { shape: 'bark', w: 2, sx: 0.5, sy: 0.15, sz: 1.2, color: 0x4a3a2c },
     { shape: 'coal', w: 4, sx: 0.4, sy: 0.35, sz: 0.4, color: 0x5a2a12 },       // coals (they glow)
   ],
+  // a wall of stakes (the ranger's Hedgeward): only its stakes, whole or snapped, never thicker than one (at `BREAKS`'
+  // size of 1, at most 14 cm across and 1.9 m long; its stakes are 11 to 15 cm and 1.7 to 2 m). Broken as a wooden
+  // prop, it left log rounds wider than a head over several metres (from Victor's review: "it also cannot fall apart
+  // in to sawn off log pieces >head in diameter", "should be just wooden sticks")
+  sticks: [
+    { shape: 'splinter', w: 1, sx: 0.06, sy: 0.06, sz: 0.8, color: null },
+  ],
+};
+
+/** A kind's own break, where a prop's footprint shouldn't set it (`breakProp` in world/destructible.ts): how many
+ *  pieces, their size, how far round where it stood they start (a share of its reach) and how hard they fly, how
+ *  long they lie (s), and the size its dust, smoke and shake are made at (as a prop's footprint sets them). A wall of
+ *  nine stakes leaves about a dozen sticks: its stakes, a few snapped in two (from Victor: "too much debris", "like a
+ *  tree"; a wall 3.6 m long broke as a big prop, 36 pieces sized by its length). */
+export const BREAKS: Partial<Record<RubbleKind, { count: number; size: number; spread: number; speed: number; life: number; as: number }>> = {
+  sticks: { count: 12, size: 1, spread: 0.45, speed: 1.4, life: 3, as: 0.4 },
 };
 
 export function initRubble(): void {
@@ -119,7 +135,8 @@ export function rubble(x: number, z: number, { count, color, kind = 'stone', rad
       x: x + Math.cos(a) * d, y: groundHeight(x, z) + 0.15 + Math.random() * height, z: z + Math.sin(a) * d,
       vx: Math.cos(a) * speed * rand(0.3, 1), vy: rand(1.5, 4.5) * (speed / 4), vz: Math.sin(a) * speed * rand(0.3, 1),
       rx: rand(0, 6), ry: rand(0, 6), rz: rand(0, 6), wx: rand(-9, 9), wy: rand(-9, 9), wz: rand(-9, 9),
-      sx: s * part.sx * rand(0.8, 1.2), sy: s * part.sy * rand(0.8, 1.2), sz: s * part.sz * rand(0.8, 1.2), t: 0, life: LIFE + rand(0, 3), rest: false, tx: 0, tz: 0,
+      sx: s * part.sx * rand(0.8, 1.2), sy: s * part.sy * rand(0.8, 1.2), sz: s * part.sz * rand(0.8, 1.2), t: 0,
+      life: BREAKS[kind] ? BREAKS[kind]!.life + rand(0, 1) : LIFE + rand(0, 3), rest: false, tx: 0, tz: 0,
     });
     pool.mesh.setColorAt(slot, _c.set(part.color ?? color).multiplyScalar((part.shade ?? 1) * rand(0.75, 1.15)));
     // (placed where it starts at once: drawn before the next update with the pool's unset place, a fresh piece stood

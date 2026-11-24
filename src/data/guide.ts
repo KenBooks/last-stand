@@ -231,7 +231,7 @@ export const CLASS_NOTES: Record<string, ClassNote> = {
     },
     loadouts: [
       { name: 'The hunter', keys: { mouse0: 'nockShot', mouse2: 'fanShot', '1': 'piercingShot', '2': 'arrowRain', '3': 'quarryMark', '4': 'strawman' }, why: 'The default kit covers everything: single targets, lines, packs and a lure.' },
-      { name: 'The warden', keys: { mouse0: 'nockShot', mouse2: 'fanShot', '1': 'piercingShot', '2': 'arrowRain', '3': 'hedgeward', '4': 'strawman' }, why: 'Swap the mark for Hedgeward\'s walls to hold the pack back.' },
+      { name: 'The warden', keys: { mouse0: 'nockShot', mouse2: 'fanShot', '1': 'piercingShot', '2': 'arrowRain', '3': 'hedgeward', '4': 'strawman' }, why: 'Swap the mark for Hedgeward\'s walls to slow the pack: they walk round, but big foes walk straight through.' },
     ],
     combos: [
       { name: 'Lure and rain', steps: ['strawman', 'arrowRain'], how: 'Raise the Strawman, let the pack gather round it, and rain arrows on the knot.' },

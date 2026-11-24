@@ -7,7 +7,7 @@ import { BLOCK } from '../data/balance';
 import { SCHOOLS, schoolCss } from '../data/schools';
 import { input } from '../core/input';
 import { itemIconSVG } from './itemIcons';
-import { skillDamageHTML, skillHealHTML, skillRamHTML, skillWardHTML } from './skillDamage';
+import { skillDamageHTML, skillHealHTML, skillRamHTML, skillWallHTML, skillWardHTML } from './skillDamage';
 import type { ClassDef, Item, SkillDef, StatKey } from '../types';
 
 /** Tooltip content: HTML, accent color and optional footer hint. */
@@ -186,7 +186,7 @@ export function skillTooltip(raw: SkillDef, ofHero = true): () => TooltipContent
     let html = `<div class="tt-card" style="--c:${def.icon.color}"><div class="tt-name" style="color:${def.icon.color}">${def.name}</div>`;
     html += `<div class="tt-type">${def.tags.join(' · ')}</div>`;
     html += `<div class="tt-desc">${def.desc}</div>`;
-    html += skillDamageHTML(def, stats) + skillHealHTML(def, stats) + skillWardHTML(def, stats);
+    html += skillDamageHTML(def, stats) + skillHealHTML(def, stats) + skillWardHTML(def, stats) + skillWallHTML(def, G.run?.wave ?? 1);
     const bits = [];
     if (def.cost) bits.push(def.channel ? `${def.cost} Energy / sec` : `${def.cost} Energy`);
     if (def.gain) bits.push(`+${def.gain} Energy per hit`);

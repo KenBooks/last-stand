@@ -101,9 +101,16 @@ export interface ProjectileOpts {
   tick?(proj: Projectile, dt: number): void;
   onHit?(target: Enemy | Player, proj: Projectile): void;
   onExpire?(proj: Projectile): void;
-  /** it met a prop's circle (`o`, coming from `from`): instead of fading out where it is, it ends as this has it (true: the
-   *  prop takes the blow) or flies on past that prop (false: its circle is rounder than what it draws, and missed it) */
-  onProp?(o: Obstacle, proj: Projectile, from: THREE.Vector3): boolean;
+  /** it met a prop's circle (`o`, on its step from `from` to `to`, its point's with a `tip`): instead of fading out where
+   *  it is, it ends as this has it (true: the prop takes the blow) or flies on past that prop (false: its circle is
+   *  rounder than what it draws, and missed it) */
+  onProp?(o: Obstacle, proj: Projectile, from: THREE.Vector3, to: THREE.Vector3): boolean;
+  /** how far ahead of where it is it meets a prop (m): an arrow's point. A projectile with one meets the props before
+   *  its own flight (`tick`) can put it in the ground: tested by its middle after that, an arrow aimed low at the
+   *  ranger's wall put its point in the ground at the wall's foot first and stood there, dealing nothing (from
+   *  Victor's review of #647: "Sometimes arrow can fly through without dealing damage, I get it more than half the
+   *  time") */
+  tip?: number;
   /** how far from the middle it's gone (m, 28 by default): an arrow meets the wall itself */
   edge?: number;
   /** the hero whose shot it is: a foe that sees it coming may get out of its way (entities/evade.ts) */
@@ -116,6 +123,15 @@ export interface ProjectileOpts {
 const _to = new THREE.Vector3(), _from = new THREE.Vector3(), _hits: Enemy[] = [], _along: number[] = [], _order: number[] = [];
 const _heads: boolean[] = [], _struck: Struck = { head: false };
 const _ahead = new THREE.Vector3(), _stepFrom = new THREE.Vector3(), _stepTo = new THREE.Vector3();
+const _flat = new THREE.Vector3();
+
+/** whether the props are met by a projectile's middle after its own flight, as before its `tip` (the lab's canary) */
+let propsLate = false;
+
+/** The lab's canary: props met by a projectile's middle after its own flight (`lab hedgeward --canary`'s played). */
+export function holdPropsAfterFlight(late: boolean): void {
+  propsLate = late;
+}
 
 export class Projectile {
   readonly pos: THREE.Vector3;
@@ -141,6 +157,7 @@ export class Projectile {
   readonly size: number;
   readonly onExpire?: ProjectileOpts['onExpire'];
   readonly onProp?: ProjectileOpts['onProp'];
+  readonly tip: number;
   /** the props it has flown past (their circles, not what they draw) */
   readonly passed = new Set<Obstacle>();
   readonly edge: number;
@@ -172,6 +189,7 @@ export class Projectile {
     this.ownMesh = !!o.mesh;
     this.onExpire = o.onExpire;
     this.onProp = o.onProp;
+    this.tip = o.tip ?? 0;
     this.edge = o.edge ?? 28;
     this.by = o.hostile ? undefined : o.by;
     this.judged = o.judged ?? new Set();
@@ -213,6 +231,9 @@ export class Projectile {
     if (this.level && !this.hostile && this.strikeFoes(_from.set(px, py, pz))) return false;
     // (a hero's arrow low over a vine cuts it: it goes on through it only if it pierces)
     if (this.level && this.by && cutVineAlong(_from.set(px, py, pz), this.pos) && !this.pierce) return this.kill();
+    // (by its point, before its own flight can put that point in the ground)
+    const tipFirst = this.tip > 0 && !propsLate;
+    if (tipFirst && this.meetsProp(px, py, pz)) return false;
     this.tick?.(this, dt);
     // (its own flight may end it: an arrow into the ground, past a foe it went through first, which takes it: a
     // Lancewood Shot at a ducked foe's feet went through what was left of it into the ground)
@@ -238,19 +259,7 @@ export class Projectile {
 
     // world collision
     if (Math.hypot(this.pos.x, this.pos.z) > this.edge) return this.expire();
-    // only what reaches up to the bolt: it flies over low cover
-    const low = this.pos.y - this.radius * 0.5;
-    for (const o of G.arena.obstacles) {
-      if (o.h > low && !this.passed.has(o) && this.distanceSq(o.x, o.z, px, pz) < (o.r + this.radius * 0.5) ** 2) {
-        if (this.onProp) {
-          if (!this.onProp(o, this, _from.set(px, py, pz))) { this.passed.add(o); continue; }
-          hurtProp(o, PROP_DAMAGE.bolt);
-          return this.kill();
-        }
-        hurtProp(o, this.hostile ? PROP_DAMAGE.hostile : PROP_DAMAGE.bolt);
-        return this.expire();
-      }
-    }
+    if (!tipFirst && this.meetsProp(px, py, pz)) return false;
 
     // target collision
     if (this.hostile) {
@@ -262,6 +271,29 @@ export class Projectile {
       }
     } else if (!this.level && this.strikeFoes(_from.set(px, py, pz))) return false;
     return true;
+  }
+
+  /**
+   * Whether this frame's step from (px, py, pz) met a prop, which then took it: only what reaches up to it (it flies
+   * over low cover), by its point where it has a `tip`. True: it's gone.
+   */
+  private meetsProp(px: number, py: number, pz: number): boolean {
+    const ahead = _ahead.copy(this.vel).setLength(propsLate ? 0 : this.tip);
+    const from = _stepFrom.set(px, py, pz).add(ahead), to = _stepTo.copy(this.pos).add(ahead);
+    const low = to.y - this.radius * 0.5;
+    for (const o of G.arena.obstacles) {
+      if (o.h <= low || this.passed.has(o) || this.stepDistanceSq(o.x, o.z, from, to) >= (o.r + this.radius * 0.5) ** 2) continue;
+      if (this.onProp) {
+        if (!this.onProp(o, this, from, to)) { this.passed.add(o); continue; }
+        hurtProp(o, PROP_DAMAGE.bolt);
+        this.kill();
+        return true;
+      }
+      hurtProp(o, this.hostile ? PROP_DAMAGE.hostile : PROP_DAMAGE.bolt);
+      this.expire();
+      return true;
+    }
+    return false;
   }
 
   /** The foes that see it coming within `SEEN_AHEAD` of its flight, each judged once (`evades`): one that blinks out
@@ -353,10 +385,16 @@ export class Projectile {
   }
 
   private distanceSq(x: number, z: number, px: number, pz: number): number {
-    if (!this.swept) return (this.pos.x - x) ** 2 + (this.pos.z - z) ** 2;
-    const dx = this.pos.x - px, dz = this.pos.z - pz, lengthSq = dx * dx + dz * dz;
-    const t = lengthSq > 0 ? Math.max(0, Math.min(1, ((x - px) * dx + (z - pz) * dz) / lengthSq)) : 0;
-    return (px + dx * t - x) ** 2 + (pz + dz * t - z) ** 2;
+    return this.stepDistanceSq(x, z, _flat.set(px, 0, pz), this.pos);
+  }
+
+  /** The square of the least distance on the ground from (x, z) to its step from `from` to `to`, or to `to` alone
+   *  unless it's `swept`. */
+  private stepDistanceSq(x: number, z: number, from: THREE.Vector3, to: THREE.Vector3): number {
+    if (!this.swept) return (to.x - x) ** 2 + (to.z - z) ** 2;
+    const dx = to.x - from.x, dz = to.z - from.z, lengthSq = dx * dx + dz * dz;
+    const t = lengthSq > 0 ? Math.max(0, Math.min(1, ((x - from.x) * dx + (z - from.z) * dz) / lengthSq)) : 0;
+    return (from.x + dx * t - x) ** 2 + (from.z + dz * t - z) ** 2;
   }
 
   expire(): false {
