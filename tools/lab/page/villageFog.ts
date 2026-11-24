@@ -158,18 +158,24 @@ export async function firesStillInFog(lab: Lab, canary: boolean): Promise<Lights
     await lab.step(30);
     const inFog = Math.abs(flames.uFrame.value - before);
     const drawnInFog = flames.drawn();
+    // (held at the frame kept for a fire that stands still, which its `uFrame` reads under 0: left at a frame of
+    // the loop it burns on with the fires he sees, whose two frames on the GPU are every fire's)
+    const held = flames.uFrame.value < 0;
     await standAt(lab, CAMPFIRE[0] + 2.4, CAMPFIRE[1], 0);
     const seenFrom = flames.uFrame.value;
     await lab.step(30);
     const seen = Math.abs(flames.uFrame.value - seenFrom);
     const line = `the campfire's flames in 30 frames: ${inFog.toFixed(2)} frames of its loop in the fog`
-      + `${drawnInFog ? ', drawn there' : ', not drawn there'}, ${seen.toFixed(2)} beside it`
+      + `${drawnInFog ? ', drawn there' : ', not drawn there'}${held ? ', at its held frame' : ', at a frame of the loop'}, `
+      + `${seen.toFixed(2)} beside it`
       + `${flames.drawn() ? '' : ', not drawn'}`;
-    // (nor drawn there: from play, "why is fire still burning in fog of war")
-    const moved = inFog > 0.001 || drawnInFog;
+    // (from play, "why is fire still burning in fog of war")
+    const moved = inFog > 0.001 || !held;
     if (canary) return { lines: [line], problems: [], caught: moved, moments: [] };
     const problems: string[] = [];
     if (moved) problems.push(`${line}: it burns on in the fog`);
+    // (from play, "why campfire stopped burning, supposed to be frozen flame in fog of war")
+    if (!drawnInFog) problems.push(`${line}: its flames are gone in the fog`);
     if (seen < 0.1 || !flames.drawn()) problems.push(`${line}: it stands still in sight, or isn't drawn`);
     return { lines: [line], problems, caught: null, moments: [] };
   } finally {
