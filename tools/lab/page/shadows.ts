@@ -1,30 +1,29 @@
-// `lab shadows`: the hero's shadow cast as one (src/entities/models/castAsOne.ts) against his pieces cast each on its
-// own, as the player sees them. In each way he holds his weapons, in all his armour and in none (the gear's pieces
-// shown and hidden, so the merged mesh made again), and in each view, the frame is drawn both ways and compared pixel
-// by pixel. Cast as one, a piece's vertices pass through other matrices than its own (its bone's, in floats), which
-// round otherwise: a shadow's edge moves by a texel here and there, and its soft edge differs by a few levels in up to
-// some 250 pixels of the frame (the dual-wielder over the shoulder). More than that, or by more, is a fault: the
-// merged mesh hidden for the frame it was made again lost 1.7k to 3.3k pixels of the shadow top-down by 56 to 133,
-// and the body cast through the eyes 86k to 112k pixels by 38. The pieces cast as one are counted, so a frame with
-// none cast that way can't pass for a match. `--canary` moves their shadow 30 cm: it must be seen. `--cost` times
-// the shadow map's draw a frame by the browser's clock, the two ways in turns on the one page (the machine's load
-// drifts from boot to boot), standing in the lobby's view.
-import type * as THREE from 'three';
+// `lab shadows`: the hero's shadow cast from fewer triangles (src/entities/models/shadowDetail.ts, the engine's
+// `casterGeometry`: each of his pieces a record of its own for the shadow alone) against cast from every triangle, as
+// the player sees it. In each way he holds his weapons, in all his armour and in none, and in each view, the frame is
+// drawn both ways and compared pixel by pixel: its outline within a texel or two, no patch of his own body shaded
+// otherwise. The pieces cast from fewer triangles are counted (the engine's `casters`), and his shadow taken away must
+// change the frame, so a frame with none can't pass for a match. Through the eyes it doesn't under the engine: his
+// body is on the layer no camera draws there, which the engine's walk passes by, and his shadow was cast by his
+// pieces cast as one, which it never makes. `--canary` takes his shadow away: it must be seen. `--cost` times the frame on the engine's GPU
+// clock in turns, each way and with him casting nothing. It compared his pieces cast as one (castAsOne.ts) against each
+// alone, in three's shadow pass, which the engine never runs: under it the two drew the same, no piece was cast as one,
+// and its timing read three's shadow map, never drawn.
+import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import type { ViewMode } from '../../../src/core/renderer';
 import type { WeaponStyle } from '../../../src/loot/loadout';
 import { castingAsOne } from '../../../src/entities/models/castAsOne';
-import { G } from '../../../src/state';
+import { RUST } from '../../../src/engine';
 import { drawFrame, type Canvas } from './light';
 import { stylesOf } from './form';
-import { quantile, timeCalls, type Timing } from './timing';
-import { gpuDone } from '../../../src/core/webgpu';
+import { costInTurns, sure, type TurnsCost } from './gpuTurns';
 
 export interface ShadowsOptions {
   /** the views the frames are drawn in (top, third, first by default) */
   views?: ViewMode[];
   canary: boolean;
-  /** time the shadow map's draw both ways instead */
+  /** time the frame on the engine's GPU clock both ways instead */
   cost: boolean;
 }
 
@@ -35,15 +34,6 @@ const FACING = 0.6;
 const WEARS = [['helm', 'chest', 'hands'], []] as const;
 /** the most two pixels may differ (levels of 255): the same frame drawn twice differs by a level in a few */
 const ROUNDING = 2;
-/** the most pixels may differ by more than `ROUNDING` (a shadow's edge moved by rounding), and by how much at most */
-const EDGE_PIXELS = 600;
-const EDGE_LEVELS = 24;
-/** how far the canary moves the pieces' shadow (m) */
-const CANARY_SHIFT = 0.3;
-/** the cost's turns, each way, and the frames a turn: the timer ticks in 0.1 ms, so a turn's mean is over many */
-const TURNS = 40;
-const TURN_FRAMES = 10;
-
 /** How two frames differ. */
 interface Difference {
   /** pixels whose channel differs by more than `ROUNDING` */
@@ -67,34 +57,6 @@ function differenceOf(a: Canvas, b: Canvas): Difference {
   return { pixels, most: Math.round(most) };
 }
 
-/** Whether `difference` is more than a shadow's edge moved by rounding. */
-const isFault = (difference: Difference): boolean => difference.pixels > EDGE_PIXELS || difference.most > EDGE_LEVELS;
-
-/** The frame drawn with the hero's pieces cast as one, or each on its own. */
-function drawnWith(lab: Lab, asOne: boolean): Canvas {
-  const was = castingAsOne.on;
-  castingAsOne.on = asOne;
-  try {
-    return drawFrame(lab);
-  } finally {
-    castingAsOne.on = was;
-  }
-}
-
-/** The frame cast as one with its pieces' shadow moved `CANARY_SHIFT` along their own x (by the mesh's bind matrix,
- *  which the pieces' vertices pass through before their bones). */
-function drawnShifted(lab: Lab): Canvas {
-  const mesh = lab.player.shadow.mesh;
-  if (!mesh) throw new Error('lab: no shadow cast as one to move');
-  const bind: THREE.Matrix4 = mesh.bindMatrix;
-  bind.elements[12] += CANARY_SHIFT;
-  try {
-    return drawnWith(lab, true);
-  } finally {
-    bind.elements[12] -= CANARY_SHIFT;
-  }
-}
-
 /** the most pixels a shadow cast from fewer triangles may differ in from one cast from every triangle, and by how
  *  much (levels of 255): its outline within a texel or two, no patch of his own body shaded otherwise */
 const COARSE_PIXELS = 4000;
@@ -106,117 +68,90 @@ function holdWhole(whole: boolean): void {
   (castingAsOne as { whole?: boolean }).whole = whole;
 }
 
+/** The frame drawn with every triangle cast or fewer; and how many of his pieces cast from fewer. */
+function drawnWith(lab: Lab, whole: boolean): { frame: Canvas; fewer: number } {
+  holdWhole(whole);
+  // (a frame first: the sun's map is drawn again as what casts into it changes, the frame after it steady)
+  drawFrame(lab);
+  const frame = drawFrame(lab);
+  return { frame, fewer: RUST.bridge?.stats.casters ?? 0 };
+}
+
+/** What casts of the hero, each part's own say, while `run` runs with none of it casting. */
+function castingNothing<T>(lab: Lab, run: () => T): T {
+  const casting: THREE.Object3D[] = [];
+  lab.player.obj.traverse((object) => {
+    if (object.castShadow) casting.push(object);
+  });
+  for (const object of casting) object.castShadow = false;
+  try {
+    return run();
+  } finally {
+    for (const object of casting) object.castShadow = true;
+  }
+}
+
 /** One case's line, and its problems. */
 async function measureCase(lab: Lab, view: ViewMode, gear: WeaponStyle | undefined, wear: readonly string[],
   canary: boolean): Promise<{ line: string; problems: string[]; caught?: boolean }> {
   await lab.setup({ view, gear, facing: FACING, wear: [...wear] as ('helm' | 'chest' | 'hands')[] });
-  // (every triangle cast for the match of as one against alone: cast from fewer, the two are simplified apart)
-  holdWhole(true);
-  // (each way drawn after one drawn the other way: a frame's look follows from the one before, its exposure adapting)
-  const before = drawnWith(lab, false);
-  const asOne = drawnWith(lab, true);
-  const pieces = lab.player.shadow.pieces.length;
-  const alone = drawnWith(lab, false);
-  const difference = differenceOf(asOne, alone);
-  const steady = differenceOf(before, alone);
-  const name = `${gear ?? 'as rolled'}, ${wear.length ? 'armoured' : 'bare'}, ${view}`;
-  const apart = `${difference.pixels} pixels apart, by ${difference.most} at most`;
-  let line = `${name}: ${pieces} pieces cast as one; ${apart} (cast alone twice: ${steady.pixels}, ${steady.most})`;
-  const problems: string[] = [];
-  if (!pieces) problems.push(`${name}: no piece cast as one`);
-  if (isFault(difference)) problems.push(`${name}: ${apart} from the pieces cast alone`);
-  // (then from fewer triangles, as the game casts it, against every triangle)
+  const whole = drawnWith(lab, true);
+  const fewer = drawnWith(lab, false);
+  const again = drawnWith(lab, false);
   holdWhole(false);
-  drawnWith(lab, true);
-  const coarse = differenceOf(drawnWith(lab, true), asOne);
-  line += `; cast from fewer triangles ${coarse.pixels} pixels apart, by ${coarse.most} at most`;
+  const coarse = differenceOf(fewer.frame, whole.frame);
+  const steady = differenceOf(fewer.frame, again.frame);
+  const gone = differenceOf(castingNothing(lab, () => drawnWith(lab, false).frame), fewer.frame);
+  const name = `${gear ?? 'as rolled'}, ${wear.length ? 'armoured' : 'bare'}, ${view}`;
+  const apart = `${coarse.pixels} pixels apart, by ${coarse.most} at most`;
+  const line = `${name}: ${fewer.fewer} pieces cast from fewer triangles (${whole.fewer} held whole); ${apart} from `
+    + `every triangle cast (drawn twice: ${steady.pixels}, ${steady.most}); his shadow taken away, ${gone.pixels} `
+    + `pixels apart by ${gone.most}`;
+  const problems: string[] = [];
+  if (!gone.pixels) problems.push(`${name}: his shadow isn't drawn (taken away, the frame is the same)`);
+  else if (!fewer.fewer) problems.push(`${name}: no piece cast from fewer triangles`);
   if (coarse.pixels > COARSE_PIXELS || coarse.most > COARSE_LEVELS) {
-    problems.push(`${name}: cast from fewer triangles, ${coarse.pixels} pixels apart by ${coarse.most} at most`);
+    problems.push(`${name}: cast from fewer triangles, ${apart}`);
   }
   if (!canary) return { line, problems };
-  const shifted = differenceOf(drawnShifted(lab), alone);
-  return { line: `${line}\ncanary: his pieces' shadow moved, ${shifted.pixels} pixels apart`, problems,
-    caught: isFault(shifted) };
+  return { line, problems, caught: gone.pixels > COARSE_PIXELS || gone.most > COARSE_LEVELS };
 }
 
-/** The median of `values` (a turn the machine's load slowed is passed over: their means swung by 1.8 ms). */
-const medianOf = (values: number[]): number => quantile([...values].sort((a, b) => a - b), 0.5);
-
-/**
- * What `timing`'s calls take a frame (ms) over `TURN_FRAMES` frames, the GPU let finish after each, untimed: the lab
- * runs its frames back to back, and with the GPU's queue full whichever call waited for it took the GPU's time (the
- * shadow map's draw read 0.8 ms or 2 ms by the turns before it).
- */
-async function framesTimed(lab: Lab, timing: Timing): Promise<number> {
-  let took = 0;
-  for (let frame = 0; frame < TURN_FRAMES; frame++) {
-    await gpuDone(G.renderer);
-    timing.lap();
-    await lab.step(1);
-    took += timing.lap();
-  }
-  return took / TURN_FRAMES;
+/** A cost in turns said. */
+function costWords(cost: TurnsCost | null): string {
+  if (!cost) return 'not timed (the engine has no GPU clock here)';
+  const told = sure(cost) ? '' : ', not told from nothing';
+  return `${cost.takes.toFixed(3)} ms ± ${cost.error.toFixed(3)}${told}`;
 }
 
-/** The ways the hero casts in `shadowCost`'s turns: as one, each piece alone, and nothing at all (what his whole
- *  shadow costs). */
-const WAYS = ['asOne', 'alone', 'none'] as const;
-type Way = (typeof WAYS)[number];
-
-/** The hero cast `way` until the returned function is called. */
-function castBy(lab: Lab, way: Way): () => void {
-  const was = castingAsOne.on;
-  castingAsOne.on = way === 'asOne';
-  const casting: THREE.Object3D[] = [];
-  if (way === 'none') {
-    lab.player.obj.traverse((object) => {
-      if (object.castShadow) casting.push(object);
-    });
-  }
-  for (const object of casting) object.castShadow = false;
-  return () => {
-    castingAsOne.on = was;
-    for (const object of casting) object.castShadow = true;
-  };
-}
-
-/** The shadow map's draw a frame (ms) each way the hero casts, in turns of `TURN_FRAMES` frames. */
+/** The frame on the engine's GPU clock, in turns: his shadow from every triangle against fewer, and fewer against
+ *  none at all (what his whole shadow costs), standing in the lobby's view. */
 async function shadowCost(lab: Lab): Promise<Report> {
   await lab.setup({});
   const drawing = lab.drawing;
   lab.drawing = true;
-  const timing = timeCalls(G.renderer.shadowMap, 'render');
-  const turns: Record<Way, number[]> = { asOne: [], alone: [], none: [] };
-  const made = lab.player.shadow.made;
+  const casting: THREE.Object3D[] = [];
+  lab.player.obj.traverse((object) => {
+    if (object.castShadow) casting.push(object);
+  });
   try {
-    for (let turn = 0; turn < TURNS * WAYS.length; turn++) {
-      const way = WAYS[turn % WAYS.length];
-      const undo = castBy(lab, way);
-      try {
-        // (a frame first to let the switch take, untimed)
-        await lab.step(1);
-        turns[way].push(await framesTimed(lab, timing));
-      } finally {
-        undo();
-      }
-    }
+    const wholeCost = await costInTurns((on) => holdWhole(on));
+    const shadowItself = await costInTurns((on) => {
+      for (const object of casting) object.castShadow = on;
+    });
+    return {
+      text: [
+        "the frame on the engine's GPU clock, in turns (the sun's map drawn every frame his shadow changes):",
+        `  every triangle cast over fewer: ${costWords(wholeCost)}`,
+        `  his shadow from fewer triangles over none: ${costWords(shadowItself)}`,
+      ].join('\n'),
+      problems: [],
+    };
   } finally {
-    timing.stop();
+    holdWhole(false);
+    for (const object of casting) object.castShadow = true;
     lab.drawing = drawing;
   }
-  const asOne = medianOf(turns.asOne);
-  const alone = medianOf(turns.alone);
-  const none = medianOf(turns.none);
-  const saved = (alone - asOne).toFixed(3);
-  const remade = lab.player.shadow.made - made;
-  const lines = [
-    `the shadow map's draw a frame, the median of ${TURNS} turns of ${TURN_FRAMES} frames each way:`,
-    `  cast as one ${asOne.toFixed(3)} ms, each piece alone ${alone.toFixed(3)} ms (${saved} saved)`,
-    `  the hero casting nothing ${none.toFixed(3)} ms: his shadow ${(asOne - none).toFixed(3)} ms cast as one, `
-      + `${(alone - none).toFixed(3)} alone`,
-    `  its mesh made again ${remade} times meanwhile`,
-  ];
-  return { text: lines.join('\n'), problems: [] };
 }
 
 export async function shadowsCheck(lab: Lab, options: ShadowsOptions): Promise<Report> {
@@ -236,6 +171,7 @@ export async function shadowsCheck(lab: Lab, options: ShadowsOptions): Promise<R
       }
     }
   }
-  if (options.canary && !caught) problems.push('canary: his pieces\' shadow moved 30 cm went unseen');
+  if (options.canary) lines.push(`canary, his shadow taken away in the first case: ${caught ? 'caught' : 'missed'}`);
+  if (options.canary && !caught) problems.push('canary: his shadow taken away went unseen');
   return { text: lines.join('\n'), problems };
 }

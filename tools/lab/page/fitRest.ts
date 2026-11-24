@@ -122,7 +122,7 @@ async function frameAt(lab: Lab, tune: Record<string, number[]>): Promise<Framed
   await lab.step(SETTLE);
   lab.model.root.updateMatrixWorld(true);
   try {
-    return framed(lab);
+    return await framed(lab);
   } catch {
     // (a sliver of the weapon in the frame that no ray met: a try, not a measure)
     return null;

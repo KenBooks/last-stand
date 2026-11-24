@@ -832,6 +832,8 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
   const restore = await measuring(lab, options);
   const compiled = programsCompiledInGame();
   const lateBefore = lateCompiles.length;
+  /** what the parts' switches ask for themselves (the depth in one pass, other samples): theirs, not play's */
+  let partsAsked = 0;
   const lines: string[] = [];
   const problems: string[] = [];
   try {
@@ -866,7 +868,10 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
     if (options.parts) {
       const { partCosts } = await import('./perfParts');
       // (in the village already, by the set-up: left for it again, Esc over the shoulder put the view back on top)
+      const askedBefore = programsCompiledInGame();
       const parts = await partCosts(lab, true);
+      partsAsked = programsCompiledInGame() - askedBefore;
+      lines.push(`the parts' switches asked for ${partsAsked} pipelines of their own`);
       lines.push(...parts.lines);
       problems.push(...parts.problems);
     }
@@ -878,7 +883,7 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
   } finally {
     await restore();
   }
-  const late = programsCompiledInGame() - compiled;
+  const late = programsCompiledInGame() - compiled - partsAsked;
   if (late > 0) problems.push(`${late} shaders compiled as it was timed: ${lateCompiles.slice(lateBefore).join('; ')}`);
   return { text: lines.join('\n'), problems };
 }

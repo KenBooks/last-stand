@@ -210,7 +210,7 @@ export async function sheet(lab: Lab, options: SheetOptions): Promise<Sheet> {
     await state(lab, async (label, own = []) => {
       lab.model.root.updateMatrixWorld(true);
       const tiles = lab.capture(options.views, { focus: options.focus, look: options.look });
-      const seen = viewMode() === 'first' ? framed(lab) ?? undefined : undefined;
+      const seen = viewMode() === 'first' ? (await framed(lab)) ?? undefined : undefined;
       const parts = tiles.filter((tile) => tile.parts).map((tile) => `${tile.view}: ${describeParts(tile.parts!)}`);
       moments.push({ state: name, label, tiles, notes: [...own, ...notesOn(lab, seen), ...parts], framed: seen });
     }, options);

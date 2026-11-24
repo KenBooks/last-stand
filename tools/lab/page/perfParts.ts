@@ -10,6 +10,7 @@ import * as renderer from '../../../src/core/renderer';
 import { lampsHeldOut, lampShadowsOn, setLampShadows } from '../../../src/core/lamps';
 import { qualityLevel } from '../../../src/core/quality';
 import { QUALITY } from '../../../src/data/quality';
+import { TUNE } from '../../../src/engine/globals';
 import { canaryCost, flameCost, turnCost } from './fireCost';
 import { medianOf, timedRenders } from './gpuTurns';
 import type { Lab } from './lab';
@@ -91,19 +92,6 @@ function under(mesh: THREE.Object3D, name: string): boolean {
 
 /** a mesh's reach from which it's taken for the sky's dome (m), left drawn with all else hidden */
 const SKY = 200;
-/** a mesh's reach from which it's taken for the ground (m), and the order it's tried in (before the sky's, 100) */
-const GROUND = 100;
-const GROUND_ORDER = 90;
-/** the order a depth pass is tried in, before all else */
-const DEPTH_PASS_ORDER = -10;
-
-/** What the village draws merged as still, that writes depth and cuts nothing out of its shape. */
-function stillMeshes(): THREE.Mesh[] {
-  return shownMeshes().filter((mesh) => {
-    const material = mesh.material as THREE.Material;
-    return under(mesh, 'village') && mesh.name.includes('merged') && !material.transparent && !material.alphaTest;
-  });
-}
 
 /** The meshes shown that hold nothing under them. */
 function shownMeshes(): THREE.Mesh[] {
@@ -133,44 +121,12 @@ interface Switch {
   turn: (on: boolean) => void;
 }
 
-/** What's drawn first by how near the camera its middle is, whatever its material: three goes by material first, and a
- *  pixel covered later has been shaded for nothing. */
-function nearestFirst(a: THREE.RenderItem, b: THREE.RenderItem): number {
-  return a.renderOrder - b.renderOrder || (a.z ?? 0) - (b.z ?? 0);
-}
-
-/** The meadow's blades drawn before all else, or in their turn. */
-function grassFirst(first: boolean): void {
-  for (const mesh of shownMeshes()) {
-    if (under(mesh, 'meadow')) mesh.renderOrder = first ? -1 : 0;
-  }
-}
-
-/** The widest of what's drawn (the ground) after all else but the sky, or in its turn. */
-function groundLast(last: boolean): void {
-  for (const mesh of shownMeshes()) {
-    const reach = reachOf(mesh);
-    if (reach > GROUND && reach < SKY && mesh.renderOrder <= 0) mesh.renderOrder = last ? GROUND_ORDER : 0;
-    else if (reach > GROUND && reach < SKY && mesh.renderOrder === GROUND_ORDER) mesh.renderOrder = 0;
-  }
-}
-
-/** What a depth pass of what stands still would save: its meshes drawn once before all else, into the depth alone. */
-function depthPassOf(meshes: THREE.Mesh[]): (on: boolean) => void {
-  const depthOnly = new THREE.MeshBasicMaterial({ colorWrite: false });
-  const copies = meshes.map((mesh) => {
-    const copy = new THREE.Mesh(mesh.geometry, depthOnly);
-    copy.renderOrder = DEPTH_PASS_ORDER;
-    copy.matrixAutoUpdate = false;
-    copy.matrix.copy(mesh.matrixWorld);
-    copy.matrixWorld.copy(mesh.matrixWorld);
-    copy.visible = false;
-    copy.layers.mask = mesh.layers.mask;
-    G.scene.add(copy);
-    return copy;
-  });
+/** A switch of the engine's (`TUNE`), on as the game has it and off at `off`. */
+function engineSwitch(field: 'depthFirst' | 'nearFirst' | 'shadows' | 'shadowTurns', off: number):
+  (on: boolean) => void {
+  const own = TUNE[field];
   return (on) => {
-    for (const copy of copies) copy.visible = !on;
+    TUNE[field] = on ? own : off;
   };
 }
 
@@ -183,13 +139,10 @@ function switches(): Switch[] {
     { name: 'MSAA (off: 4)', turn: (on) => renderer.setRenderQuality(on ? preset : { ...preset, msaa: 4 }) },
     { name: 'the lamps\' still shadows', turn: (on) => setLampShadows(on && shadows) },
     { name: 'the lamps\' list, all of it', turn: (on) => lampsHeldOut(!on) },
-    { name: 'three\'s order (off: nearest first)', turn: (on) => G.renderer.setOpaqueSort(on ? null : nearestFirst) },
-    { name: 'three\'s order (off: the grass first)', turn: (on) => grassFirst(!on) },
-    { name: 'three\'s order (off: the ground last)', turn: (on) => groundLast(!on) },
-    { name: 'no depth pass (off: what stands still first)', turn: depthPassOf(stillMeshes()) },
-    { name: 'the moon or sun\'s shadow map redrawn', turn: (on) => {
-      G.renderer.shadowMap.autoUpdate = on;
-    } },
+    { name: 'the depth drawn first (off: in one pass)', turn: engineSwitch('depthFirst', 0) },
+    { name: 'what the camera stands in drawn last (off: in its turn)', turn: engineSwitch('nearFirst', 0) },
+    { name: 'the moon or sun\'s shadow', turn: engineSwitch('shadows', 0) },
+    { name: 'its map kept between turns (off: drawn every frame)', turn: engineSwitch('shadowTurns', 0) },
   ];
 }
 

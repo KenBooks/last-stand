@@ -5,7 +5,9 @@
 // past `WARM_BEHIND.heldMost` until something asks for the heroes. `held` counts every frame as held, as a phone's
 // GPU holds them where the lab's never does: the warm-up must give up, compiling nothing after, and the heroes must
 // not be asked for. Without it the heroes must be warm before long, behind the lobby. `canary` asks for the heroes as
-// the game did, which must be caught.
+// the game did, which must be caught. Under the engine a return's boot asks for them as it ends (`want('heroes')` in
+// main.ts: a hero's warm-up there is his build and what's handed to the engine, no program of three's), so they're
+// warm before he nears the hall, and there's nothing to measure: it said "boot it --cold" of a cold boot.
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
@@ -107,6 +109,11 @@ async function whileSmooth(lab: Lab, isAsked: (need: Need) => boolean): Promise<
 export async function hallNear(lab: Lab, options: HallNearOptions): Promise<Report> {
   if (!warmBehind || !askedFor) {
     return { text: 'this tree asks for the heroes outright as he nears the hall: nothing to measure', problems: [] };
+  }
+  if (warm.isWarm('heroes') && askedFor('heroes')) {
+    const text = 'the heroes were asked for and warm before he neared the hall (a return\'s boot asks for them as it '
+      + 'ends; without --cold, the lab\'s own boot): nothing to measure';
+    return { text, problems: [] };
   }
   if (warm.isWarm('heroes')) {
     return { text: '', problems: ['hallnear: the heroes are warm already: boot it --cold, as a new deploy is'] };
