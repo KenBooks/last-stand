@@ -25,8 +25,8 @@ export default {
     },
     rarity: {
       kind: 'choice',
-      choices: ['rare', 'epic', 'legendary', 'ascendant'],
-      usage: 'rare|epic|legendary|ascendant',
+      choices: ['rare', 'epic', 'legendary', 'ascendant', 'ultimate'],
+      usage: 'rare|epic|legendary|ascendant|ultimate',
       help: 'the rarity each item is given (rare by default)',
     },
     pictures: {

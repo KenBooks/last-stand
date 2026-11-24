@@ -12,6 +12,7 @@ const PARTS = [
   'houses-1: a house said by its index in ROOM_IDS, now in the order of its file in data/houses/',
   'lobby-1: a room has no lobby of its own (the village is every game\'s): none in hello, refuse or a room\'s card',
   'party-room-1: welcome carries the host\'s house (rm) so joiners spawn in the same building',
+  'rarity-1: the rarity of an item can be Ultimate, a tier above Ascendant (data/items.ts)',
   'sit-1: how far a hero is sat on a seat, StateMsg sw, sh, sf, sb, sa (entities/sitting.ts)',
   'ward-1: the Hedgeward rising, struck and breaking, the enemy fx `ward` (combat/skills/hedgeward.ts)',
 ];

@@ -61,7 +61,7 @@ export function coopTradeStock(_lab: Lab, { tag, count, filler = 0 }: { tag: str
   const cls = G.player.cls;
   const named = (i: number) => ({ ...makeItem({ cls, rarity: 'rare', ilvl: 5 }), name: `Lab ${tag} ${i + 1}` });
   const items = Array.from({ length: count }, (_, i) => named(i));
-  const rarities = ['common', 'magic', 'rare', 'epic', 'legendary', 'ascendant'] as const;
+  const rarities = ['common', 'magic', 'rare', 'epic', 'legendary', 'ascendant', 'ultimate'] as const;
   const more = Array.from({ length: filler }, (_, i) => makeItem({ cls, rarity: rarities[i % rarities.length], ilvl: 5 + i }));
   G.profile.stash = [...items, ...more];
   saveProfile(G.profile);

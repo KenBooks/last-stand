@@ -9,7 +9,7 @@ import { closedFrom, villageObject } from '../../../game/village';
 import { screen } from '../../screenKit';
 import { G } from '../../../state';
 import { fewestFor, offer, price, runsToRestock, stockOf, takes, trade, worth } from '../../../loot/merchant';
-import { rarityOf } from '../../../loot/items';
+import { rarityIndex, rarityOf } from '../../../loot/items';
 import { RUN } from '../../../data/balance';
 import { sfx } from '../../../core/audio';
 import { dialog } from '../../dialogs';
@@ -52,7 +52,7 @@ function initMerchant(onClose: () => void): void {
     if (!wanted) return;
     const piece = stockOf(G.profile).find((it) => it.id === wanted);
     if (!piece || !trade(G.profile, wanted, [...given])) return;
-    sfx.loot(Math.max(0, ['common', 'magic', 'rare', 'epic', 'legendary', 'ascendant'].indexOf(piece.rarity)));
+    sfx.loot(Math.max(0, rarityIndex(piece.rarity)));
     $('#merchant .mc-said').textContent = `${piece.name} is yours. Odo keeps what you gave.`;
     odoNods();
     wanted = null;

@@ -57,11 +57,12 @@ export const TIPS_PAGES: Tip[] = [
     html: () => {
       const waves = [1, 5, 10, 15];
       const rows = RARITIES.map((r, i) => `<tr><th style="color:${r.color}">${r.name}</th><td>${r.affixes[0]}–${r.affixes[1]}</td>${waves.map((w) => `<td>${num(chances(w)[i] * 100, 1)}%</td>`).join('')}</tr>`);
-      const asc = RARITIES.findIndex((r) => r.id === 'ascendant');
+      // the tiers that drop only from some wave on (Ascendant, Ultimate)
+      const late = (['ascendant', 'ultimate'] as const).map((id) => RARITIES.findIndex((r) => r.id === id)).filter((i) => i >= 0);
       return para('Loot goes straight into your bag, sealed: you only see each item\'s rarity until you bank. The bank\'s summary then opens them one by one, the most valuable first.')
         + para('A rarer item rolls more extra stats and bigger ones. The chances below are for a cleared wave\'s rewards:')
         + `<table class="gd-table"><tr><th>Rarity</th><th>Extra stats</th>${waves.map((w) => `<th>Wave ${w}</th>`).join('')}</tr>${rows.join('')}</table>`
-        + (asc >= 0 ? para(`${RARITIES[asc].name} items only drop from wave ${firstWaveOf(asc)} on.`) : '')
+        + late.map((i) => para(`${RARITIES[i].name} items only drop from wave ${firstWaveOf(i)} on.`)).join('')
         + head('Stat limits') + para('Each stat has a most a single item can roll:')
         + `<div class="gd-caps">${(Object.keys(STATS) as StatKey[]).filter((k) => STATS[k].cap).map((k) => `<span>${formatStat(k, STATS[k].cap!)}</span>`).join('')}</div>`;
     },

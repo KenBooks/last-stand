@@ -13,12 +13,12 @@ const ORDER: RarityId[] = RARITIES.map((r) => r.id);
 
 /** how strongly each glowing rarity glows against the rest (its colour times this and `ITEM_GLOW.strength`): the rarer
  *  a little more */
-export const GLOW_STRENGTH: Partial<Record<RarityId, number>> = { rare: 1, epic: 1.15, legendary: 1.35, ascendant: 1.2 };
+export const GLOW_STRENGTH: Partial<Record<RarityId, number>> = { rare: 1, epic: 1.15, legendary: 1.35, ascendant: 1.2, ultimate: 1.2 };
 /** a rarity's weapon glowing less than `ITEM_GLOW.weapon` times the rest: Ascendant's orange (#403), its red near
  *  full, clipped at that and coated the bow in a flat paint (an adversarial review's FAIL). (Over a warm dye, gold
  *  above all, its strands read as rust more than light, as any orange or amber tried did, lighter ones as dirt: its
  *  light added saturation more than value, no pixel darker. A hot core to the strands is the shader's to give.) */
-const WEAPON_SHARE: Partial<Record<RarityId, number>> = { ascendant: 0.6 };
+const WEAPON_SHARE: Partial<Record<RarityId, number>> = { ascendant: 0.6, ultimate: 0.6 };
 
 /** The colour (linear) an item of `rarity` glows, black for none. */
 export function glowOf(rarity: RarityId | undefined, out: THREE.Color): THREE.Color {

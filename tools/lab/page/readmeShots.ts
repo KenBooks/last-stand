@@ -50,7 +50,7 @@ const NIGHT = 21.5;
 /** the level of the gear the shots roll */
 const ITEM_LEVEL = 24;
 /** every rarity, the least first */
-const RARITIES: RarityId[] = ['common', 'magic', 'rare', 'epic', 'legendary', 'ascendant'];
+const RARITIES: RarityId[] = ['common', 'magic', 'rare', 'epic', 'legendary', 'ascendant', 'ultimate'];
 /** a half turn: the way that faces -z, the hall's side of the village and the dais's of an arena */
 const NORTH = Math.PI;
 
