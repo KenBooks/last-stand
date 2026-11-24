@@ -18,7 +18,8 @@ import { isCoop } from '../net/role';
 import { cleanTag, sameTag, savedTag, tagProblem, TAG_MAX } from '../net/nameTag';
 import { anchorLabel, removeLabel, onLayout, onScreenOrEdge } from './floaters';
 import { Label, ORDER } from './overlay/layer';
-import { ALLY_BAR, ALLY_NAME, barArt, barStep } from './overlay/bars';
+import { ALLY_BAR, ALLY_NAME, AWAY_WORD, barArt, barStep } from './overlay/bars';
+import { isAway } from '../net/afk';
 import { drawText, measure, OUTLINE, type TextStyle } from './overlay/paint';
 import { renderLobbyOptions } from './menus';
 import { openSaves } from './saves';
@@ -980,8 +981,9 @@ export function updateNameTags(): void {
   for (const p of G.players) {
     const t = nameTagFor(p);
     const share = Math.max(0, p.life / p.stats.maxLife);
-    const look = { ...ALLY_BAR, name: nameOf(p), nameStyle: ALLY_NAME };
-    const step = barStep(look, share);
+    const away = isAway(p);
+    const look = { ...ALLY_BAR, name: nameOf(p), nameStyle: ALLY_NAME, ...(away ? { over: 'AFK', overStyle: AWAY_WORD } : {}) };
+    const step = barStep(look, share) * 2 + (away ? 1 : 0);
     if (step !== t.shown) {
       t.shown = step;
       t.label.show(barArt(look, share));

@@ -6,6 +6,7 @@
 /** what this game's messages are, a part a line, sorted (`scripts/sorted.mjs` checks): `<feature>-<n>: what` */
 // sorted
 const PARTS = [
+  'afk-1: a player away from the game, StateMsg afk (net/afk.ts)',
   'base-41: every message as of PROTOCOL 41, the last number bumped by hand (net/AGENTS.md tells their history)',
   'belt-skulls-1: the Ossuary Twins belt skulls thrown, the enemy fx `beltSkull` (entities/twinSkulls.ts)',
   'floor-1: a drop on the lobby floor carries its seconds left, GroundDrop left (game/groundItems.ts)',

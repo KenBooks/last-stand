@@ -13,6 +13,9 @@ export interface BarLook {
   /** the name over it, if any, and how it's written */
   name?: string;
   nameStyle?: TextStyle;
+  /** a word over the name, if any (a partner away: AFK), and how it's written */
+  over?: string;
+  overStyle?: TextStyle;
 }
 
 const FRAME = 'rgba(160,124,70,.25)';
@@ -21,6 +24,8 @@ export const HERO_FOE_BAR: BarLook = { w: 84, h: 7, ring: 'rgba(240,200,96,.6)',
 export const ALLY_BAR: BarLook = { w: 56, h: 5, ring: FRAME, fill: ['#6ab8ff', '#1d4f8a'] };
 export const FOE_NAME: TextStyle = { face: 'display', size: 12, color: '#f5c060', shadows: OUTLINE };
 export const ALLY_NAME: TextStyle = { face: 'display', size: 12, color: '#9ccfff', shadows: OUTLINE };
+/** the word over a partner's name while it's away (#847): a dim grey under the name's size */
+export const AWAY_WORD: TextStyle = { face: 'display', size: 10, color: '#c9c4b8', shadows: OUTLINE };
 
 /** room round the bar and its name for the name's shadows (px) */
 const PAD = 7;
@@ -30,16 +35,20 @@ const GAP = 2;
 /** A bar's art showing `share` (0 to 1) of its fill. */
 export function barArt(look: BarLook, share: number): LabelArt {
   const name = look.name !== undefined && look.nameStyle ? measure(look.name, look.nameStyle) : null;
+  const over = look.over !== undefined && look.overStyle ? measure(look.over, look.overStyle) : null;
+  const above = (over ? over.h + GAP : 0) + (name ? name.h + GAP : 0);
   // (the track inside its 1 px border, and the ring 1 px round that)
   const outer = { w: look.w + 4, h: look.h + 4 };
-  const w = Math.max(outer.w, name?.w ?? 0) + PAD * 2, h = (name ? name.h + GAP : 0) + outer.h + PAD * 2;
+  const w = Math.max(outer.w, name?.w ?? 0, over?.w ?? 0) + PAD * 2, h = above + outer.h + PAD * 2;
   // (hung from the bottom of its border, as the page's box was)
-  const top = PAD + (name ? name.h + GAP : 0) + 2;
+  const top = PAD + above + 2;
   return {
     w, h,
     anchor: { x: w / 2, y: top + look.h + 1 },
     paint(c, scale) {
-      if (name && look.nameStyle) drawText(c, name, (w - name.w) / 2, PAD, look.nameStyle, scale);
+      if (over && look.overStyle) drawText(c, over, (w - over.w) / 2, PAD, look.overStyle, scale);
+      const nameAt = PAD + (over ? over.h + GAP : 0);
+      if (name && look.nameStyle) drawText(c, name, (w - name.w) / 2, nameAt, look.nameStyle, scale);
       const x = (w - look.w) / 2, y = top;
       ringAround(c, x - 1, y - 1, look.w + 2, look.h + 2, 1, look.ring);
       ringAround(c, x, y, look.w, look.h, 1, 'rgba(0,0,0,.9)');
