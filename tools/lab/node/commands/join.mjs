@@ -32,6 +32,7 @@ export default {
     },
     side: { kind: 'number', usage: 'px', help: 'picture: its longest side (1280; the frame\'s own if smaller)' },
     png: { kind: 'switch', help: 'picture: a PNG, exact but several times a JPEG\'s size' },
+    file: { kind: 'text', usage: 'path', help: 'eval: the code read from this file (code of several lines)' },
     timeout: { kind: 'number', usage: 's', help: 'how long a step waits for the game\'s answer (30)' },
   },
   async run(options) {

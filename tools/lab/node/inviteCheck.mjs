@@ -190,6 +190,10 @@ async function stepsAnswered(game, found, link, dir) {
   found.expect(controls.some((c) => c.name === 'god') && controls.some((c) => c.name.startsWith('part:')),
     'look lists neither the panel\'s god mode nor a part of the frame');
   found.expect((seen.frame?.parts?.length ?? 0) > 0, 'look lists no parts of the frame');
+  // (the engine's counts: read off three's renderer, a real game's look said 0 triangles)
+  found.say(`look's frame: ${seen.frame?.draws} draws, ${seen.frame?.triangles} triangles`);
+  found.expect(seen.frame?.triangles > 1000 && seen.frame?.draws > 10 && seen.frame.draws < 20_000,
+    `look counts a frame of ${seen.frame?.draws} draws and ${seen.frame?.triangles} triangles`);
 
   await game.whileStepping(link.step('set', { values: { god: true, wave: 7 } }));
   const set = await game.state();

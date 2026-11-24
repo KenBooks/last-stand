@@ -13,6 +13,7 @@ import { perfHudStats } from '../ui/perfHud';
 import { frameParts } from '../perf/sceneParts';
 import { freeCamOn, placeFreeCam, setFreeCam } from './freeCam';
 import { panelControls, setControl } from './agentControls';
+import { frameCounts } from './frameCounts';
 import { cheats, time } from './index';
 
 /** A step as the agent sends it. */
@@ -127,7 +128,7 @@ function underCrosshair(): unknown {
 
 /** The game as it stands: the hero, the camera, what's under the crosshair, the settings, the frame's parts. */
 export function look(): unknown {
-  const hero = G.player, camera = G.camera, info = G.renderer.info, stats = perfHudStats();
+  const hero = G.player, camera = G.camera, counts = frameCounts(), stats = perfHudStats();
   camera.getWorldDirection(_dir);
   _euler.setFromQuaternion(camera.quaternion, 'YXZ');
   const controls = panelControls();
@@ -152,7 +153,7 @@ export function look(): unknown {
       panel: controls,
     },
     frame: {
-      draws: info.render.calls, triangles: info.render.triangles,
+      ...counts,
       fps: stats ? round(stats.fps) : null, ms: stats ? round(stats.p50) : null,
       cpu: stats ? round(stats.cpu) : null, gpu: stats ? round(stats.gpu) : null,
       parts: frameParts().map((part) => {

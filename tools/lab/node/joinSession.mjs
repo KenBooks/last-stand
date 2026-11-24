@@ -149,7 +149,10 @@ function argsOf(step, words, options) {
   if (step === 'picture') return pictureArgs(options);
   if (step === 'set') return { values: valuesOf(words) };
   if (step === 'eval') {
-    if (!words.length) throw labError('eval needs its code: npm run lab -- join eval "G.player.pos"');
+    // (code of several lines comes from a file: through `npm run` on Windows an argument ends at its first newline,
+    // and the game ran the first line alone, answering null)
+    if (options.file) return { code: readFileSync(options.file, 'utf8') };
+    if (!words.length) throw labError('eval needs its code: npm run lab -- join eval "G.player.pos" (or --file path)');
     return { code: words.join(' ') };
   }
   return {};
