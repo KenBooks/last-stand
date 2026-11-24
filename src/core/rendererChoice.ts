@@ -7,17 +7,3 @@
 export function hasWebGpu(): boolean {
   return typeof navigator !== 'undefined' && 'gpu' in navigator && !!navigator.gpu;
 }
-
-/** What the page runs. Constants now, read where code of the renderers before the engine is still being taken out. */
-export const RUNNING: { webgpu: boolean; rust: boolean; webgpuOnGl: boolean; meshlets: boolean; lightsEach: boolean } = {
-  /** three's WebGPURenderer is the page's host */
-  webgpu: true,
-  /** the frame's scene is drawn by the engine */
-  rust: true,
-  /** three's WebGL 2 backend: never */
-  webgpuOnGl: false,
-  /** three's GPU-driven meshlets: never */
-  meshlets: false,
-  /** three's point lights written out in full: never */
-  lightsEach: false,
-};

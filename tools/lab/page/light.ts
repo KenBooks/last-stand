@@ -172,7 +172,6 @@ function channelsOf(bytes: Uint8Array): Float32Array {
 
 /** The canvas's pixels as last drawn: all of them, or those of `box`. */
 function readCanvas(box?: CanvasBox): Canvas {
-  G.renderer.setRenderTarget(null);
   const frame = renderer.frameRect();
   const { left, bottom, width, height } = box ?? { left: 0, bottom: 0, width: frame.width, height: frame.height };
   return readWebGpuCanvas({ left, bottom, width, height });
