@@ -30,7 +30,7 @@ import { CLASS_IDS } from '../data/classes/index';
 import { LAMP_SOFT } from '../core/lamps';
 import { standHeroes } from './hall';
 import { dropNameAt } from './groundItems';
-import { leaveSeatsTo } from '../entities/sitting';
+import { leaveSeatsTo, useWhileSatBy } from '../entities/sitting';
 import type { Seat } from '../world/seats';
 import { isWarm } from './warm';
 import { flash, release, type LightSlot } from '../fx/lights';
@@ -154,6 +154,7 @@ export function heroLookedAt(): number {
 export function initVillage(h: VillageHooks): void {
   hooks = h;
   leaveSeatsTo(fireLeftToItsObject);
+  useWhileSatBy(usedWhileSat);
   for (const o of OBJECTS) {
     const at = (): { x: number; y: number; z: number } | null => {
       if (!named(o)) return null;
@@ -219,6 +220,14 @@ export function fireLeftToItsObject(seat: Seat): boolean {
     if (here(o) && Math.hypot(o.at[0] - seat.ax, o.at[1] - seat.az) < AT_FIRE && distanceTo(o) < o.reach) return true;
   }
   return false;
+}
+
+/** Whether the hero, sat, is within reach of an object he can use from where he sits (#721: the campfire's Play
+ *  together from its logs): not a door, held to use, which would take him in sat. */
+export function usedWhileSat(): boolean {
+  if (!hooks.active()) return false;
+  const o = nearest();
+  return !!o && !usedByHolding(o);
 }
 
 /** The object the hero is near enough to use (the nearest), or null. */

@@ -41,9 +41,13 @@ import { SitFilm } from './sitFilm';
 import { FINGERS_UNDER_FROM, FingersUnder, fingersCanary } from './fingersUnder';
 import { FRAMED_MOST, neckOnScreen, type Framed } from './sitFraming';
 import { toLobby } from './hallMoves';
+import * as village from '../../../src/game/village';
 import { enterRoom } from '../../../src/game/rooms';
 import type { RoomId } from '../../../src/data/houses';
 import { coopOpen } from '../../../src/ui/coop';
+
+/** Whether E is the object's he sits by (`usedWhileSat`, #721), none in a commit from before it (an A/B's other side). */
+const usedWhileSat = (): boolean => (village as { usedWhileSat?: () => boolean }).usedWhileSat?.() ?? false;
 
 /** What `lab sit` takes. */
 export interface SitOptions {
@@ -533,6 +537,10 @@ async function sitKey(lab: Lab, c: SeatCase, seat: Seat, out: Out): Promise<void
   }
   if (outlinedLook()) out.problems.push(`sit: the ${name} still outlined as he set off to sit on it`);
   const sat = await lab.until(() => satWhole(player.sitting.pose), SIT_KEY_MOST * RATE, `sat after E by the ${name}`);
+  if (usedWhileSat()) {
+    await usedSat(lab, name, sat, out);
+    return;
+  }
   const left = sitLeft(player.sitting.pose);
   await lab.step(1, () => ({ keys: ['e'] }));
   await lab.step(KEY_TAKES);
@@ -541,6 +549,36 @@ async function sitKey(lab: Lab, c: SeatCase, seat: Seat, out: Out): Promise<void
   // (the campfire's object in reach leaves E to the sit: `Sitting.takesKey`)
   if (coopOpen()) out.problems.push(`sit: by the ${name}, E to sit or get up opened Play together too`);
   out.text.push(`    E: sat in ${(sat / RATE).toFixed(1)} s, ${rising ? 'and up again by it' : 'never up again by it'}`);
+}
+
+/** Sat within reach of something E uses (`usedWhileSat`, the campfire's Play together, #721: "No way to interact with
+ *  campfire while sitting"): E uses it and leaves him sat, E again puts it away, and a step gets him up. */
+async function usedSat(lab: Lab, name: string, sat: number, out: Out): Promise<void> {
+  const { player } = lab;
+  const address = location.href;
+  // (the lab's own link, `?net=local`: Play together asks no server for its health, which production's refuses the lab)
+  history.replaceState(null, '', `${location.pathname}?net=local`);
+  let stillSat = false;
+  let opened = false;
+  try {
+    await lab.step(1, () => ({ keys: ['e'] }));
+    await lab.step(KEY_TAKES);
+    stillSat = satWhole(player.sitting.pose);
+    opened = coopOpen();
+    await lab.step(1, () => ({ keys: ['e'] }));
+    await lab.step(KEY_TAKES);
+  } finally {
+    history.replaceState(null, '', address);
+  }
+  if (!stillSat) out.problems.push(`sit: by the ${name}, E pressed sat by what it uses got him up`);
+  if (coopOpen()) out.problems.push(`sit: by the ${name}, E pressed again left Play together open`);
+  const left = sitLeft(player.sitting.pose);
+  await lab.step(KEY_TAKES, () => ({ keys: ['w'] }));
+  const rising = sitLeft(player.sitting.pose) < left;
+  if (!rising) out.problems.push(`sit: by the ${name}, a step sat didn't get him up`);
+  const used = opened ? 'opened Play together' : 'used what he sits by';
+  out.text.push(`    E: sat in ${(sat / RATE).toFixed(1)} s; sat, E ${used} ${stillSat ? 'and left him sat' : 'and got him up'}, `
+    + `a step ${rising ? 'got him up' : 'never got him up'}`);
 }
 
 /** The over-the-shoulder camera zoomed in all the way: his neck as high on the screen sat as standing. */

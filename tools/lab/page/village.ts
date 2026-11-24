@@ -197,6 +197,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     hoardShowsStash: () => hoardShowsStash(lab, options.canary),
     chestDrawsFew: async () => chestDrawsFew(options.canary),
     campfireUsedUpClose: () => campfireUsedUpClose(lab, options.canary),
+    campfireUsedSat: async () => (await import('./villageSatUse')).campfireUsedSat(lab, options.canary),
     escClosesHelp: () => escClosesHelp(lab, options.canary),
     wornStaysOn: () => wornStaysOn(lab, options.canary),
     heroFaceNotBlinding: () => heroFaceNotBlinding(lab, options.canary),
