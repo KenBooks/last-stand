@@ -1053,8 +1053,21 @@ const compileContext = () => `(${G.mode}${G.run ? ` wave ${G.run.wave}` : ''}, t
 let view: ViewMode = 'top';
 const crosshair = document.getElementById('crosshair')!, lookHint = document.getElementById('look-hint')!;
 
+/** A sit begun through the eyes (#720), shown over the shoulder until he's up: the camera rides his head, so through
+ *  them his own seated body would fill the view. Set as he walks to the seat through the eyes; the eyes chosen by V
+ *  while he sits are the eyes, and get him up (`Player.freeToSit`). */
+let sitFromEyes = false;
+
+/** The view shown: the player's, but over the shoulder while a sit begun through the eyes is under way. */
+function sitView(): ViewMode {
+  const sitting = G.player.sitting;
+  if (!sitting.under) sitFromEyes = false;
+  else if (view === 'first' && sitting.walking) sitFromEyes = true;
+  return view === 'first' && sitFromEyes ? 'third' : view;
+}
+
 function syncView(): void {
-  setView(view);
+  setView(sitView());
   input.centerAim = view !== 'top';
   // mouse look holds the pointer through the run, the bank-or-continue choice included (B / C
   // pick there), and lets go for the pause menu and the run's end; in the lobby, while its panels

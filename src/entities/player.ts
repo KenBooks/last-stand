@@ -661,10 +661,10 @@ export class Player {
 
   // --- input & skills -------------------------------------------------------------
   handleInput(dt: number): void {
-    // (the seat the cursor rests on, outlined once E would sit him on it: none through the eyes, paused, out of
-    // the run, in a wave)
+    // (the seat the cursor rests on, outlined once E would sit him on it: none paused, out of the run, in a wave; through
+    // the eyes the crosshair's, as over the shoulder, #720: "Sitting options should appear in all camera views")
     const peace = G.mode !== 'run' || G.run?.phase !== 'fighting';
-    const pointing = !(this.eyes || this.idle || this.out);
+    const pointing = !(this.idle || this.out);
     if (this.local) this.sitting.point(this, pointing ? cursorRay() : null, dt, peace);
     if (this.idle || this.out || this.held) {
       // the co-op pause menu, out of the run (banked, he's still standing, unseen), or held by a rival's skill in a
@@ -1445,10 +1445,12 @@ export class Player {
       && Math.hypot(p.pos.x - this.pos.x, p.pos.z - this.pos.z) < COOP.reviveRange);
   }
 
-  /** Whether he could go and sit (or stay sat): nothing cast, aimed or held, no foe near, not hurt, not through the eyes
-   *  (the camera rides his head) and not held where he is. */
+  /** Whether he could go and sit (or stay sat): nothing cast, aimed or held, no foe near, not hurt, not placed on the
+   *  seat through the eyes (the camera rides his head: a sit begun through them shows him over the shoulder, `sitView`
+   *  in `main.ts`, and the eyes chosen while he sits get him up) and not held where he is. */
   private freeToSit(): boolean {
-    return this.sits && this.glances && this.local && this.alive && !this.idle && !this.eyes && !this.casting
+    return this.sits && this.glances && this.local && this.alive && !this.idle && !(this.eyes && this.sitting.placed)
+      && !this.casting
       && !this.channel && !this.dash && !this.aiming && this.aimHold <= 0 && !this.staggered && !this.rooted
       && this.hitT <= 0 && !foeNear(this.pos.x, this.pos.z);
   }

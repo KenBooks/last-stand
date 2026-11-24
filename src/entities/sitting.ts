@@ -156,6 +156,11 @@ export class Sitting {
     return this.phase === 'turn' || this.phase === 'down' || this.phase === 'sat' || this.phase === 'up';
   }
 
+  /** Whether a sit is under way (walking there, turning, going down, sat or getting up). */
+  get under(): boolean {
+    return this.phase !== null;
+  }
+
   /** Whether he's walking to a seat: `walkGoal` is his way. */
   get walking(): boolean {
     return this.phase === 'walk';
