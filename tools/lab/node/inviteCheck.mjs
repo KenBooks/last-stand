@@ -9,6 +9,9 @@
 //   a new invitation joined by the command a session runs, `lab join <code>` in a process of its own, and its steps
 //     run as command lines (joinCommandCheck.mjs);
 //   a new invitation, joined and let in, then a co-op room opened: the agent sent away, and none offered in the room.
+//   (between the steps and the kick, inviteMakes.mjs: a thing made in the scene and seen drawn, made again in its
+//   place, a broken module refused with the thing left standing, unmade; one left through the kick, for the panel's
+//   Remove)
 // `--canary` starts the relay with the fault it must catch, a used code left good, so a second agent gets in; and
 // with its hold on an unaccepted agent's messages off, so the step sent before the answer reaches the page, whose own
 // hold must then be what stops it.
@@ -16,6 +19,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { joinGame } from './agentLink.mjs';
 import { joinCommandChecked } from './joinCommandCheck.mjs';
+import { madeInTheScene, removedByThePanel } from './inviteMakes.mjs';
 import { labError } from './errors.mjs';
 import { OUT } from './paths.mjs';
 
@@ -34,8 +38,11 @@ const ROOM = { tag: 'Brannoch', kind: 'private', name: 'Quiet room', password: '
 const SIDE = 480;
 const RANGE_LEAST = 24;
 
+/** the canary's faults, each of which the check must catch: its name, and what it is */
+const CANARY_FAULTS = { reuse: 'a used code left good', unseen: 'a made thing left undrawn' };
+
 /** Calls `fn` of the page module `module` (under tools/lab/page) with `args`; a failure names the call. */
-async function callPage(page, module, fn, args = {}) {
+export async function callPage(page, module, fn, args = {}) {
   try {
     return await page.evaluate(async ([module, fn, args]) => {
       const loaded = await import(`/tools/lab/page/${module}.ts`);
@@ -52,17 +59,17 @@ class Findings {
     this.canary = canary;
     this.lines = [];
     this.problems = [];
-    this.faultSeen = false;
+    this.faultsSeen = new Set();
   }
 
   say(line) {
     this.lines.push(line);
   }
 
-  /** `problem` noted unless `fine`; with the canary, a problem of its fault is the fault seen. */
-  expect(fine, problem, ofFault = false) {
+  /** `problem` noted unless `fine`; with the canary, a problem of its fault `ofFault` (a name) is that fault seen. */
+  expect(fine, problem, ofFault = null) {
     if (fine) return;
-    if (this.canary && ofFault) this.faultSeen = true;
+    if (this.canary && ofFault) this.faultsSeen.add(ofFault);
     else this.problems.push(`invite: ${problem}`);
   }
 }
@@ -168,7 +175,7 @@ async function heldAtTheQuestion(game, found, server, code, dir) {
   }
   if (second) {
     found.say('a second agent on the same code: let in');
-    found.expect(false, 'a second agent got in on a code already used', true);
+    found.expect(false, 'a second agent got in on a code already used', 'reuse');
     // (the fault's second agent took the first's place: the rest runs with it)
     link = second;
     await game.until((s) => s.asked, 'the game never asked for the second agent');
@@ -300,12 +307,17 @@ export async function runInvite(side, { canary = false } = {}) {
     found.expect(inside.badge && !inside.asked,'let in, the badge isn\'t up or the question still is');
     found.expect(!(await game.state()).marks.includes('early'), 'the step sent before the answer ran once the agent was let in');
     await stepsAnswered(game, found, link, dir);
+    await madeInTheScene(game, found, link, dir);
     await kicked(game, found, server, link, code, dir);
+    await removedByThePanel(game, found);
     await joinCommandChecked(game, found, server, await invited(game, found, server));
     await coopSendsAway(game, found, server);
     if (canary) {
-      found.say(`canary: a used code left good ${found.faultSeen ? 'caught' : 'went unseen'}`);
-      if (!found.faultSeen) found.problems.push('invite: the canary\'s used code left good went unseen');
+      for (const [fault, what] of Object.entries(CANARY_FAULTS)) {
+        const seen = found.faultsSeen.has(fault);
+        found.say(`canary: ${what} ${seen ? 'caught' : 'went unseen'}`);
+        if (!seen) found.problems.push(`invite: the canary: ${what} went unseen`);
+      }
     }
     found.say(`pictures: ${dir}`);
     return { text: found.lines.join('\n'), problems: found.problems };

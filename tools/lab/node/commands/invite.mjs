@@ -10,14 +10,16 @@ export default {
     + 'with the code and held at the question (a step sent before the answer never runs), a second agent refused '
     + 'on the same code, let in by Let it in with the badge up, `look`, `set`, `eval` and `picture` (the '
     + 'player\'s view, and a camera placed and put back) answered and checked against the page\'s own state, '
-    + 'kicked by the badge, the used code refused, and an agent sent away as a co-op room opens, where none is '
-    + 'offered; pictures in `out/invite` (`--canary` starts the relay leaving a used code good, which it must catch, and '
-    + 'passing an unaccepted agent\'s messages on, which the page alone must then hold)',
+    + 'a thing made in the scene (`join make`) and seen drawn in a picture of its spot, made again in its place, '
+    + 'sent again as its file is saved, and unmade, kicked by the badge, the used code refused, and an agent sent '
+    + 'away as a co-op room opens, where none is offered; pictures in `out/invite` (`--canary` builds the made '
+    + 'thing hidden and starts the relay leaving a used code good, both of which it must catch, and passing an '
+    + 'unaccepted agent\'s messages on, which the page alone must then hold)',
   help: 'the agent invited into a game end to end against a relay of the lab\'s own: invite, the question, a second '
-    + 'agent refused, let in, look, set, eval, picture, kick, the used code refused, co-op sending the agent away; '
+    + 'agent refused, let in, look, set, eval, picture, make, kick, the used code refused, co-op sending the agent away; '
     + 'pictures in out/invite',
   options: {
-    canary: { kind: 'switch', help: 'start the relay leaving a used code good: a second agent gets in' },
+    canary: { kind: 'switch', help: 'the made thing built hidden, and the relay leaving a used code good' },
     ...COMMON_OPTIONS,
   },
   async each(side, options) {

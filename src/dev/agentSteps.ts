@@ -4,6 +4,7 @@
 //   picture  the frame as drawn, through the player's view or from a camera the agent places (the free camera)
 //   set      what the developer panel sets, by its controls' names (agentControls.ts)
 //   eval     code run in this page, with `G` (the game's state), `THREE` and `dev` (this mode's own pieces) in scope
+//   make, makes, unmake   things built into the scene as the player watches (agentMakes.ts)
 // Nothing here runs until the owner has accepted the agent (agent.ts holds every message till then).
 import * as THREE from 'three';
 import { G } from '../state';
@@ -14,6 +15,7 @@ import { frameParts } from '../perf/sceneParts';
 import { freeCamOn, placeFreeCam, setFreeCam } from './freeCam';
 import { panelControls, setControl } from './agentControls';
 import { frameCounts } from './frameCounts';
+import { make, makes, unmake } from './agentMakes';
 import { cheats, time } from './index';
 
 /** A step as the agent sends it. */
@@ -284,6 +286,9 @@ export async function runStep(message: AgentStep): Promise<unknown> {
     case 'picture': return picture(message);
     case 'set': return set(message);
     case 'eval': return evaluate(message);
-    default: throw new Error(`no step ${JSON.stringify(message.step)}: look, picture, set, eval`);
+    case 'make': return make(message);
+    case 'makes': return makes();
+    case 'unmake': return unmake(message);
+    default: throw new Error(`no step ${JSON.stringify(message.step)}: look, picture, set, eval, make, makes, unmake`);
   }
 }
