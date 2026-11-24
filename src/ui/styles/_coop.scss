@@ -198,6 +198,11 @@ body.touch .cc-swatch.cc-any { width: auto; border-radius: 20px; }
 }
 .coop-close-slot { display: contents; }
 .coop-foot .coop-join input { width: 10.5em; letter-spacing: 2px; }
+// (a button as wide as each word it can say, so what's beside it stays put as it changes: Join, Joining…; Copy link,
+// Copied (the link's field grew as it shrank); Copy, Copied)
+.coop-foot .coop-join .btn { min-width: 7.5em; }
+#btn-coop-copy { min-width: 8.2em; }
+.coop-copy-code { min-width: 6.6em; }
 // (a field in a column grows down, not across: the room name filled the create page's height)
 .coop-field input { flex: none; }
 // friends (#676, part 2): the Friends tab's code, sections and rows, a room's invite list, the create page's tick
@@ -214,6 +219,8 @@ body.touch .cc-swatch.cc-any { width: auto; border-radius: 20px; }
   border: 1px solid rgba($frame, .5); border-radius: 3px; user-select: text; letter-spacing: 1px;
 }
 .coop-friend-note { margin: -4px 0 0; font-size: 14px; color: $ally-text; &.bad { color: var(--danger); } }
+// (the note's and the badge's room kept while they're empty, so nothing under or beside them moves as they come)
+.coop-friend-note.blank, .coop-badge.blank { visibility: hidden; }
 .coop-friend-me {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: none; font-size: 14px; color: var(--ink-dim);
   .coop-friend-code { font: 700 18px var(--font-display); letter-spacing: 3px; color: var(--accent); user-select: text; }
@@ -232,9 +239,18 @@ body.touch .cc-swatch.cc-any { width: auto; border-radius: 20px; }
   b { display: block; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   small { display: block; font-size: 13px; color: var(--ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   small.on { color: $ally-text; }
-  small.on::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: $ally; }
+  // (a dot on every line, lit for a friend online and dim for one away: on the online lines alone, their words began
+  // 13 px further in than the offline ones')
+  small::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: rgba($frame, .45); }
+  small.on::before { background: $ally; }
 }
 .coop-friend-acts { display: flex; gap: 6px; .btn { padding: 3px 10px; font-size: 13px; } .btn.quiet { opacity: .7; } }
+// (each row's buttons in two slots of fixed width, kept empty where a row has none, so every list's buttons stand in
+// one column whatever a row holds, and a word changed on one (Invite, Invited; Remove, Remove?) moves nothing)
+.coop-act-slot { display: flex; flex: none; justify-content: stretch; .btn { width: 100%; } }
+.coop-act-slot.first { width: 76px; }
+.coop-act-slot.second { width: 84px; }
+.coop-invite-friends .coop-act-slot.second { display: none; }
 .coop-friends-empty { color: var(--ink-dim); text-align: center; padding: 20px 8px; }
 .coop-friends-out { margin: auto; max-width: 460px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px;
   p { color: var(--ink-dim); line-height: 1.45; } b { color: var(--ink); } }
@@ -266,6 +282,8 @@ body.touch .cc-swatch.cc-any { width: auto; border-radius: 20px; }
   .coop-pips { display: none; }
   .coop-friend-me .coop-check { margin-left: 0; }
   .coop-friend { padding: 3px 6px; gap: 6px; }
+  .coop-act-slot.first { width: 66px; }
+  .coop-act-slot.second { width: 74px; }
 }
 @media (max-height: 520px) {
   #coop .modal-box:has(.coop-main) { height: calc(96vh / var(--ui, 1)); max-height: calc(96vh / var(--ui, 1)); padding: 8px 14px 8px; }

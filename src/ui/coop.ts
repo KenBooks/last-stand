@@ -446,7 +446,7 @@ function browseHtml(open: boolean): string {
   const maps = [['', 'All maps'], ...BIOME_IDS.map((id) => [id, BIOMES[id].label])]
     .map(([id, label]) => `<button class="coop-chip${form.map === id ? ' on' : ''}" data-map="${id}" aria-pressed="${form.map === id}">${esc(label)}</button>`)
     .join('');
-  const empty = rooms === 'loading' ? 'Looking for rooms…'
+  const empty = server === 'checking' ? 'Checking the co-op server…' : rooms === 'loading' ? 'Looking for rooms…'
     : rooms === null ? 'The list of rooms couldn\'t be read. Join a friend by their code below.'
     : Array.isArray(rooms) && rooms.length && !shown.length ? 'No rooms match. Clear the search or the filters.'
     : 'No public rooms right now. Create one, and it shows here for anyone.';
@@ -482,7 +482,9 @@ function createHtml(open: boolean, tag: string): string {
  *  asked for, with its field). */
 function statusHtml(s: string, code: string): string {
   if (server === 'down') return `<div class="coop-offline" role="status"><p>${esc(SERVER_DOWN)}</p><button class="btn" id="btn-coop-retry">Try again</button></div>`;
-  if (server === 'checking') return '<p class="coop-checking" role="status">Checking the co-op server…</p>';
+  // (the check said where the rooms are listed, `browseHtml`: a line here over the pages went as it answered, and
+  // every page under it jumped up)
+  if (server === 'checking') return '';
   if (pressed) {
     return `<p class="coop-checking" role="status">Getting co-op ready, then ${pressed === 'host' ? 'opening a room'
       : `joining room <b>${esc(code.trim().toUpperCase())}</b>`}…</p>`;
@@ -727,16 +729,23 @@ function roomLine(room: cloudApi.FriendRoom): string {
 function friendsBadge(): string {
   const view = friendsView();
   const waiting = view ? view.incoming.length + view.invites.length : 0;
-  return waiting ? ` <span class="coop-badge" aria-label="${waiting} waiting">${waiting}</span>` : '';
+  // (its room kept with nothing waiting, so the tabs don't move as a request comes: Victor, "avoiding layout shift is
+  // one of key concepts behind good UX")
+  return waiting ? ` <span class="coop-badge" aria-label="${waiting} waiting">${waiting}</span>`
+    : ' <span class="coop-badge blank" aria-hidden="true">0</span>';
 }
 
-/** A person's row in the Friends tab: their class's mark, their name, a line under it, and their buttons. */
-function personHtml(who: Pick<cloudApi.FriendAsk, 'id' | 'name' | 'cls'>, line: string, acts: string, on = false): string {
+/** A person's row in the Friends tab: their class's mark, their name, a line under it, and their buttons in two slots
+ *  of fixed width, the first (Join, Invite, Accept) and the second (Remove, Decline, Later, Cancel), kept whether a
+ *  row has a button there or not, so every list's buttons stand in one column whatever a row holds (from Victor: "all
+ *  grid looking UI elements should be aligned well, regardless of content"). */
+function personHtml(who: Pick<cloudApi.FriendAsk, 'id' | 'name' | 'cls'>, line: string, first: string, second: string,
+  on = false): string {
   const cls = classOf(who.cls);
   const dot = cls ? ` style="--dot:${cls.accent}"` : '';
   return `<li class="coop-friend"><span class="coop-cls"${dot}>${esc((cls?.name ?? who.name).slice(0, 1))}</span>
-    <span class="coop-friend-who"><b>${esc(who.name)}</b><small${on ? ' class="on"' : ''}>${esc(line)}</small></span>
-    <span class="coop-friend-acts">${acts}</span></li>`;
+    <span class="coop-friend-who"><b>${esc(who.name)}</b><small class="${on ? 'on' : 'off'}">${esc(line)}</small></span>
+    <span class="coop-friend-acts"><span class="coop-act-slot first">${first}</span><span class="coop-act-slot second">${second}</span></span></li>`;
 }
 
 /** A row's button, acting on the person `id`. */
@@ -761,24 +770,24 @@ function friendsHtml(open: boolean): string {
     return `<p class="coop-friends-empty" role="status">${esc(problem || 'Reading your friends…')}</p>`;
   }
   const invites = view.invites.map((i) => personHtml(i, `Invites you · ${roomLine(i.room)}`,
-    actHtml('join-invite', i.id, 'Join', 'primary', !open) + actHtml('dismiss', i.id, 'Later'), true));
+    actHtml('join-invite', i.id, 'Join', 'primary', !open), actHtml('dismiss', i.id, 'Later'), true));
   const incoming = view.incoming.map((f) => personHtml(f, 'Wants to be friends',
-    actHtml('accept', f.id, 'Accept', 'primary') + actHtml('decline', f.id, 'Decline')));
+    actHtml('accept', f.id, 'Accept', 'primary'), actHtml('decline', f.id, 'Decline')));
   const online = view.friends.filter((f) => f.online).map((f) => {
     const join = f.room && f.room.code !== session.code ? actHtml('join', f.id, 'Join', 'primary', !open) : '';
     const asks = !f.room && !f.busy ? actHtml('invite', f.id, invitedFriends.has(f.id) ? 'Invited' : 'Invite', '',
       !open || invitedFriends.has(f.id)) : '';
     const line = f.room ? roomLine(f.room) : f.busy ? 'In a room friends can\'t join' : 'Online, in no room';
-    return personHtml(f, line, join + asks + removeHtml(f.id), true);
+    return personHtml(f, line, join + asks, removeHtml(f.id), true);
   });
-  const offline = view.friends.filter((f) => !f.online).map((f) => personHtml(f, agoOf(f.seen), removeHtml(f.id)));
-  const sent = view.outgoing.map((f) => personHtml(f, 'Asked to be friends', actHtml('remove', f.id, 'Cancel')));
+  const offline = view.friends.filter((f) => !f.online).map((f) => personHtml(f, agoOf(f.seen), '', removeHtml(f.id)));
+  const sent = view.outgoing.map((f) => personHtml(f, 'Asked to be friends', '', actHtml('remove', f.id, 'Cancel')));
   const none = !view.friends.length && !incoming.length && !sent.length && !invites.length
     ? '<p class="coop-friends-empty">No friends yet. Give your friend code to a friend, or type theirs above.</p>' : '';
   return `<form class="coop-friend-add">
       <input id="coop-friend-code" maxlength="12" placeholder="Add a friend by their friend code: e.g. K7QM-2XRA" autocomplete="off" spellcheck="false" aria-label="A friend's code">
       <button class="btn" type="submit">Send request</button></form>
-    <p class="coop-friend-note${friendNote.bad ? ' bad' : ''}${friendNote.text ? '' : ' hidden'}" role="status">${esc(friendNote.text)}</p>
+    <p class="coop-friend-note${friendNote.bad ? ' bad' : ''}${friendNote.text ? '' : ' blank'}" role="status">${esc(friendNote.text) || '&nbsp;'}</p>
     <div class="coop-friend-me"><span>Your friend code</span><b class="coop-friend-code">${esc(codeShown(view.code))}</b>
       <button class="btn coop-copy-code">Copy</button><button class="link coop-new-code" title="A new code: the old one stops working">New code</button>
       <label class="coop-check"><input type="checkbox" id="coop-offline"${appearOffline() ? ' checked' : ''}> Appear offline</label></div>
@@ -800,7 +809,7 @@ function inviteFriendsHtml(s: string): string {
   const free = view.friends.filter((f) => f.online && f.room?.code !== session.code && !here.some((t) => sameTag(t, f.name)));
   if (!free.length) return '';
   const rows = free.map((f) => personHtml(f, f.room ? roomLine(f.room) : 'Online, in no room',
-    actHtml('invite', f.id, invitedFriends.has(f.id) ? 'Invited' : 'Invite', '', invitedFriends.has(f.id) || session.opening), true));
+    actHtml('invite', f.id, invitedFriends.has(f.id) ? 'Invited' : 'Invite', '', invitedFriends.has(f.id) || session.opening), '', true));
   return `<div class="coop-invite-friends">${sectionHtml('Invite friends', rows)}</div>`;
 }
 

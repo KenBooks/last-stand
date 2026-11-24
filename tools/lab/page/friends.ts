@@ -111,7 +111,9 @@ export async function friendsOpenTab(lab: Lab): Promise<void> {
   if (!coopOpen()) openCoop(true);
   // (the server checked first: its answer writes the dialog afresh, and a click across it was lost on a phone's screen)
   // (it answers in the browser's own time, not the lab's frames: waited for by real timeouts)
-  for (let waited = 0; inDialog('.coop-checking'); waited += 100) {
+  // (said in the rooms' list now, in a line of its own over the pages before: either is waited out)
+  const checking = (): boolean => Boolean(inDialog('.coop-checking')) || text(inDialog('.coop-rooms-empty')).startsWith('Checking');
+  for (let waited = 0; checking(); waited += 100) {
     if (waited > 15_000) throw new Error('lab: friends: the dialog never found the server');
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
@@ -153,6 +155,52 @@ export function friendsPlantOverlap(): void {
   // (the name's column held to 12 px, as a narrow card squeezed it, and its text let run on past it)
   style.textContent = '#coop .coop-list > .coop-card { grid-template-columns: 36px 12px auto minmax(48px, auto) !important; } '
     + '#coop .coop-card-who b, #coop .coop-card-who small { overflow: visible !important; }';
+  document.head.append(style);
+}
+
+/** Where the Friends tab's parts stand (css px): what moves as a note, a count or a button comes would show here. */
+export interface FriendsLayout {
+  /** the top of the player's own code's line, under the add box and its note */
+  meTop: number;
+  /** each tab's left edge */
+  tabs: number[];
+}
+
+/** Where the Friends tab's parts stand now. */
+export function friendsLayout(): FriendsLayout {
+  const me = inDialog('.coop-friend-me')?.getBoundingClientRect().top ?? -1;
+  const tabs = [...document.querySelectorAll<HTMLElement>('#coop .coop-tab')]
+    .map((tab) => Math.round(tab.getBoundingClientRect().left * 10) / 10);
+  return { meTop: Math.round(me * 10) / 10, tabs };
+}
+
+/** The columns the Friends tab's rows and a room's cards don't share, said as problems: every row's first and second
+ *  buttons' slots at one left edge across all the tab's lists, and every card's stats and mark at one edge. */
+export function friendsColumns(_lab: Lab, { where }: { where: string }): string[] {
+  const edgesOf = (selector: string, side: 'left' | 'right'): number[] =>
+    [...document.querySelectorAll<HTMLElement>(selector)]
+      .filter((element) => element.getClientRects().length > 0)
+      .map((element) => element.getBoundingClientRect()[side]);
+  const apart = (edges: number[]): number => (edges.length ? Math.max(...edges) - Math.min(...edges) : 0);
+  const columns: [string, string, 'left' | 'right'][] = [
+    ['the friends\' first buttons', '#coop .coop-friends-sections .coop-act-slot.first', 'left'],
+    ['the friends\' second buttons', '#coop .coop-friends-sections .coop-act-slot.second', 'left'],
+    ['the invite list\'s buttons', '#coop .coop-invite-friends .coop-act-slot.first', 'left'],
+    ['the cards\' stats', '#coop .coop-card:not(.empty) .coop-card-stats', 'left'],
+    ['the cards\' marks', '#coop .coop-card .coop-card-mark', 'right'],
+  ];
+  return columns.flatMap(([name, selector, side]) => {
+    const off = apart(edgesOf(selector, side));
+    return off > 1 ? [`${where}: ${name} aren't in one column (${off.toFixed(1)} px apart)`] : [];
+  });
+}
+
+/** The canary's fault for the columns and the shifts: the rows' button slots sized by what they hold, and the note's
+ *  and the badge's room let go while they're empty, as they were before Victor's rule. */
+export function friendsPlantShifts(): void {
+  const style = document.createElement('style');
+  style.textContent = '#coop .coop-act-slot { width: auto !important; min-width: 0 !important; } '
+    + '#coop .coop-friend-note.blank, #coop .coop-badge.blank { display: none !important; }';
   document.head.append(style);
 }
 
