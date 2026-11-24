@@ -16,6 +16,29 @@ let played = false;
 /** how long after one reload onto a new version another may come by itself (ms): never a loop */
 const RELOAD_APART_MS = 60_000;
 const RELOADED_KEY = 'last-stand.updated-at';
+/** when the page last reloaded for a chunk it couldn't fetch (its own key: a reload for a new version isn't held up by it) */
+const CHUNK_RELOADED_KEY = 'last-stand.chunk-reloaded-at';
+
+/** what a browser's failed `import()` says: Chrome's and Edge's, Safari's, Firefox's */
+const MISSING_CHUNK = /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i;
+
+/**
+ * A chunk of this page's build its `import()` couldn't fetch (`err`): the page reloaded by itself onto the build the
+ * host serves now, at most once a minute (never a loop); whether it did. A page of an older build (left open across
+ * a deploy, or the cached page a slow network gave way to) asks for chunks the host has replaced, and the boot
+ * stopped on the error (#856).
+ */
+export function reloadForMissingChunk(err: unknown): boolean {
+  const said = err instanceof Error ? err.message : String(err);
+  if (!MISSING_CHUNK.test(said)) return false;
+  try {
+    const last = Number(sessionStorage.getItem(CHUNK_RELOADED_KEY)) || 0;
+    if (Date.now() - last < RELOAD_APART_MS) return false;
+    sessionStorage.setItem(CHUNK_RELOADED_KEY, String(Date.now()));
+  } catch { return false; }
+  location.reload();
+  return true;
+}
 
 /** Reloads onto the new version by itself if the player hasn't played yet and it didn't just do so; whether it did. */
 function reloadUnplayed(): boolean {

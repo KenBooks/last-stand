@@ -1454,6 +1454,8 @@ the game draws in front of him (a leaf card cut out by its texture, a prop disso
 part's cut-out (a hair card's) keeps its texture's alpha. A pixel is found as a part by its colour within 2 levels
 a channel, looked up once (matched against every part's colour, a picture took 10 s).
 - `pwa`: a deploy as a returning player meets it, the offline worker and all, which the lab's dev server never has
+  (every load must also end without the loading screen's failure, #856's "Failed to fetch dynamically imported
+  module")
   (`node/pwa.mjs`; it runs in this process, not the server). Another commit's production build (`--from[=ref]`,
   origin/main by default, exported as `--ab` exports it) and this tree's are built with Vite into `out/pwa/`, and
   served in turn on 127.0.0.1 under `/last-stand/` as Pages serves the game (`node/staticHost.mjs`: `max-age=600`,

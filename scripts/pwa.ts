@@ -1,14 +1,14 @@
 // Vite build plugin for the installable, offline game (PWA):
 // - renders the PNG app icons from public/icon.svg (the repo keeps no binary assets),
 // - links the Apple touch icon (iOS ignores the manifest's icons),
-// - writes sw.js, a service worker that precaches every built file a WebGL page loads, so the game runs offline.
+// - writes sw.js, a service worker that precaches every built file the game loads, so the game runs offline.
 // The worker's cache name comes from a hash of the build, so each deploy installs a fresh cache;
 // the page is served network-first, so a plain reload shows a new deploy.
 import { readdirSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { Resvg } from '@resvg/resvg-js';
-import type { Plugin, Rollup } from 'vite';
+import type { Plugin } from 'vite';
 
 // Pages' page for a missing path (public/404.html): never the game's, so never precached
 const NOT_FOUND = '404.html';
@@ -31,60 +31,16 @@ export function pwa(): Plugin {
         const source = new Resvg(svg, { fitTo: { mode: 'width', value: size } }).render().asPng();
         this.emitFile({ type: 'asset', fileName, source });
       }
-      const webgpuOnly = webgpuOnlyChunks(bundle);
       const files = [...new Set([...Object.keys(bundle), ...ICONS.map(([f]) => f), ...readdirSync(publicDir)])]
-        .filter((f) => !f.endsWith('.map') && f !== NOT_FOUND && f !== VERSION && !webgpuOnly.has(f) && !f.startsWith('assets/portrait-')).sort();
+        // (three's WebGPU build among them: the engine draws on WebGPU alone, and left out as a renderer no player
+        // chose, a page of an older build asked for its chunk where no cache held it and the host had it no more,
+        // #856: "Failed to fetch dynamically imported module: .../assets/three-webgpu-Dq2KBQmG.js")
+        .filter((f) => !f.endsWith('.map') && f !== NOT_FOUND && f !== VERSION && !f.startsWith('assets/portrait-')).sort();
       const html = bundle['index.html'];
       const version = createHash('sha256').update(files.join('\n')).update(html && 'source' in html ? html.source : '').digest('hex').slice(0, 12);
       this.emitFile({ type: 'asset', fileName: 'sw.js', source: serviceWorker(version, files) });
     },
   };
-}
-
-/** three's WebGPU build, as `vite.config.ts` puts it in a chunk of its own */
-const WEBGPU_BUILD = /three[\\/]build[\\/]three\.(webgpu|tsl)\.js$/;
-
-/**
- * The chunks only a WebGPU page (`?renderer=webgpu`) loads: three's WebGPU build, what can't run without it (each chunk
- * importing it, as the meshlets' pipeline and the point lights' loop do), and what only those import. Precached, an
- * install downloaded them all in the background (about 900 kB) for a renderer no player chooses yet; a WebGPU page
- * fetches them from the network.
- */
-function webgpuOnlyChunks(bundle: Rollup.OutputBundle): Set<string> {
-  const chunks = Object.values(bundle).filter((file): file is Rollup.OutputChunk => file.type === 'chunk');
-  const byName = new Map(chunks.map((chunk) => [chunk.fileName, chunk]));
-  const needsWebgpu = new Map<string, boolean>();
-  const needs = (chunk: Rollup.OutputChunk): boolean => {
-    if (!needsWebgpu.has(chunk.fileName)) {
-      needsWebgpu.set(chunk.fileName, false);
-      const own = chunk.moduleIds.some((id) => WEBGPU_BUILD.test(id));
-      const imported = chunk.imports.some((name) => byName.has(name) && needs(byName.get(name)!));
-      needsWebgpu.set(chunk.fileName, own || imported);
-    }
-    return needsWebgpu.get(chunk.fileName)!;
-  };
-  const roots = chunks.filter((chunk) => needs(chunk));
-  const reached = (from: Rollup.OutputChunk[], skip: (chunk: Rollup.OutputChunk) => boolean): Set<string> => {
-    const seen = new Set<string>();
-    const queue = from.filter((chunk) => !skip(chunk));
-    while (queue.length) {
-      const chunk = queue.pop()!;
-      if (seen.has(chunk.fileName)) continue;
-      seen.add(chunk.fileName);
-      for (const name of [...chunk.imports, ...chunk.dynamicImports]) {
-        const next = byName.get(name);
-        if (next && !skip(next)) queue.push(next);
-      }
-      for (const asset of [...chunk.viteMetadata?.importedCss ?? [], ...chunk.viteMetadata?.importedAssets ?? []]) {
-        seen.add(asset);
-      }
-    }
-    return seen;
-  };
-  const entries = chunks.filter((chunk) => chunk.isEntry);
-  const webgl = reached(entries, (chunk) => needs(chunk));
-  const webgpu = reached(roots, () => false);
-  return new Set([...webgpu].filter((name) => !webgl.has(name)));
 }
 
 function serviceWorker(version: string, files: string[]): string {
