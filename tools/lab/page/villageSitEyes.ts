@@ -1,8 +1,8 @@
 // `lab village --only sitFromEyes` (#720, from play: "Sitting options should appear in all camera views", "Currently
 // does not appear in first person"): through the eyes, the crosshair on a log by the campfire, the log must be outlined
-// to sit on (`Sitting.pointed`), E must sit him on it, shown over the shoulder while he sits (`sitView` in `main.ts`:
-// through his eyes his own seated body would fill the view), and a step must get him up and bring the eyes back. Said:
-// the log, each of those, and the view at each. `canary` holds the sit off (`Player.sits`), as through the eyes it was
+// to sit on (`Sitting.pointed`), E must sit him on it, still through the eyes while he sits (from review, "Why does he
+// exit 1st person view when sitting? He should not"), and a step must get him up, through the eyes still. Said: the
+// log, each of those, and the view at each. `canary` holds the sit off (`Player.sits`), as through the eyes it was
 // held off: E must not sit him.
 import * as THREE from 'three';
 import type { Lab, Pictured } from './lab';
@@ -102,7 +102,7 @@ export async function sitFromEyes(lab: Lab, canary: boolean): Promise<LightsChec
     const problems: string[] = [];
     if (!seen.outlined) problems.push('sit from the eyes: the log under the crosshair wasn\'t outlined');
     if (!seen.sat) problems.push('sit from the eyes: E never sat him');
-    if (seen.sat && seen.satIn !== 'third') problems.push(`sit from the eyes: shown ${seen.satIn} while he sat`);
+    if (seen.sat && seen.satIn !== 'first') problems.push(`sit from the eyes: shown ${seen.satIn} while he sat`);
     if (!seen.backInEyes) problems.push('sit from the eyes: a step didn\'t bring him up and the eyes back');
     return { lines: [seen.line], problems, caught: null, moments: seen.moments };
   } finally {

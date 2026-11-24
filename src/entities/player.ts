@@ -1445,12 +1445,11 @@ export class Player {
       && Math.hypot(p.pos.x - this.pos.x, p.pos.z - this.pos.z) < COOP.reviveRange);
   }
 
-  /** Whether he could go and sit (or stay sat): nothing cast, aimed or held, no foe near, not hurt, not placed on the
-   *  seat through the eyes (the camera rides his head: a sit begun through them shows him over the shoulder, `sitView`
-   *  in `main.ts`, and the eyes chosen while he sits get him up) and not held where he is. */
+  /** Whether he could go and sit (or stay sat): nothing cast, aimed or held, no foe near, not hurt and not held where
+   *  he is. Through the eyes too: the camera rides his head down onto the seat (#720's review: "Why does he exit 1st
+   *  person view when sitting? He should not"). */
   private freeToSit(): boolean {
-    return this.sits && this.glances && this.local && this.alive && !this.idle && !(this.eyes && this.sitting.placed)
-      && !this.casting
+    return this.sits && this.glances && this.local && this.alive && !this.idle && !this.casting
       && !this.channel && !this.dash && !this.aiming && this.aimHold <= 0 && !this.staggered && !this.rooted
       && this.hitT <= 0 && !foeNear(this.pos.x, this.pos.z);
   }
