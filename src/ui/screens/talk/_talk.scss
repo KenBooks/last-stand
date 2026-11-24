@@ -1,43 +1,94 @@
 // Talking to the village's folk (ui/talk.ts): a card at the foot of the screen, the room still seen above it (no blur,
-// a shade only towards the foot); his emblem, his name and what he is, his lines fading in one after another, the
-// replies as rows to pick. Narrow or short screens: the emblem shrinks, the lines scroll.
+// a shade only towards the foot). His portrait in an oval frame with his name plate under it beside what he says: his
+// lines come one by one (each fading up into place), a hint under them while he speaks, then the replies as framed
+// rows, two to a row where the card is wide, each with its number's key; the one the keys are on lit as a hover is,
+// one asked before quieter and marked, Leave last and plainer. The box is zoomed by the UI's scale (`_modals.scss`), so
+// heights in the window's units are divided by it. Short screens (a phone held sideways): the portrait small, the
+// lines scroll; narrow ones: the portrait and plate in a row over the lines.
 @use 'theme' as *;
 
 #talk { align-items: flex-end; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2vh);
-  background: linear-gradient(transparent 45%, rgba(0, 0, 0, .55)); backdrop-filter: none; }
-.tk-box { width: 720px; flex-direction: row; align-items: flex-start; gap: 16px; padding: 16px 18px; text-align: left; }
-.tk-emblem { flex: 0 0 76px; width: 76px; height: 76px; }
-.tk-emblem svg { width: 100%; height: 100%; display: block; }
-.tk-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.tk-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding-right: 26px; position: relative; }
-.tk-name { font: 900 22px var(--font-display); color: var(--accent); }
-.tk-title { font-size: 14px; font-style: italic; color: var(--ink-dim); }
-.tk-close { position: absolute; top: -6px; right: -4px; width: 30px; height: 30px; padding: 0; font-size: 24px; line-height: 1;
-  background: none; border: none; color: var(--ink-dim); cursor: $cursor-hand; }
-.tk-close:hover { color: var(--ink); }
-.tk-says { max-height: 28vh; overflow-y: auto; }
-.tk-says p { margin: 0 0 6px; font-size: 17px; line-height: 1.35; color: var(--ink); animation: tk-in .45s ease backwards;
-  animation-delay: calc(var(--i) * .35s); }
-.tk-replies { display: flex; flex-direction: column; gap: 4px; }
-.tk-reply { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 5px 10px; text-align: left;
-  font: 500 16px var(--font-body, inherit); color: #ffe7b0; background: rgba(255, 255, 255, .03);
-  border: 1px solid rgba($frame, .45); border-radius: 3px; cursor: $cursor-hand; animation: tk-in .35s ease backwards;
-  animation-delay: calc(var(--i) * .35s); }
-.tk-reply:hover, .tk-reply:focus-visible { background: rgba(255, 231, 176, .1); border-color: var(--accent); }
-.tk-reply .k { flex: 0 0 auto; min-width: 20px; padding: 0 4px; font: 700 12px var(--font-display); text-align: center;
-  border: 1px solid var(--frame); border-radius: 2px; color: var(--accent); }
-@keyframes tk-in { from { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .tk-says p, .tk-reply { animation: none; } }
-// (a short screen, a phone held sideways: the emblem small, two replies to a row, the lines a little smaller)
-@media (max-height: 520px) {
-  .tk-box { gap: 10px; padding: 10px 12px; }
-  .tk-emblem { flex-basis: 44px; width: 44px; height: 44px; }
-  .tk-says { max-height: 22vh; }
-  .tk-says p { font-size: 15px; margin-bottom: 3px; }
-  .tk-replies { display: grid; grid-template-columns: 1fr 1fr; }
-  .tk-reply { min-height: 32px; font-size: 14px; }
+  background: linear-gradient(transparent 40%, rgba(0, 0, 0, .6)); backdrop-filter: none; }
+.tk-box { position: relative; width: 880px; flex-direction: row; align-items: stretch; gap: 20px; padding: 18px 22px 18px 18px;
+  text-align: left; overflow: hidden; }
+
+// --- his portrait and name plate ---
+.tk-side { flex: 0 0 136px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+// (the picture of his model in an oval of the theme's frame; the dim library's colour behind and a spinner while it
+// comes)
+// (its look the folk's oval's, `_folkFace.scss`)
+.tk-portrait { width: 136px; height: 159px; }
+.tk-plate { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 5px 6px 6px;
+  background: $well; border: 1px solid rgba($frame, .7); border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .6); }
+.tk-name { font: 900 15px/1.15 $font-display; color: var(--accent); text-align: center; letter-spacing: .02em; }
+.tk-title { font: italic 12px/1.2 $font-body; color: var(--ink-dim); text-align: center; }
+
+// --- what he says ---
+.tk-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.tk-close { position: absolute; top: 6px; right: 8px; width: 32px; height: 32px; padding: 0; font-size: 26px; line-height: 1;
+  background: none; border: none; color: var(--ink-dim); cursor: $cursor-hand; z-index: 1; }
+.tk-close:hover, .tk-close:focus-visible { color: var(--ink); }
+.tk-says { max-height: calc(30vh / var(--ui, 1)); overflow-y: auto; padding-right: 30px; cursor: $cursor-hand;
+  border-left: 2px solid rgba($frame, .35); padding-left: 14px; }
+.tk-says p { margin: 0 0 8px; font: 18px/1.42 $font-body; color: var(--ink); animation: tk-line .45s ease-out backwards; }
+.tk-says p:last-child { margin-bottom: 0; }
+// (the hint while he speaks: what shows the rest; on touch, a tap)
+.tk-more { display: none; font: 600 12px $font-body; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-dim);
+  padding-left: 16px; cursor: $cursor-hand; }
+.tk-more::before { content: '\25B8\00a0 Click or press Space to go on'; }
+body.touch .tk-more::before { content: '\25B8\00a0 Tap to go on'; }
+.revealing .tk-more { display: block; animation: tk-breathe 2.4s ease-in-out infinite; }
+
+// --- the replies ---
+.tk-replies { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.tk-reply { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 40px; padding: 6px 10px; text-align: left;
+  font: 500 16px/1.25 $font-body; color: #ffe7b0; background: rgba(255, 255, 255, .03);
+  border: 1px solid rgba($frame, .45); border-left-width: 3px; border-radius: 3px; cursor: $cursor-hand;
+  animation: tk-line .3s ease-out backwards; animation-delay: calc(var(--i) * .06s);
+  transition: background .12s, border-color .12s; }
+.tk-reply .tx { flex: 1; min-width: 0; }
+.tk-reply .k { flex: 0 0 auto; min-width: 22px; padding: 1px 5px; font: 700 12px $font-display; text-align: center;
+  border: 1px solid var(--frame); border-radius: 2px; color: var(--accent); background: rgba(0, 0, 0, .35); }
+.tk-reply .mark { flex: 0 0 auto; font-size: 13px; color: var(--ink-dim); }
+.tk-reply .asked-mark { font: 600 10px $font-body; letter-spacing: .08em; text-transform: uppercase; padding: 1px 5px;
+  border: 1px solid rgba($frame, .3); border-radius: 2px; }
+.tk-reply:hover, .tk-reply.focus, .tk-reply:focus-visible { background: rgba(255, 231, 176, .1); border-color: var(--accent);
+  outline: none; }
+.tk-reply.focus .k, .tk-reply:hover .k { background: var(--accent); color: #1a120c; }
+.tk-reply.asked { color: rgba(255, 231, 176, .62); }
+.tk-reply.leave { color: var(--ink-dim); background: transparent; border-style: dashed; }
+.tk-reply.leave:hover, .tk-reply.leave.focus { color: var(--ink); }
+@keyframes tk-line { from { opacity: 0; transform: translateY(4px); } }
+@keyframes tk-breathe { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) {
+  .tk-says p, .tk-reply { animation: none; }
+  .revealing .tk-more { animation: none; }
 }
-// (a narrow screen, a phone held upright: the emblem beside the name only)
+
+// (on touch, each reply a finger's height whatever the UI's scale: the box is zoomed by it, so the floor is divided by
+// it; at a small scale they were 27 css px tall)
+body.touch .tk-reply { min-height: max(40px, calc(36px / var(--ui, 1))); }
+// (a narrower card: the replies one to a row)
+@media (max-width: 900px) { .tk-replies { grid-template-columns: 1fr; } }
+// (a short screen, a phone held sideways: the portrait small, the replies two to a row again, the lines smaller)
+@media (max-height: 520px) {
+  .tk-box { gap: 12px; padding: 10px 14px 10px 10px; }
+  .tk-side { flex-basis: 78px; gap: 5px; }
+  .tk-portrait { width: 78px; height: 91px; }
+  .tk-plate { padding: 3px 4px; }
+  .tk-name { font-size: 11px; }
+  .tk-title { font-size: 10px; }
+  .tk-body { gap: 6px; }
+  .tk-says { max-height: calc(28vh / var(--ui, 1)); }
+  .tk-says p { font-size: 15px; line-height: 1.3; margin-bottom: 4px; }
+  .tk-replies { grid-template-columns: 1fr 1fr; gap: 4px; }
+  .tk-reply { min-height: 34px; padding: 4px 8px; font-size: 14px; }
+}
+// (a narrow screen, a phone held upright: the portrait and plate in a row over the lines)
 @media (max-width: 560px) {
-  .tk-emblem { flex-basis: 40px; width: 40px; height: 40px; }
+  .tk-box { flex-direction: column; gap: 10px; }
+  .tk-side { flex: 0 0 auto; flex-direction: row; align-items: center; }
+  .tk-portrait { width: 56px; height: 65px; }
+  .tk-plate { width: auto; align-items: flex-start; }
+  .tk-replies { grid-template-columns: 1fr; }
 }

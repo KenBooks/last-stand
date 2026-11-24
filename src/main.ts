@@ -43,11 +43,12 @@ import { noteBank } from './ui/choiceLesson';
 import { initHud, showHud, layOutHudAhead, slotsAhead, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, updateVillageMinimap, readyMinimap, renderSpoils } from './ui/hud';
 import { cancelProfile, profiling } from './ui/profileTab';
 import { openGuide, closeGuide, guideOpen, type GuideSection } from './ui/guide/index';
-import { stepPortraits } from './ui/guide/portraits';
+import { portrait, stepPortraits } from './ui/guide/portraits';
 import { initMenus, layOutMenuAhead, slideMenuAhead, rehearseChest, showMenu, showSummary, hideSummary, showPause, menuStowed, lobbyPractice, selectedWave, trainingSelected, selectTraining, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, layOutHelpAhead, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { initPvp, renderPvp } from './ui/pvpMenu';
-import { closeTalk } from './ui/screens/talk/talk';
+import { closeTalk, stepTalk } from './ui/screens/talk/talk';
+import { facesWaiting, stepFaces } from './ui/folkFace';
 import { closeDialogs, dialogKeys, dialogOpen } from './ui/dialogs';
 import { useOf, villageUse, type UseOf } from './game/villageUses';
 import { initDuel, quitDuel, setupNow, type DuelSetup } from './game/duel';
@@ -301,7 +302,9 @@ async function boot() {
   initVillage({ use: useObject, leave: leaveObject, active: villageActive, shows: objectShows });
   // (in or out of a house: what was open put away, the partners told and shown only where they stand)
   // (a talk with the village's folk: he looks up from his book while it's open, and the village forgets it as it ends)
-  onRoomChange(() => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); showMerchant(false); setVillageMap(false); closedFrom(); syncAway(); });
+  // (into the library: Brother Hollis's portrait for his talk's card made as the hero comes in, behind the lobby a piece at a
+  // time, so his face is there when he's talked to; the guide's are made only once it's opened)
+  onRoomChange((room) => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); showMerchant(false); setVillageMap(false); closedFrom(); syncAway(); if (room === 'library') void portrait('scholar'); if (room === 'merchant') void portrait('odo'); });
   initVillageCard((o) => closedFrom(o), (id) => { G.arena.setBiome(id); sendLobbyChoice(); });
   // (a player alone at the rack is walked to the campfire, where a party is gathered)
   initPvp(() => { const fire = villageObject('campfire'); if (fire) goUse(fire); }, biomeFirst(whenWarm(['fight'], startDuel, READYING.fight), startDuel, () => setupNow().ground));
@@ -1222,6 +1225,9 @@ function update(dt: number): void {
   for (const p of G.players) p.update(dt);
   perfLap('player');
   updateHall(dt);
+  // (a talk's lines shown one by one by the game's clock: ui/screens/talk/talk.ts)
+  stepTalk(dt);
+  stepFaces(dt);
   // (the other heroes, the hall's and a spare of each class built behind the lobby, a piece a frame: game/behind.ts;
   // once the lobby's warm-ups behind it are done, not on top of them)
   if (G.mode === 'menu' && !hallOpen() && !isWarming()) {
@@ -1380,7 +1386,9 @@ function frame(timestamp: number): void {
   }
   framePart('update');
   // (the guide open: its pictures made first, whatever else is building or warming, ui/guide/portraits.ts)
+  // (and a card's face while it waits for it, whatever holds the build behind the lobby: a room's warm-up)
   if (guideOpen()) stepPortraits();
+  else if (facesWaiting()) stepPortraits(false);
   // (the developer mode's free camera, flown by the browser's clock with the game frozen or not)
   if (dev && revealed) dev.frame(Math.min(rawDt, 0.1));
   // (photo mode's camera, flown by the browser's clock too: solo the game stands frozen meanwhile)

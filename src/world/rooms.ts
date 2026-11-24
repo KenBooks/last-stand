@@ -10,6 +10,7 @@
 // (`Room.wall`).
 import * as THREE from 'three';
 import type { Scholar } from '../entities/models/scholar';
+import type { Rounds } from './scholarRounds';
 import { HOUSES, ROOM_IDS, type RoomId } from '../data/houses';
 import type { Odo } from '../entities/models/merchant';
 import type { EnemyId } from '../data/enemies';
@@ -70,6 +71,8 @@ export interface Room {
   seats: Seat[];
   /** the merchant's Odo, once seated (tools/lab `odo`) */
   odo?(): Odo | undefined;
+  /** his rounds through the room, once he's seated (world/scholarRounds.ts; tools/lab `scholar`) */
+  rounds?(): Rounds | undefined;
 }
 
 /**
@@ -152,7 +155,8 @@ function makeMats(): Mats {
     // (night outside: a deep blue pane, a little lit)
     glass: new THREE.MeshStandardMaterial({ color: 0x0c1424, roughness: 0.2, metalness: 0.1, emissive: 0x1a2c50, emissiveIntensity: 0.35 }),
     paper: new THREE.MeshStandardMaterial({ color: 0xe8d8b0, roughness: 0.9 }),
-    leather: new THREE.MeshStandardMaterial({ color: 0x5a2a1a, roughness: 0.65 }),
+    // (named: a harness tells a book of the old kind, a leather box, by it)
+    leather: new THREE.MeshStandardMaterial({ color: 0x5a2a1a, roughness: 0.65, name: 'room leather' }),
     rug: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 }),
     dark: new THREE.MeshStandardMaterial({ color: 0x120c08, roughness: 0.9 }),
   };

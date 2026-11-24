@@ -1,14 +1,13 @@
-  <div id="talk" class="modal hidden"><div class="modal-box tk-box" role="dialog" aria-label="Talk">
-    <div class="tk-emblem" aria-hidden="true"><svg viewBox="0 0 64 64">
-      <circle cx="32" cy="32" r="29" fill="#1a120c" stroke="#c99a48" stroke-width="2.5"/>
-      <path d="M32 40 C24 35 15 35 10 37 L10 22 C15 20 24 20 32 25 C40 20 49 20 54 22 L54 37 C49 35 40 35 32 40Z" fill="#e8d8b0" stroke="#5a3a1a" stroke-width="1.5"/>
-      <path d="M32 25 L32 40" stroke="#5a3a1a" stroke-width="1.5"/>
-      <path d="M15 26h12M15 30h12M37 26h12M37 30h12M15 34h10M37 34h10" stroke="#7a5a3a" stroke-width="1.2"/>
-      <path d="M44 10 C47 14 47 17 44 19 C41 17 41 14 44 10Z" fill="#ffc870"/><rect x="42.5" y="19" width="3" height="5" fill="#f2e6c8"/>
-    </svg></div>
+  <div id="talk" class="modal hidden"><div class="modal-box tk-box" role="dialog" aria-labelledby="tk-name">
+    <div class="tk-side">
+      <!-- his portrait: a picture of his own model (ui/guide/portraits.ts), a spinner while it comes -->
+      <div class="tk-portrait folk-face" aria-hidden="true"><canvas class="tk-photo folk-photo"></canvas><div class="tk-wait folk-wait"></div></div>
+      <div class="tk-plate"><span class="tk-name" id="tk-name"></span><span class="tk-title"></span></div>
+    </div>
     <div class="tk-body">
-      <div class="tk-head"><span class="tk-name"></span><span class="tk-title"></span><button class="tk-close" aria-label="Close">&times;</button></div>
-      <div class="tk-says"></div>
+      <button class="tk-close" aria-label="Leave">&times;</button>
+      <div class="tk-says" aria-live="polite"></div>
+      <div class="tk-more" aria-hidden="true"></div>
       <div class="tk-replies"></div>
     </div>
   </div></div>

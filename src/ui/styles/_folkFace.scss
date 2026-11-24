@@ -1,0 +1,20 @@
+// One of the village folk's face in an oval of the theme's frame (ui/folkFace.ts), on his cards (the talk's, Odo's
+// trade): the picture of his own model, a room's dim colour behind it and a spinner while it comes, faded in once made.
+// The oval's size is its card's, and it keeps it whatever it shows: nothing round it moves as the picture comes.
+@use 'theme' as *;
+
+.folk-face { position: relative; flex: none; border-radius: 50%; overflow: hidden;
+  background: radial-gradient(circle at 35% 30%, #4a2e16, #0c0806 75%);
+  box-shadow: 0 0 0 3px $frame, 0 0 0 4.5px $frame-dark, 0 6px 16px rgba(0, 0, 0, .7); }
+.folk-face .folk-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0;
+  transition: opacity .3s; }
+.folk-face.pictured .folk-photo { opacity: 1; }
+.folk-face .folk-wait { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px;
+  border-radius: 50%; border: 3px solid rgba($frame, .25); border-top-color: $frame; opacity: 0; transition: opacity .2s;
+  will-change: transform; animation: folk-spin 1s linear infinite; }
+.folk-face.waiting .folk-wait { opacity: 1; }
+@keyframes folk-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) {
+  .folk-face .folk-photo { transition: none; }
+  .folk-face .folk-wait { animation-duration: 3s; }
+}

@@ -10,6 +10,9 @@
 // 330 ms and then 90 to 110 ms a picture (from Victor's review of #665: "lags for 1-2sec"; `npm run lab -- guide`).
 // A production build keeps them in the browser's storage for its own build (`CACHE`), so a later visit makes none.
 // Opened before they're made, the guide shows a picture as it comes, the ones it shows first (`hurryPortrait`).
+// The village folk are pictured here too, each first as his card asks for it (Brother Hollis's talk, Odo's trade):
+// another of him built on his own model, looking into the camera, head and shoulders in the room behind him
+// (`folkPortraits.ts`; from play, "lets have an actual picture of him, of his actual face", "Have him look straight").
 import * as THREE from 'three';
 import { foeLoaded, loadFoe } from '../../entities/bosses';
 import { ENEMIES, type EnemyId } from '../../data/enemies';
@@ -20,6 +23,7 @@ import { disposeGeometries } from '../../entities/models/rig';
 import { buildFirst, buildLater, buildOnly, finishNow, queued } from '../../game/behind';
 import { perfClock } from '../perfHud';
 import type { Model, Profile } from '../../types';
+import { FOLK, folkStaged, isFolk, type FolkId } from './folkPortraits';
 
 declare const __BUILD__: { ref: string; time: string };
 
@@ -27,6 +31,8 @@ declare const __BUILD__: { ref: string; time: string };
 const SIZE = 320;
 /** where the camera stands: how far round from the foe's front (rad) and how far above level it looks down (rad) */
 const VIEW = { round: 0.55, down: 0.12, fov: 28 };
+/** how many frames one of the folk's pictures waits for his room to build him (asked for as the hero walks in) */
+const FOLK_WAIT = 600;
 /** the build's key behind the lobby */
 const JOB = 'guide portraits';
 /** the browser's store the pictures are kept in, a production build's alone (a dev build's models change under it) */
@@ -38,11 +44,12 @@ const CACHE = { db: 'last-stand-guide', store: 'portraits', on: !import.meta.env
 export const WHILE_OPEN = { ms: 8, most: 40 };
 
 /** a harness's planted faults: each picture drawn and encoded at once, as they were (`remakeAllNow`); the pictures not
- *  made while the guide is open, only behind the lobby, as they were (`lab guide --canary=slow`) */
-export const portraitPlant = { allAtOnce: false, notWhileOpen: false };
+ *  made while the guide is open, only behind the lobby, as they were (`lab guide --canary=slow`); the next try at
+ *  `failNext`'s picture failing, as one came back empty in play and the talk card showed a drawing (`lab talk`) */
+export const portraitPlant = { allAtOnce: false, notWhileOpen: false, failNext: null as Who | null };
 
-/** Whose picture: a foe's id, or `hero:` and a class's id. */
-export type Who = EnemyId | `hero:${string}`;
+/** Whose picture: a foe's id, `hero:` and a class's id, or one of the village folk. */
+export type Who = EnemyId | `hero:${string}` | FolkId;
 
 /** each picture made: a canvas of its own (`SIZE` square) every place showing it is drawn from */
 const made = new Map<Who, HTMLCanvasElement>();
@@ -81,13 +88,16 @@ function* timedSteps<T>(what: string, steps: Generator<void, T, undefined>): Gen
 }
 
 /** Every picture the guide shows: the foes', the bosses' and the heroes'. */
-function everyone(): Who[] {
+function guides(): Who[] {
   const foes = (Object.keys(ENEMIES) as EnemyId[]).filter((id) => !ENEMIES[id].dummy);
   return [...foes.filter((id) => !ENEMIES[id].boss), ...foes.filter((id) => ENEMIES[id].boss), ...CLASS_IDS.map((id) => `hero:${id}` as Who)];
 }
+/** Every picture the guide makes once it's opened (the folk's are their cards', each made as it asks for it:
+ *  `startFolk`). */
+const everyone = (): Who[] => guides();
 
 /** The pictures not made yet, of every foe, boss and hero the guide shows (a harness's: `lab guide`). */
-export const portraitsLeft = (): Who[] => everyone().filter((id) => !made.has(id));
+export const portraitsLeft = (): Who[] => guides().filter((id) => !made.has(id));
 
 /** A picture made already, or null. */
 export const portraitMade = (id: Who): HTMLCanvasElement | null => made.get(id) ?? null;
@@ -113,8 +123,16 @@ function copied(from: CanvasImageSource): HTMLCanvasElement {
 export function portrait(id: Who): Promise<HTMLCanvasElement | null> {
   const have = made.get(id);
   if (have || failed) return Promise.resolve(have ?? null);
-  startPortraits();
+  if (isFolk(id)) startFolk(id); else startPortraits();
   return new Promise((done) => waiting.set(id, [...(waiting.get(id) ?? []), done]));
+}
+
+/** One of the folk's pictures alone queued, for his card: the guide's are made once the guide is opened, not because
+ *  he was talked to or traded with. */
+function startFolk(id: FolkId): void {
+  if (made.has(id) || pending.includes(id) || making.some((m) => m.id === id)) return;
+  pending.unshift(id);
+  requeue();
 }
 
 /** `id`'s picture made before the others (a page showing it opened), the build behind the lobby moved to the front. */
@@ -130,11 +148,30 @@ export function hurryPortrait(id: Who): void {
  *  their compiles, `lab guide`) */
 let own: Who | null = null;
 
+/** `id`'s picture tried again, first, after a try came back empty (a talk's card waits on with a spinner). */
+export function retryPortrait(id: Who): void {
+  if (made.has(id)) return;
+  failed = false;
+  if (!pending.includes(id)) pending.unshift(id);
+  requeue();
+  hurryPortrait(id);
+}
+
+/** A harness's: `id`'s picture forgotten, to be made again as if it never had been (`lab talk`). */
+export function forgetPortrait(id: Who): void {
+  made.delete(id);
+  portraitTimes.delete(id);
+  if (!pending.includes(id)) pending.unshift(id);
+  requeue();
+}
+
 /** The pictures made while the guide is open, ahead of everything built behind the lobby and whatever holds it
- *  (called each frame it's open, from main.ts): the player is looking at them. */
-export function stepPortraits(): void {
+ *  (called each frame it's open, from main.ts): the player is looking at them. `all` false: the talk's card's alone,
+ *  while it waits for it. */
+export function stepPortraits(all = true): void {
   if (portraitPlant.notWhileOpen) return;
-  startPortraits();
+  // (all of them once the guide is opened; while the talk's card waits for his picture, his alone, already queued)
+  if (all) startPortraits();
   buildOnly(JOB, WHILE_OPEN);
 }
 
@@ -148,9 +185,10 @@ export function hurryPortraits(ids: Who[]): void {
 
 /** A harness's: every picture forgotten, to be made again as on a first visit (`lab guide`). */
 export function forgetPortraits(): void {
-  made.clear();
+  // (the guide's alone: the scholar's is his talk's card's, made as it asks for it)
+  for (const id of guides()) made.delete(id);
   portraitTimes.clear();
-  pending = everyone();
+  pending = guides();
   started = true;
   requeue();
 }
@@ -176,7 +214,9 @@ function settle(id: Who, pic: HTMLCanvasElement | null): void {
  *  (waited on out of the queue: the build queued again as it's done). */
 interface Making {
   id: Who;
-  model: Model;
+  root: THREE.Object3D;
+  /** its meshes shown, their buffers still to send (a batch a piece: `BUFFERS_A_PIECE`) */
+  meshes: THREE.Mesh[];
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   textures: THREE.Texture[];
@@ -204,7 +244,7 @@ function finished(m: Making, pic: HTMLCanvasElement | null): void {
   making = making.filter((x) => x !== m);
   if (own === m.id) own = null;
   pending = pending.filter((who) => who !== m.id);
-  try { m.scene.remove(m.model.root); disposeGeometries(m.model.root); } catch { /* let go as it is */ }
+  try { m.scene.remove(m.root); disposeGeometries(m.root); } catch { /* let go as it is */ }
   settle(m.id, pic);
 }
 
@@ -242,7 +282,16 @@ function* steps(): Generator<void, void, undefined> {
         continue;
       }
     }
-    const ready = copying ? undefined : making.filter((m) => m.compiled && !m.textures.length).sort((x, y) => order(x) - order(y))[0];
+    // (its meshes' buffers sent a batch a piece once it's compiled, each batch drawn alone: sent by its draw, the
+    // scholar's held it 72 ms)
+    const buffering = copying ? undefined : making.filter((m) => m.compiled && !m.textures.length && m.meshes.length).sort((x, y) => order(x) - order(y))[0];
+    if (buffering) {
+      const batch = takeBatch(buffering.meshes);
+      piece(`${buffering.id}: buffers sent`, () => drawnAlone(renderer!, buffering, batch));
+      yield;
+      continue;
+    }
+    const ready = copying ? undefined : making.filter((m) => m.compiled && !m.textures.length && !m.meshes.length).sort((x, y) => order(x) - order(y))[0];
     if (ready) {
       const r = renderer!;
       try {
@@ -276,21 +325,37 @@ function* steps(): Generator<void, void, undefined> {
     const ownMaking = making.some((m) => m.id === own);
     if (next && (next === pending[0] || (making.length < SIDE_BY_SIDE && !firstWaits && !ownMaking))) {
       try {
+        if (portraitPlant.failNext === next) { portraitPlant.failNext = null; throw new Error('a planted failure'); }
         if (!renderer) { renderer = piece('the renderer made', makeRenderer); yield; }
-        const model: Model = yield* timedSteps(`${next}: its model built`, modelOf(next));
+        let root: THREE.Object3D, scene: THREE.Scene, camera: THREE.PerspectiveCamera;
+        if (isFolk(next)) {
+          // (built a slice at a time, as his room builds him: whole, Brother Hollis was one task of 0.9 to 2.7 s)
+          // (asked for as the hero walks into his room, before the room has built him: waited for, a while)
+          const folk = FOLK[next];
+          let building = folk.sitter();
+          for (let f = 0; !building && f < FOLK_WAIT; f++) { yield; building = folk.sitter(); }
+          if (!building) throw new Error(`${next} was never built in his room: nothing to build him on`);
+          const sitter = yield* timedSteps(`${next}: built`, building);
+          yield;
+          ({ root, scene, camera } = piece(`${next}: staged`, () => folkStaged(sitter, folk.backdrop)));
+        } else {
+          const model: Model = yield* timedSteps(`${next}: its model built`, modelOf(next));
+          yield;
+          root = model.root;
+          // (a frame each, its staging, its small textures and its compile asked for: in one, the mage's were 31 ms of
+          // a frame behind the lobby, past `lab behind`'s 30)
+          ({ scene, camera } = piece(`${next}: staged and framed`, () => staged(model)));
+        }
         yield;
-        // (a frame each, its staging, its small textures and its compile asked for: in one, the mage's were 31 ms of
-        // a frame behind the lobby, past `lab behind`'s 30)
-        const { scene, camera } = piece(`${next}: staged and framed`, () => staged(model));
+        const swaps = piece(`${next}: its textures made small`, () => smallTextures(root));
         yield;
-        const swaps = piece(`${next}: its textures made small`, () => smallTextures(model.root));
-        yield;
-        const m: Making = { id: next, model, scene, camera, textures: [...new Set(swaps.map((w) => w.small))], swaps, compiled: false };
+        const m: Making = { id: next, root, meshes: meshesOf(root), scene, camera, textures: [...new Set(swaps.map((w) => w.small))], swaps, compiled: false };
         making.push(m);
         if (portraitPlant.allAtOnce) {
-          // (the canary's: compiled as it's drawn, its textures sent then too)
+          // (the canary's: compiled as it's drawn, its textures and buffers sent then too)
           m.compiled = true;
           m.textures = [];
+          m.meshes = [];
         } else {
           const r = renderer;
           const asked = perfClock.now();
@@ -421,6 +486,38 @@ function withSmall(swaps: Swap[], draw: () => void): void {
   try { draw(); } finally {
     swaps.forEach((w, i) => { (w.material as unknown as Record<string, unknown>)[w.key] = kept[i]; });
   }
+}
+
+/** how many vertices' buffers a piece sends (each batch drawn alone, `drawnAlone`) */
+const BUFFERS_A_PIECE = 12000;
+
+/** Every mesh shown of `root`. */
+function meshesOf(root: THREE.Object3D): THREE.Mesh[] {
+  const found: THREE.Mesh[] = [];
+  root.traverseVisible((o) => { if ((o as THREE.Mesh).isMesh) found.push(o as THREE.Mesh); });
+  return found;
+}
+
+/** The next meshes from `left`, up to `BUFFERS_A_PIECE` vertices (one at least). */
+function takeBatch(left: THREE.Mesh[]): THREE.Mesh[] {
+  const batch: THREE.Mesh[] = [];
+  let vertices = 0;
+  while (left.length && (!batch.length || vertices + left[0].geometry.attributes.position.count <= BUFFERS_A_PIECE)) {
+    const mesh = left.shift()!;
+    vertices += mesh.geometry.attributes.position.count;
+    batch.push(mesh);
+  }
+  return batch;
+}
+
+/** `m`'s scene drawn with only `batch` of its meshes shown, under its small textures, so their buffers are sent; the
+ *  rest shown again after. */
+function drawnAlone(r: THREE.WebGLRenderer, m: Making, batch: THREE.Mesh[]): void {
+  const hidden: THREE.Mesh[] = [];
+  const keep = new Set(batch);
+  m.root.traverseVisible((o) => { if ((o as THREE.Mesh).isMesh && !keep.has(o as THREE.Mesh)) hidden.push(o as THREE.Mesh); });
+  for (const mesh of hidden) mesh.visible = false;
+  try { withSmall(m.swaps, () => r.render(m.scene, m.camera)); } finally { for (const mesh of hidden) mesh.visible = true; }
 }
 
 /** The lights a portrait is drawn by: a warm key from the front right, a cool rim from behind, a dim fill. */
