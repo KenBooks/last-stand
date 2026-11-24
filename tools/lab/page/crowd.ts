@@ -17,6 +17,7 @@ import { bindKnown, holdFor, pressing, skillNamed, type BoundSkill } from './cas
 import { foeKind, foesAt } from './death';
 import { timeCalls, type Timing } from './timing';
 import { gpuDone } from '../../../src/core/webgpu';
+import { RUST } from '../../../src/engine';
 
 export interface CrowdOptions {
   fixture: Fixture;
@@ -190,18 +191,16 @@ function bodiesOf(foes: Enemy[]): { lying: number; moving: number } {
 /** One frame run and timed by the browser's clock, the bodies' part of it by their timings, its draw calls counted. */
 async function timedFrame(lab: Lab, foes: Enemy[], timings: BodyTimings, input: () => Frame): Promise<Timed> {
   const now = window.__labClock.realNow;
-  const info = G.renderer.info;
-  // (counted over the frame's every render: by itself the count starts again with each)
-  info.autoReset = false;
-  info.reset();
   const start = now();
   await lab.step(1, input);
   // (waited out on the GPU: what it draws runs behind the page, and the page's own time leaves it out)
   await gpuDone(G.renderer);
   const frame = now() - start;
-  info.autoReset = true;
+  // (the engine's: three's renderer, its host alone, draws none of the frame and counts 0)
+  const stats = RUST.bridge?.stats;
+  const calls = stats ? stats.draws + stats.shadowDraws : 0;
   const alive = { glow: particles.glow.count, smoke: particles.smoke.count };
-  return { frame, calls: info.render.calls, ...alive, ...lapBodies(timings), ...bodiesOf(foes) };
+  return { frame, calls, ...alive, ...lapBodies(timings), ...bodiesOf(foes) };
 }
 
 /** Each body's frame made `CANARY_MS` slower; returns what puts it back. */

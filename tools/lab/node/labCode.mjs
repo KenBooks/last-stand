@@ -196,7 +196,7 @@ export function labCodeOf(command) {
   const browser = read(`${NODE}/browser.mjs`);
   const scripts = browser.match(/^export const PAGE_SCRIPTS = .*$/m)?.[0] ?? browser;
   const boot = nodeCodeReached(`${NODE}/browser.mjs`, `${scripts}\ngpuArgs`);
-  const files = new Set([...page, ...modules, ...BOOT_FILES]);
+  const files = new Set([...page, ...modules, ...boot.modules, ...BOOT_FILES]);
   return { texts: [...work.texts, ...boot.texts], files: [...files].sort() };
 }
 
