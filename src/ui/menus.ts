@@ -232,6 +232,10 @@ export function initMenus(h: MenuHooks): void {
   hooks = h;
   $('#btn-start').onclick = () => { sfx.click(); hooks.start(); };
   $('#btn-summary').onclick = () => { sfx.click(); hooks.summaryDone(); };
+  // (a click or a tap anywhere on the summary but its button opens every cache still to open, #734)
+  $('#summary').addEventListener('pointerdown', (event) => {
+    if (!(event.target as Element).closest('#btn-summary')) revealAllNow();
+  });
   $('#btn-resume').onclick = () => { sfx.click(); hooks.resume(); };
   initProfileTab();
   initRecordingTab();
@@ -1034,17 +1038,29 @@ export function showSummary({ training, outcome, wave, score, kills, bag, lost =
   if (dead) items.innerHTML = rarityChips(bag, 'chip lost');
   else {
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // (a long bag's caches open faster, the whole reveal in `REVEAL_MOST` s at most whatever it holds, and a click or a
+    // tap anywhere on the summary opens the rest at once: #734, from play, "after several waves (e.g. 10), the waiting
+    // time to see all earned rewards can become quite long"; from the owner, "I would just speed up showing if too
+    // many items")
+    const step = Math.min(REVEAL_STEP, REVEAL_MOST / Math.max(1, bag.length));
+    let heard = -Infinity;
     bag.slice().sort(byValue).forEach((it, i) => {
       const c = document.createElement('span');
       c.className = 'chip reveal' + (gone.has(it.id) ? ' lost' : '');
       c.style.color = rarityOf(it.rarity).color;
       c.dataset.r = it.rarity;
-      c.style.animationDelay = `${0.3 + i * REVEAL_STEP}s`;
+      const at = 0.3 + i * step;
+      c.style.animationDelay = `${at}s`;
       c.textContent = it.name;
       bindTooltip(c, itemTooltip(it));
       items.append(c);
-      if (!still) revealTimers.push(setTimeout(() => sfx.loot(rarityIndex(it.rarity)), (0.3 + i * REVEAL_STEP) * 1000));
+      // (a cache's sound no sooner than `SOUND_APART` after the last: forty in a second were one noise)
+      if (!still && at - heard >= SOUND_APART) {
+        heard = at;
+        revealTimers.push(setTimeout(() => sfx.loot(rarityIndex(it.rarity)), at * 1000));
+      }
     });
+    revealing = !still && bag.length > 0;
   }
   if (!dead) markNew(kept);
   $('.sm-note', box).textContent = note ?? '';
@@ -1055,10 +1071,28 @@ export function showSummary({ training, outcome, wave, score, kills, bag, lost =
 
 export function hideSummary(): void { $('#summary').classList.add('hidden'); hideTooltip(); clearReveal(); }
 
-/** seconds between one cache opening and the next on the summary */
+/** seconds between one cache opening and the next on the summary, the most the whole reveal takes (a long bag's
+ *  step is shorter), and the least between two of their sounds */
 const REVEAL_STEP = 0.22;
+const REVEAL_MOST = 3.5;
+const SOUND_APART = 0.12;
 let revealTimers: ReturnType<typeof setTimeout>[] = [];
-function clearReveal(): void { revealTimers.forEach(clearTimeout); revealTimers = []; }
+/** whether the summary's caches are still opening one by one */
+let revealing = false;
+function clearReveal(): void { revealTimers.forEach(clearTimeout); revealTimers = []; revealing = false; }
+
+/** Every cache still to open on the summary opened at once (a click or a tap on it as they open, #734). */
+export function revealAllNow(): void {
+  if (!revealing) return;
+  clearReveal();
+  for (const chip of document.querySelectorAll<HTMLElement>('#summary .sm-items .chip.reveal')) {
+    chip.classList.remove('reveal');
+    chip.style.animationDelay = '';
+  }
+}
+
+/** Whether the summary's caches are still opening one by one (the lab's `ui --states summarySkip`). */
+export const summaryRevealing = (): boolean => revealing;
 function renderTraceOptions(): void {
   const t = traceConsent();
   document.querySelectorAll<HTMLElement>('#opt-traces button').forEach((b) => b.classList.toggle('active', b.dataset.t === t));
