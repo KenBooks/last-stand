@@ -162,6 +162,8 @@ export interface Sample {
   planned?: typeof PINGS;
   /** in `wall`: the guest's Hedgeward as this game shows it (page/coopWall.ts), none while none stands */
   wall?: import('./coopWall').WallSample | null;
+  /** in `belt`: the Twins' belt skulls as this game shows them (page/coopBelt.ts) */
+  belt?: import('./coopBelt').BeltSample;
   /** in `chat`: the chat as this game's page shows it (page/coopChat.ts); the first sample also carries what the
    *  scenario says and when it presses Esc */
   chat?: ChatSample;
@@ -441,6 +443,7 @@ function wallInput(frame: number): Frame {
 
 /** The wall each game shows, read as `wall` starts (none in another scenario) */
 let wallNow: (() => import('./coopWall').WallSample | null) | null = null;
+let belt: typeof import('./coopBelt') | null = null;
 
 /** The guest in `blink`: every so often it holds the blink aimed at its other spot and lets go, its cooldown and
  *  energy made ready first (a blink every few seconds, where its own cooldown would allow one in seven). */
@@ -642,6 +645,27 @@ const SCENARIOS: Record<string, Scenario> = {
     ],
     hostInput: () => ({}),
     guestInput: () => ({ keys: (G.player as { rooted?: boolean }).rooted ? ['d'] : [] }),
+  },
+  belt: {
+    about: 'the Ossuary Twins throw their belt skulls at the guest from where they stand, bombs and poison, the guest '
+      + 'standing in them, the host standing off: the same skulls landing in one place on both screens, the belts\' '
+      + 'counts alike on both, the guest alone hurt',
+    frames: 1100,
+    host: [-14, -10],
+    guest: [16, 25],
+    foes: [
+      { type: 'twinslab', at: [16, 11] },
+      { type: 'twinreliquary', at: [21, 12] },
+    ],
+    hostInput: (frame) => {
+      belt?.holdTwins(frame);
+      return {};
+    },
+    // (kept whole, so the skulls' hurts are counted to the end)
+    guestInput: () => {
+      G.player.life = G.player.stats.maxLife;
+      return {};
+    },
   },
   wall: {
     about: 'the guest, a ranger, raises its Hedgeward between it and a Sporecaller shooting at it, the host standing '
@@ -1157,11 +1181,14 @@ function makeUnhurt(player: Player): void {
 }
 
 /** Sets scenario `name` up on this page: its hero on its spot, the foes spawned on the host, nothing recorded yet. */
-export async function coopScenario(lab: Lab, { name }: { name: string }): Promise<void> {
+export async function coopScenario(lab: Lab, { name, canary }: { name: string; canary?: boolean }): Promise<void> {
   const scenario = SCENARIOS[name];
   if (!scenario) throw new Error(`lab: coop: no scenario ${name}`);
   // (the wall's module loaded only for its scenario: a tree without the wall still plays the others)
   wallNow = name === 'wall' ? (await import('./coopWall')).wallNow : null;
+  belt = name === 'belt' ? await import('./coopBelt') : null;
+  // (the canary's: the guest's game never shows a skull lying where it landed)
+  belt?.unlayOnThisGame(Boolean(canary) && play.role === 'guest');
   play.scenario = name;
   play.frame = 0;
   play.samples = [];
@@ -1273,6 +1300,7 @@ function sampleNow(): Sample {
     if (!play.samples.length) sample.planned = PINGS;
   }
   if (play.scenario === 'wall' && wallNow) sample.wall = wallNow();
+  if (play.scenario === 'belt' && belt) sample.belt = belt.beltNow();
   if (play.scenario === 'chat') {
     sample.chat = chatNow();
     if (!play.samples.length) Object.assign(sample, { said: SAID, escAt: ESC_AT, quiet: QUIET });

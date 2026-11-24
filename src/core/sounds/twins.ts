@@ -54,6 +54,43 @@ function twinFall(): void {
   v.start(); v.stopAt(v.t + 2.5);
 }
 
+/** A belt skull torn off its rope and thrown: a rattle of bone on the rope, a swish as the arm comes over. */
+function skullThrow(): void {
+  const v = voice(0, 0.3);
+  grit(v, 10, 0, 0.18, 1400, 3600, 0.06);
+  const swish = glide(v, 'bandpass', 2, [[0.1, 500], [0.3, 1800], [0.45, 700]]);
+  v.loop(swish); swish.connect(swellAt(v, 0.1, 0.28, 0.12, 0.25));
+  v.start(); v.stopAt(v.t + 0.8);
+}
+
+/** A bomb's fuse burning down over `dur` s: a hiss rising in pitch and loudness under a crackle, cut at the blast. */
+function skullFuse(dur: number): void {
+  const v = voice(0.05, 0.25);
+  const hiss = glide(v, 'bandpass', 4, [[0, 1800], [dur, 5200]]);
+  v.loop(hiss); hiss.connect(swellAt(v, 0, dur, 0.1, 0.05));
+  grit(v, Math.round(dur * 14), 0, dur, 2400, 6000, 0.035);
+  v.start(); v.stopAt(v.t + dur + 0.05);
+}
+
+/** A bomb skull bursting: a deep thump, bone and stone thrown, a rumble after. */
+function skullBlast(): void {
+  const v = voice(0, 0.45);
+  whump(v, 0, 0.75, 0.5);
+  crack(v, 0, 0.3, v.out, 1300);
+  grit(v, 24, 0.02, 0.5, 900, 4200, 0.09);
+  rumble(v, 0.02, 0.45, 1.2);
+  v.start(); v.stopAt(v.t + 1.8);
+}
+
+/** A poison skull breaking where it lands: a wet crack and a long hiss of gas let out. */
+function skullPoison(): void {
+  const v = voice(0, 0.4);
+  crack(v, 0, 0.18, v.out, 1800);
+  const gas = glide(v, 'bandpass', 1.5, [[0, 2600], [0.3, 1400], [1.6, 900]]);
+  v.loop(gas); gas.connect(swellAt(v, 0, 0.15, 0.1, 1.4));
+  v.start(); v.stopAt(v.t + 2);
+}
+
 /** the survivor taking up his brother's power, the chain snapping tight, the skulls let fly, the mend over `dur` s, one
  *  of them collapsing */
 export const twinSounds = {
@@ -62,4 +99,9 @@ export const twinSounds = {
   skulls: guard(() => { if (throttle('skullVolley', 200)) return; skullVolley(); }),
   mend: guard((dur: number = 2) => { if (throttle('twinMend', 500)) return; twinMend(dur); }),
   fall: guard(() => { if (throttle('twinFall', 800)) return; twinFall(); }),
+  /** a belt skull thrown, a bomb's fuse over `dur` s, its blast, a poison skull breaking (entities/twinSkulls.ts) */
+  skullThrow: guard(() => { if (throttle('skullThrow', 300)) return; skullThrow(); }),
+  fuse: guard((dur: number = 2) => { if (throttle('skullFuse', 300)) return; skullFuse(dur); }),
+  blast: guard(() => { if (throttle('skullBlast', 300)) return; skullBlast(); }),
+  poison: guard(() => { if (throttle('skullPoison', 300)) return; skullPoison(); }),
 };

@@ -4,6 +4,8 @@
 import { foeAI, foeFx, foeModels } from '../foeKit';
 import { buildTwinReliquary, buildTwinSlab } from '../models/twins';
 import { chainSnapped, chargeRan, mendBegun, mendDone, skullsLoosed, twinFell, twinsAI } from '../twins';
+import { skullThrown } from '../twinSkulls';
+import { readyBeltSkulls } from '../models/beltSkull';
 
 declare module '../foeKit' {
   interface FoeFx {
@@ -18,10 +20,16 @@ declare module '../foeKit' {
     twinMended(id: number, slab: number): void;
     /** twin `id` collapsing at half, paying nothing */
     twinFall(id: number): void;
+    /** a belt skull of kind `kind` (0 a bomb, 1 poison) thrown by twin `id` from (ox, oy, oz) to land at (tx, tz) in
+     *  `flight` s (entities/twinSkulls.ts) */
+    beltSkull(id: number, kind: number, ox: number, oy: number, oz: number, tx: number, tz: number, flight: number, damage: number): void;
   }
 }
 declare module '../../types' { interface EnemyAIKinds { twins: true } }
-declare module '../../combat/damage' { interface EnemyAttacks { charge: true; skull: true; chain: true } }
+declare module '../../combat/damage' { interface EnemyAttacks { charge: true; skull: true; chain: true; bomb: true; poison: true } }
+
+/** their belt skulls made before either is built (`loadFoe` waits for it) */
+export const ready = readyBeltSkulls();
 
 foeModels({ twinslab: buildTwinSlab, twinreliquary: buildTwinReliquary });
 foeAI({ twins: (e) => twinsAI(e) });
@@ -32,4 +40,5 @@ foeFx({
   twinMend: (_id, _slab, warn) => mendBegun(warn),
   twinMended: (id, slab) => mendDone(id, slab),
   twinFall: (id) => twinFell(id),
+  beltSkull: (id, kind, ox, oy, oz, tx, tz, flight, damage) => skullThrown(id, kind, ox, oy, oz, tx, tz, flight, damage),
 });

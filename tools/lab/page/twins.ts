@@ -15,6 +15,7 @@
 // - `pictures` (asked for alone): the pair in each of their moments, a sheet for the eye.
 // - `look` (asked for alone): each twin alone from its front, back and sides and its skull close up, its triangles held
 //   to 45k.
+// - their belt skulls (twinsBelt.ts): `belt`, `bomb`, `poison`, `inherit`, `cost`, and `beltPictures` asked for alone.
 //
 // `--canary` plants a fault each part must catch: no special boss wave (the Colossus on the 15th), a pair that shares
 // nothing, a chain that never snaps, no collapse at half, a mend that mends nothing, a program compiled in the fight.
@@ -35,12 +36,15 @@ import { startNextWave } from '../../../src/game/run';
 import { inObstacle } from '../../../src/world/collision';
 import { lineClear } from '../../../src/world/navigation';
 import { femur, forearm, humerus, jaw, pelvis, scapula, skull, sternum, tibia, twinSkull } from '../../../src/entities/models/ossuary';
-import { PIPELINES } from '../../../src/engine/pipelinesAside';
+import { PIPELINES_ASKED } from '../../../src/engine/pipelinesAside';
+import { SKULLS_THROWN, SKULL_KINDS, skullFlight } from '../../../src/entities/twinSkulls';
+import { belt, beltPictures, bomb, cost, inherit, poison } from './twinsBelt';
 
 /** The parts the command runs, in order. */
-export type TwinsPart = 'waves' | 'fight' | 'compiles' | 'pictures' | 'look';
+export type TwinsPart = 'waves' | 'fight' | 'belt' | 'bomb' | 'poison' | 'inherit' | 'compiles' | 'cost' | 'pictures' | 'look'
+  | 'beltPictures';
 /** the parts run by default: the pictures are asked for alone */
-export const TWINS_PARTS: TwinsPart[] = ['waves', 'fight', 'compiles'];
+export const TWINS_PARTS: TwinsPart[] = ['waves', 'fight', 'belt', 'bomb', 'poison', 'inherit', 'compiles', 'cost'];
 
 export interface TwinsOptions {
   fixture: Fixture;
@@ -71,7 +75,7 @@ const MEND_MOST_OFF = 0.1;
 const fixed = (value: number, digits = 2): string => value.toFixed(digits);
 
 /** The hero set up in `biome`, at the spot, facing the arena's middle. */
-async function standIn(lab: Lab, fixture: Fixture, biome: BiomeId): Promise<void> {
+export async function standIn(lab: Lab, fixture: Fixture, biome: BiomeId): Promise<void> {
   if (G.arena.biome !== biome) G.arena.setBiome(biome);
   const facing = Math.atan2(-SPOT[0], -SPOT[1]);
   await lab.setup({ at: SPOT, facing, ...fixture });
@@ -99,7 +103,7 @@ function clearSpot(away: number, radius: number): THREE.Vector3 {
 }
 
 /** Slab and Reliquary risen abreast `away` m from the hero, dazed (thinking nothing) unless `thinks`. */
-async function pairAt(lab: Lab, away: number, thinks: boolean): Promise<{ slab: Enemy; reliquary: Enemy }> {
+export async function pairAt(lab: Lab, away: number, thinks: boolean): Promise<{ slab: Enemy; reliquary: Enemy }> {
   const at = clearSpot(away, ENEMIES.twinslab.radius);
   const toHero = new THREE.Vector3(G.player.pos.x - at.x, 0, G.player.pos.z - at.z).normalize();
   const side = new THREE.Vector3(-toHero.z, 0, toHero.x);
@@ -116,7 +120,7 @@ async function pairAt(lab: Lab, away: number, thinks: boolean): Promise<{ slab: 
 }
 
 /** The hero's life held whole each frame, but where a check reads it. */
-const keepWhole = (): Record<string, never> => {
+export const keepWhole = (): Record<string, never> => {
   G.player.life = G.player.stats.maxLife;
   return {};
 };
@@ -340,6 +344,15 @@ async function fight(lab: Lab, options: TwinsOptions, lines: string[], problems:
 
 // --- compiles ----------------------------------------------------------------------------------------------
 
+/** `count` frames drawn, the browser let go after each (`lab.step` never yields, and a pipeline compiled aside is
+ *  only asked for and finished in the browser's own time). */
+async function framesLetGo(lab: Lab, count: number): Promise<void> {
+  for (let i = 0; i < count; i++) {
+    await lab.step(1);
+    await window.__labClock.realFrame();
+  }
+}
+
 /** Every effect of the Twins' fight drawn: no program compiled meanwhile. */
 async function compiles(lab: Lab, options: TwinsOptions, lines: string[], problems: string[]): Promise<void> {
   await standIn(lab, options.fixture, 'crypt');
@@ -348,7 +361,7 @@ async function compiles(lab: Lab, options: TwinsOptions, lines: string[], proble
   lab.drawing = true;
   try {
     await lab.step(2);
-    const before = PIPELINES.made;
+    const before = PIPELINES_ASKED.length;
     const hero = G.player.pos;
     fx('chainSnap', slab.id, slab.pos.x, slab.pos.z, reliquary.pos.x, reliquary.pos.z, 0);
     fx('skullVolley', reliquary.id, reliquary.pos.x, reliquary.pos.z, hero.x, hero.z, 5, 0);
@@ -358,6 +371,13 @@ async function compiles(lab: Lab, options: TwinsOptions, lines: string[], proble
     fx('twinMend', reliquary.id, slab.id, 2);
     fx('twinMended', reliquary.id, slab.id);
     fx('bossPhase', reliquary.id, 1);
+    // (the belt skulls: a bomb lying out its fuse to its blast, a poison cloud)
+    fx('beltSkull', slab.id, SKULL_KINDS.indexOf('bomb'), slab.pos.x, 3, slab.pos.z, hero.x + 6, hero.z, skullFlight(6), 0);
+    // (its own record held: the log keeps the last 16 alone)
+    const thrownBomb = SKULLS_THROWN.at(-1)!;
+    fx('beltSkull', reliquary.id, SKULL_KINDS.indexOf('poison'), reliquary.pos.x, 3, reliquary.pos.z, hero.x - 3, hero.z,
+      skullFlight(6), 0);
+    await lab.until(() => !!thrownBomb.blast, 5 * FPS, 'the bomb never burst');
     if (options.canary) {
       // (a blending, side and depth no other material has together: the engine's pipelines are set apart by those,
       // and a three material of its own, flat-shaded Phong, made none under it: `compiles.ts`'s canary)
@@ -370,14 +390,15 @@ async function compiles(lab: Lab, options: TwinsOptions, lines: string[], proble
       const odd = new THREE.Mesh(new THREE.TorusKnotGeometry(0.3, 0.1), material);
       odd.position.copy(slab.pos).setY(2);
       G.scene.add(odd);
-      await lab.step(4);
+      await framesLetGo(lab, 8);
       G.scene.remove(odd);
       odd.geometry.dispose();
       material.dispose();
     }
-    await lab.step(60);
-    const compiled = PIPELINES.made - before;
-    lines.push(`compiles: ${compiled} programs compiled drawing the chain's snap, a volley, a charge, a slam, a mend and a phase`);
+    await framesLetGo(lab, 60);
+    const compiled = PIPELINES_ASKED.length - before;
+    lines.push(`compiles: ${compiled} programs compiled drawing the chain's snap, a volley, a charge, a slam, a mend, a phase, `
+      + 'a bomb thrown, lying and bursting and a poison cloud');
     if (compiled > 0) problems.push(`compiles: ${compiled} programs compiled in the Twins' fight`);
   } finally {
     lab.drawing = drawing;
@@ -467,15 +488,14 @@ const SKULL_DOWN = 0.6;
 const trianglesIn = (geometry: THREE.BufferGeometry): number =>
   (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;
 
-/** The triangles a model draws, by its meshes' geometries (each drawn once). */
+/** The triangles a model draws, every mesh of it drawn (a belt skull off its rope is undrawn). */
 function trianglesOf(root: THREE.Object3D): number {
-  const seen = new Set<THREE.BufferGeometry>();
+  // (every mesh drawn counts, a shared geometry as often as it's drawn: the belt skulls share one, and counted once
+  // the twins read 2k fewer than they draw)
   let count = 0;
-  root.traverse((object) => {
+  root.traverseVisible((object) => {
     const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh || seen.has(mesh.geometry)) return;
-    seen.add(mesh.geometry);
-    count += trianglesIn(mesh.geometry);
+    if (mesh.isMesh) count += trianglesIn(mesh.geometry);
   });
   return Math.round(count);
 }
@@ -515,6 +535,9 @@ function bonesTriangles(): string {
   for (const [, geometry] of bones) geometry.dispose();
   return listed;
 }
+
+/** how far from Reliquary's casket its close-up is taken (m): its orbit's five skulls whole in the frame */
+const CASKET_FROM = 4.5;
 
 /** Where `who`'s skull is drawn, in the world: just under the top of its body as posed. */
 function skullOf(who: Enemy): THREE.Vector3 {
@@ -572,6 +595,11 @@ async function look(lab: Lab, options: TwinsOptions, lines: string[], problems: 
       moments.push(lab.picture(`${name} sides`, ['left', 'right'], [`${name} from both sides`], whole));
       moments.push(lab.picture(`${name} skull`, ['back', 'left', 'right'], [`${name}'s skull, its face and both sides`],
         { at: skullOf(who), distance: SKULL_FROM }));
+      const casket = who.model.root.userData.casket as THREE.Object3D | undefined;
+      if (casket) {
+        moments.push(lab.picture(`${name}'s casket`, ['back', 'left'], [`the casket ${name} holds, its skulls circling it`],
+          { at: casket.getWorldPosition(new THREE.Vector3()), distance: CASKET_FROM }));
+      }
       for (const twin of [who, other]) {
         sighted(twin);
         twin.dazed = 1e4;
@@ -591,7 +619,9 @@ async function look(lab: Lab, options: TwinsOptions, lines: string[], problems: 
 // --- the command -------------------------------------------------------------------------------------------
 
 /** the parts that judge, each a function of the same shape */
-const JUDGED: Record<Exclude<TwinsPart, 'pictures' | 'look'>, typeof waves> = { waves, fight, compiles };
+const JUDGED: Record<Exclude<TwinsPart, 'pictures' | 'look' | 'beltPictures'>, typeof waves> = {
+  waves, fight, belt, bomb, poison, inherit, compiles, cost,
+};
 
 /** `lab twins`: each part asked for in turn. */
 export async function twins(lab: Lab, options: TwinsOptions): Promise<Report> {
@@ -604,6 +634,7 @@ export async function twins(lab: Lab, options: TwinsOptions): Promise<Report> {
     for (const part of parts) {
       if (part === 'pictures') moments.push(...await pictures(lab, options, lines));
       else if (part === 'look') moments.push(...await look(lab, options, lines, problems));
+      else if (part === 'beltPictures') moments.push(...await beltPictures(lab, options, lines));
       else await JUDGED[part](lab, options, lines, problems);
     }
   } finally {
@@ -611,7 +642,7 @@ export async function twins(lab: Lab, options: TwinsOptions): Promise<Report> {
   }
   if (!options.canary) return { text: lines.join('\n'), problems, moments };
   lines.push(`canary: ${problems.length} faults caught`);
-  const judged = parts.filter((part) => part !== 'pictures' && part !== 'look');
+  const judged = parts.filter((part) => part !== 'pictures' && part !== 'look' && part !== 'beltPictures' && part !== 'cost');
   const missed = judged.filter((part) => !problems.some((problem) => problem.startsWith(`${part}:`)));
   return { text: lines.join('\n'), problems: missed.map((part) => `canary: the ${part} part's planted fault went uncaught`), moments };
 }

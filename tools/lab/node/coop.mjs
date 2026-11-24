@@ -167,6 +167,14 @@ function colourLines(states, picked, lines) {
   return problems;
 }
 
+/** The belt's canary's verdict (the guest's game never laying a skull where it landed), its line pushed onto
+ *  `lines`: caught, its problem is the canary's and none of the scenario's; missed, a problem of its own. */
+function beltCanary(problems, lines) {
+  const caught = problems.some((problem) => problem.includes('lying'));
+  lines.push(`canary: the guest's skulls never laid ${caught ? 'caught' : 'missed'}`);
+  return caught ? problems.filter((problem) => !problem.includes('lying')) : ['canary missed: no skull lying went unseen'];
+}
+
 /** The canary's verdict, its line pushed onto `lines`: the guest in the host's colour must have been caught. */
 function canaryLines(problems, lines) {
   const caught = problems.some((problem) => problem.includes('wear one colour'));
@@ -801,7 +809,7 @@ export async function runCoop(side, options) {
         lines.push(`${name}: not played (${unplayable})`);
         continue;
       }
-      await Promise.all(pair.pages.map((page) => callPage(page, 'coopScenario', { name })));
+      await Promise.all(pair.pages.map((page) => callPage(page, 'coopScenario', { name, canary })));
       const { frames, pictures: at } = await callPage(side.page, 'coopScenarioFrames', { name });
       if (pictures && at.length) {
         const files = await pair.runPicturing(settle + frames, name, at.map((frame) => settle + frame));
@@ -811,7 +819,7 @@ export async function runCoop(side, options) {
       const [hostSamples, guestSamples] = await Promise.all([side.page, guest].map(samplesOf));
       const judged = judgeScenario({ name, about: about[name], host: hostSamples, guest: guestSamples, frameMs });
       lines.push(...judged.lines);
-      problems.push(...judged.problems);
+      problems.push(...(canary && name === 'belt' ? beltCanary(judged.problems, lines) : judged.problems));
     }
     problems.push(...await backToLobby(pair, lines, canary, pictures));
     lines.push(...await heroCostLines(pair));

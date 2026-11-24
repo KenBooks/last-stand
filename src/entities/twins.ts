@@ -14,6 +14,9 @@
 // - **At half** the one that took more of the hits collapses (`twinFall` fx: no spoils from it) and the other takes its
 //   power: faster, casting sooner, and gaining its brother's signature attack (Slab the volley, Reliquary the slam).
 //   Wearing both down evenly leaves the stronger of them, Slab or the caster, no stronger than the other.
+// - **Their belts** (entities/twinSkulls.ts): a few skulls on a rope at each one's waist, thrown now and then, Slab's
+//   bombs bursting after a fuse and throwing a hero back, Reliquary's poison lying as a cloud; at half the one left
+//   standing takes its brother's belt.
 // Their warned hits never land together (`claimBeat`).
 import * as THREE from 'three';
 import { G } from '../state';
@@ -30,6 +33,7 @@ import { schedule } from '../core/timers';
 import { claimBeat, partnerOf, telegraphShare, telegraphTime, telegraphed } from './bossKit';
 import { bossHooks } from './bossHooks';
 import { fx, seek } from './enemyAI';
+import { beltThrow, heldByBomb, inherit, showBelt } from './twinSkulls';
 import type { Enemy } from './enemy';
 import type { Player } from './player';
 
@@ -75,6 +79,7 @@ function begin(e: Enemy, name: string, every: number): number | null {
 
 function slabAttack(e: Enemy, dist: number, lone: boolean): boolean {
   if (dist < T.slam.ahead + T.slam.radius) return slam(e);
+  if (beltThrow(e, dist)) return true;
   e.brain.chargeT ??= 0;
   if (dist < T.charge.reach + 1 && G.time >= e.brain.chargeT) {
     if (begin(e, 'charge', e.def.cooldown * 0.8) === null) return true;
@@ -93,6 +98,7 @@ function reliquaryAttack(e: Enemy, dist: number, lone: boolean): boolean {
   if (slab && !lone && slab.life < slab.maxLife * 0.98 && G.time - (slab.brain.hitAt ??= G.time) >= T.mend.untouched) return mend(e, slab);
   // (alone, his brother's slab brought down on a hero who comes close)
   if (lone && dist < T.slam.ahead + T.slam.radius) return slam(e);
+  if (beltThrow(e, dist)) return true;
   if (dist < 22) return volley(e);
   return false;
 }
@@ -226,7 +232,8 @@ export function skullsLoosed(id: number, ox: number, oz: number, tx: number, tz:
  *  reach of the line between them; light and bone dust down its length. */
 export function chainSnapped(id: number, ax: number, az: number, bx: number, bz: number, damage: number): void {
   const p = grounded(), lx = bx - ax, lz = bz - az, len2 = lx * lx + lz * lz || 1;
-  if (p) {
+  // (a hero a bomb holds stunned is passed by: its stun is never a free hit for the chain)
+  if (p && !heldByBomb(p)) {
     const k = Math.max(0, Math.min(1, ((p.pos.x - ax) * lx + (p.pos.z - az) * lz) / len2));
     const cx = ax + lx * k, cz = az + lz * k;
     if (Math.hypot(p.pos.x - cx, p.pos.z - cz) < T.chain.reach + p.radius) {
@@ -263,6 +270,8 @@ export function mendDone(id: number, slabId: number): void {
 export function twinFell(id: number): void {
   const e = foeOf(id);
   if (!e || !e.alive) return;
+  // (its belt taken up by its brother, before it's gone)
+  inherit(e, partnerOf(e));
   e.noSpoils = true;
   e.die();
   twinSounds.fall();
@@ -326,6 +335,10 @@ for (const kind of ['twinslab', 'twinreliquary'] as const) {
     hurt,
     enter(e) { e.cd = Math.min(e.cd, 1.2); (e as { speed: number }).speed *= T.alone.faster; },
     cue,
-    frame(e) { if (kind === 'twinslab') slabFrame(e); else reliquaryFrame(e); },
+    frame(e) {
+      if (kind === 'twinslab') slabFrame(e);
+      else reliquaryFrame(e);
+      showBelt(e);
+    },
   });
 }
