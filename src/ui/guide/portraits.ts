@@ -10,9 +10,9 @@
 // 330 ms and then 90 to 110 ms a picture (from Victor's review of #665: "lags for 1-2sec"; `npm run lab -- guide`).
 // A production build keeps them in the browser's storage for its own build (`CACHE`), so a later visit makes none.
 // Opened before they're made, the guide shows a picture as it comes, the ones it shows first (`hurryPortrait`).
-// The library's Brother Hollis is pictured here too, first, for his talk's card (ui/talk.ts): another of him built on
-// the library's book, looking up at the one he talks to, head and shoulders by a candle in the dim library
-// (`scholarStaged`; from play, "lets have an actual picture of him, of his actual face").
+// The village folk are pictured here too, each first as his card asks for it (Brother Hollis's talk, Odo's trade):
+// another of him built on his own model, looking into the camera, head and shoulders in the room behind him
+// (`folkPortraits.ts`; from play, "lets have an actual picture of him, of his actual face", "Have him look straight").
 import * as THREE from 'three';
 import { foeLoaded, loadFoe } from '../../entities/bosses';
 import { ENEMIES, type EnemyId } from '../../data/enemies';
@@ -23,7 +23,7 @@ import { disposeGeometries } from '../../entities/models/rig';
 import { buildFirst, buildLater, buildOnly, finishNow, queued } from '../../game/behind';
 import { perfClock } from '../perfHud';
 import type { Model, Profile } from '../../types';
-import { scholarBook, scholarSteps, type Scholar } from '../../entities/models/scholar';
+import { FOLK, folkStaged, isFolk, type FolkId } from './folkPortraits';
 
 declare const __BUILD__: { ref: string; time: string };
 
@@ -31,6 +31,8 @@ declare const __BUILD__: { ref: string; time: string };
 const SIZE = 320;
 /** where the camera stands: how far round from the foe's front (rad) and how far above level it looks down (rad) */
 const VIEW = { round: 0.55, down: 0.12, fov: 28 };
+/** how many frames one of the folk's pictures waits for his room to build him (asked for as the hero walks in) */
+const FOLK_WAIT = 600;
 /** the build's key behind the lobby */
 const JOB = 'guide portraits';
 /** the browser's store the pictures are kept in, a production build's alone (a dev build's models change under it) */
@@ -46,8 +48,8 @@ export const WHILE_OPEN = { ms: 8, most: 40 };
  *  `failNext`'s picture failing, as one came back empty in play and the talk card showed a drawing (`lab talk`) */
 export const portraitPlant = { allAtOnce: false, notWhileOpen: false, failNext: null as Who | null };
 
-/** Whose picture: a foe's id, `hero:` and a class's id, or the library's scholar. */
-export type Who = EnemyId | `hero:${string}` | 'scholar';
+/** Whose picture: a foe's id, `hero:` and a class's id, or one of the village folk. */
+export type Who = EnemyId | `hero:${string}` | FolkId;
 
 /** each picture made: a canvas of its own (`SIZE` square) every place showing it is drawn from */
 const made = new Map<Who, HTMLCanvasElement>();
@@ -90,8 +92,8 @@ function guides(): Who[] {
   const foes = (Object.keys(ENEMIES) as EnemyId[]).filter((id) => !ENEMIES[id].dummy);
   return [...foes.filter((id) => !ENEMIES[id].boss), ...foes.filter((id) => ENEMIES[id].boss), ...CLASS_IDS.map((id) => `hero:${id}` as Who)];
 }
-/** Every picture the guide makes once it's opened (the scholar's is his talk's card's, made as it asks for it:
- *  `startScholar`). */
+/** Every picture the guide makes once it's opened (the folk's are their cards', each made as it asks for it:
+ *  `startFolk`). */
 const everyone = (): Who[] => guides();
 
 /** The pictures not made yet, of every foe, boss and hero the guide shows (a harness's: `lab guide`). */
@@ -121,15 +123,15 @@ function copied(from: CanvasImageSource): HTMLCanvasElement {
 export function portrait(id: Who): Promise<HTMLCanvasElement | null> {
   const have = made.get(id);
   if (have || failed) return Promise.resolve(have ?? null);
-  if (id === 'scholar') startScholar(); else startPortraits();
+  if (isFolk(id)) startFolk(id); else startPortraits();
   return new Promise((done) => waiting.set(id, [...(waiting.get(id) ?? []), done]));
 }
 
-/** The scholar's picture alone queued, for his talk's card: the guide's are made once the guide is opened, not
- *  because he was talked to. */
-function startScholar(): void {
-  if (made.has('scholar') || pending.includes('scholar') || making.some((m) => m.id === 'scholar')) return;
-  pending.unshift('scholar');
+/** One of the folk's pictures alone queued, for his card: the guide's are made once the guide is opened, not because
+ *  he was talked to or traded with. */
+function startFolk(id: FolkId): void {
+  if (made.has(id) || pending.includes(id) || making.some((m) => m.id === id)) return;
+  pending.unshift(id);
   requeue();
 }
 
@@ -326,13 +328,16 @@ function* steps(): Generator<void, void, undefined> {
         if (portraitPlant.failNext === next) { portraitPlant.failNext = null; throw new Error('a planted failure'); }
         if (!renderer) { renderer = piece('the renderer made', makeRenderer); yield; }
         let root: THREE.Object3D, scene: THREE.Scene, camera: THREE.PerspectiveCamera;
-        if (next === 'scholar') {
-          // (built a slice at a time, as the library builds him: whole, he was one task of 0.9 to 2.7 s)
-          const book = scholarBook();
-          if (!book) throw new Error('the scholar was never seated: no book to build him on');
-          const s: Scholar = yield* timedSteps(`${next}: built`, scholarSteps(book));
+        if (isFolk(next)) {
+          // (built a slice at a time, as his room builds him: whole, Brother Hollis was one task of 0.9 to 2.7 s)
+          // (asked for as the hero walks into his room, before the room has built him: waited for, a while)
+          const folk = FOLK[next];
+          let building = folk.sitter();
+          for (let f = 0; !building && f < FOLK_WAIT; f++) { yield; building = folk.sitter(); }
+          if (!building) throw new Error(`${next} was never built in his room: nothing to build him on`);
+          const sitter = yield* timedSteps(`${next}: built`, building);
           yield;
-          ({ root, scene, camera } = piece(`${next}: staged`, () => scholarStaged(s)));
+          ({ root, scene, camera } = piece(`${next}: staged`, () => folkStaged(sitter, folk.backdrop)));
         } else {
           const model: Model = yield* timedSteps(`${next}: its model built`, modelOf(next));
           yield;
@@ -559,66 +564,6 @@ function staged(model: Model): { scene: THREE.Scene; camera: THREE.PerspectiveCa
   );
   camera.lookAt(mid);
   return { scene, camera };
-}
-
-/** The scholar's portrait: where the one he talks to stands (his frame: ahead of him), how far the camera is from
- *  his face (m) and how far round from that man (rad), its field of view, how far below the top of his cap it aims
- *  (m: his face, beard and shoulders in the frame's 0.5 m), how much higher than that the camera stands (m), and how
- *  long he's posed for his look up to settle (s, in steps). Aimed at his head's joint, at his neck, the oval held his
- *  chest and cut his head off. */
-const SCHOLAR_SHOT = { talker: new THREE.Vector3(0.15, 0, 1.5), distance: 0.95, round: 0.28, fov: 30, below: 0.2, above: 0.06, settle: 3, step: 0.05 };
-
-/** The dim library behind him: a warm glow up to his left (his candle's side), the shelves' rows dark across it. */
-function libraryBackdrop(): THREE.CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const g = c.getContext('2d')!;
-  const glow = g.createRadialGradient(40, 36, 4, 56, 56, 110);
-  glow.addColorStop(0, '#6a4220');
-  glow.addColorStop(0.45, '#2a180c');
-  glow.addColorStop(1, '#0c0806');
-  g.fillStyle = glow;
-  g.fillRect(0, 0, 128, 128);
-  // (the shelves: their boards, and the books' spines between them, faint)
-  for (const y of [30, 62, 94]) {
-    g.fillStyle = 'rgba(0, 0, 0, .45)';
-    g.fillRect(0, y, 128, 3);
-    for (let x = 0; x < 128; x += 5 + ((x * 7) % 4)) {
-      g.fillStyle = `rgba(${90 + ((x * 13) % 60)}, ${40 + ((x * 7) % 30)}, 20, .16)`;
-      g.fillRect(x, y - 22 + ((x * 3) % 5), 3 + ((x * 5) % 3), 22 - ((x * 3) % 5));
-    }
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-/** Another of Brother Hollis, built on the library's book, posed looking up at the one he talks to, in a scene of
- *  his own: lit by a warm key from his candle's side, a cool rim from behind, a dim warm fill; a camera on his face
- *  from just round that man, his shoulders in. */
-function scholarStaged(s: Scholar): { root: THREE.Object3D; scene: THREE.Scene; camera: THREE.PerspectiveCamera } {
-  const scene = new THREE.Scene();
-  scene.background = libraryBackdrop();
-  scene.add(s.root);
-  s.root.updateMatrixWorld(true);
-  for (let t = 0; t < SCHOLAR_SHOT.settle; t += SCHOLAR_SHOT.step) s.update(SCHOLAR_SHOT.step, SCHOLAR_SHOT.talker, true, 0);
-  s.root.updateMatrixWorld(true);
-  scene.add(new THREE.HemisphereLight(0xffd8b0, 0x1a1008, 0.55));
-  const key = new THREE.DirectionalLight(0xffc890, 2.8);
-  key.position.set(1.4, 2.4, 1.6);
-  scene.add(key);
-  const rim = new THREE.DirectionalLight(0x9fb8ff, 1.4);
-  rim.position.set(-1.6, 2.2, -1.8);
-  scene.add(rim);
-  const cap = s.root.getObjectByName('scholar cap')!;
-  const box = new THREE.Box3().setFromObject(cap);
-  const top = box.getCenter(new THREE.Vector3()).setY(box.max.y);
-  const toward = SCHOLAR_SHOT.talker.clone().sub(top).setY(0).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), SCHOLAR_SHOT.round);
-  const aim = top.clone().setY(top.y - SCHOLAR_SHOT.below);
-  const camera = new THREE.PerspectiveCamera(SCHOLAR_SHOT.fov, 1, 0.05, 20);
-  camera.position.copy(aim).addScaledVector(toward, SCHOLAR_SHOT.distance).setY(aim.y + SCHOLAR_SHOT.above);
-  camera.lookAt(aim);
-  return { root: s.root, scene, camera };
 }
 
 /** Where the pictures' making stands, for a harness (`lab guide`): what's still to make, the one being made and how

@@ -9,6 +9,7 @@ import { HOUSES } from './houses';
 import { BIOMES } from './biomes';
 import { ENEMIES } from './enemies';
 import type { ClassDef, Profile } from '../types';
+import type { FolkId } from '../ui/guide/folkPortraits';
 
 /** What a talk knows as it's had: whether this is the first meeting, how many times they've talked before, whether a
  *  node was heard (in an earlier talk or this one), the hero's class and his records. */
@@ -29,7 +30,7 @@ export interface TalkNode { says: Said[]; again?: Said[]; replies: TalkReply[] }
 export interface Speaker {
   id: string; name: string; title: string;
   /** his portrait's picture, made of his own model (ui/guide/portraits.ts) */
-  portrait?: 'scholar';
+  portrait?: FolkId;
   start: (c: TalkContext) => string;
   nodes: Record<string, TalkNode>;
 }

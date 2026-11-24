@@ -18,7 +18,7 @@ import { dialog } from '../../dialogs';
 import { villageUse } from '../../../game/villageUses';
 import { showVillageCard } from '../../villageCard';
 import { openPanels } from '../../menus';
-import { drawPortrait, hurryPortrait, portrait, portraitMade, retryPortrait } from '../../guide/portraits';
+import { FolkFace } from '../../folkFace';
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 
@@ -85,58 +85,22 @@ export function openTalk(id: string): void {
   const card = $('#talk');
   $('.tk-name', card).textContent = speaker.name;
   $('.tk-title', card).textContent = speaker.title;
-  showPortrait(speaker);
+  face().show(speaker.portrait ?? null);
   card.classList.remove('hidden');
   go(speaker.start(context));
   changed(true);
 }
 
-/** how long a portrait that came back empty waits before it's tried again (s, the game's): each try builds his model */
-const PORTRAIT_RETRY = 1.5;
-/** the portrait the card waits for, while it does (made ahead of the rest, main.ts: `talkWaitsForPortrait`) */
-let waitingFor: Speaker['portrait'] | null = null;
-/** a try that came back empty: how long till the next (s), and what's done then */
-let retry: { in: number; then: () => void } | null = null;
-/** Whether the open card waits for its portrait: it's made then whatever else holds the build behind the lobby. */
-export const talkWaitsForPortrait = (): boolean => waitingFor != null && talkOpen();
-
-/** His portrait in the oval: the picture of his model, made behind the lobby long before; a spinner in the oval while
- *  it isn't yet (never made in the opening's frame), tried again if it came back empty. Never the drawing that stood in
- *  for it: from play, the card showed a cartoon of him instead of his face. */
-function showPortrait(who: Speaker): void {
-  const frame = $('#talk .tk-portrait'), photo = $<HTMLCanvasElement>('.tk-photo', frame);
-  const id = who.portrait;
-  frame.classList.remove('pictured', 'waiting');
-  waitingFor = null;
-  retry = null;
-  if (!id) return;
-  const show = (pic: HTMLCanvasElement | null): void => {
-    if (speaker !== who) return;
-    if (!pic) {
-      retry = { in: PORTRAIT_RETRY, then: () => { retryPortrait(id); void portrait(id).then(show); } };
-      return;
-    }
-    // (a canvas already drawn: copied in, nothing to decode)
-    drawPortrait(photo, pic);
-    frame.classList.remove('waiting');
-    frame.classList.add('pictured');
-    waitingFor = null;
-  };
-  const made = portraitMade(id);
-  if (made) { show(made); return; }
-  frame.classList.add('waiting');
-  waitingFor = id;
-  hurryPortrait(id);
-  void portrait(id).then(show);
-}
+/** his portrait in the oval (ui/folkFace.ts): the picture of his model, a spinner while it comes */
+let faceOf: FolkFace | null = null;
+const face = (): FolkFace => (faceOf ??= new FolkFace($('#talk .tk-portrait')));
 
 /** The talk ended. */
 export function closeTalk(): void {
   if (!talkOpen()) return;
   $('#talk').classList.add('hidden');
   speaker = null;
-  waitingFor = null;
-  retry = null;
+  face().show(null);
   context = null;
   memory = null;
   changed(false);
@@ -144,11 +108,6 @@ export function closeTalk(): void {
 
 /** The talk's frame: his next line shown once the last has had its time. */
 export function stepTalk(dt: number): void {
-  if (retry && talkOpen() && (retry.in -= dt) <= 0) {
-    const { then } = retry;
-    retry = null;
-    then();
-  }
   if (!talkOpen() || shown >= lines.length) return;
   wait -= dt;
   if (wait > 0) return;

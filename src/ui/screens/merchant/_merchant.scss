@@ -1,6 +1,7 @@
 // Odo's trade (ui/merchant.ts), in three numbered steps: his wares in a row, the hero's stash in a grid under them
 // (dimmed until a ware is chosen), and the deal: what's got beside what's given, the bar of its value against his price
-// and what's missing in words, then Trade. The step to do next is lit (`.now`), the ones before it ticked (`.done`).
+// and what's missing in words, then Trade. Over them his face in an oval (`_folkFace.scss`) beside his name and terms,
+// its place kept whatever it shows. The step to do next is lit (`.now`), the ones before it ticked (`.done`).
 // Each piece a button in its rarity's colour (--rc), its icon, its name and its value as a badge, picked with a gold
 // outline. As wide as a desktop allows; on a short screen the stash scrolls within it and the deal's card is cut short.
 @use 'theme' as *;
@@ -8,17 +9,19 @@
 // two columns: choosing and offering down the left, the deal and Trade down the right (in one, the box was taller than
 // a 1080p window and scrolled its title away)
 .mc-box { width: 1040px; display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); column-gap: 12px; row-gap: 8px;
-  grid-template-areas: 'title title' 'sub sub' 'want deal' 'give deal' 'give said' 'give row' 'give warn';
-  grid-template-rows: auto auto auto auto auto auto 1fr; align-items: start; text-align: left; }
-.mc-box .sm-title { grid-area: title; text-align: center; font-size: 28px; }
-.mc-sub { grid-area: sub; }
+  grid-template-areas: 'who who' 'want deal' 'give deal' 'give said' 'give row' 'give warn';
+  grid-template-rows: auto auto auto auto auto 1fr; align-items: start; text-align: left; }
+.mc-who { grid-area: who; display: flex; align-items: center; justify-content: center; gap: 16px; }
+.mc-face { width: 64px; height: 75px; }
+.mc-whom { display: flex; flex-direction: column; gap: 2px; }
+.mc-box .sm-title { text-align: left; font-size: 28px; margin: 0; }
 .mc-want { grid-area: want; }
 .mc-give { grid-area: give; align-self: stretch; }
 .mc-deal { grid-area: deal; align-self: stretch; }
 .mc-said { grid-area: said; }
 .mc-row { grid-area: row; }
 .mc-warn { grid-area: warn; }
-.mc-sub { margin: 0; text-align: center; font-size: 14px; color: var(--ink-dim); font-style: italic; }
+.mc-sub { margin: 0; font-size: 14px; color: var(--ink-dim); font-style: italic; }
 .mc-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .mc-label { display: flex; align-items: center; gap: 8px; font: 700 15px var(--font-display); letter-spacing: .05em;
   text-transform: uppercase; color: #ffe7b0; }
@@ -85,6 +88,7 @@
 @media (max-height: 520px) {
   .mc-box { gap: 5px; }
   .mc-box .sm-title { font-size: 22px; }
+  .mc-face { width: 40px; height: 47px; }
   .mc-sub, .mc-warn { display: none; }
   .mc-step { padding: 5px 8px; }
   .mc-stash { max-height: 34vh; }
@@ -95,7 +99,7 @@
 // --- an upright screen: one column, the deal under the stash ---
 @media (orientation: portrait) and (max-width: 1000px) {
   .mc-box { grid-template-columns: minmax(0, 1fr); grid-template-rows: none;
-    grid-template-areas: 'title' 'sub' 'want' 'give' 'deal' 'said' 'row' 'warn'; }
+    grid-template-areas: 'who' 'want' 'give' 'deal' 'said' 'row' 'warn'; }
   .mc-stash { max-height: 26vh; }
 }
 @media (prefers-reduced-motion: reduce) { .mc-fill, .mc-step { transition: none; } }

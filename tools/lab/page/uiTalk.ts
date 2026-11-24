@@ -4,12 +4,13 @@
 // middle, his portrait and name plate shown; on touch each reply a finger's height. Its canary makes the card twice the
 // window's height, which must be found.
 import { closeTalk, openTalk, talkAnswerable } from '../../../src/ui/screens/talk/talk';
-import { portraitMade } from '../../../src/ui/guide/portraits';
+import { portrait, portraitMade } from '../../../src/ui/guide/portraits';
 import { realWait } from './lab';
 import { G } from '../../../src/state';
 import { goTo } from '../../../src/game/village';
 import type { Lab } from './lab';
 import { touchMode, type TouchFound } from './uiTouch';
+import type { FolkId } from '../../../src/ui/guide/folkPortraits';
 
 /** the canary's problem, and what it plants */
 export const TALK_CANARY = { name: 'the talk card leaves the window', what: 'the card twice the window\'s height' };
@@ -21,11 +22,14 @@ const SHOWN_FRAMES = 30;
  *  browser's own time, between the lab's frames */
 const PORTRAIT_MS = 20000;
 
-/** Frames on, each with a little of the browser's own time, till his portrait is made behind the lobby; how many. */
-export async function portraitWaited(lab: Lab): Promise<number> {
+/** Frames on, each with a little of the browser's own time, till `id`'s portrait is made behind the lobby (Brother
+ *  Hollis's, or another of the folk's); how many. */
+export async function portraitWaited(lab: Lab, id: FolkId = 'scholar'): Promise<number> {
   const giveUp = window.__labClock.realNow() + PORTRAIT_MS;
+  // (asked for, as walking into his room asks for it: a state opening his card from elsewhere waited on nothing)
+  void portrait(id);
   let frames = 0;
-  while (!portraitMade('scholar')) {
+  while (!portraitMade(id)) {
     if (window.__labClock.realNow() > giveUp) throw new Error(`lab: his portrait was never made (${PORTRAIT_MS / 1000} s)`);
     await lab.step(1);
     await realWait(5);

@@ -21,6 +21,7 @@ import { odoNods, odoTrades } from '../../../entities/models/merchant';
 import { bindTooltip, hideTooltip, itemTooltip, itemTooltipHTML } from '../../tooltip';
 import { renderMenu } from '../../menus';
 import type { Item } from '../../../types';
+import { FolkFace } from '../../folkFace';
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 
@@ -73,8 +74,13 @@ villageUse('merchant', {
 });
 
 /** The trade screen shown (his stock restocked first if it's due), or put away. */
+/** his face in its oval (ui/folkFace.ts) */
+let faceOf: FolkFace | null = null;
+const face = (): FolkFace => (faceOf ??= new FolkFace($('#merchant .mc-face')));
+
 export function showMerchant(on: boolean): void {
   $('#merchant').classList.toggle('hidden', !on);
+  face().show(on ? 'odo' : null);
   // (Odo stays at his desk while it's open)
   odoTrades(on);
   hideTooltip();

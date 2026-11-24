@@ -183,8 +183,14 @@ export function buildOdo(shop: OdoShop): Odo {
   return built(odoSteps(shop));
 }
 
+/** the shop's plan he was first built on: his portrait's built on it too (ui/guide/folkPortraits.ts) */
+let firstShop: OdoShop | null = null;
+/** The plan of the shop Odo stands in, once it's built (null before). */
+export const odoShop = (): OdoShop | null => firstShop;
+
 /** `buildOdo` a piece at a time (models/steps.ts), so the boot paints between them, as the scholar's is (#838). */
 export function* odoSteps(shop: OdoShop): Generator<void, Odo, undefined> {
+  firstShop ??= shop;
   const kit = createKit(0xffc27a);
   const tex = (maps: ReturnType<typeof woolMaps>, ns = 1) => {
     const m = pbrMaterialMaps(maps, 1, ns);

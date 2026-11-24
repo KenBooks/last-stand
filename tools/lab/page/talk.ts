@@ -25,6 +25,8 @@ import { holdThroughDoor } from './housesDoor';
 import { LOOKED, offHero, SEEN_FROM } from './scholar';
 import { portraitWaited } from './uiTalk';
 import { forgetPortrait, portraitPlant, portraitState } from '../../../src/ui/guide/portraits';
+import { enterRoom } from '../../../src/game/rooms';
+import { faceCanary, faceChecked } from './folkFaces';
 
 export interface TalkOptions { canary: boolean }
 
@@ -325,11 +327,26 @@ export async function talk(lab: Lab, options: TalkOptions): Promise<Report> {
     const cost = `the frame with the card up: ${open.mean.toFixed(1)} ms mean, ${open.worst.toFixed(1)} slowest; without it `
       + `${closed.mean.toFixed(1)} ms, ${closed.worst.toFixed(1)} (a game frame and a browser frame each, ${COST_FRAMES} of them)`;
     lines.push(cost);
+    // (each of the folk's portraits looking into the camera: Brother Hollis's, then Odo's once his shop is built)
+    const faces = [faceChecked('scholar', 'Brother Hollis')];
+    enterRoom('merchant');
+    await lab.until(() => G.arena.room === 'merchant', 600, "Odo's shop never opened");
+    await lab.step(15);
+    faces.push(faceChecked('odo', 'Odo'));
+    for (const f of faces) { lines.push(f.line); problems.push(...f.problems); }
+    if (options.canary) {
+      for (const [id, name] of [['scholar', 'Brother Hollis'], ['odo', 'Odo']] as const) {
+        const c = faceCanary(id, name);
+        lines.push(c.line);
+        problems.push(...c.problems);
+      }
+    }
     if (options.canary) {
       const caught = { once: problems.some((p) => p.includes('more than one line in a frame') || p.includes('frames after the one before')),
         leave: problems.some((p) => p.includes('(canary)') && p.includes('leaves the window')) };
       lines.push(`canary: every line at once ${caught.once ? 'caught' : 'went unseen'}; Leave off the window ${caught.leave ? 'caught' : 'went unseen'}`);
-      const missed = [...(caught.once ? [] : ['talk: the canary\'s lines at once went unseen']), ...(caught.leave ? [] : ['talk: the canary\'s Leave off the window went unseen'])];
+      const missed = [...(caught.once ? [] : ['talk: the canary\'s lines at once went unseen']), ...(caught.leave ? [] : ['talk: the canary\'s Leave off the window went unseen']),
+        ...problems.filter((p) => p.startsWith('canary: '))];
       return { text: lines.join('\n'), problems: missed, moments };
     }
     return { text: lines.join('\n'), problems, moments };

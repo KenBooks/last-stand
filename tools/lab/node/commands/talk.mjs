@@ -11,7 +11,7 @@ export default {
     + '(a key, the arrows and Enter, the mouse, a tap, Leave), the talk remembered in the profile across a visit '
     + 'after, the card and replies within the window, and the frame\'s cost with the card up',
   options: {
-    canary: { kind: 'switch', help: 'show every line at once and push Leave off the window, each of which must be found' },
+    canary: { kind: 'switch', help: 'show every line at once, push Leave off the window and turn each of the folk\'s portraits\' heads off the camera, each of which must be found' },
     ...COMMON_OPTIONS,
   },
   each: (side, options) => side.command('talk', { canary: Boolean(options.canary) }),
