@@ -3,12 +3,13 @@
 // the player sees it. In each way he holds his weapons, in all his armour and in none, and in each view, the frame is
 // drawn both ways and compared pixel by pixel: its outline within a texel or two, no patch of his own body shaded
 // otherwise. The pieces cast from fewer triangles are counted (the engine's `casters`), and his shadow taken away must
-// change the frame, so a frame with none can't pass for a match. Through the eyes it doesn't under the engine: his
-// body is on the layer no camera draws there, which the engine's walk passes by, and his shadow was cast by his
-// pieces cast as one, which it never makes. `--canary` takes his shadow away: it must be seen. `--cost` times the frame on the engine's GPU
-// clock in turns, each way and with him casting nothing. It compared his pieces cast as one (castAsOne.ts) against each
-// alone, in three's shadow pass, which the engine never runs: under it the two drew the same, no piece was cast as one,
-// and its timing read three's shadow map, never drawn.
+// change the frame, so a frame with none can't pass for a match. Through the eyes it needn't: his body is hidden
+// there and casts nothing, by design since #270 (his pieces cast as one shrank it out of the shadow; the engine's walk
+// passes its layer by, as three's shadow pass did), and his arms' shadow falls at his feet, below the view, but for
+// the ranger's bow. `--canary` takes his shadow away: it must be seen. `--cost` times the frame on the engine's GPU
+// clock in turns, each way and with him casting nothing. It compared his pieces cast as one (castAsOne.ts) against
+// each alone, in three's shadow pass, which the engine never runs: under it the two drew the same, no piece was cast
+// as one, and its timing read three's shadow map, never drawn.
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import type { ViewMode } from '../../../src/core/renderer';
@@ -108,8 +109,14 @@ async function measureCase(lab: Lab, view: ViewMode, gear: WeaponStyle | undefin
     + `every triangle cast (drawn twice: ${steady.pixels}, ${steady.most}); his shadow taken away, ${gone.pixels} `
     + `pixels apart by ${gone.most}`;
   const problems: string[] = [];
-  if (!gone.pixels) problems.push(`${name}: his shadow isn't drawn (taken away, the frame is the same)`);
-  else if (!fewer.fewer) problems.push(`${name}: no piece cast from fewer triangles`);
+  // (through the eyes his body casts nothing, and what his arms cast is mostly out of view: the warrior's arms, drawn
+  // by their own camera, cast nothing)
+  const seenFromOutside = view !== 'first';
+  if (seenFromOutside && !gone.pixels) {
+    problems.push(`${name}: his shadow isn't drawn (taken away, the frame is the same)`);
+  } else if (seenFromOutside && !fewer.fewer) {
+    problems.push(`${name}: no piece cast from fewer triangles`);
+  }
   if (coarse.pixels > COARSE_PIXELS || coarse.most > COARSE_LEVELS) {
     problems.push(`${name}: cast from fewer triangles, ${apart}`);
   }
@@ -164,14 +171,19 @@ export async function shadowsCheck(lab: Lab, options: ShadowsOptions): Promise<R
   for (const gear of styles) {
     for (const wear of WEARS) {
       for (const view of options.views ?? VIEWS) {
-        const measured = await measureCase(lab, view, gear, wear, options.canary && caught === undefined);
+        // (the canary in the first case seen from outside him: through the eyes his shadow is mostly out of view)
+        const canary = options.canary && caught === undefined && view !== 'first';
+        const measured = await measureCase(lab, view, gear, wear, canary);
         lines.push(measured.line);
         problems.push(...measured.problems);
         caught ??= measured.caught;
       }
     }
   }
-  if (options.canary) lines.push(`canary, his shadow taken away in the first case: ${caught ? 'caught' : 'missed'}`);
+  if (options.canary) {
+    const seen = caught ? 'caught' : 'missed';
+    lines.push(`canary, his shadow taken away in the first case seen from outside him: ${seen}`);
+  }
   if (options.canary && !caught) problems.push('canary: his shadow taken away went unseen');
   return { text: lines.join('\n'), problems };
 }
