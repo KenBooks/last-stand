@@ -90,6 +90,9 @@ over him, a roof in three layers, and a doorway into a room he sees a sector of.
    More of it is left there, about two fifths (`DOOR_FROM_INSIDE` in `engine/seeKinds.ts`), and the engine lights
    that ghost by its own colour (`GHOST_LIT`): at a sixth of its unlit inner face nothing of the wall showed but
    the door frame's edges ("Make it stronger", "geometry needs to be possible to tell").
+   Two things a wall's ghost showed up: the open door leaves stood half in the wall's own edge at the doorway and
+   fought it in slivers (they hang `DOOR.clear` into the doorway now), and a column the game thinned wrote no depth,
+   so the wall's ghost lay over a column before it (`engine/materials.ts` has a column write its depth always).
 
 Held by `npm run lab -- houserule` (its four `the portico case` views, with the terrace, the stair, the hall's
 inside and the cottages) and by `lab rustcheck`, which runs the four with a canary; and in the engine's own lab,

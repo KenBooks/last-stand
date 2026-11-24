@@ -87,7 +87,7 @@ const DAIS_LIGHT = { up: 3.0, ahead: 2.2 };
 /** the banners behind the hall's plinths: their tops over the floor, how far off the back wall, their scale (`bannerGeo`
  *  is 0.9 m across) */
 const HALL_BANNER = { top: 4.6, off: 0.25, scale: 1.15 };
-const DOOR = { frame: 0.32, set: 0.22, straps: [0.5, 1.7, 2.9], open: 1.45 };
+const DOOR = { frame: 0.32, set: 0.22, straps: [0.5, 1.7, 2.9], open: 1.45, clear: 0.09 };
 /** the plinth block at the foot of each side of the door's frame: how high (over the plinth course's 0.45), how deep
  *  out from the wall (past the course's 0.35) and how much wider than the frame each way (m) */
 const DOOR_FOOT = { high: 0.52, deep: 0.4, wider: 0.03 };
@@ -1723,7 +1723,7 @@ function hallDoor(scene: THREE.Object3D, M: Mats, X: number, y0: number, face: n
   // (each leaf hung on its side of the frame and swung in, open: the hall is walked into)
   for (const s of [-1, 1]) {
     const leaf = new THREE.Group();
-    leaf.position.set(X + s * dh, y0, face - DOOR.set);
+    leaf.position.set(X + s * (dh - DOOR.clear), y0, face - DOOR.set);
     leaf.rotation.y = -s * DOOR.open;
     scene.add(leaf);
     const lx = -s * dh / 2;
