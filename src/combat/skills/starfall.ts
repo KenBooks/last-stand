@@ -46,6 +46,8 @@ function dropMeteor(player: Player, def: Def, landing: THREE.Vector3, delay: num
   const meteor = new THREE.Mesh(meteorGeo, getMeteorMat());
   const streak = new THREE.Mesh(streakGeo, streakMat);
   const group = new THREE.Group();
+  meteor.name = 'Starfall: crystal';
+  streak.name = 'Starfall: streak';
   group.add(meteor, streak);
   group.visible = false;
   G.scene.add(group);
@@ -85,8 +87,10 @@ function dropMeteor(player: Player, def: Def, landing: THREE.Vector3, delay: num
 function impact(player: Player, def: Def, p: THREE.Vector3, fall: Fall): void {
   const { blasted, judged } = fall;
   const at = new THREE.Vector3(p.x, p.y + 0.3, p.z);
-  // a slim pillar: a wide pale one blooms into a haze over the whole impact
-  lightPillar(p, { color: CORE, intensity: 1.8, radius: 0.25, height: 7, life: 0.3 });
+  // a slim pillar: a wide pale one blooms into a haze over the whole impact. Its top stays as it fades, long enough
+  // that the next crystal's comes while it's lit: sinking and gone in 0.3 s, each pillar's top lit the top of the
+  // over-the-shoulder view and left it before the next landed 0.14 s on, 3 flashes a second, `lab cast starfall`
+  lightPillar(p, { color: CORE, intensity: 1.8, radius: 0.25, height: 7, life: 0.5, sink: 0 });
   shockwave(p, { color: COLOR, intensity: 1.3, from: 0.4, to: def.radius * 1.25, life: 0.35, y: p.y + 0.06 });
   crackDecal(p, { size: def.radius * 0.95, color: COLOR, intensity: 2.2, life: 3.5 });
   decal(p, { type: 'scorch', size: def.radius * 0.8, life: 7 });

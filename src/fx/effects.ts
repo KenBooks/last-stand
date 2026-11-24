@@ -280,11 +280,13 @@ export function glyphMarker(pos: Pos, { radius = 1.2, color = 0xffffff, intensit
   return e;
 }
 
-/** Brief vertical beam of light (impact from above). */
-export function lightPillar(pos: Pos, { color = 0xffffff, intensity = 3, radius = 0.6, height = 9, life = 0.45 } = {}) {
+/** Brief vertical beam of light (impact from above). `sink`: the share of its height it loses as it fades (0: its
+ *  top stays where it was, for pillars that come one after another, each lit till the next's comes). */
+export function lightPillar(pos: Pos, { color = 0xffffff, intensity = 3, radius = 0.6, height = 9, life = 0.45, sink = 0.4 } = {}) {
   const mat = additive(color, intensity);
   mat.side = THREE.DoubleSide;
   const m = new THREE.Mesh(GEO.pillar, mat);
+  m.name = 'light pillar';
   m.position.set(pos.x, floor(pos), pos.z);
   const dispose = tracked(m, [mat]);
   let t = 0;
@@ -293,7 +295,7 @@ export function lightPillar(pos: Pos, { color = 0xffffff, intensity = 3, radius 
       t += dt;
       const k = t / life;
       const w = radius * (1 - k) ** 0.5;
-      m.scale.set(w, height * (0.6 + 0.4 * (1 - k)), w);
+      m.scale.set(w, height * (1 - sink * k), w);
       mat.opacity = (1 - k) ** 2;
       return k < 1;
     }, dispose,
