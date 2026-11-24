@@ -219,8 +219,6 @@ function drawnNow(lab: Lab, area: Area): ImageData {
   } finally {
     lab.drawing = drawing;
   }
-  // (the chain's last pass may leave its own target bound: read the canvas's)
-  G.renderer.setRenderTarget(null);
   return readOpaque(area);
 }
 

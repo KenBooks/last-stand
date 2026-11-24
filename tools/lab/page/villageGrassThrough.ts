@@ -16,14 +16,8 @@ import { CAMPFIRE, NOTICE, YARD, yardToWorld } from '../../../src/data/village';
 import { holdHour } from '../../../src/game/clock';
 import { LAMPS } from '../../../src/world/village';
 import { rayChunks } from './rayChunks';
-import { grassDrawnAt } from './grassDrawn';
 import { groundHeight } from '../../../src/world/ground';
-import { RUNNING } from '../../../src/core/rendererChoice';
-
-/** whether the grass as drawn can't be read back: the engine draws it, by a look of its own (engine/looks/meadow.ts),
- *  which three's renderer can't draw into a target of the lab's; the map that holds it is read either way */
-const NOT_READ = RUNNING.rust;
-import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
+import { faceCamera, viewMode } from '../../../src/core/renderer';
 import { viewBy } from './villageHallCull';
 import { faultsSoFar } from '../../../src/engine/said';
 import { CROWD_LAYER, HERO_SHADOW_LAYER } from '../../../src/core/layers';
@@ -62,10 +56,8 @@ const MAP_SLACK = 0.03;
 const GHOST_NAMED = 'ghost: ';
 /** the half width of a post standing in the grass without an obstacle (m) */
 const POST_HALF = 0.1;
-/** the fewest points under a prop the rays must meet, and the fewest pixels of grass drawn over the footprints' ground,
- *  or nothing was measured */
+/** the fewest points under a prop the rays must meet, or nothing was measured */
 const LEAST_UNDER = 500;
-const LEAST_DRAWN = 200;
 /** the hour pictured, and how far off each spot its pictures stand (m) */
 const NOON = 12;
 const PICTURE_FROM = [2.6, 1.6];
@@ -355,8 +347,6 @@ async function pictures(lab: Lab): Promise<Pictured[]> {
   return moments;
 }
 
-/** the grass drawn alone through the game's camera at each stand: its target's size (px) */
-const DRAWN = { across: 640, down: 360 };
 /** how far from a prop the hero stands to see it as a player does (m), and the frames he settles in */
 const STAND_OFF = 1.1;
 const SETTLE = 15;
@@ -382,70 +372,6 @@ function stands(): { what: string; x: number; z: number; lookX: number; lookZ: n
   return out;
 }
 
-/** The grass drawn over a prop at each stand, as the game draws it: each pixel of grass put back into the world, and
- *  a ray from it down meeting a solid above the ground before the ground (a blade's tip on a log's top, from above). */
-/** What the grass drawn at a stand does against the props there: pixels over one (a tip through a log's top), pixels
- *  squeezed under one (a blade pressed flat on the ground under a log, its flat face fighting the ground's for the
- *  depth: from review, "z fighting under log"), and the pixels of grass over the footprints' ground read. */
-interface Drawn { what: string; view: ViewMode; over: number; under: number; near: number }
-
-/** The views each stand is read from: the lobby's own from above, and over the shoulder, low, facing the prop. */
-const DRAWN_VIEWS: ViewMode[] = ['top', 'third'];
-/** how close over a pixel of grass a solid squeezes it (m), and how near the ground it lies flat there (m: the ground
- *  is drawn at 1.6 cm, and a blade pressed down to it fights it for the depth) */
-const SQUEEZED = 0.12;
-const FLAT = 0.05;
-
-/** The grass drawn at each stand in each view, as the game draws it: each pixel of grass put back into the world, a ray
- *  from it down meeting a solid above the ground (a blade's tip on a log's top), or, lying within `FLAT` of the ground,
- *  one up meeting a solid within `SQUEEZED` (a blade pressed flat under it). `moments` takes each as the player sees it, at `hours`. */
-async function drawnOverProps(lab: Lab, feet: Foot[], meshes: THREE.Mesh[], moments?: Pictured[]): Promise<Drawn[]> {
-  const ray = new THREE.Raycaster();
-  const down = new THREE.Vector3(0, -1, 0);
-  const up = new THREE.Vector3(0, 1, 0);
-  const from = new THREE.Vector3();
-  const counts: Drawn[] = [];
-  const was = viewMode();
-  for (const view of DRAWN_VIEWS) {
-    await viewBy(lab, view);
-    for (const stand of stands()) {
-      G.player.walkTo = null;
-      G.player.place(new THREE.Vector3(stand.x, groundHeight(stand.x, stand.z), stand.z), 0);
-      // (over the shoulder, the camera turned to face what he stands by)
-      if (view !== 'top') faceCamera(Math.atan2(stand.lookX - stand.x, stand.lookZ - stand.z));
-      await lab.step(SETTLE);
-      const counted: Drawn = { what: stand.what, view, over: 0, under: 0, near: 0 };
-      for (const point of grassDrawnAt(lab, G.camera, DRAWN.across, DRAWN.down)) {
-        const foot = feet.find((f) => Math.hypot(point.x - f.x, point.z - f.z) <= f.r);
-        if (!foot) continue;
-        counted.near++;
-        const near = meshesOver(meshes, foot);
-        ray.set(from.set(point.x, point.y + 0.002, point.z), down);
-        ray.far = Math.max(0, point.y);
-        if (point.y > GROUND_UP && ray.intersectObjects(near, false).some((hit) => hit.point.y > GROUND_UP)) {
-          counted.over++;
-          continue;
-        }
-        if (point.y > FLAT) continue;
-        ray.set(from.set(point.x, point.y + 0.002, point.z), up);
-        ray.far = SQUEEZED;
-        if (ray.intersectObjects(near, false).length) counted.under++;
-      }
-      counts.push(counted);
-      if (moments) {
-        for (const hour of view === 'top' ? [NOON] : SEEN_AT) {
-          holdHour(hour);
-          await lab.step(2);
-          moments.push(await lab.screen(`beside ${stand.what}, ${view === 'top' ? "the lobby's view" : 'over the shoulder'} at ${hour}h`, []));
-        }
-        holdHour(NOON);
-      }
-    }
-  }
-  await viewBy(lab, was);
-  return counts;
-}
-
 /** Each seat log over the shoulder as the player sees it, by night and by day: the page's own screenshot, which the
  *  engine's canvas gives where a picture of the frame read back can't (its pictures came out black), so the grass by
  *  the logs is seen however it's drawn. */
@@ -469,39 +395,6 @@ async function seatLogsSeen(lab: Lab): Promise<Pictured[]> {
   return moments;
 }
 
-/** Each stand's and view's count on a line. */
-function drawnLine(c: Drawn): string {
-  return `${c.what} (${c.view}): ${c.over} over it, ${c.under} squeezed under it, of ${c.near}`;
-}
-
-/** The solids' map emptied while `run` runs (the drawn test's canary: every blade stands as if nothing were over it). */
-async function withSolidsEmptied<T>(run: () => Promise<T>): Promise<T> {
-  const texture = G.arena.village!.meadow.userData.solids as THREE.DataTexture;
-  const bytes = texture.image.data as Uint8Array;
-  const kept = bytes.slice();
-  bytes.fill(255);
-  texture.needsUpdate = true;
-  try {
-    return await run();
-  } finally {
-    bytes.set(kept);
-    texture.needsUpdate = true;
-  }
-}
-
-/** The blades' room taken away while `run` runs (the squeezed grass's canary: every blade under a prop held flat to the
- *  ground there, as the hold alone left them under the seat logs, "z fighting under log"). */
-async function withoutRoom<T>(run: () => Promise<T>): Promise<T> {
-  const room = G.arena.village!.meadow.userData.room as { value: number };
-  const kept = room.value;
-  room.value = 0;
-  try {
-    return await run();
-  } finally {
-    room.value = kept;
-  }
-}
-
 /** No blade through anything standing on the meadow, the grass up to it; pictures close to. */
 export async function grassNotThroughProps(lab: Lab, canary: boolean): Promise<LightsChecked> {
   if (G.arena.place !== 'village') throw new Error('lab: village: not in the village');
@@ -523,40 +416,24 @@ export async function grassNotThroughProps(lab: Lab, canary: boolean): Promise<L
     ...throughLines(maps, missed).map((line) => `  ${line}`),
     'what the rays met: ' + [...countBy(under)].map(([by, n]) => `${by} ${n}`).join('; '),
   ];
-  const meshes = builtMeshes();
   if (canary) {
     const foot = under[0].foot;
     const mapCaught = through(withoutFoot(maps, foot), under.filter((point) => point.foot === foot)).length > 0;
     const said = (caught: boolean): string => (caught ? 'caught' : 'missed');
-    // (the drawn grass's two plants need it read back, which the engine's look can't be: the map's alone then)
-    if (NOT_READ) {
-      lines.push(`canary: the map's ${said(mapCaught)} (the grass drawn: not read, the engine draws it)`);
-      return { lines, problems: [], caught: mapCaught, moments: [] };
-    }
-    const drawnCaught = (await withSolidsEmptied(() => drawnOverProps(lab, feet, meshes))).some((c) => c.over > 0);
-    const squeezedCaught = (await withoutRoom(() => drawnOverProps(lab, feet, meshes))).some((c) => c.under > 0);
-    lines.push(`canary: the map's ${said(mapCaught)}, the grass drawn over ${said(drawnCaught)}, under ${said(squeezedCaught)}`);
-    return { lines, problems: [], caught: mapCaught && drawnCaught && squeezedCaught, moments: [] };
+    lines.push(`canary: the map's ${said(mapCaught)} (the grass drawn: not read, the engine draws it)`);
+    return { lines, problems: [], caught: mapCaught, moments: [] };
   }
-  holdHour(NOON);
-  const seenThere: Pictured[] = [];
-  // (its depth read back through WebGL's targets: on WebGPU the map alone is read, and the pictures)
-  const drawn = NOT_READ ? [] : await drawnOverProps(lab, feet, meshes, seenThere);
-  holdHour(null);
-  const seen = drawn.reduce((sum, c) => sum + c.near, 0);
-  if (!NOT_READ && seen < LEAST_DRAWN) throw new Error(`lab: village: only ${seen} pixels of grass drawn round the props`);
-  lines.push(NOT_READ ? 'the grass drawn: not read (the engine draws it by a look of its own)' : `the grass drawn beside each (${DRAWN.across}x${DRAWN.down} pixels):`);
-  lines.push(...drawn.map((c) => `  ${drawnLine(c)}`));
+  // (the grass as drawn isn't read back: the engine draws it by a look of its own, `engine/looks/meadow.ts`, with no
+  // depth the page can read; three's targets it was drawn into before, `grassDrawn.ts`, are gone, and the seat logs
+  // are seen by the page's own screenshots instead)
+  lines.push('the grass drawn: not read (the engine draws it by a look of its own)');
   const pictured = await pictures(lab);
   // (the low close-ups of the seat logs' feet first: the review's own angle)
   const low = pictured.filter((moment) => moment.label.includes("'s foot, low"));
-  // (on the engine the stands aren't read, so its seat logs are seen by the page's own screenshots)
-  const seenOnEngine = NOT_READ ? await seatLogsSeen(lab) : [];
-  const moments = [...seenOnEngine, ...low, ...seenThere, ...pictured.filter((moment) => !low.includes(moment))];
+  const moments = [...await seatLogsSeen(lab), ...low, ...pictured.filter((moment) => !low.includes(moment))];
   const problems = [
     ...faultsSoFar().map((said) => `the renderer hit a problem (its frames drawn nothing): ${said.slice(0, 200)}`),
     ...throughLines(maps, missed).map((line) => `grass through ${line}`),
-    ...drawn.filter((c) => c.over > 0 || c.under > 0).map((c) => `grass drawn against ${drawnLine(c)}`),
   ];
   return { lines, problems, caught: null, moments };
 }

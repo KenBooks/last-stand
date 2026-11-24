@@ -419,7 +419,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   called no gain and a loss; one of them, measured loaded, saves 13%. So run it at a size that gives errors of a
   few hundredths, alone on the machine (Loaner's `--exclusive`), and believe nothing a row with a wide error says.
   `--hero` times the hero's parts too, over 24 rounds: his head, his hands, his cloth, the rest of him and that rest
-  a material at a time, the shadows he casts (his pieces' casting switched with his one shadow let go, `castingAsOne`:
+  a material at a time, the shadows he casts (his pieces' casting switched with his one shadow let go, `castingAsOne`, three's and since taken out:
   switched alone, the one shadow was merged again at every turn, and the merge was what read, 1.9 ms), and a change
   of nothing, which must read nothing: told from nothing and over 0.15 ms is a problem. With `--rarity` (every item
   he wears of it: Rare and up glow) it times the glow of his gear too, each glowing material's colour put to black, so
