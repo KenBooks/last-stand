@@ -67,7 +67,7 @@ const faded = new Float32Array(RAYS).fill(1);
 
 /** Where the roofs are, in a map of the ground: what stands high over what's unseen stays seen on a roof alone. By height
  *  alone a tree's lower crown read as one, bright green over the fog (from play, "and tree leaves should be grey too?"). */
-const ROOFS_TEXELS = 256;
+const ROOFS_TEXELS = 512;
 export const ROOFS_HALF = 64;
 /** how far past its walls a roof reaches (m), and how far it's soft (the eaves) */
 const ROOF_EAVES = 1.1;
