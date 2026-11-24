@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
+import { RUST } from '../../../src/engine';
 import { outsideOf } from '../../../src/data/houses';
 import { enterRoom } from '../../../src/game/rooms';
 import { groundHeight } from '../../../src/world/ground';
@@ -436,8 +437,9 @@ async function walkIn(lab: Lab, odo: Odo, lines: string[], problems: string[], m
   moments.push(pictureOdo(lab, odo, 'odo-greet-3-greets', [FRONT, SIDE], greets, { distance: 3 }));
   moments.push(await lab.screen('odo-greet-4-player', ['as the player sees him greet them']));
   // (what the frame the player sees takes to draw: the screen's render just drawn)
-  const drawn = G.renderer.info.render;
-  lines.push(`the shop as the player sees it: ${drawn.calls} draws, ${drawn.triangles} triangles`);
+  // (the engine's counts: three's `info.render` is its own, the overlays' alone under the engine)
+  const drawn = RUST.bridge?.stats;
+  lines.push(`the shop as the player sees it: ${drawn?.draws ?? 0} draws, ${drawn?.triangles ?? 0} triangles`);
   const off = headOffHero(odo);
   lines.push(`greeting: at his desk ${reached >= 0 ? `after ${secs(reached)} s` : 'never'}, `
     + `his head ${off.toFixed(0)} deg off the hero`);

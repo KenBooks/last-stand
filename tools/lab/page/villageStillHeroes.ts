@@ -9,12 +9,14 @@
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
+import { RUST } from '../../../src/engine';
 import { holdHour } from '../../../src/game/clock';
 import { groundHeight } from '../../../src/world/ground';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
 import { HALL, TERRACE } from '../../../src/data/village';
-import { standHeroes } from '../../../src/game/hall';
+import { heroesStanding, standHeroes } from '../../../src/game/hall';
 import { stillAsOne } from '../../../src/entities/models/stillAsOne';
+import { isWarm } from '../../../src/game/warm';
 import { changedShare, countedFrame, viewBy, type Counted } from './villageHallCull';
 import { VILLAGE_SPOT } from './draws';
 import type { LightsChecked } from './villageLights';
@@ -47,6 +49,18 @@ async function standAt(lab: Lab, stand: Stand): Promise<void> {
   await viewBy(lab, 'third');
   faceCamera(stand.facing);
   await lab.step(SETTLE);
+}
+
+/** The frames to settle drawn: the heroes are merged as the game draws them standing still (stepped undrawn, at
+ *  midnight none were). */
+async function drawnSettle(lab: Lab): Promise<void> {
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    await lab.step(SETTLE);
+  } finally {
+    lab.drawing = drawing;
+  }
 }
 
 /** The game's camera put before the dais's plinths, looking at them; returns what puts it back. */
@@ -110,6 +124,11 @@ function mergeChanges(lab: Lab, canary: boolean): { saved: number; seen: number;
   }
 }
 
+/** What stands them: the heroes' warm-up, and how many stand on the dais. */
+function standingNow(): string {
+  return `the heroes ${isWarm('heroes') ? 'warm' : 'cold'}, ${heroesStanding().length} standing`;
+}
+
 /** How many meshes the hall's heroes are drawn with merged. */
 function mergedMeshes(): number {
   let count = 0;
@@ -128,13 +147,17 @@ export async function heroesStillAsOne(lab: Lab, canary: boolean): Promise<Light
   const lines: string[] = [];
   const problems: string[] = [];
   let caught = false;
+  const turns = RUST.tune.shadowTurns;
+  // (the sun's map drawn on every frame read: kept on every other, the frames drawn merged and apart differed by it,
+  // 0.5 to 1.1% of their pixels, the heroes themselves the same to the pixel close)
+  RUST.tune.shadowTurns = 0;
   try {
     for (const stand of STANDS) {
       await standAt(lab, stand);
       const read: string[] = [];
       for (const hour of HOURS) {
         holdHour(hour);
-        await lab.step(SETTLE);
+        await drawnSettle(lab);
         // (the state it measures: the heroes standing still and merged by the game's own frames)
         const merged = mergedMeshes();
         const { saved, seen, close } = mergeChanges(lab, canary);
@@ -143,7 +166,7 @@ export async function heroesStillAsOne(lab: Lab, canary: boolean): Promise<Light
         if (Math.max(seen, close) > MOST_CHANGED) caught = true;
         if (canary) continue;
         const at = `the hall's still heroes, ${stand.name}, at ${hour}:00`;
-        if (merged === 0) problems.push(`${at}: they weren't merged`);
+        if (merged === 0) problems.push(`${at}: they weren't merged (${standingNow()})`);
         else if (saved < FEWEST_SAVED) problems.push(`${at}: merged, they're ${saved} draws fewer, not ${FEWEST_SAVED}`);
         if (seen > MOST_CHANGED) problems.push(`${at}: the frame changed`);
         if (close > MOST_CHANGED) problems.push(`${at}: they changed, close`);
@@ -151,6 +174,7 @@ export async function heroesStillAsOne(lab: Lab, canary: boolean): Promise<Light
       lines.push(`the hall's still heroes merged against part by part, ${stand.name}: ${read.join('; ')}`);
     }
   } finally {
+    RUST.tune.shadowTurns = turns;
     holdHour(null);
     await viewBy(lab, view);
   }

@@ -48,8 +48,11 @@ const IN_HALL = 7;
 /** how far over its budget each count may read (draws, triangles, materials switched, programs switched): a share of
  *  it, and at least a few. The yard's foes and the wind move between boots, and a small count's 2% is under one (Very
  *  low's programs switched read 50 of 49 on a second boot); the switches move more with the night's lamps than the
- *  draws do (the square facing 0 at midnight read 55 to 58 programs switched from boot to boot) */
-const OVER = [0.02, 0.02, 0.05, 0.05];
+ *  draws do (the square facing 0 at midnight read 55 to 58 programs switched from boot to boot); the triangles are
+ *  the engine's, the meadow's blades among them, which its GPU counts a few frames late (`fieldKept`): the square
+ *  facing 0 read 1.205M and 1.234M in two runs; and its draws, batched by what's alike, read 221 and 229 there at
+ *  midnight */
+const OVER = [0.05, 0.05, 0.05, 0.05];
 const OVER_LEAST = [2, 2, 4, 4];
 /** how far under its budget a count reads before the line says to lower it (a share) */
 const UNDER = 0.1;
@@ -174,7 +177,9 @@ async function readHour(lab: Lab, key: string, canary: boolean): Promise<Read> {
     await lab.step(SETTLE);
     moment = readMoment(lab, canary);
   }
-  if (!moment.still) throw new Error(`lab: village: sweep: ${key} never stood still`);
+  // (the canary's plant culls all it may, which the frames after it settle from: it never stands still, and is judged
+  // by what it changed)
+  if (!moment.still && !canary) throw new Error(`lab: village: sweep: ${key} never stood still`);
   const counts = canary ? moment.whole.counts : moment.culled.counts;
   const changed = changedShare(moment.culled.frame.canvas, moment.whole.frame.canvas);
   return { key, counts, changed, ...againstBudget(counts, BUDGETS[key]) };

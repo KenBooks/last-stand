@@ -51,12 +51,17 @@ export interface FrameStats {
   movedMeshes: number;
   newTextures: number;
   newMaterials: number;
+  /** the faces of a lamp's (or a place's own light's) shadow of what stands still drawn this frame, a lamp's six at
+   *  most: drawn once, a lamp a frame (`lampShadows.ts`) */
+  lampFaces: number;
+  /** the faces of the movers' shadows by their nearest lamps drawn this frame, each holding one (`LampShadows.moved`) */
+  moverFaces: number;
 }
 
 export class Core {
   readonly stats: FrameStats = {
     records: 0, draws: 0, shadowDraws: 0, shadowTriangles: 0, shadowsKept: 0, lowDraws: 0, lightsLeftOut: 0, fieldKept: 0, fieldCounted: 0, solid: 0, casters: 0, objects: 0, culled: 0, triangles: 0, gpuMs: 0, gpuReads: 0, gpuBusy: 0, arms: 0, placeMs: 0, walkMs: 0,
-    engineMs: 0, newMeshes: 0, movedMeshes: 0, newTextures: 0, newMaterials: 0,
+    engineMs: 0, newMeshes: 0, movedMeshes: 0, newTextures: 0, newMaterials: 0, lampFaces: 0, moverFaces: 0,
   };
   /** what wasn't handed over, by its kind, on the last frame */
   readonly skipped = new Map<string, number>();

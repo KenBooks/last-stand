@@ -68,11 +68,14 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
 - `lab.ts`: `drawn`'s lit pictures (`lab.drawn`, the close-ups `glow` and others read) are read off the engine's canvas in the task that drew them (`shownIn`, `readOpaque`): they were cropped from three's canvas, blank under the engine, and `lab glow` read no glow on any item, every reading of it passing over nothing. A measure that reads pixels names the canvas it reads (`drawnCanvas` in `pixels.ts`), never `G.renderer.domElement`, which is three's (the pointer's target still).
 - `lobbyStart.ts`, `lobbyFrames.ts`: `lab lobbystart` lets the page's time pass between the frames it steps (`LabClock.flow`) and puts the browser's clock in `perfClock`'s place: the game times the slices it spreads over frames by them (`builtInSlices`, `tickDetail`, a warm-up's compile), and on the lab's clock, standing still, none ever ended, so a hero's whole build, 11 poses of a hall hero and every hero's simplified triangles each read as one task of 60 to 350 ms that a player's browser spreads over frames. What held the page between frames is the message round trips that ran a task (`untilResumed`), not the time a slice waited for a worker. Its ceiling is 25 ms (two warm-up tasks of up to 10 ms can run between two frames); the aim is 12. The heroes' fewer triangles are made in the game's worker under it (`detailOnPage(false)`), and on the page everywhere else in the lab, by the fixed clock (`detailOnPage` in `lab.ts` calls the game's where the tree has it: an A/B copies the lab's page code into main's tree, and a named import of an export main hasn't got stopped the page loading there). `--held` sets `WARM_BEHIND.heldMost` to 0, as a phone's GPU holds the frames behind which the lab's never does.
 - `music.ts`: the village's lobby plays the hour's battleground's track (`biomeOfHour`): each round holds the hour to its battleground's (`HOUR_OF`), and the lab's own hour had the forest's lobby play the crypt's.
-- `perf.ts`, `uploads.ts`: each phase says what a frame sent the GPU (`bufferData`, `bufferSubData`, the textures'
-  uploads: their calls and bytes, a `bufferSubData` by the length three gives it, its update range) and the buffers
-  whose version changed, by object and attribute (each sent again as it's drawn): on a phone's GPU a buffer written
-  while a frame queued still reads it holds the page. The village's frame at Very low sends some 40 KB of buffers
-  in 12 calls and 60 to 200 KB of textures, standing or walking alike: the particles' pools by their live part.
+- `perf.ts`, `uploads.ts`: each phase says what a frame sent the GPU: the engine's device's queue's writes
+  (`writeBuffer`, `writeTexture`, `copyExternalImageToTexture`: their calls and bytes, the queue's prototype wrapped as
+  the first count is asked), and the scene's buffers whose version changed, by object and attribute (each handed to the
+  engine again): on a phone's GPU a buffer written while a frame queued still reads it holds the page. They were the
+  WebGL context's calls, none under the engine: empty. The village at High sends some 375 to 470 KB of buffers a frame
+  in 50 to 60 calls (the particles' pools the most) and a 208 KB texture every other frame. Its draws and triangles
+  are the engine's (the scene's and the sun's map's), and what it calls compiled as it was timed is named: the
+  village's walk at High asked for two lit pipelines at 1 sample, culling back faces, not looked into.
 - `perf.ts`, `programSwitches.ts`, `matrixWalks.ts`: each phase counts the programs switched and the objects walked as well as the draws (`gl.useProgram` and three's `updateMatrixWorld` wrapped as the page loads; no switches on WebGPU): a switch sets again every uniform a program reads that its material's don't, and the walk went down every hidden part too. Exact counts, where the page's ms moved by a millisecond or two with the shared PC's load: compare those first, then time on the lent 4080 (`--exclusive`).
 - `programCost.ts`: a time is the browser's clock's (`__labClock.realNow`): by the page's `performance.now`, the lab's,
   every compile read 0 ms. Salted by a comment at the code's end, the 80 pipelines took 21.5 s here; the same salt
@@ -90,4 +93,24 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
 - `throws.ts`: the vine's shot lets the bow go `SHOT.loosedAfter` frames into the hold, drawn as far as it is: held for its whole draw and the quiver's fetch from the throw, the arrow left a frame after the vine let him go (on main too).
 - `uiCloudIdentity.ts`: the service's health is asked once a visit (`serviceHealth` in `loot/cloudApi.ts`), so the state forgets it before and after its stub answers: a state before it asked the lab's server, and Google's button stayed hidden in a run of every state, alone it passed.
 - `uiPerfAsk.ts`, `uiStates/decisionTouch.ts`: a canary's plant must land where it's judged: the prompt's moved to the window's top, onto the choice (moved down to the middle it left the choice on a 1080 screen, and went unseen on main), and the choice's padding is planted and judged on a short screen alone.
+- `villageBloomLow.ts`: the bloom's pixels are the engine's own sizes at the share it was told (`Levels.now`'s
+  `bloomSent`, Bulwark's post.rs), the bloom taken out by `rust.bloom`: it read three's bloom passes, 0 pixels both
+  ways. Low's level switched in play makes its plain set aside (`plainSet.ts`), 72 pipelines, waited for with frames
+  drawn (the switch begins as a frame tells the engine the level); and what a view first draws at Low asks for its
+  own, so the bloom's switches are counted from a frame of each view on.
+- `villageHallCull.ts`, `villageStillHeroes.ts`, `villageSweep.ts`: a frame is counted by the engine's own stats
+  (`countedFrame`: its scene's draws and triangles, the meadow's blades among them): it was three's draws round
+  `renderBufferDirect`, which three's WebGPU renderer hasn't got, and all three stopped there. The sweep's budgets were
+  read again so; the switches (`materialSwitches`, `programSwitches`) stay 0. The still heroes' frames hold the sun's
+  turns off (`rust.shadowTurns` 0): kept every other frame, the frames merged and apart differed by 0.5 to 1.1% with
+  the heroes the same to the pixel close. Stood on the square with the heroes warm and both standing, the game never
+  merged them under the engine (0 merged meshes; merged by the check's own `standHeroes`, 48 draws fewer): not looked
+  into.
+- `villageSunStep.ts`, `villageLampHandOver.ts`, `villageHeroShadow.ts`: a frame's draws are the engine's counts
+  (`FrameStats.lampFaces`, `moverFaces`, `shadowDraws`, `shadowTriangles`); a map drawn whole is told from the movers
+  over a copy by its triangles, the draws alike as the idling hero is among the movers. The moon's map at midnight is
+  drawn whole every frame, a Bulwark fault (`commands/village.md`). Between two lamps his moon shadow read 0% at every
+  pair, as the by-lamp reading's hold of the shadow's turns (`engineShadowTurns`) was missing there: a frame between
+  turns read the map from before he stopped casting. One lamp's shadow of him reads 3 to 14% between four pairs on
+  main and here, under the 15% the check asks.
 - `villageSweep.ts`, `villageBudgets.ts`: the culled frame is read first and the whole one right after it in the same moment, and the second reads fewer materials and programs switched (a cottage's 158 and 76 against 135 and 49), as what the first frame of a moment draws (most likely the shadow maps) isn't drawn again: the budgets are the culled frame's alone. The draws are the game's camera's alone (`countedFrame`) and agree. Square facing 0 reads 235 draws at midnight against 187 at noon at High in every boot read (187 both at Very low); its cause wasn't looked into. The canary's plant (the hall culling all it may) is set again before the moment's second culled frame: letting the culls run again sets the hall's back to the doorway, and the canary's moments never stood still.

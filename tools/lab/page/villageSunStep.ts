@@ -1,17 +1,19 @@
 // `lab village`'s sun's step: what the frame draws when the sun has moved far enough for its kept shadow map to be
 // drawn again (`world/arena.ts`, about every 20 s by the player's clock). From play, "FPS is not stable, even on high
-// end hardware": that frame drew the scene a second time into a pixel and every still light's shadow cube with the
-// sun's map, 870 draws and 4.1M triangles where its neighbours drew 450 and 0.2M, the arena's stage 28 to 41 ms of it
-// on a phone's CPU (`lab perf --village --throttle 4`) and 5 to 40 ms in players' reports (traces 0BAM-GTXN, KAW8-MQ8M,
-// Y8YJ-N70H). Then the frame as the step left the maps against every one of them drawn again at that moment: a map the
-// step left alone and kept anyway would hold the hero's shadow where he stood. `canary` asks for every still shadow at
-// the step, as it was: its cubes' draws must be counted.
+// end hardware": under three that frame drew the scene a second time into a pixel and every still light's shadow cube
+// with the sun's map, 870 draws and 4.1M triangles where its neighbours drew 450 and 0.2M, the arena's stage 28 to
+// 41 ms of it on a phone's CPU (`lab perf --village --throttle 4`) and 5 to 40 ms in players' reports (traces
+// 0BAM-GTXN, KAW8-MQ8M, Y8YJ-N70H). Under the engine it reads the engine's own counts: the sun's map is kept while
+// what casts into it and its view stand as they stood (Bulwark's `shadow_mark`), and the lamps' maps of what stands
+// still are drawn once, a lamp a frame (`engine/lampShadows.ts`): the step's frame draws the sun's map and no lamp's.
+// Then the frame as the step left the lamps' maps against every one of them drawn again at that moment. `canary` asks
+// for every lamp's map at the step: their faces must be counted.
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
+import { RUST } from '../../../src/engine';
+import { render } from '../../../src/core/renderer';
 import { holdHour } from '../../../src/game/clock';
-import { drawLampShadows } from '../../../src/world/props';
-import { keepMoonShadow } from '../../../src/world/moonShadow';
 import { groundHeight } from '../../../src/world/ground';
 import { drawFrame } from './light';
 import { changedShare } from './villageHallCull';
@@ -19,63 +21,88 @@ import type { LightsChecked } from './villageLights';
 
 /** the frames given for the place to settle at an hour */
 const SETTLE = 30;
-/** the hours the sun is stepped from, by day and by night (the lamps' cubes are kept then too) */
+/** the hours the sun is stepped from, by day and by night (the lamps' maps are kept then too) */
 const HOURS = [10, 0];
 /** how far the hour is moved for a step (h): past an eighth of a unit of the sun's place, well short of a new look */
 const STEP_HOURS = 0.25;
-/** the frames watched after the hour moves (the breakables' casters take one first) */
+/** the frames watched after the hour moves, and beside it (after `BESIDE_AFTER` frames: the first after a frame drawn
+ *  alone draws the sun's map whole) */
 const WATCHED = 4;
-/** the most draws the step's frame may make in the scene's pass over a frame beside it (the lab's frames draw none
- *  unless asked: what's counted is the still draw's own render) */
+const BESIDE_AFTER = 2;
+/** the share of the step's triangles in the sun's map past which a frame beside it drew the map whole */
+const WHOLE_SHARE = 0.6;
+/** the most draws the step's frame may make in the scene's pass over a frame beside it */
 const SCENE_OVER = 4;
 /** where he stands, on the square among its lamps, and where he stood before the step */
 const STAND: [number, number] = [-4, 4];
 const STOOD: [number, number] = [2, 3];
-/** the most of the frame that may differ between the maps as the step left them and all drawn again */
+/** the most of the frame that may differ between the lamps' maps as the step left them and all drawn again */
 const MOST_CHANGED = 0.002;
+/** the most frames drawn for every lamp's map to be drawn again, a lamp a frame (24 lamps and a place's own 4) */
+const AGAIN_FRAMES = 40;
 
-/** What a frame drew: the scene's pass (by the game's camera), the sun's map and the point lights' cubes. */
-export interface Drawn { scene: number; sun: number; cubes: number; triangles: number; faces: number }
-
-/** a frame that drew nothing */
-const nothingDrawn = (): Drawn => ({ scene: 0, sun: 0, cubes: 0, triangles: 0, faces: 0 });
-
-/** Every draw of `frames` frames, the busiest frame's; `faces`: the cube faces it drew into, and into `all` each
- *  frame's. */
-export async function busiestFrame(lab: Lab, frames: number, all: Drawn[] = []): Promise<Drawn> {
-  const gl = G.renderer;
-  const own = gl.renderBufferDirect.bind(gl);
-  let now = nothingDrawn();
-  let faces = new Set<string>();
-  gl.renderBufferDirect = (camera, scene, geometry, material, object, group) => {
-    if (scene === G.scene && camera === G.camera) now.scene++;
-    else if ((camera as THREE.OrthographicCamera).isOrthographicCamera) now.sun++;
-    else if (!(scene as THREE.Scene | null)?.isScene) {
-      now.cubes++;
-      faces.add(`${gl.getRenderTarget()?.texture.id ?? 0}:${gl.getActiveCubeFace()}`);
-    }
-    own(camera, scene, geometry, material, object, group);
-  };
-  let busiest = now;
-  try {
-    for (let f = 0; f < frames; f++) {
-      now = nothingDrawn();
-      faces = new Set();
-      const before = gl.info.render.triangles;
-      await lab.step(1);
-      now.triangles = gl.info.render.triangles - before;
-      now.faces = faces.size;
-      all.push(now);
-      if (now.scene + now.sun + now.cubes > busiest.scene + busiest.sun + busiest.cubes) busiest = now;
-    }
-  } finally {
-    gl.renderBufferDirect = own;
-  }
-  return busiest;
+/** What a frame drew, by the engine's counts: the scene's pass, the sun's map (its draws and triangles: a map kept
+ *  draws its movers alone over a copy of it, the hero idling among them, so its draws read alike whether it's drawn
+ *  whole or not), the lamps' maps of what stands still (faces) and of the movers (faces), and the scene's triangles. */
+export interface Drawn {
+  scene: number;
+  sun: number;
+  sunTriangles: number;
+  still: number;
+  movers: number;
+  triangles: number;
 }
 
-const said = (drawn: Drawn): string => `${drawn.scene} draws in the scene, ${drawn.sun} in the sun's map, `
-  + `${drawn.cubes} in the lights' cubes, ${Math.round(drawn.triangles / 1000)}k triangles`;
+/** The engine's bridge, which a village check needs. */
+function bridge(): NonNullable<typeof RUST.bridge> {
+  if (!RUST.bridge) throw new Error('lab: village: the engine is not drawing');
+  return RUST.bridge;
+}
+
+/** What the engine's last frame drew. */
+function lastDrawn(): Drawn {
+  const stats = bridge().stats;
+  return {
+    scene: stats.draws, sun: stats.shadowDraws, sunTriangles: stats.shadowTriangles, still: stats.lampFaces,
+    movers: stats.moverFaces, triangles: stats.triangles,
+  };
+}
+
+/** The most of each count of `a` and `b`. */
+function mostOf(a: Drawn, b: Drawn): Drawn {
+  return {
+    scene: Math.max(a.scene, b.scene), sun: Math.max(a.sun, b.sun), sunTriangles: Math.max(a.sunTriangles, b.sunTriangles),
+    still: Math.max(a.still, b.still), movers: Math.max(a.movers, b.movers), triangles: Math.max(a.triangles, b.triangles),
+  };
+}
+
+/** What each of `frames` frames drew, each into `all`; returns the most of each count a frame drew. */
+export async function busiestFrame(lab: Lab, frames: number, all: Drawn[] = []): Promise<Drawn> {
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  let busiest: Drawn | null = null;
+  try {
+    for (let frame = 0; frame < frames; frame++) {
+      await lab.step(1);
+      const now = lastDrawn();
+      all.push(now);
+      busiest = busiest ? mostOf(busiest, now) : now;
+    }
+  } finally {
+    lab.drawing = drawing;
+  }
+  return busiest ?? lastDrawn();
+}
+
+/** Every lamp's map of what stands still asked again (a canary's plant). */
+export const askLampsAgain = (): void => bridge().lampShadowsAgain();
+
+/** Thousands, rounded. */
+const thousands = (count: number): string => `${Math.round(count / 1000)}k`;
+
+const said = (drawn: Drawn): string => `${drawn.scene} draws in the scene (${thousands(drawn.triangles)} triangles), `
+  + `${drawn.sun} in the sun's map (${thousands(drawn.sunTriangles)}), ${drawn.still} lamps' faces of what stands `
+  + `still, ${drawn.movers} of the movers (the most of each a frame drew)`;
 
 /** The hero stood at `spot`. */
 export function standAt([x, z]: [number, number]): void {
@@ -84,17 +111,22 @@ export function standAt([x, z]: [number, number]): void {
 }
 
 /**
- * The frame now, the kept maps as the still draws left them, against the frame with every one drawn again: the share
- * that changed, at one moment (no frame runs between: the grass and the water move).
+ * The frame now, the lamps' maps as they were left, against the frame with every one drawn again: the share that
+ * changed, at one moment (the frames between are drawn at the same time: the grass and the water move).
  */
 export function leftAgainstDrawnAgain(lab: Lab): number {
   const left = drawFrame(lab);
-  drawLampShadows();
-  G.arena.update(0, G.time);
-  keepMoonShadow(false);
-  const allAgain = drawFrame(lab);
-  keepMoonShadow(true);
-  return changedShare(left, allAgain);
+  askLampsAgain();
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    for (let frame = 0; frame < AGAIN_FRAMES && bridge().lampShadowsNow().waiting > 0; frame++) render();
+  } finally {
+    lab.drawing = drawing;
+  }
+  const waiting = bridge().lampShadowsNow().waiting;
+  if (waiting > 0) throw new Error(`lab: village: ${waiting} lamps' maps still waiting after ${AGAIN_FRAMES} frames`);
+  return changedShare(left, drawFrame(lab));
 }
 
 /** The sun stepped by day and by night: its frame draws the sun's map again, and nothing else twice. */
@@ -109,28 +141,34 @@ export async function sunStepDrawsItsMap(lab: Lab, canary: boolean): Promise<Lig
       await lab.step(SETTLE);
       // (a frame drawn: the maps hold his shadow where he stands, as a player's do at a step)
       drawFrame(lab);
-      const beside = await busiestFrame(lab, WATCHED);
+      await busiestFrame(lab, BESIDE_AFTER);
+      const besideFrames: Drawn[] = [];
+      const beside = await busiestFrame(lab, WATCHED, besideFrames);
       holdHour(hour + STEP_HOURS);
-      if (canary) drawLampShadows();
+      if (canary) askLampsAgain();
       const step = await busiestFrame(lab, WATCHED);
       const line = `the sun stepped at ${hour}:00: ${said(step)}; a frame beside it: ${said(beside)}`;
       lines.push(line);
-      if (step.sun <= beside.sun) problems.push(`${line}: the sun's map wasn't drawn again (the measure's own)`);
+      // (a frame beside it drew the map whole where it drew as many triangles as the step's whole draw, near enough:
+      // the movers alone, over a copy, are a fifth of it)
+      const whole = besideFrames.filter((frame) => frame.sunTriangles > step.sunTriangles * WHOLE_SHARE).length;
+      if (whole > 0) {
+        problems.push(`${line}: the sun's map drawn whole on ${whole} of ${besideFrames.length} frames beside it`);
+      } else if (step.sunTriangles <= beside.sunTriangles) {
+        problems.push(`${line}: the sun's map wasn't drawn again (the measure's own)`);
+      }
       const twice = step.scene > beside.scene + SCENE_OVER;
-      const cubes = step.cubes > beside.cubes;
+      const lamps = step.still > 0;
       if (twice) problems.push(`${line}: the scene drawn again for it`);
-      if (cubes) problems.push(`${line}: the lights' cubes drawn again for it`);
-      caught ||= cubes;
-      // (then the lamps' own still draw, the sun's map left alone, his shadow in it where he stands)
-      drawFrame(lab);
-      drawLampShadows();
+      if (lamps) problems.push(`${line}: the lamps' maps of what stands still drawn again for it`);
+      caught ||= lamps;
       await lab.step(2);
       standAt(STAND);
       await lab.step(SETTLE);
       const changed = leftAgainstDrawnAgain(lab);
       const share = (of: number): string => `${(of * 100).toFixed(2)}%`;
-      const kept = `at ${hour}:00, walked off after the sun's step and the lamps' own draw, the frame as they left the `
-        + `maps against all drawn again: ${share(changed)} changed`;
+      const kept = `at ${hour}:00, walked off after the sun's step, the frame as it left the lamps' maps `
+        + `against all drawn again: ${share(changed)} changed`;
       lines.push(kept);
       if (changed > MOST_CHANGED) problems.push(`${kept}: over ${share(MOST_CHANGED)}`);
     }

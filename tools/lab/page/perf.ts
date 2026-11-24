@@ -19,10 +19,11 @@ import * as perfHud from '../../../src/ui/perfHud';
 import * as quality from '../../../src/core/quality';
 import * as renderer from '../../../src/core/renderer';
 import { G } from '../../../src/state';
+import { RUST } from '../../../src/engine';
 import { Player } from '../../../src/entities/player';
 import { heroDetail } from '../../../src/entities/models/armor';
 import { particles } from '../../../src/fx/particles';
-import { programsCompiledInGame } from '../../../src/core/shaders';
+import { lateCompiles, programsCompiledInGame } from '../../../src/core/shaders';
 import { bindKnown, foesAhead, holdFor, pressing, skillNamed } from './cast';
 import { standIn } from './light';
 import { toLobby } from './hallMoves';
@@ -30,7 +31,7 @@ import { quantile } from './timing';
 import { particleFill } from './particleFill';
 import { matrixWalks } from './matrixWalks';
 import { programSwitches } from './programSwitches';
-import { buffersChanged, uploadsBetween, uploadsSoFar, type UploadCount } from './uploads';
+import { buffersChanged, uploadsBetween, uploadsSoFar, writesOver, type UploadCount } from './uploads';
 import { materialSwitches } from './materialSwitches';
 import { reportRead } from './perfReport';
 import { gpuDone } from '../../../src/core/webgpu';
@@ -198,6 +199,14 @@ async function waitForGpu(): Promise<void> {
   await gpuDone(G.renderer);
 }
 
+/** What the engine's last frame drew: its draws and triangles, the sun's map's with the scene's. three's counts
+ *  (`info.render`) are its own, none under the engine. */
+function engineDrawn(): { draws: number; triangles: number } {
+  const stats = RUST.bridge?.stats;
+  if (!stats) return { draws: 0, triangles: 0 };
+  return { draws: stats.draws + stats.shadowDraws, triangles: stats.triangles + stats.shadowTriangles };
+}
+
 /** One frame run and timed by the browser's clock, waited out on the GPU, and what the perf overlay timed of it. */
 async function timedFrame(lab: Lab, input: () => Frame): Promise<Timed> {
   const now = window.__labClock.realNow;
@@ -217,7 +226,7 @@ async function timedFrame(lab: Lab, input: () => Frame): Promise<Timed> {
   const frame = now() - start;
   await nextTask();
   const timed = perfHud.lastPerfFrame();
-  const drawn = G.renderer.info.render;
+  const drawn = engineDrawn();
   const { fill, pixels } = particleFill();
   return {
     frame,
@@ -225,7 +234,7 @@ async function timedFrame(lab: Lab, input: () => Frame): Promise<Timed> {
     update: timed?.upd ?? 0,
     render: timed?.rnd ?? 0,
     stages: { ...(timed?.stages ?? {}) },
-    draws: drawn.calls,
+    draws: drawn.draws,
     switches,
     materials,
     walked,
@@ -566,30 +575,26 @@ const gpuMedian = (phase: Phase): number => spreadOf(gpuOf(phase).whole).median;
 /** A phase's median of what its frames drew. */
 const drawnMedian = (phase: Phase, pick: (frame: Timed) => number): number => spreadOf(phase.frames.map(pick)).median;
 
-/** What's sent to the GPU's buffers meanwhile: the bytes, by who sent them, the most first, while `run` runs. */
+/** What's sent to the GPU meanwhile (the engine's queue's writes, `uploads.ts`): the bytes, by who sent them, the
+ *  most first, while `run` runs. */
 async function uploadsOver(run: () => Promise<unknown>): Promise<[string, number][]> {
-  const gl = G.renderer.getContext() as WebGL2RenderingContext;
-  const own = gl.bufferSubData;
   const byWho = new Map<string, number>();
-  gl.bufferSubData = function counted(this: WebGL2RenderingContext, ...args: unknown[]): void {
-    const data = args[2] as ArrayBufferView;
-    const length = args[4] as number | undefined;
-    const elements = data.byteLength / ((data as unknown as { BYTES_PER_ELEMENT?: number }).BYTES_PER_ELEMENT ?? 1);
-    const bytes = length ? (length / elements) * data.byteLength : data.byteLength;
+  await writesOver(run, (bytes) => {
     const who = uploader();
     byWho.set(who, (byWho.get(who) ?? 0) + bytes);
-    (own as (...sent: unknown[]) => void).apply(this, args);
-  } as typeof gl.bufferSubData;
-  await run();
-  gl.bufferSubData = own;
+  });
   return [...byWho].sort((a, b) => b[1] - a[1]);
 }
 
-/** The game's function nearest this upload, from its stack, three's own left out. */
+/** Whether a stack's line is the game's own: three's and the engine's (its bridge, its module) left out. */
+const isGame = (line: string): boolean => line.includes('/src/') && !line.includes('three')
+  && !line.includes('/src/engine/');
+
+/** The game's function nearest this upload, from its stack. */
 function uploader(): string {
   const stack = new Error().stack?.split('\n') ?? [];
-  const game = stack.find((line) => line.includes('/src/') && !line.includes('three'));
-  return game?.trim().replace(/\(?http[^ ]*\/src\//, '').replace(/[?:].*$/, '') ?? 'three alone';
+  const game = stack.find(isGame);
+  return game?.trim().replace(/\(?http[^ ]*\/src\//, '').replace(/[?:].*$/, '') ?? 'the engine alone';
 }
 
 const uploadWords = (sent: [string, number][], frames: number) => sent
@@ -826,6 +831,7 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
   if (!options.lobby && !options.village && options.foes) await foesAhead(lab, options.biome, options.foes);
   const restore = await measuring(lab, options);
   const compiled = programsCompiledInGame();
+  const lateBefore = lateCompiles.length;
   const lines: string[] = [];
   const problems: string[] = [];
   try {
@@ -873,6 +879,6 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
     await restore();
   }
   const late = programsCompiledInGame() - compiled;
-  if (late > 0) problems.push(`${late} shaders compiled as it was timed`);
+  if (late > 0) problems.push(`${late} shaders compiled as it was timed: ${lateCompiles.slice(lateBefore).join('; ')}`);
   return { text: lines.join('\n'), problems };
 }

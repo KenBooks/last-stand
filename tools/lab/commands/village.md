@@ -92,14 +92,19 @@ the casting lights handed over as his walk hands them, each lamp giving at least
 the least 74%; `--canary` puts each lamp out for both its readings at the last stop); the frame with the sun's map
 kept (`sunShadowKept`, `world/moonShadow.ts`) against it redrawn whole at one moment, at three spots, the last by the
 chest: 0.00% changed (`--canary` leaves what moves out of it, 1.1 to 1.3%); the frame the sun's step draws
-(`sunStepDrawsItsMap`, `page/villageSunStep.ts`: the hour moved a quarter by day and at midnight, its draws counted by
-pass: the sun's map's alone, 24 draws and 301k triangles where it was 351 and 3.98M, the scene a second time and the
-lights' cubes with it; then, walked off after that step and a lamps' own still draw, the frame as they left the kept maps
-against all drawn again, 0.00% changed, 0.40% with a map kept that the draw had left alone, his shadow where he stood;
-`--canary` asks for every still shadow at the step); the lamps' lights handed on (`lampHandOverByFaces`,
-`page/villageLampHandOver.ts`: stood by a lamp at midnight, then by the lamp furthest from it, each frame's cube
-faces counted: one a frame, 13 draws and 293k triangles, where it was twelve in one, 154 and 3.52M; the frame after
-it against all drawn again 0.00% changed; `--canary` asks for every cube at once); the hall's heroes let go and wanted
+(`sunStepDrawsItsMap`, `page/villageSunStep.ts`: the hour moved a quarter by day and at midnight, read by the engine's
+own counts of each frame, the scene's pass, the sun's map's draws and triangles and the lamps' faces, of what stands
+still and of the movers, `FrameStats.lampFaces`, `moverFaces`: the step draws the sun's map whole, 226 draws and
+381k triangles where the frames beside it draw the movers over a copy, 69 and 72k, and no lamp's map of what stands
+still; then, walked off, the frame as the lamps' maps were left against all drawn again, 0.00% changed; `--canary`
+asks for every lamp's map at the step. Under three it counted its draws round `renderBufferDirect`, which three's
+WebGPU renderer hasn't got. **At midnight it fails**: the moon's map is drawn whole every frame, 221 draws and 372k
+triangles, as the movers' faces by the lamps (`LampShadows.moved`) are planned in the engine's one plan (Bulwark's
+`bake_lamp_face`), which forgets what stood still in the frame before; with `rust.lampShadows=0` it's the movers
+alone again); the hero come to other lamps (`lampHandOverByFaces`, `page/villageLampHandOver.ts`: stood by a lamp at
+midnight, then by the lamp furthest from it: no lamp's map of what stands still drawn again over 90 frames, 540
+faces of his shadow by his new lamps; the frame after it against all drawn again 0.00% changed; `--canary` asks for
+every lamp's map again as he arrives); the hall's heroes let go and wanted
 at once (`heroesStandInPieces`, `page/villageHeroesStand.ts`: they stand within 900 frames, no frame's update over
 60 ms by the browser's clock; `--canary` builds a hero whole in a frame); every curb's top facing up (`curbsFaceUp`,
 `--canary` reads them wound the other way); what the chest's hoard draws, read as the frame with it and without at one
