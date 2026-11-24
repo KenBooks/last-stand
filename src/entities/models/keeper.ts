@@ -99,6 +99,10 @@ const TUCKED = RAG_TUCKED;
 /** where the shirt's chest piece ends below the chest joint (its lowest row, `chestRows`) */
 const CHEST_HEM = -0.1;
 export const BODY_GROWN = { chest: [0.005, 0, 0.03], belly: [0.03, 0, 0.06] } as const;
+/** whether his head and face are made (by their workers, as his room is first built: world/tavernKeeper.ts), so
+ *  another of him can be built in slices with nothing to wait for (his talk card's portrait, ui/guide/folkPortraits.ts) */
+export const KEEPER_MADE = { head: false };
+
 /** whether his arms keep out of his body (`lab tavern --canary` turns it off, which its check must catch) */
 export const KEEPER_ARMS = { offBody: true };
 /** (a switch for `lab tavern --canary`: his walk with no lift and his hips not lowered, legs straight, which its knee

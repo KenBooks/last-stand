@@ -11,11 +11,11 @@ import type { SkillDef } from '../types';
 /** the keeper's name, and what he is (the talk card's, the guide's and the village object's) */
 export const KEEPER = { name: 'Bertram Tunwell', title: 'Keeper of the Ember & Oak' } as const;
 
-/** His face on his talk card, drawn from his model looking at the camera (Kenneth's round 3; made by the village
- *  folk's portraits of #702, `ui/guide/folkPortraits.ts` there, once merged): his head held level and square to the
- *  camera, his eyes on it (rad, his neck's and head's turns over his rest), and the camera's framing (m over his feet
- *  it looks at, how far before his face it stands, its field of view in degrees). Its place on the card is the emblem's
- *  box, a fixed 76 px (`.tk-emblem`, ui/screens/talk/_talk.scss), so nothing moves as the face comes in. */
+/** His face on his talk card, drawn from his model looking at the camera (Kenneth's round 3; the village folk's
+ *  portraits, `ui/guide/folkPortraits.ts`, which stage him and square his head and eyes to the camera themselves): his
+ *  neck's and head's turns over that (rad: his head a little down, as a man looks at one across his bar), and a framing
+ *  kept for a picture of his own (m over his feet it looks at, how far before his face, its field of view in degrees;
+ *  the folk share `FOLK_SHOT`'s now). */
 export const KEEPER_PORTRAIT = { neck: { pitch: 0, yaw: 0 }, head: { pitch: -0.04, yaw: 0 }, frame: { at: 1.66, far: 0.62, fov: 26 } } as const;
 
 /** a place on the room's floor: where he stands for a task, and which way he faces (rad: 0 to +z, a quarter to +x) */

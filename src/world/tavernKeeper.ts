@@ -26,7 +26,7 @@ import { createKit } from '../core/materials';
 import { sfx } from '../core/audio';
 import { floatText } from '../ui/floaters';
 import { particles, col } from '../fx/particles';
-import { keeperSteps, KEEPER_HEAD, RAG_TUCKED, type HandGoal, type Keeper, type KeeperPose } from '../entities/models/keeper';
+import { keeperSteps, KEEPER_HEAD, KEEPER_MADE, RAG_TUCKED, type HandGoal, type Keeper, type KeeperPose } from '../entities/models/keeper';
 import { readyHead } from '../entities/models/head';
 import { heroDetail } from '../entities/models/armor';
 import { readyFace } from '../core/textures';
@@ -1320,6 +1320,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
       // at the boot, they were the boot's to wait on for a house a visit may never open)
       // (handed to the slices to wait for, `builtInSlices`: spun on a flag, the lab's boot held its page in one task)
       yield Promise.all([readyHead(KEEPER_HEAD, heroDetail()), readyFace('keeper')]);
+      KEEPER_MADE.head = true;
       const built = yield* keeperSteps();
       if (keeper) return;
       keeper = built;

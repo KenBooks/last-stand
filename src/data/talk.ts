@@ -208,6 +208,7 @@ export const TUNWELL: Speaker = {
   id: 'keeper',
   name: KEEPER.name,
   title: KEEPER.title,
+  portrait: 'bertram',
   start: () => 'start',
   nodes: {
     start: {
