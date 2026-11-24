@@ -1,7 +1,7 @@
 // The game's materials handed to the engine: each described by its numbers, maps and key, look-alikes sharing one
 // engine material so their meshes batch, and a material with a look of its own (`custom.ts`) by its shader's numbers.
 import * as THREE from 'three';
-import type { SeeThrough } from '../core/seeThrough';
+import { COLUMN_SHAFT, type SeeThrough } from '../core/seeThrough';
 import type { Core } from './core';
 import { lookOf, LOOK_FLOATS, type RustLook } from './custom';
 import { TUNE } from './globals';
@@ -141,7 +141,12 @@ export class Materials {
     const multiplied = material.blending === THREE.CustomBlending && material.blendSrc === THREE.OneFactor;
     const blend = multiplied ? 3 : material.blending === THREE.AdditiveBlending ? 2 : material.transparent ? 1 : 0;
     const side = material.side === THREE.DoubleSide ? 1 : material.side === THREE.BackSide ? 2 : 0;
-    return blend | (side << 2) | (material.depthWrite ? 16 : 0);
+    // (what a column wears, its iron band and its capital, writes its depth whatever the game's own thinning
+    // says: with none written, the shaft's ghost, drawn after, lay over its own band, from play "why the
+    // stripes on columns disappear". Not the shaft: a flame behind it shows through its ghost)
+    const see = (material as { seeThrough?: SeeThrough }).seeThrough;
+    const worn = !!see?.reach && !!see.cover && !material.userData?.[COLUMN_SHAFT];
+    return blend | (side << 2) | (material.depthWrite || worn ? 16 : 0);
   }
 
   /** The engine's material for the numbers, maps and key in the scratch arrays: one for every material alike. */
