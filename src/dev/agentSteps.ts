@@ -8,7 +8,7 @@
 // Nothing here runs until the owner has accepted the agent (agent.ts holds every message till then).
 import * as THREE from 'three';
 import { G } from '../state';
-import { frameRect, frameShot, viewMode } from '../core/renderer';
+import { frameApart, frameRect, frameShot, viewMode } from '../core/renderer';
 import { qualityLevel, qualitySetting, resolutionSetting } from '../core/quality';
 import { perfHudStats } from '../ui/perfHud';
 import { frameParts } from '../perf/sceneParts';
@@ -169,13 +169,17 @@ export function look(): unknown {
 // --- picture -------------------------------------------------------------------------------------------------------
 /** how long a picture waits for a frame (ms): none is drawn while the game's tab is out of view */
 const SHOT_WAIT = 10_000;
-/** frames a placed camera is given before its picture: what the game draws by its camera's place comes in */
+/** frames a camera the player is left at is given before its picture: his frame settles on it */
 const SETTLE_FRAMES = 3;
 /** a picture's longest side by default (px), and the most its text may be to fit one message of the relay's */
 const SIDE = 1280, DATA_MOST = 3_600_000;
 
-/** The next frame as drawn, copied (shrunk to `side` px at its longest) before anything is drawn over it. */
-function shot(side: number): Promise<HTMLCanvasElement> {
+/** the lens a placed camera looks through: the free camera's (freeCam.ts) */
+const APART = { fov: 60, near: 0.05 };
+
+/** The next frame as drawn, copied (shrunk to `side` px at its longest) before anything is drawn over it; with
+ *  `apart`, the scene as that camera sees it in place of the frame, drawn beside it (`frameApart`). */
+function shot(side: number, apart?: THREE.PerspectiveCamera): Promise<HTMLCanvasElement> {
   return new Promise((resolve, reject) => {
     const take = (canvas: HTMLCanvasElement): void => {
       clearTimeout(timer);
@@ -189,11 +193,14 @@ function shot(side: number): Promise<HTMLCanvasElement> {
         resolve(out);
       } catch (error) { reject(error as Error); }
     };
+    const asked = apart ? { camera: apart, taken: take } : null;
     const timer = setTimeout(() => {
       if (frameShot.take === take) frameShot.take = null;
+      if (asked && frameApart.take === asked) frameApart.take = null;
       reject(new Error('no frame was drawn in 10 s: is the game\'s tab in view?'));
     }, SHOT_WAIT);
-    frameShot.take = take;
+    if (asked) frameApart.take = asked;
+    else frameShot.take = take;
   });
 }
 
@@ -221,28 +228,35 @@ function placeOf(camera: Record<string, unknown>): { at: THREE.Vector3; yaw: num
   return { at, yaw: Math.atan2(-way.x, -way.z), pitch: Math.asin(THREE.MathUtils.clamp(way.y, -1, 1)) };
 }
 
+/** A camera of its own at `place`, shaped as the game's is and looking through the free camera's lens. */
+function cameraAt(place: { at: THREE.Vector3; yaw: number; pitch: number }): THREE.PerspectiveCamera {
+  const camera = new THREE.PerspectiveCamera(APART.fov, G.camera.aspect, APART.near, G.camera.far);
+  camera.layers.mask = G.camera.layers.mask;
+  camera.position.copy(place.at);
+  camera.quaternion.setFromEuler(_euler.set(place.pitch, place.yaw, 0));
+  camera.updateMatrixWorld();
+  return camera;
+}
+
 /**
- * The frame as drawn (the game's view without the page's UI), as a JPEG or a PNG in base64. With `camera` it's taken
- * from there by the free camera, which is then put back as it was; `keep` leaves the owner looking from it, flying
- * and frozen as F9 leaves him.
+ * The frame as drawn (the game's view without the page's UI), as a JPEG or a PNG in base64. With `camera` it's the
+ * scene from there, whole as the free camera shows it, drawn beside the player's frame, which doesn't change
+ * (`frameApart`); `keep` takes the player there instead, flying and frozen as F9 leaves him, and the picture is his
+ * frame.
  */
 export async function picture(args: AgentStep): Promise<unknown> {
   const side = THREE.MathUtils.clamp(Number(args.side ?? SIDE) || SIDE, 64, 4096);
   const type = args.format === 'png' ? 'image/png' : 'image/jpeg';
-  let putBack: (() => void) | null = null;
+  let apart: THREE.PerspectiveCamera | undefined;
   if (args.camera && typeof args.camera === 'object') {
     const place = placeOf(args.camera as Record<string, unknown>);
-    const flying = freeCamOn();
-    _euler.setFromQuaternion(G.camera.quaternion, 'YXZ');
-    const was = { at: G.camera.position.clone(), yaw: _euler.y, pitch: _euler.x };
-    if (args.keep) hooks.fly(true);
-    else if (!flying) setFreeCam(true);
-    placeFreeCam(place.at, place.yaw, place.pitch);
-    if (!args.keep) putBack = flying ? () => placeFreeCam(was.at, was.yaw, was.pitch) : () => setFreeCam(false);
-    await frames(SETTLE_FRAMES);
+    if (args.keep) {
+      hooks.fly(true);
+      placeFreeCam(place.at, place.yaw, place.pitch);
+      await frames(SETTLE_FRAMES);
+    } else apart = cameraAt(place);
   }
-  let canvas: HTMLCanvasElement;
-  try { canvas = await shot(side); } finally { putBack?.(); }
+  const canvas = await shot(side, apart);
   const blob = await new Promise<Blob | null>((done) => canvas.toBlob(done, type, 0.9));
   if (!blob) throw new Error('picture: the frame gave no picture');
   const data = await base64Of(blob);

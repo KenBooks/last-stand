@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { lightTheLamps } from './lamps';
 import { aimSight } from './sight';
+import { setWholeView, wholeView } from './wholeView';
 import { clearOverFrame, countOverPass, holdSceneTarget, makeWebGPURenderer, overFrameUncleared } from './webgpu';
 import { G } from '../state';
 import { bootRust, drawRust, rustFrame, rustPlain, rustSamples, RUST } from '../engine';
@@ -1184,6 +1185,42 @@ function shotTaken(from: HTMLCanvasElement): void {
   take(from);
 }
 
+/**
+ * A picture of the scene from another camera, drawn apart from the frame (the developer mode's invited agent,
+ * dev/agentSteps.ts; nothing sets it in production): the next frame draws the scene from `camera` first, whole as the
+ * free camera shows it (core/wholeView.ts), hands that picture over, and then draws the frame as ever from the game's
+ * own camera, all in the frame's one task. The page shows what a task drew last, so the player's view never changes
+ * (flown there by the free camera for three frames, a picture was a flicker to him: "I also saw flicker in the
+ * scene... think we have a bug").
+ */
+export const frameApart = {
+  take: null as { camera: THREE.PerspectiveCamera; taken(canvas: HTMLCanvasElement): void } | null,
+};
+/** The scene drawn from the camera of the picture asked for, and handed over; the game's own view set back. */
+function drawApart(width: number, height: number, graded: Parameters<typeof drawRust>[6] & object): void {
+  const ask = frameApart.take;
+  if (!ask) return;
+  frameApart.take = null;
+  const whole = wholeView();
+  setWholeView(true);
+  aimSight(ask.camera);
+  // (the scene alone: none of what the frame lays over the player's own view, his arms, a blow's red, low health's
+  // grey and blood, photo mode's look)
+  const plain = {
+    ...graded, arms: null, hurt: 0, low: 0,
+    look: graded.look && { ...graded.look, on: false },
+    edges: graded.edges && { ...graded.edges, reach: 0 },
+  };
+  try {
+    drawRust(G.scene, ask.camera, G.time, width, height, gl, plain);
+    const frame = rustFrame(gl.domElement, false);
+    if (frame) ask.taken(frame);
+  } finally {
+    setWholeView(whole);
+    aimSight(G.camera);
+  }
+}
+
 /** what marks each of the render's passes as a part of the frame (`markPassesWith`; none until the game sets it) */
 let framePart: (name: string) => void = () => {};
 
@@ -1245,6 +1282,8 @@ export function render(): void {
     },
     edges: { mask: u.tBlood.value, reach: (u.uLow.value as number) * (1 + 0.06 * (u.uBeat.value as number)) },
   };
+  // (a picture asked for from another camera: drawn first, the frame's own draw after it is what the page shows)
+  if (frameApart.take) drawApart(pixels.width, pixels.height, graded);
   drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded);
   // (a photo's picture: the engine's frame, taken before anything is drawn over it)
   if (frameShot.take) {
