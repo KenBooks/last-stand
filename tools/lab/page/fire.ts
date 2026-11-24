@@ -720,7 +720,7 @@ async function gameViewCost(lab: Lab, biome: BiomeId, fire: Fire, at: THREE.Vect
   const drawing = lab.drawing;
   lab.drawing = true;
   try {
-    return await flameCost(G.renderer, fire.parts, () => renderer.render());
+    return await flameCost(fire.parts, () => renderer.render());
   } finally {
     lab.drawing = drawing;
     await standIn(lab, { biome, view: 'top', facing, at: [at.x, at.y] });
@@ -743,7 +743,7 @@ async function levelCosts(lab: Lab, biome: BiomeId, fire: Fire, canary: boolean)
     for (const level of COST_LEVELS) {
       useQuality(level);
       await lab.step(LEVEL_SETTLE);
-      const beside = await timedFrom(lab, fire, shots.beside, (draw) => flameCost(G.renderer, fire.parts, draw));
+      const beside = await timedFrom(lab, fire, shots.beside, (draw) => flameCost(fire.parts, draw));
       lines.push(`  ${level}:`, costLine(beside, 'from beside them'));
       if (canary && level === 'high' && beside) {
         problems.push(...(await costCanary(lab, fire, shots.beside, beside)).map((missed) => `${biome}: ${missed}`));
@@ -760,7 +760,7 @@ async function levelCosts(lab: Lab, biome: BiomeId, fire: Fire, canary: boolean)
  *  if not. */
 async function costCanary(lab: Lab, fire: Fire, shot: Shot, cost: FlameCost): Promise<string[]> {
   const single = cost.shown - cost.hidden;
-  const planted = await timedFrom(lab, fire, shot, (draw) => canaryCost(G.renderer, fire.parts, draw));
+  const planted = await timedFrom(lab, fire, shot, (draw) => canaryCost(fire.parts, draw));
   if (planted === null || planted <= 0 || planted < single * CANARY_COST_LEAST) {
     return [`canary: the flames drawn over went unseen (${planted?.toFixed(2)} ms against their own `
       + `${single.toFixed(2)})`];
@@ -815,7 +815,7 @@ export async function fire(lab: Lab, options: FireOptions): Promise<Report> {
   const column = columnOf(fire, size.width);
   const plants = reachingInto(group, G.camera, column);
   const cost = options.cost
-    ? await timedFrom(lab, fire, shots.beside, (draw) => flameCost(G.renderer, fire.parts, draw))
+    ? await timedFrom(lab, fire, shots.beside, (draw) => flameCost(fire.parts, draw))
     : undefined;
   const fromGame = options.cost ? await gameViewCost(lab, biome, fire, stand, facing) : undefined;
   const turned = readTurning(lab, fire, size.height);
