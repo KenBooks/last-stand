@@ -2,7 +2,7 @@
 // hides the hero, each kind's numbers written to the frame's globals as the game has them (core/seeThrough.ts).
 import * as THREE from 'three';
 import { BLEND_GONE, SIGHT_CONE, coverRuleNow, type SeeThrough } from '../core/seeThrough';
-import { SIGHT, seesInAt } from '../core/sight';
+import { SIGHT, nearDoorAt, seesInAt } from '../core/sight';
 import { HALL, TERRACE } from '../data/village';
 import type { Core } from './core';
 import { GLOBALS, TUNE } from './globals';
@@ -115,7 +115,9 @@ export class SeeKinds {
       // (and a wall with the door he stands before and sees in through opens whole, to the rule's ghost: from
       // play, "he just needs to see whole wall behind it")
       // (not till the pipelines its room's layers are drawn apart with have compiled, `ROOMS`)
-      if (cover) g[at + 6] = ROOMS.ready && see.walls && see.door ? this.seesIn(see.door.value) : 0;
+      // (and from in its room by the door, by how far he stands in the room: "same problem but the other way
+      // around")
+      if (cover) g[at + 6] = ROOMS.ready && see.walls && see.door ? this.seesIn(see.door.value, inside) : 0;
       // (`rust.see` off: nothing of any kind thinned; `rust.housesWhole`: nothing of a house's, a harness's frame)
       if (!TUNE.see || (TUNE.housesWhole && see.cover)) { g[at + 2] = 0; g[at + 6] = 0; g[at + 10] = 0; g[at + 18] = 0; }
     }
@@ -128,9 +130,11 @@ export class SeeKinds {
     return coverRuleNow() * (1 - TUNE.houseLeft);
   }
 
-  /** How far he stands before the door between `jambs` (x, z, x, z) seeing in through it (`seesInAt`). */
-  private seesIn(jambs: THREE.Vector4): number {
-    return seesInAt((jambs.x + jambs.z) / 2, jambs.y);
+  /** How far he stands by the door between `jambs` (x, z, x, z) seeing through it: before it, seeing in
+   *  (`seesInAt`), or `inside` its room (0 to 1), seeing out (`nearDoorAt`). */
+  private seesIn(jambs: THREE.Vector4, inside: number): number {
+    const x = (jambs.x + jambs.z) / 2;
+    return Math.max(seesInAt(x, jambs.y), inside * nearDoorAt(x, jambs.y));
   }
 
   /** when the kinds were last written (the page's ms), and how far he stands in each kind's room, 0 to 1 */

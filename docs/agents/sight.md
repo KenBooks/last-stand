@@ -85,6 +85,8 @@ over him, a roof in three layers, and a doorway into a room he sees a sector of.
    the stair the wall still opens over the wedge he sees alone. A cover's pixel at the eye's height or over it
    opens by this rule alone: its line never comes down, and judged by floor behind it the hall's ceiling opened.
    `lab houserule` pictures the front wall alone in the six views that stand him there (14 to 20% of it left).
+   From in the hall by the door it opens whole the same, by how near the door he stands (`nearDoorAt`; from play,
+   "same problem but the other way around"): pictured, no view of the check reads it from inside.
 
 Held by `npm run lab -- houserule` (its four `the portico case` views, with the terrace, the stair, the hall's
 inside and the cottages) and by `lab rustcheck`, which runs the four with a canary; and in the engine's own lab,

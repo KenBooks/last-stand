@@ -6,9 +6,15 @@
 // and the heroes were 128 of the frame's 429 draws, all drawn whatever the doorway showed of them).
 import * as THREE from 'three';
 import { fadedWhole } from '../core/seeThrough';
-import { seesInAt } from '../core/sight';
-import { HALL, TERRACE } from '../data/village';
+import { SIGHT, nearDoorAt, seesInAt } from '../core/sight';
+import { HALL, TERRACE, inHall } from '../data/village';
 import type { Doorway } from './doorways';
+
+/** Whether he stands in the hall by its door, its front wall opened whole for what he sees out to. */
+function byDoorInside(): boolean {
+  const from = SIGHT.uSightFrom.value;
+  return inHall(from.x, from.y) && nearDoorAt(TERRACE.x, HALL.inFront) > 0;
+}
 
 /** The hall's doorway (`cutaway`: its roof and front wall, cut away when the camera isn't under them). */
 export function hallDoorway(cutaway: readonly THREE.Object3D[]): Doorway {
@@ -38,7 +44,7 @@ export function hallDoorway(cutaway: readonly THREE.Object3D[]): Doorway {
     // room past the doorway's own view wasn't drawn, and the meadow showed through the thinned wall in the
     // room's far corners, from play "do you [see the] slanted roof effect")
     whole: () => cutaway.every((part) => part.visible) && !fadedWhole('hallFront') && !fadedWhole('hallRoof')
-      && seesInAt(TERRACE.x, HALL.inFront) <= 0,
+      && seesInAt(TERRACE.x, HALL.inFront) <= 0 && !byDoorInside(),
     wallsSaid: () => `roof and front shown ${cutaway.every((part) => part.visible)}, `
       + `front thinned ${fadedWhole('hallFront')}, roof thinned ${fadedWhole('hallRoof')}`,
   };

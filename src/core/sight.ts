@@ -444,11 +444,17 @@ export const DOOR_WHOLE = { within: 3.2, past: 5.2 };
  *  see whole wall behind it"), and its room is drawn whole meanwhile (`world/hallPortal.ts`). */
 export function seesInAt(x: number, z: number): number {
   const cast = SIGHT.uSightDoor.value;
-  const from = SIGHT.uSightFrom.value;
   if (Math.hypot(cast.x - x, cast.y - z) > 1.5) return 0;
+  return SIGHT.uSightDoorOn.value * nearDoorAt(x, z);
+}
+
+/** How near the door whose inner sill's middle is (x, z) he stands, 0 to 1 (`DOOR_WHOLE`), whichever side of it:
+ *  stood in the room by its door he sees out as he saw in, and the wall opens whole the same (from play, "same
+ *  problem but the other way around"). */
+export function nearDoorAt(x: number, z: number): number {
+  const from = SIGHT.uSightFrom.value;
   const away = Math.hypot(from.x - x, from.y - z);
-  const near = Math.min(1, Math.max(0, (DOOR_WHOLE.past - away) / (DOOR_WHOLE.past - DOOR_WHOLE.within)));
-  return SIGHT.uSightDoorOn.value * near;
+  return Math.min(1, Math.max(0, (DOOR_WHOLE.past - away) / (DOOR_WHOLE.past - DOOR_WHOLE.within)));
 }
 
 /** how far the game has the fog on (0 to 1): `uSightOn`, but in a whole view, which draws none */
