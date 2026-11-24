@@ -332,6 +332,99 @@ export function heroFall(j: Joints, k: number, dirSign = -1): void {
   // (his head turned and rolled to his right)
   j.neck.rotation.y += limp * 0.45;
   j.head.rotation.z -= limp * 0.18;
+  // (what each hand holds laid down along the ground: held as in life, the mage's staff stood up out of his flung
+  // hand, its foot half a metre into the floor)
+  if (limp > 0) {
+    j.body.updateMatrixWorld(true);
+    layHeldFlat(j.handL, limp);
+    layHeldFlat(j.handR, limp);
+  }
+  liftOffFloor(j);
+}
+
+const _inv = new THREE.Matrix4();
+const _at = new THREE.Vector3();
+const _box = new THREE.Box3();
+const _corner = new THREE.Vector3();
+const _axis = new THREE.Vector3();
+const _flat = new THREE.Vector3();
+const _turn = new THREE.Quaternion();
+const _parentTurn = new THREE.Quaternion();
+const _handTurn = new THREE.Quaternion();
+/** how much further than the rig's radii a lying hero's gear reaches toward the ground (m: `liftOffFloor`), each a
+ *  little over what the three heroes lying read (a boot 3.7 cm past the ankle's, the ranger's quiver 2.3 cm past the
+ *  chest's, the mage's crystal 1.1 cm past the hand's) */
+const LIFT_MORE = { foot: 0.045, back: 0.03, hand: 0.015 };
+/** an item a hand holds shorter than this (m) is left as held: a fist, a dagger's stub */
+const LAID_FROM = 0.35;
+
+/**
+ * What `hand` holds turned to lie along the ground, by `share` (0 as held, 1 lying flat): the long axis of its bounds,
+ * in the hand's own frame, levelled in the world's by turning the hand, its heading kept. Its matrices must be current.
+ */
+function layHeldFlat(hand: THREE.Group, share: number): void {
+  _box.makeEmpty();
+  _inv.copy(hand.matrixWorld).invert();
+  hand.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.visible || o === hand) return;
+    const geometry = mesh.geometry;
+    if (!geometry.boundingBox) geometry.computeBoundingBox();
+    const b = geometry.boundingBox!;
+    for (let c = 0; c < 8; c++) {
+      _corner.set(c & 1 ? b.max.x : b.min.x, c & 2 ? b.max.y : b.min.y, c & 4 ? b.max.z : b.min.z);
+      _box.expandByPoint(_corner.applyMatrix4(mesh.matrixWorld).applyMatrix4(_inv));
+    }
+  });
+  if (_box.isEmpty()) return;
+  _box.getSize(_axis);
+  const longest = Math.max(_axis.x, _axis.y, _axis.z);
+  if (longest < LAID_FROM) return;
+  _axis.set(_axis.x === longest ? 1 : 0, _axis.y === longest && _axis.x !== longest ? 1 : 0,
+    _axis.z === longest && _axis.x !== longest && _axis.y !== longest ? 1 : 0);
+  // (the axis in the world, and the same heading level with the ground)
+  _axis.transformDirection(hand.matrixWorld);
+  _flat.set(_axis.x, 0, _axis.z);
+  if (_flat.lengthSq() < 1e-6) _flat.set(1, 0, 0);
+  _flat.normalize();
+  _turn.setFromUnitVectors(_axis, _flat);
+  _turn.slerp(_handTurn.identity(), 1 - share);
+  // (turned in the world: the hand's new turn in its parent's frame)
+  hand.parent!.getWorldQuaternion(_parentTurn);
+  hand.getWorldQuaternion(_handTurn);
+  _handTurn.premultiply(_turn);
+  hand.quaternion.copy(_parentTurn.invert().multiply(_handTurn));
+  hand.updateMatrixWorld(true);
+}
+
+/**
+ * A posed body raised so no part of it lies under the floor (#751's review: "Can he lie fully above ground?"): the
+ * body turns about his feet, so tipped back his spine lay along the ground's line, half his body in it. Each joint's
+ * height over his feet less the part's own thickness there (the rig's radii; the torso by its depth) is read, and he's
+ * lifted by the lowest's depth under the floor, nothing while he stands.
+ */
+function liftOffFloor(j: Joints): void {
+  const P = j.P;
+  // (past the rig's own radii, what the heroes wear and hold reaches further: a boot's sole and toe past the ankle,
+  // a quiver or a pack on the back, a staff's crystal by the hand; read off the drawn models lying, `LIFT_MORE`)
+  const M = LIFT_MORE;
+  const back = P.chestD + M.back, foot = P.shinR + M.foot, hand = P.handR + M.hand;
+  const parts: [THREE.Object3D, number][] = [
+    [j.hips, P.chestD], [j.spine, back], [j.chest, back], [j.neck, P.headR * 0.5], [j.head, P.headR],
+    [j.shoulderL, P.upperR], [j.shoulderR, P.upperR], [j.elbowL, P.foreR], [j.elbowR, P.foreR],
+    [j.handL, hand], [j.handR, hand], [j.thighL, P.thighR], [j.thighR, P.thighR],
+    [j.kneeL, P.shinR], [j.kneeR, P.shinR], [j.ankleL, foot], [j.ankleR, foot],
+  ];
+  j.body.updateMatrixWorld(true);
+  _inv.copy(j.root.matrixWorld).invert();
+  let lowest = 0;
+  for (const [joint, thick] of parts) {
+    const y = _at.setFromMatrixPosition(joint.matrixWorld).applyMatrix4(_inv).y - thick;
+    lowest = Math.min(lowest, y);
+  }
+  if (lowest >= 0) return;
+  j.body.position.y -= lowest;
+  j.body.updateMatrixWorld(true);
 }
 
 /** Smoothstep of a share already within 0 to 1. */
