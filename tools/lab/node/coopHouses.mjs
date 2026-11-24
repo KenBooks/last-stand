@@ -54,6 +54,7 @@ export async function partnerInHouse(pair, callPage, lines, { tags, canary = fal
   const after = await callPage(host, 'coopHouseSeen', { id: HOUSE });
   if (after.drawn || after.minimap.length) found.push(`the ${HOUSE}'s marker stays after ${guestTag} came out`);
   lines.push(`${guestTag} out again: the marker ${after.drawn ? 'still drawn' : 'gone'}`);
+  const quiet = await yardUnseenInHouse(pair, callPage, lines, { tags, canary, picture });
 
   // --- #740: party created inside a building -> every joiner spawns inside that same building ---
   for (const page of pair.pages) await callPage(page, 'coopPartyLeave');
@@ -144,11 +145,72 @@ export async function partnerInHouse(pair, callPage, lines, { tags, canary = fal
   lines.push(`party outside, ${guestTag} joined from ${HOUSE}: now in ${guestOut.room ?? 'village'}, `
     + `host sees ${hostOut.partnersVisible}, ${guestTag} sees ${guestOut.partnersVisible}`);
 
-  if (!canary) return [...problems, ...found.map((p) => `houses: ${p}`), ...spawnFound.map((p) => `houses: ${p}`)];
+  if (!canary) {
+    return [...problems, ...found.map((p) => `houses: ${p}`), ...spawnFound.map((p) => `houses: ${p}`), ...quiet];
+  }
+  const caughtYard = quiet.length > 0;
+  lines.push(`canary: the yard kept going in the ${HOUSE} ${caughtYard ? 'caught' : 'went unseen'}`);
+  if (!caughtYard) problems.push('houses canary: the yard kept going in a house went unseen');
   const caughtMark = found.some((p) => p.includes('shows no marker'));
   const caughtSpawn = spawnFound.some((p) => p.includes('spawned outside'));
   lines.push(`canary: the marker taken away ${caughtMark ? 'caught' : 'went unseen'}; guest outside ${HOUSE} ${caughtSpawn ? 'caught' : 'went unseen'}`);
   if (!caughtMark) problems.push('houses: canary: the lost marker went unseen');
   if (!caughtSpawn) problems.push(`houses: canary: guest outside ${HOUSE} went unseen`);
+  return problems;
+}
+
+/** the frames both heroes cast every skill in the yard before one goes in, and those read in the house after, and how
+ *  often they're read */
+const CASTING_FRAMES = 360;
+const INSIDE_FRAMES = 360;
+const READ_EVERY = 30;
+/** what of the yard a game in a house is read for (`coopYardSeen` in page/coopHouses.ts) */
+const YARD_PARTS = ['projectiles', 'effects', 'particles', 'lights', 'numbers', 'channels', 'spent'];
+
+/**
+ * Nothing of the training yard shows in a house (from play: "make sure you cant see any casts while inside the village
+ * houses, that anyone might be casting at the training grounds"): both heroes cast every skill of theirs in the yard,
+ * channels held, then `inside` walks into the house while `outside` casts on, and `inside`'s game is read each half
+ * second for anything of the yard's (its projectiles, effects, particles and pooled lights by the yard, the numbers
+ * floating, a channel held). Played both ways round, host inside and guest. Returns the problems found.
+ */
+async function yardUnseenInHouse(pair, callPage, lines, { tags, canary, picture }) {
+  const problems = [];
+  const [host, guest] = pair.pages;
+  const ways = [
+    { inside: host, outside: guest, who: tags[0] },
+    { inside: guest, outside: host, who: tags[1] },
+  ];
+  for (const [turn, { inside, outside, who }] of ways.entries()) {
+    for (const page of [host, guest]) {
+      await callPage(page, 'coopPractise');
+      await callPage(page, 'coopCastEveryInLobby', { on: true });
+    }
+    await pair.run(CASTING_FRAMES);
+    const before = await callPage(inside, 'coopYardSeen');
+    if (canary) await callPage(inside, 'coopKeepVillage', { kept: true });
+    await callPage(inside, 'coopCastEveryInLobby', { on: false });
+    await callPage(inside, 'coopEnterHouse', { id: HOUSE });
+    const most = Object.fromEntries(YARD_PARTS.map((part) => [part, 0]));
+    for (let read = 0; read < INSIDE_FRAMES; read += READ_EVERY) {
+      await pair.run(read === 0 ? 2 : READ_EVERY);
+      const seen = await callPage(inside, 'coopYardSeen');
+      if (seen.room !== HOUSE) throw new Error(`lab: coop: houses: ${who} never went into the ${HOUSE}`);
+      for (const part of YARD_PARTS) most[part] = Math.max(most[part], seen[part]);
+    }
+    if (turn === 0) await picture('yard-from-house');
+    if (canary) await callPage(inside, 'coopKeepVillage', { kept: false });
+    await callPage(outside, 'coopCastEveryInLobby', { on: false });
+    await callPage(inside, 'coopLeaveHouse');
+    await pair.run(HEARD_FRAMES);
+    const said = YARD_PARTS.map((part) => `${part} ${most[part]}`).join(', ');
+    const going = YARD_PARTS.map((part) => `${part} ${before[part]}`).join(', ');
+    lines.push(`${who} in the ${HOUSE}, the yard cast in: of the yard's, at most ${said} (in the yard: ${going})`);
+    if (before.projectiles + before.effects + before.particles === 0) {
+      throw new Error(`lab: coop: houses: nothing was cast in the yard before ${who} went in`);
+    }
+    const seen = YARD_PARTS.filter((part) => most[part] > 0);
+    if (seen.length) problems.push(`houses: ${who} in the ${HOUSE} shows the yard's ${seen.join(', ')}`);
+  }
   return problems;
 }

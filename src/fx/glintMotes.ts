@@ -258,6 +258,7 @@ export function glintMotes(player: Player): void {
     const made = new Motes();
     motes.set(player, made);
     addEffect({
+      standing: true,
       update: (dt) => made.step(dt),
       dispose: () => {
         made.dispose();

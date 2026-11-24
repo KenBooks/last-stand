@@ -88,8 +88,35 @@ export function coopCastInLobby(_lab: Lab, { on }: { on: boolean }): void {
 
 /** The input of lobby frame `frame` (`coopCastInLobby`), or null when this game's hero isn't casting there. */
 export function lobbyCastInput(frame: number): Frame | null {
+  if (castingEvery && G.mode === 'menu') return everySkillInput(frame);
   if (!castingInLobby || G.mode !== 'menu') return null;
   return { keys: frame % CAST_EVERY === 0 ? [SKILL_KEYS[0]] : [] };
+}
+
+/** how long each of the hero's skills is held in turn as he casts them all (frames: a channel runs, the rest cast),
+ *  and the frames between */
+const EACH_HELD = 40;
+const EACH_APART = 10;
+/** whether this game's hero casts every skill of his in turn in the training yard (`coopCastEveryInLobby`) */
+let castingEvery = false;
+
+/** This game's hero casts every skill of his in turn, each held a while (on), or stops (off). */
+export function coopCastEveryInLobby(_lab: Lab, { on }: { on: boolean }): void {
+  castingEvery = on;
+}
+
+/** The input of frame `frame` as he casts every skill in turn, aimed ahead of him at the yard's middle. */
+function everySkillInput(frame: number): Frame {
+  const turn = Math.floor(frame / (EACH_HELD + EACH_APART));
+  const key = SKILL_KEYS[turn % SKILL_KEYS.length];
+  const holding = frame % (EACH_HELD + EACH_APART) < EACH_HELD;
+  const village = village_ as { yardToWorld?: (x: number, z: number) => [number, number] };
+  const [x, z] = village.yardToWorld ? village.yardToWorld(0, 2) : [G.player.pos.x, G.player.pos.z + 2];
+  const aim = new THREE.Vector3(x, 0, z);
+  if (!holding) return { aim };
+  if (key === 'mouse0') return { m0: true, aim };
+  if (key === 'mouse2') return { m2: true, aim };
+  return { keys: [key], aim };
 }
 
 /** What this game's name tags showed, frame by frame: the heroes shown in the camera's view, and those without their

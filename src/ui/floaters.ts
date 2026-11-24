@@ -300,6 +300,9 @@ const layoutHooks: (() => void)[] = [];
 /** Runs `hook` every frame where the labels are placed: after the camera, before they're drawn. */
 export function onLayout(hook: () => void): void { layoutHooks.push(hook); }
 
+/** For a harness (tools/lab): how many numbers and words float now. */
+export const floatersShown = (): number => floats.length;
+
 export function clearFloaters(): void {
   for (const f of floats) f.label.remove();
   floats.length = 0;

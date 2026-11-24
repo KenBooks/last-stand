@@ -272,6 +272,7 @@ function start(): void {
   G.scene.add(line, dots);
   uniforms.uAlpha.value = 0;
   addEffect({
+    standing: true,
     update(dt) {
       const on = G.time - shownAt < 0.05;
       const a = uniforms.uAlpha;
