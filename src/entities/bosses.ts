@@ -6,6 +6,9 @@ import { FOE_FILE, type EnemyId } from '../data/enemies';
 
 /** each boss's file, to load */
 const CHUNKS = import.meta.glob('./bosses/*.ts');
+/** what a boss's file may export: `ready`, what its models need made before one is built (the Twins' belt skull,
+ *  simplified once its simplifier has loaded), waited for as it loads */
+interface BossFile { ready?: Promise<unknown> }
 const chunkOf = (id: EnemyId): string => `./bosses/${FOE_FILE[id]}.ts`;
 
 /** the boss files loaded (or loading) */
@@ -24,7 +27,10 @@ export function loadFoe(id: EnemyId): Promise<void> {
   const chunk = chunkOf(id);
   let load = loading.get(chunk);
   if (!load) {
-    load = CHUNKS[chunk]().then(() => { loaded.add(chunk); });
+    load = CHUNKS[chunk]().then(async (file) => {
+      await (file as BossFile).ready;
+      loaded.add(chunk);
+    });
     loading.set(chunk, load);
   }
   return load;

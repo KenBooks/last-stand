@@ -18,6 +18,9 @@
 //   It holds a bronze reliquary before its chest, a skull behind its grille, and five skulls circle it: they spin
 //   faster and the casket is raised as a volley builds, and raised high, its light swelling, through a mend.
 // Both stagger and fold up as they fall; from the second phase (the other fallen) its eyes and runes burn brighter.
+// Each carries four small skulls on a rope at its waist (`root.userData.belt`, laid by the game each frame: Slab's
+// bombs, their eyes a hot orange; Reliquary's poison, a sickly green), a hand unhooking one, drawing it back over its
+// shoulder and throwing it (the `bomb` and `poison` actions); the one left standing at half wears its brother's too.
 // Drawn in their crowds (models/crowd.ts): every change is a joint's place or a glow's strength.
 import * as THREE from 'three';
 import { additive, createKit } from '../../core/materials';
@@ -28,6 +31,7 @@ import {
   drape, femur, finger, forearm, humerus, jaw, JAW_HINGE, mirrored, pelvis, scapula, skull, SKULL_EYE, SKULL_NECK,
   sternum, THIRD_EYE, tibia, toned, twinSkull, vertebra, type SkullLook,
 } from './ossuary';
+import { BELT_K, beltSkullMesh, HOOK_TOP, SKULL_DROP, type SkullKind } from './beltSkull';
 import type { AnimState, MaterialKit, Model } from '../../types';
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -81,12 +85,13 @@ function kept(key: string, f: () => THREE.BufferGeometry): THREE.BufferGeometry 
 
 /** A skull with its jaw shut on `parent`, `k` times a man's, facing +z turned by `rot`, glowing eyes in its sockets:
  *  the small skulls of a mantle or an orbit. */
-function smallSkull(b: Body, parent: THREE.Object3D, at: P3, rot: P3, k: number): void {
+function smallSkull(b: Body, parent: THREE.Object3D, at: P3, rot: P3, k: number,
+  [skullCell, jawCell]: [number, number] = [SMALL_SKULL_CELL, SMALL_JAW_CELL]): void {
   const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot));
   const off = V(...SKULL_NECK).multiplyScalar(-k).applyQuaternion(q);
   const pos: P3 = [at[0] + off.x, at[1] + off.y, at[2] + off.z];
-  b.S.add(made(() => kept(`skull ${SMALL_SKULL_CELL}`, () => skull(SMALL_SKULL_CELL))), b.bone, parent, pos, rot, k);
-  b.S.add(made(() => kept(`jaw ${SMALL_JAW_CELL}`, () => jaw(SMALL_JAW_CELL))), b.bone, parent, pos, rot, k);
+  b.S.add(made(() => kept(`skull ${skullCell}`, () => skull(skullCell))), b.bone, parent, pos, rot, k);
+  b.S.add(made(() => kept(`jaw ${jawCell}`, () => jaw(jawCell))), b.bone, parent, pos, rot, k);
   for (const s of [-1, 1]) {
     const eye = V(s * SKULL_EYE[0], SKULL_EYE[1], SKULL_EYE[2] - 0.012).multiplyScalar(k).applyQuaternion(q);
     b.S.add(made(() => new THREE.SphereGeometry(0.009 * k, 6, 4)), b.eye, parent, [pos[0] + eye.x, pos[1] + eye.y, pos[2] + eye.z]);
@@ -291,12 +296,16 @@ function walkAndFall(b: Body, st: AnimState, hip: number, stoop: number): void {
 /** An arm of `upper` and `fore` m laid from its shoulder (`sh`, its joint, on the chest) to put its hand at `to` (in
  *  the chest's space), its elbow bent out towards `pole`: the shoulder turned so the upper arm points at the elbow with
  *  the elbow's hinge across the arm's plane, the elbow bent by the angle between the two bones. */
+/** the most of its whole length an arm reaches (`reach`): never quite straight */
+const REACH_MOST = 0.97;
 const _sh = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), _u = new THREE.Vector3();
 const _f = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _m = new THREE.Matrix4();
 function reach(sh: THREE.Object3D, el: THREE.Object3D, to: THREE.Vector3, pole: THREE.Vector3, upper: number, fore: number): void {
   _sh.copy(sh.position);
   _d.subVectors(to, _sh);
-  const d = THREE.MathUtils.clamp(_d.length(), Math.abs(upper - fore) + 1e-3, upper + fore - 1e-3);
+  // (never quite straight: a straight arm's forearm lies along its upper arm, the axis across them below is none, and
+  // the shoulder's turn made from it was NaN, the whole twin drawn nowhere: a throw reaching past the arm did it)
+  const d = THREE.MathUtils.clamp(_d.length(), Math.abs(upper - fore) + 1e-3, (upper + fore) * REACH_MOST);
   _d.normalize();
   // (the elbow on the circle where the two bones meet, on its side towards the pole)
   const along = (upper * upper - fore * fore + d * d) / (2 * d), out = Math.sqrt(Math.max(0, upper * upper - along * along));
@@ -305,7 +314,11 @@ function reach(sh: THREE.Object3D, el: THREE.Object3D, to: THREE.Vector3, pole: 
   _u.subVectors(_e, _sh).normalize();
   _f.copy(_sh).addScaledVector(_d, d).sub(_e).normalize();
   _y.copy(_u).negate();
-  _z.copy(_f).addScaledVector(_u, -_f.dot(_u)).normalize();
+  _z.copy(_f).addScaledVector(_u, -_f.dot(_u));
+  // (the forearm along the upper arm after all: across them, the way to the pole)
+  if (_z.lengthSq() < 1e-10) _z.copy(pole).addScaledVector(_u, -pole.dot(_u));
+  if (_z.lengthSq() < 1e-10) _z.set(_u.y, -_u.x, 0);
+  _z.normalize();
   _x.crossVectors(_y, _z);
   sh.quaternion.setFromRotationMatrix(_m.makeBasis(_x, _y, _z));
   el.rotation.set(-Math.acos(THREE.MathUtils.clamp(_u.dot(_f), -1, 1)), 0, 0);
@@ -410,6 +423,133 @@ function tombstoneShape(w: number, h: number): THREE.Shape {
   return shape;
 }
 
+// --- the belt skulls (entities/twinSkulls.ts) ------------------------------------------------------------------
+
+/** the skulls on a rope; a hidden rope's scale (drawn, so its pipelines are made with the warm-up, too small to see:
+ *  a hidden skull is left undrawn, the skulls on its own rope making its pipelines) */
+const BELT_SKULLS = 4, HIDDEN = 1e-3;
+/** how high over the hand's grip a held skull's middle is (m) */
+const IN_HAND = 0.11 * BELT_K;
+/** a skull's swing on its cord (rad): at rest, and more for each m/s its twin walks; how fast (rad/s) */
+const SWING = { rest: 0.05, walking: 0.06, most: 0.25, rate: 2.1 };
+/** the rope's length along the hip and how low its loop hangs (m) */
+const ROPE_LONG = 1.45, ROPE_SAG = 0.6;
+
+/** A twin's belts: its own kind's rope of skulls at its hip on its throwing side, the other kind's behind it (shown once
+ *  it takes its fallen brother's), and a skull of each kind in its throwing hand while one is held. */
+interface Belts {
+  /** shows `bomb` and `poison` skulls on the ropes, one of `holding` in the hand and not on its rope */
+  lay(bomb: number, poison: number, holding: SkullKind | null): void;
+  /** swings the hung skulls on their cords at time `t` as the twin walks at `move` m/s */
+  swing(t: number, move: number): void;
+  /** where the hand reaches to unhook one, in the body's space */
+  hook: THREE.Vector3;
+  /** the hand's skull (`userData.throwHand`: where a throw leaves from) */
+  inHand: THREE.Object3D;
+  /** each kind's skulls on its rope, and in the hand (`userData.beltSkulls`: what the lab counts as drawn) */
+  skulls: Record<SkullKind, THREE.Object3D[]>;
+  held: Record<SkullKind, THREE.Object3D>;
+}
+
+/**
+ * The belts of a twin whose own kind is `own`, on the side `s` (1 its right, -1 its left) of its hip at the belt's
+ * `top` and radius `r`, its throwing hand `hand`. Each skull is the one a throw flies and lays on the floor
+ * (models/beltSkull.ts: meshes of their own on the rope's knots, in materials of their own, not merged into the twin).
+ */
+function belts(b: Body, own: SkullKind, s: number, top: number, r: number, hand: THREE.Object3D, handLen: number): Belts {
+  const other: SkullKind = own === 'bomb' ? 'poison' : 'bomb';
+  const skulls = { bomb: [] as THREE.Group[], poison: [] as THREE.Group[] };
+  const ropes = {} as Record<SkullKind, THREE.Group>;
+  const along = (k: number): THREE.Vector3 => V(s * 0.06 * Math.sin(k * Math.PI), -ROPE_SAG * Math.sin(k * Math.PI), (k - 0.5) * ROPE_LONG);
+  for (const [kind, z] of [[own, 0.36], [other, -0.36]] as const) {
+    // (a rope from the belt at its side, hanging in a loop along the hip, a skull on a cord from each of four knots)
+    const rope = joint(b.body, s * r * 0.97, top - 0.06, z * r);
+    const loop: THREE.Vector3[] = [];
+    for (let i = 0; i <= 8; i++) loop.push(along(i / 8));
+    b.S.add(made(() => taperTube(loop, () => 0.03, 8, 4)), b.dark, rope);
+    for (let i = 0; i < BELT_SKULLS; i++) {
+      const knot = joint(rope, 0, 0, 0);
+      knot.position.copy(along((i + 0.5) / BELT_SKULLS)).add(V(s * 0.04, 0, 0));
+      // (its cord down from the knot to the iron ring through the skull's crown)
+      b.S.add(made(() => taperTube([V(0, 0.02, 0), V(0, -(SKULL_DROP - HOOK_TOP) - 0.02, 0)], () => 0.012, 2, 4)), b.dark, knot);
+      const sk = beltSkullMesh(kind);
+      sk.position.y = -SKULL_DROP;
+      sk.rotation.set(0.15, s * Math.PI / 2 + (i % 2 ? 0.3 : -0.3), 0);
+      knot.add(sk);
+      skulls[kind].push(knot);
+    }
+    ropes[kind] = rope;
+  }
+  // (a skull of each kind in the hand, in its palm, shown while one is held)
+  const held = joint(hand, 0, -handLen * 0.62, 0.14);
+  const inHand = {} as Record<SkullKind, THREE.Group>;
+  for (const kind of ['bomb', 'poison'] as const) {
+    inHand[kind] = joint(held, 0, IN_HAND, 0);
+    inHand[kind].add(beltSkullMesh(kind));
+  }
+  return {
+    hook: V(s * r * 1.02, top - 0.35, 0.36 * r),
+    inHand: held,
+    skulls,
+    held: inHand,
+    lay(bomb, poison, holding) {
+      for (const kind of ['bomb', 'poison'] as const) {
+        const count = kind === 'bomb' ? bomb : poison;
+        const shown = Math.max(0, count - (holding === kind ? 1 : 0));
+        // (a skull off the rope undrawn: its triangles counted only where it shows)
+        skulls[kind].forEach((sk, i) => { sk.visible = i < shown; });
+        // (the inherited rope shown once there's anything of it: its own always hangs, empty or not)
+        if (kind !== own) ropes[kind].scale.setScalar(count > 0 || holding === kind ? 1 : HIDDEN);
+        inHand[kind].visible = holding === kind;
+      }
+    },
+    swing(t, move) {
+      const most = Math.min(SWING.most, SWING.rest + SWING.walking * move);
+      for (const kind of ['bomb', 'poison'] as const) {
+        skulls[kind].forEach((knot, i) => {
+          knot.rotation.x = most * Math.sin(t * SWING.rate + i * 1.7);
+          knot.rotation.z = most * 0.6 * Math.sin(t * SWING.rate * 0.8 + i * 2.3);
+        });
+      }
+    },
+  };
+}
+
+/** A throw's moments as shares of its action (`hit` its release): the hand reaching down to the rope, the skull
+ *  unhooked, drawn back over the shoulder, thrown, and the arm come back to where its pose has it. */
+interface ThrowArm { weight: number; target: THREE.Vector3; holding: boolean }
+const _throwAt = new THREE.Vector3(), _hookAt = new THREE.Vector3(), _back = new THREE.Vector3(), _out = new THREE.Vector3();
+const _inv = new THREE.Matrix4();
+
+/**
+ * Where a throwing arm's hand is through action `a` (`bomb` or `poison`), in the chest's space: from `rest` (where the
+ * pose has it) down to the rope's hook, back over its shoulder on its side `s`, forward to its release at `a.hit`, and
+ * back; `weight` how much of it the arm takes from the pose, `holding` whether a skull is in the hand.
+ */
+function throwArm(b: Body, a: AnimState['action'], s: number, span: number, hook: THREE.Vector3, rest: THREE.Vector3): ThrowArm | null {
+  if (!a || (a.name !== 'bomb' && a.name !== 'poison')) return null;
+  const h = a.hit ?? 0.6, t = a.t;
+  b.chest.updateMatrix();
+  _inv.copy(b.chest.matrix).invert();
+  _hookAt.copy(hook).applyMatrix4(_inv);
+  _back.set(s * 0.95, span + 0.55, -0.85);
+  _out.set(s * 0.35, span + 0.25, 1.45);
+  const unhook = h * 0.3, drawn = h * 0.82;
+  if (t < unhook) _throwAt.lerpVectors(rest, _hookAt, ramp(t, 0, unhook));
+  else if (t < drawn) _throwAt.lerpVectors(_hookAt, _back, ramp(t, unhook, drawn));
+  else if (t < h) _throwAt.lerpVectors(_back, _out, ramp(t, drawn, h));
+  else _throwAt.lerpVectors(_out, rest, ramp(t, h, 1));
+  const weight = ramp(t, 0, 0.08) * (1 - ramp(t, 0.9, 1));
+  return { weight, target: _throwAt, holding: t >= unhook && t < h };
+}
+
+/** The hand of the arm from `sh` through `el` to `hd` as its joints are now, in the chest's space. */
+function handInChest(sh: THREE.Object3D, el: THREE.Object3D, hd: THREE.Object3D, out: THREE.Vector3): THREE.Vector3 {
+  sh.updateMatrix();
+  el.updateMatrix();
+  return out.copy(hd.position).applyMatrix4(el.matrix).applyMatrix4(sh.matrix);
+}
+
 export function buildTwinSlab(): Model {
   const kit = createKit(0xc08040);
   const f: Frame = { hip: 2.1, shoulder: 4.3, skull: 4.85, thick: 0.21, wide: 1.45, upper: 1.25, fore: 1.15, head: 3.6, hand: 0.66, foot: 0.26, look: 'heavy' };
@@ -503,9 +643,15 @@ export function buildTwinSlab(): Model {
   }
   S.add(made(() => organic(new THREE.BoxGeometry(1.2, 0.12, 0.38), 0.01, 6, 93)), iron, slab, [0, -0.08, 0.35]);
   for (const x of [-0.42, -0.14, 0.14, 0.42]) S.add(made(() => new THREE.SphereGeometry(0.025, 6, 4)), iron, slab, [x, -0.08, 0.545]);
+  const belt = belts(b, 'bomb', -1, top, r, b.hand[1], f.hand);
   S.build();
   const chain = boneChain(b.root, ring);
   b.root.userData.layChain = chain.lay;
+  const shown = { bomb: BELT_SKULLS, poison: 0 };
+  b.root.userData.belt = (bomb: number, poison: number) => { shown.bomb = bomb; shown.poison = poison; };
+  b.root.userData.throwHand = belt.inHand;
+  b.root.userData.beltSkulls = { rope: belt.skulls, hand: belt.held };
+  const restHand = new THREE.Vector3();
 
   let burn = 0;
   function animate(st: AnimState): void {
@@ -530,6 +676,14 @@ export function buildTwinSlab(): Model {
     // left arm: steadying the slab overhead, else swinging; dropped forward for the charge
     b.shoulder[1].rotation.set(-0.15 - lift * 2.4 - down * 0.5 - lean * 0.6 - idle, 0, -0.2 - lift * 0.1);
     b.elbow[1].rotation.x = -0.5 + lift * 0.3;
+    // (a skull off his belt: his left hand to the rope, back over his shoulder, thrown, back to where it hung)
+    const thrown = throwArm(b, a, -1, span, belt.hook, handInChest(b.shoulder[1], b.elbow[1], b.hand[1], restHand));
+    if (thrown && thrown.weight > 0) {
+      reach(b.shoulder[1], b.elbow[1], restHand.lerp(thrown.target, thrown.weight), pole.set(-0.9, -0.6, -0.5), f.upper, f.fore + f.hand * 0.35);
+      b.hand[1].rotation.set(0.2, 0.6, 0);
+    }
+    belt.lay(st.dead >= 0 ? 0 : shown.bomb, st.dead >= 0 ? 0 : shown.poison, thrown?.holding ? (a!.name as SkullKind) : null);
+    belt.swing(t, st.move);
     b.skull.rotation.x = -0.15 - lift * 0.3 + lean * 0.3;
     b.jaw.rotation.x = 0.05 + down * 0.5 + (st.dead >= 0 ? st.dead * 0.4 : 0);
     b.neck.rotation.y = Math.sin(t * 0.4) * 0.08;
@@ -543,7 +697,7 @@ export function buildTwinSlab(): Model {
 
   return {
     root: b.root, kit, animate, head: b.skull, height: 5.3,
-    reset() { burn = 0; },
+    reset() { burn = 0; shown.bomb = BELT_SKULLS; shown.poison = 0; },
     dispose() { kit.dispose(); chain.mesh.geometry.dispose(); (chain.mesh.material as THREE.Material).dispose(); },
   };
 }
@@ -645,7 +799,14 @@ export function buildTwinReliquary(): Model {
     smallSkull(b, sk, [0, -0.08, 0], [0, 0, 0], 1.25);
     skulls.push(sk);
   }
+  const belt = belts(b, 'poison', 1, top, r, b.hand[0], f.hand);
   S.build();
+  const shown = { bomb: 0, poison: BELT_SKULLS };
+  b.root.userData.belt = (bomb: number, poison: number) => { shown.bomb = bomb; shown.poison = poison; };
+  b.root.userData.throwHand = belt.inHand;
+  b.root.userData.beltSkulls = { rope: belt.skulls, hand: belt.held };
+
+  b.root.userData.casket = casket;
 
   let spin = 0, burn = 0, raised = 0;
   function animate(st: AnimState): void {
@@ -669,13 +830,20 @@ export function buildTwinReliquary(): Model {
     // both hands on the casket's sides, the arms bending to it wherever it's held (with the arms swung free of it,
     // its bones showed its hands held out at its sides, nowhere near the casket); its elbows out and down
     casket.updateMatrix();
+    // (its right hand lets go of the casket for a skull off its belt: to the rope, back over its shoulder, thrown)
+    let holding: SkullKind | null = null;
     for (const [i, s] of [[0, 1], [1, -1]] as const) {
       grip.set(s * GRIP_X, -0.05, 0).applyMatrix4(casket.matrix);
       if (st.dead >= 0) grip.lerp(_rest.set(s * 0.9, -1.2, 0.3), Math.min(1, st.dead * 1.5));
+      const thrown = i === 0 ? throwArm(b, a, s, span, belt.hook, grip) : null;
+      if (thrown && thrown.weight > 0) grip.lerp(thrown.target, thrown.weight);
+      if (thrown?.holding) holding = a!.name as SkullKind;
       reach(b.shoulder[i], b.elbow[i], grip, pole.set(s * 0.9, -0.7, -0.35), f.upper, f.fore + f.hand * 0.35);
-      // (its palms turned in on the casket's sides)
-      b.hand[i].rotation.set(0.15, -s * 1.35, 0);
+      // (its palms turned in on the casket's sides, the throwing one's palm up under the skull as it leaves)
+      b.hand[i].rotation.set(0.15, -s * 1.35 * (1 - (thrown?.weight ?? 0)), 0);
     }
+    belt.lay(st.dead >= 0 ? 0 : shown.bomb, st.dead >= 0 ? 0 : shown.poison, holding);
+    belt.swing(t, st.move);
     // (the skulls spin faster as a volley builds; through a mend they rise round it in a slow ring)
     spin += dt * (0.8 + build * 4 + mend * 1.5);
     orbit.rotation.y = spin;
@@ -695,7 +863,7 @@ export function buildTwinReliquary(): Model {
 
   return {
     root: b.root, kit, animate, head: b.skull, height: 5.7,
-    reset() { spin = burn = raised = 0; },
+    reset() { spin = burn = raised = 0; shown.bomb = 0; shown.poison = BELT_SKULLS; },
     dispose() { kit.dispose(); },
   };
 }

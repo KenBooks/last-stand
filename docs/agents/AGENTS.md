@@ -2,7 +2,7 @@
 
 Notes on areas too long for their directory's AGENTS.md, each read before changing what it covers; the AGENTS.md it came from says in a line when:
 
-- `src/entities/models/AGENTS.md`'s: `heads.md`, `heroes.md`, `ranger-bow.md`, `legs.md`, `hero-cost.md` (what a hero costs to draw), `folk.md` (the village's folk and the scarecrow).
+- `src/entities/models/AGENTS.md`'s: `heads.md`, `heroes.md`, `ranger-bow.md`, `legs.md`, `hero-cost.md` (what a hero costs to draw), `folk.md` (the village's folk and the scarecrow), `twins.md` (the Ossuary Twins' bones, faces, gear and belts).
 - `src/core/AGENTS.md`'s: `sight.md` (what hides the hero, what he sees, what thins), `webgpu.md`, `audio.md` (the sounds and the music's playing), `shaders.md` (compiling programs), `views.md` (the views and the aim).
 - `src/world/AGENTS.md`'s: `village.md`, `village-grass.md`, `village-rooms.md`, `fire.md`.
 - `src/game/AGENTS.md`'s: `warm-up.md` (the warm-up at boot and after it, the boot's pipelines).

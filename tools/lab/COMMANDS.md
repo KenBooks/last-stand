@@ -128,7 +128,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
 - `trees`: the trees in the play area as the ranger's arrows meet them (every tree inside the wall a wooden prop, an arrow shot at each one's trunk standing in it; then another biome shown, and no arrow left)
 - `turnaround`: the hero standing in a plain studio from a sheet's four sides and his head close, with a reference sheet's panels in a row under ours (`--ref`, `--panels`), and his triangles (`--parts`: by joint and material)
 - `tutorial`: the village's tutorial walked as a player walks it, from the notice board, with keys and mouse or by a finger (`--touch`): each step done the way its words say, the tracker read and pictured as it asks for each (in full: `commands/tutorial.md`)
-- `twins`: the Ossuary Twins (the Crypt's 15th wave and every 20th after sending them, the Colossus on its other boss waves, both risen within their chain's reach; one life between them, the chain snapping past its reach, the collapse at half, a mend a stun breaks; no program compiled in their fight; `--parts pictures,look` for the eye, each twin's triangles held to 45k)
+- `twins`: the Ossuary Twins (the Crypt's 15th wave and every 20th after sending them, the Colossus on its other boss waves, both risen within their chain's reach; one life between them, the chain snapping past its reach, the collapse at half, a mend a stun breaks; their belt skulls: each throws its four at most, its rope showing what's left, the cooldown held, the bomb bursting where marked after its fuse and throwing a hero about 4 m onto clear floor, the cloud hurting only inside it and gone on time, the survivor taking the fallen's; no program compiled in their fight; `--parts pictures,look,beltPictures` for the eye, each twin's triangles held to 45k) (in full: [`commands/twins.md`](commands/twins.md))
 - `ui`: pictures the UI in its states (the lobby, the stash, tooltips, the dialogs, the hero selection screen, the run's HUD, the pause menu's tabs, the summary, the touch HUD...) at each screen size, each fitting the window (`--states`, `--screens`; in full in `commands/ui.md`)
 - `village`: the lobby's village as a player walks it: every object usable from its stand, walks and ways, the grass and the lamps by quality, the light at midnight, the fog from above, the hall and the houses (`--only`; in full in `commands/village.md`)
 - `village --only signpostsReadable`: the signposts, each arm pointing where its name leads, each post off the paving, the paths and what stands, each arm read face on from the paving near it (`--canary` turns an arm and stands a post in a road)
@@ -906,23 +906,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   going into the ground through a ducked foe's cap untouched, and an arrow at a ducked Sporecaller's cap flying
   through it (its skinned body is met by its hulls, which leave the cap's top out). About 3 min for the ranger, 1 for
   the mage, 20 s for the warrior.
-- `twins`: the Ossuary Twins (`page/twins.ts`; `src/entities/twins.ts`, `src/entities/bossKit.ts`), the Crypt's
-  special boss wave (`bossWaves` in `src/data/biomes.ts`). `waves`: each battleground's boss waves (5 to 35) set off
-  as the game sets them off, the run's wave and its timer, and stopped before anyone comes: the bosses the run holds
-  (`RunState.boss`), the banner's line and the Continue button's name, against what each should send (the Twins on
-  the Crypt's 15th and 35th, the Colossus on its others, the Thornheart on every one of the Thornwood's); then the
-  Crypt's 15th let come, its foes taken out, until both twins have risen: within their chain's reach of each other.
-  `fight`, each on a fresh set-up with the pair risen abreast 5 m apart: two hits of a tenth, one on each, leaving
-  0.8 of the pair's life on both; Reliquary set past the chain's reach across the hero, the chain snapping, hurting
-  him and dragging them 2 m nearer at least; Slab struck harder past half, he alone falling, paying nothing, and
-  Reliquary in its phase; Reliquary hurt with the hero far off, its mend raising the pair's life by its `heal` (10%
-  under at most), the next stunned a second in raising it by under half that. `compiles`: every effect of their
-  fight sent through `fx` with the pair drawn (the chain's snap, a volley, a charge, a slam's ring and blow, a mend
-  begun and done, the phase), no program compiled. `pictures` (asked for alone): nine moments, the pair from behind
-  the hero and above. `look` (asked for alone): each twin alone from four sides and its skull close up, its triangles
-  at most 45k (Slab 42k, Reliquary 44k), with each bone's. `--canary`: the Crypt's special wave taken out, the pair's
-  `shares`, a chain whose reach is a kilometre, Slab's `hurt` hook, a mend that heals nothing, a program compiled.
-  About a minute for the default parts.
+- `twins`: the Ossuary Twins and their belt skulls: in full in [`commands/twins.md`](commands/twins.md).
 - `throws`: what the slammers throw at a hero too far off to slam (`page/throws.ts`; `EnemyDef.throws`,
   `src/entities/throws.ts`), a throw a case, each thrower risen 12 m before the hero along the screen's W, pinned to
   its spot before every frame (it turns and throws as its AI has it, but never walks up) and its cooldown held out

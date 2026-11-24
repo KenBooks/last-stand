@@ -811,6 +811,105 @@ function judgeThrows(host, guest) {
   };
 }
 
+/** the frames a skull lies where it landed, by kind (a bomb its fuse, the poison its cloud's life, at 60 a second),
+ *  and the share of them it must be seen lying for (its first and last frames may fall either side of a sample) */
+const BELT_LIES = { bomb: 120, poison: 360 };
+const LYING_SHARE = 0.9;
+/** how near a skull's mesh lies to where it landed to count (m) */
+const LYING_NEAR = 0.3;
+
+/** the frames a bomb's stun holds a hero (its 1.2 s at 60 a second), and the share of them each screen must show
+ *  him held for */
+const STUN_FRAMES = 72;
+const STUN_SHARE = 0.9;
+
+/** How each screen shows the guest held by the bombs: the frames his own game has him stunned, the frames the host's
+ *  copy of him is, the host's own, and the hurts he took while held. */
+function stunsOf(host, guest) {
+  const count = (samples, read) => samples.filter((sample) => sample.belt && read(sample.belt)).length;
+  const sum = (samples, read) => samples.reduce((total, sample) => total + (sample.belt ? read(sample.belt) : 0), 0);
+  return {
+    guestOwn: count(guest, (belt) => belt.stunned),
+    hostCopy: count(host, (belt) => belt.partnerStunned),
+    hostOwn: count(host, (belt) => belt.stunned),
+    heldHurts: sum(guest, (belt) => belt.heldHurts ?? 0),
+  };
+}
+
+/** how many more frames than its life a skull's lying is read over from its landing (a sample's either side) */
+const LYING_READ = 1.2;
+
+/** For each skull come down on a screen, in order, the frames a skull's mesh of its kind lay at its spot there over
+ *  its own life from the sample it landed in (by place alone, a bomb lying on a cloud's spot counted for the poison
+ *  skull, 480 frames of its 360; and over the whole run, two bombs on one spot each counted the other's, 240 of 120). */
+function lyingFrames(samples, landed) {
+  const liesAt = (skull) => (at) => at.kind === skull.kind && Math.hypot(at.x - skull.x, at.z - skull.z) < LYING_NEAR;
+  return landed.map((skull) => {
+    const life = Math.round((skull.kind === 'bomb' ? BELT_LIES.bomb : BELT_LIES.poison) * LYING_READ);
+    // (a skull whose life runs past the run's end isn't judged: null)
+    if (skull.sample + BELT_LIES[skull.kind] > samples.length) return null;
+    const own = samples.slice(skull.sample, skull.sample + life);
+    return own.filter((sample) => (sample.belt?.lying ?? []).some(liesAt(skull))).length;
+  });
+}
+
+/**
+ * The Twins' belt skulls on both screens (`belt`): the skulls come down on each, matched in order, the most apart of
+ * the pairs; each twin's belt at the end on each; the hurts each game's own hero took.
+ */
+function describeBelt(host, guest) {
+  // (each skull with the sample it landed in, where its lying is read from)
+  const landedOn = (samples) => samples.flatMap((sample, i) => (sample.belt?.landed ?? []).map((skull) => ({ ...skull, sample: i })));
+  const hostLanded = landedOn(host);
+  const guestLanded = landedOn(guest);
+  const apart = guestLanded.map((skull, i) => {
+    const there = hostLanded[i];
+    return there ? Math.hypot(there.x - skull.x, there.z - skull.z) : Infinity;
+  });
+  const most = apart.length ? Math.max(...apart) : 0;
+  const lastBelts = (samples) => samples.at(-1)?.belt?.belts ?? {};
+  const hostBelts = JSON.stringify(lastBelts(host));
+  const guestBelts = JSON.stringify(lastBelts(guest));
+  const hurtsOf = (samples) => samples.reduce((sum, sample) => sum + (sample.belt?.hurts ?? 0), 0);
+  const kinds = new Set(guestLanded.map((skull) => skull.kind));
+  const line = `belt: ${guestLanded.length} skulls came down on the guest's screen (${[...kinds].join(' and ')}), `
+    + `${hostLanded.length} on the host's (the most ${cm(most)} apart); the belts at the end, the host's ${hostBelts}, `
+    + `the guest's ${guestBelts}; the guest hurt ${hurtsOf(guest)} times, the host ${hurtsOf(host)}`;
+  const problems = [];
+  if (!guestLanded.length) problems.push('no belt skull came down on the guest\'s screen');
+  if (kinds.size < 2) problems.push(`only ${[...kinds].join('') || 'no'} skulls came down`);
+  if (hostLanded.length !== guestLanded.length) {
+    problems.push(`${guestLanded.length} skulls on the guest's screen, ${hostLanded.length} on the host's`);
+  }
+  if (most > LANDED_APART) problems.push(`a skull came down ${cm(most)} apart on the two screens`);
+  if (hostBelts !== guestBelts) problems.push(`the belts ended apart: the host's ${hostBelts}, the guest's ${guestBelts}`);
+  if (!hurtsOf(guest)) problems.push('no skull hurt the guest standing in them');
+  if (hurtsOf(host)) problems.push(`the host, far off, was hurt ${hurtsOf(host)} times by the skulls`);
+  const lying = [lyingFrames(host, hostLanded), lyingFrames(guest, guestLanded)];
+  const shown = (frames) => frames.map((n) => n ?? 'cut off by the run\'s end').join(', ');
+  const line2 = `belt: each skull lying where it landed, frames on the host's screen [${shown(lying[0])}], `
+    + `on the guest's [${shown(lying[1])}]`;
+  guestLanded.forEach((skull, i) => {
+    const wanted = (skull.kind === 'bomb' ? BELT_LIES.bomb : BELT_LIES.poison) * LYING_SHARE;
+    for (const [screen, frames] of [['host', lying[0][i]], ['guest', lying[1][i]]]) {
+      if (frames !== null && (frames ?? 0) < wanted) problems.push(`a ${skull.kind} skull lying ${frames ?? 0} frames on the ${screen}'s screen, not ${Math.round(wanted)}`);
+    }
+  });
+  const bombs = guestLanded.filter((skull) => skull.kind === 'bomb').length;
+  const stuns = stunsOf(host, guest);
+  const wantedHeld = bombs * STUN_FRAMES * STUN_SHARE;
+  const line3 = `belt: ${bombs} bomb(s) on the guest: stunned ${stuns.guestOwn} frames on his own screen, his copy `
+    + `${stuns.hostCopy} on the host's (each stun ${STUN_FRAMES}); the host stunned ${stuns.hostOwn}; hurt `
+    + `${stuns.heldHurts} times while held`;
+  if (bombs && stuns.guestOwn < wantedHeld) problems.push(`the guest stunned ${stuns.guestOwn} frames by ${bombs} bomb(s)`);
+  if (stuns.hostCopy < stuns.guestOwn * STUN_SHARE) {
+    problems.push(`the guest's copy stunned ${stuns.hostCopy} frames on the host's screen, his own ${stuns.guestOwn}`);
+  }
+  if (stuns.hostOwn) problems.push(`the host, far off, stunned ${stuns.hostOwn} frames`);
+  if (stuns.heldHurts) problems.push(`the guest hurt ${stuns.heldHurts} times while a stun held him`);
+  return { line: `${line}\n  ${line2}\n  ${line3}`, problems };
+}
+
 function describeThrows(host, guest) {
   const t = judgeThrows(host, guest);
   const most = t.apart.length ? Math.max(...t.apart) : 0;
@@ -965,5 +1064,6 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
   if (name === 'ping') add(describePings(host, guest, frameMs));
   if (name === 'chat') add(describeChat(host, guest, frameMs));
   if (name === 'wall') add(describeWall(host, guest, frameMs));
+  if (name === 'belt') add(describeBelt(host, guest));
   return { lines, problems };
 }

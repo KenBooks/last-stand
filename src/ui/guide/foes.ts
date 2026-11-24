@@ -152,9 +152,14 @@ function twinsAttacks(foe: Foe): string[] {
     `<b>Skull volley:</b> ${t.volley.least} to ${t.volley.most} skulls after ${secs(warn('volley'))}, each curving in on its own arc to where you stood, at ${num(t.volley.speed)} m/s, ${whole(hit)} damage each. It keeps 9 to 13 m off you.`,
     `<b>Mend:</b> once ${brother} has stood hurt and unhit for ${secs(t.mend.untouched)}, it raises its casket for ${secs(warn('mend'))} and mends the pair by ${pct(t.mend.heal)} of their life. A stun or a freeze breaks it.`,
   ];
+  const belt = t.belt, bomb = t.bomb, poison = t.poison;
+  const skulls = slab
+    ? `<b>Bomb skulls:</b> ${belt.skulls} small skulls hang on a rope at his waist, and none come back. Every ${secs(belt.every)} at most, at a hero ${metres(belt.reach[0])} to ${metres(belt.reach[1])} away, he unhooks one and throws it on an arc to where you stood, a glow on the floor where it lands. It lies there ${secs(bomb.fuse)} rocking and glowing hotter as the glow draws in on it, then bursts for ${whole(hit * bomb.hurt)} damage within ${metres(bomb.radius)} and stuns you for ${secs(bomb.stun)}, no sooner than ${secs(bomb.rest)} after the last stun ends. A raised shield turned to it takes the blast and the stun. While it holds you, nothing else of the pair lands on you.`
+    : `<b>Poison skulls:</b> ${belt.skulls} small skulls hang on a rope at its waist, and none come back. Every ${secs(belt.every)} at most, at a hero ${metres(belt.reach[0])} to ${metres(belt.reach[1])} away, it unhooks one and throws it on an arc to where you stood, a glow on the floor where it lands. It lies in a green cloud ${metres(poison.radius * 2)} across for ${secs(poison.life)}, letting gas out of its eyes and jaw and hurting a hero inside it ${whole(hit * poison.hurt)} damage every ${secs(poison.every)}.`;
   return [
-    `<b>One life:</b> it shares its life with ${brother}: every hit on either takes it from both. At ${pct(0.5)} the one that has taken more falls, and the other moves ${pct(t.alone.faster - 1)} faster, attacks sooner and takes up its brother's attack too.`,
+    `<b>One life:</b> it shares its life with ${brother}: every hit on either takes it from both. At ${pct(0.5)} the one that has taken more falls, and the other moves ${pct(t.alone.faster - 1)} faster, attacks sooner and takes up its brother's attack too, and its brother's belt: it throws both kinds of skull, as many as its brother had left.`,
     ...own,
+    skulls,
     `<b>The chain:</b> if the two drift more than ${metres(t.chain.max)} apart it snaps tight, dragging them together and dealing ${whole(damage(ENEMIES.twinslab, foe.from) * t.chain.hurt)} damage to a hero within ${metres(t.chain.reach)} of its line.`,
   ];
 }

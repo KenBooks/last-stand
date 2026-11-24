@@ -7,6 +7,13 @@
 // with a jaw of its own to match, hinged at its condyles. The ribs, the vertebrae, the fingers and the toes are
 // tapered tubes, each carrying vertex colours too, so every piece of a twin's bone is one material.
 //
+// Each sculpted bone is simplified once meshed (`fewer`: three's meshoptimizer, loaded with the Twins' file,
+// `readyOssuary`): a surface net lays its triangles evenly, as many on a smooth shaft as round a socket, and the edge
+// collapse leaves its kept vertices on the field's surface with their normals and hollows' shading, within an eighth of
+// its grid's cell of where it was (`FEWER_ERROR`: well under the grid's own error, so no shape moves). The twins drew 52k
+// triangles each with the belt skulls' faces; their bones simplified so, every face kept (#900, from Kenneth: "Those
+// skulls need work, improve model").
+//
 // Every bone is built pointing down -y from its joint (a thigh from the hip, a shin from the knee) for the left side
 // of the body (+x), its inner side towards -x: the right side is its mirror image (`Sculpt.pair`).
 import * as THREE from 'three';
@@ -41,6 +48,51 @@ export function capsule(a: V3, b: V3, r0: number, r1: number): Shape {
 }
 
 /** A sculpt's parts as they're gathered: joined, cut away, or placed turned (`at`, `turn` an Euler XYZ). */
+/** how far a simplified bone's surface may lie from its net's, a share of the grid's cell it was meshed on */
+const FEWER_ERROR = 0.12;
+/** and a twin's own head's, finer: simplified as its bones, its crown showed facets and Slab's crack faded */
+const HEAD_ERROR = 0.04;
+/** the simplifier (three's meshoptimizer): null until it has loaded */
+let simplifier: typeof import('three/addons/libs/meshopt_simplifier.module.js').MeshoptSimplifier | null = null;
+let loading: Promise<void> | null = null;
+
+/** The simplifier loaded, once: the Twins' file waits for it as it loads, so their bones are made simplified. */
+export function readyOssuary(): Promise<void> {
+  loading ??= import('three/addons/libs/meshopt_simplifier.module.js').then(async ({ MeshoptSimplifier }) => {
+    await MeshoptSimplifier.ready;
+    simplifier = MeshoptSimplifier;
+  });
+  return loading;
+}
+
+/** A net (indexed: its points, normals and hollows' shading) with fewer triangles, its surface within `error` (m)
+ *  of its own, its vertices those it kept (none moved); as it was where the simplifier hasn't loaded. */
+export function fewer(g: THREE.BufferGeometry, error: number): THREE.BufferGeometry {
+  if (!simplifier || !g.getIndex()) return g;
+  const positions = g.getAttribute('position').array as Float32Array;
+  const index = new Uint32Array(g.getIndex()!.array);
+  const [kept] = simplifier.simplify(index, positions, 3, 3, error, ['ErrorAbsolute']);
+  if (kept.length >= index.length) return g;
+  const remap = new Int32Array(positions.length / 3).fill(-1);
+  let count = 0;
+  for (const v of kept) if (remap[v] < 0) remap[v] = count++;
+  const out = new THREE.BufferGeometry();
+  for (const name of ['position', 'normal', 'color']) {
+    const attribute = g.getAttribute(name);
+    if (!attribute) continue;
+    const from = attribute.array as Float32Array;
+    const to = new Float32Array(count * 3);
+    remap.forEach((at, v) => {
+      if (at >= 0) to.set(from.subarray(v * 3, v * 3 + 3), at * 3);
+    });
+    out.setAttribute(name, new THREE.BufferAttribute(to, 3));
+  }
+  out.setIndex(new THREE.BufferAttribute(Uint32Array.from(kept, (v) => remap[v]), 1));
+  out.computeBoundingSphere();
+  g.dispose();
+  return out;
+}
+
 class Parts {
   readonly list: Part[] = [];
   join(shape: Shape, blend: number): this {
@@ -58,8 +110,9 @@ class Parts {
     return this;
   }
   /** the surface meshed on a grid of `cell` within `box` */
-  mesh(box: THREE.Box3, cell: number): THREE.BufferGeometry {
-    return netGeometry(fieldOf(this.list), box, cell, cell * 0.75);
+  /** the parts meshed on `cell` and simplified within `error` (m: `FEWER_ERROR` of a cell by default) */
+  mesh(box: THREE.Box3, cell: number, error = cell * FEWER_ERROR): THREE.BufferGeometry {
+    return fewer(netGeometry(fieldOf(this.list), box, cell, cell * 0.75), error);
   }
 }
 
@@ -75,8 +128,8 @@ export const JAW_HINGE: V3 = [0, 0.032, -0.02];
 export const SKULL_EYE: V3 = [0.027, 0.066, 0.078];
 
 /** The crypt's skull (no jaw), a man's in size, facing +z, its teeth's foot at y 0: meshed on `cell`. */
-export function skull(cell: number): THREE.BufferGeometry {
-  return netGeometry(fieldOf(skullParts()), SKULL_BOX, cell, cell * 0.75);
+export function skull(cell: number, error = cell * FEWER_ERROR): THREE.BufferGeometry {
+  return fewer(netGeometry(fieldOf(skullParts()), SKULL_BOX, cell, cell * 0.75), error);
 }
 
 /** How a twin's skull differs from the crypt's: `heavy` (Slab's) a thick brow and cheekbones, a crack across the crown
@@ -102,12 +155,12 @@ export function twinSkull(cell: number, look: SkullLook): THREE.BufferGeometry {
     for (const s of [-1, 1]) parts.cut(ellipsoid(s * 0.058, 0.04, 0.034, 0.011, 0.016, 0.02), 0.01);
     parts.cut(ellipsoid(THIRD_EYE[0], THIRD_EYE[1], THIRD_EYE[2] + 0.01, 0.008, 0.011, 0.016), 0.004);
   }
-  return parts.mesh(box(-0.095, -0.012, -0.17, 0.095, 0.19, 0.135), cell);
+  return parts.mesh(box(-0.095, -0.012, -0.17, 0.095, 0.19, 0.135), cell, cell * HEAD_ERROR);
 }
 
 /** The jaw that fits the crypt's skull, shut, in the skull's own space: its body round the chin, under a row of teeth,
  *  rising at its angles to the condyles it's hinged on (`JAW_HINGE`) and the coronoids before them. */
-export function jaw(cell: number): THREE.BufferGeometry {
+export function jaw(cell: number, error = cell * FEWER_ERROR): THREE.BufferGeometry {
   const parts = new Parts();
   // the body, a curve of ellipsoids each turned along it: tall, thin, round the chin from angle to angle
   for (let i = 0; i <= 8; i++) {
@@ -129,7 +182,7 @@ export function jaw(cell: number): THREE.BufferGeometry {
     const a = (i / 9 - 0.5) * 2.4;
     parts.join(ellipsoid(Math.sin(a) * 0.028, -0.006, 0.054 + Math.cos(a) * 0.028, 0.0045, 0.006, 0.0045), 0.002);
   }
-  return parts.mesh(box(-0.065, -0.05, -0.035, 0.065, 0.045, 0.1), cell);
+  return parts.mesh(box(-0.065, -0.05, -0.035, 0.065, 0.045, 0.1), cell, error);
 }
 
 // --- the long bones ---------------------------------------------------------------------------------------------

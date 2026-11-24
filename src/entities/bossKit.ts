@@ -82,18 +82,20 @@ export function telegraphed(e: Enemy, name: string, hit: () => void, ring?: Tele
   e.startAction(name, dur, [[share, hit], ...more]);
 }
 
-/** When the fight's last warned hits land (G.time, from and to), across every boss in it (`claimBeat`). */
-const beat = { from: -Infinity, to: -Infinity };
+/** When the fight's warned hits still to come land (G.time, from and to), across every boss in it (`claimBeat`):
+ *  every one, not the last alone, as a belt skull's blast is claimed seconds ahead and a volley after it lands first. */
+const beats: { from: number; to: number }[] = [];
 
 /**
  * Where simulated: may a boss start a warned attack whose hits land from `hitIn` s on over `span` s, no other boss's
- * landing within `gap` s of them? Taken if so (the next must keep clear of it): the Twins' slam and skulls never land
- * together.
+ * landing within `gap` s of them? Taken if so (the next must keep clear of it): the Twins' slam, skulls and belt
+ * skulls never land together.
  */
 export function claimBeat(hitIn: number, gap: number, span = 0): boolean {
   const from = G.time + hitIn, to = from + span;
-  if (from < beat.to + gap && to > beat.from - gap) return false;
-  beat.from = from; beat.to = to;
+  for (let i = beats.length - 1; i >= 0; i--) if (beats[i].to + gap < G.time) beats.splice(i, 1);
+  if (beats.some((b) => from < b.to + gap && to > b.from - gap)) return false;
+  beats.push({ from, to });
   return true;
 }
 

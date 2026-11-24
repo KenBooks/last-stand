@@ -7,6 +7,7 @@
 // sorted
 const PARTS = [
   'base-41: every message as of PROTOCOL 41, the last number bumped by hand (net/AGENTS.md tells their history)',
+  'belt-skulls-1: the Ossuary Twins belt skulls thrown, the enemy fx `beltSkull` (entities/twinSkulls.ts)',
   'floor-1: a drop on the lobby floor carries its seconds left, GroundDrop left (game/groundItems.ts)',
   'frenzy-1: the Frenzy stacks of a warrior, StateMsg fz (combat/frenzy.ts)',
   'friends-1: the welcome says the room as its host opened it, kind, name, max and fr (net/friends.ts)',
