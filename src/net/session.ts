@@ -40,6 +40,7 @@ import { lookOf as heroLookOf, type HeroLook } from '../data/heroLooks';
 import { buildableLook, readyLook } from '../game/looks';
 
 import { PROTOCOL } from './protocol';
+import { setTavernLink } from './tavernLink';
 export { PROTOCOL };
 /** how often a public room's host sends its card again, besides as it changes (ms: the relay drops one not sent within
  *  75 s, `server/relay/rooms.mjs`) */
@@ -1130,6 +1131,8 @@ export function partnersInTavern(): { id: string; player: Player }[] {
 }
 /** A partner's player by id. */
 export const partnerPlayer = (id: string): Player | null => session.peers.get(id)?.player ?? null;
+// (the keeper's way to the party: net/tavernLink.ts)
+setTavernLink({ send: sendTavern, self: selfId, host: hostOf, inTavern: partnersInTavern, partner: partnerPlayer });
 
 export function sendControl(m: Record<string, unknown>): void { if (session.hostId) send('ctl', m, session.hostId); }
 

@@ -36,7 +36,7 @@ import {
 } from '../data/tavern';
 import { MugLedger, type Mug } from '../game/mugs';
 import { isGuest, isHost } from '../net/role';
-import { hostOf, partnerPlayer, partnersInTavern, selfId, sendTavern } from '../net/session';
+import { tavernLink } from '../net/tavernLink';
 import { onMessages } from '../net/messages';
 import { box, drum, type Build } from './rooms';
 import type { Player } from '../entities/player';
@@ -565,14 +565,14 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   let idleNext = 0;
 
   // --- who is about: the heroes in the tavern, by id (this game's own and, on the host, the partners in it) ---
-  const myId = () => selfId() || 'me';
+  const myId = () => tavernLink.self() || 'me';
   function heroes(): { id: string; player: Player }[] {
     const list: { id: string; player: Player }[] = [];
     if (G.player && G.arena.room === 'tavern') list.push({ id: myId(), player: G.player });
-    if (isHost()) list.push(...partnersInTavern());
+    if (isHost()) list.push(...tavernLink.inTavern());
     return list;
   }
-  const heroById = (id: string): Player | null => (id === myId() ? G.player ?? null : partnerPlayer(id));
+  const heroById = (id: string): Player | null => (id === myId() ? G.player ?? null : tavernLink.partner(id));
   /** a hero standing at the bar's front (within `COME_TO_BAR.near` of the stand before the tap) */
   const atBar = (p: Player) => p.pos.x < BAR.x - BAR.half + 0.2 && Math.hypot(p.pos.x - (BAR.x - 0.95), clamp(p.pos.z, BAR.from, BAR.to) - p.pos.z) < 0.01 + COME_TO_BAR.near && p.pos.x > BAR.x - 0.95 - COME_TO_BAR.near;
 
@@ -793,7 +793,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   }
   /** a change to the ledger this game asks for: done here alone or as the host, else asked of the host */
   function tell(m: Record<string, unknown>, apply: () => void): void {
-    if (isGuest()) sendTavern(m, hostOf());
+    if (isGuest()) tavernLink.send(m, tavernLink.host());
     else apply();
   }
 
@@ -825,11 +825,11 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   let toldRev = -1, muted = false;
   function tellGuests(dt: number): void {
     if (!isHost() || muted) return;
-    if (ledger.rev !== toldRev) { toldRev = ledger.rev; sendTavern({ t: 'tv', mugs: ledger.snapshot() }); }
+    if (ledger.rev !== toldRev) { toldRev = ledger.rev; tavernLink.send({ t: 'tv', mugs: ledger.snapshot() }); }
     toldAt += dt;
     if (toldAt < TOLD_EVERY) return;
     toldAt = 0;
-    sendTavern({ t: 'tv', k: { me: [me.x, me.z, me.facing, me.speed], b: [body.bend, body.crouch], h: [inHand, holding === 'broom' ? 1 : holding === 'poker' ? 2 : 0] } });
+    tavernLink.send({ t: 'tv', k: { me: [me.x, me.z, me.facing, me.speed], b: [body.bend, body.crouch], h: [inHand, holding === 'broom' ? 1 : holding === 'poker' ? 2 : 0] } });
   }
   /** a guest's game: his place and turn eased towards the host's word */
   function followHost(dt: number): void {
@@ -902,7 +902,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     keeper: () => keeper,
     serve(hero) {
       if (!keeper || hero !== G.player) return false;
-      if (isGuest()) sendTavern({ t: 'tv?', a: 'ale' }, hostOf());
+      if (isGuest()) tavernLink.send({ t: 'tv?', a: 'ale' }, tavernLink.host());
       else asked.push(myId());
       return true;
     },
