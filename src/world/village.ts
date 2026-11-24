@@ -455,14 +455,15 @@ function makeMats(): Mats {
   mats.rackPlanks = (mats.planks as THREE.MeshStandardMaterial).clone();
   mats.rackPlanks.color.set(0xf0d4a4);
   // (the houses' doors, in the planks' own program: an oak darker than the cottages', iron of the same maps dark and
-  // metal, and the dark of a room unlit past it, warm a little)
+  // metal, and the dark of a room unlit past it, warm a little. The iron is wrought, not polished: at 0.75 metal and
+  // 0.55 rough its straps' edges, under a pixel deep from the top view, shone as dotted lines across the door, #912)
   const planksBase = (mats.planks as THREE.MeshStandardMaterial).clone();
   mats.doorLeaf = planksBase.clone();
   mats.doorLeaf.color.set(0x6a4528);
   mats.doorIron = planksBase.clone();
   mats.doorIron.color.set(0x2c2a2a);
-  mats.doorIron.metalness = 0.75;
-  mats.doorIron.roughness = 0.55;
+  mats.doorIron.metalness = 0.4;
+  mats.doorIron.roughness = 0.9;
   mats.signFace = (map) => {
     const face = planksBase.clone();
     face.map = map;
