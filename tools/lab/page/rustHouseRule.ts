@@ -72,6 +72,9 @@ const CLEAR = 0.6;
  *  (`rust.houseLeft`, so its shape still reads); at a block; and the share of blocks that may be over the block's
  *  most (edges, a column's foot) */
 export const SEEN_COVER = { overLeft: 0.08, block: 0.6, blocksOver: 0.03 };
+/** how much more than `rust.houseLeft` a cover's ghost keeps, but a wall's opened by its door or of his room
+ *  (Bulwark's `COVER_FIRM`: from play, "lets thin a bit less here, almost can't see geometry") */
+const COVER_FIRM = 1.3;
 /** the most of a house's cover gone over ground he doesn't see, likewise */
 export const UNSEEN_OPEN = { mean: 0.08, block: 0.5, blocksOver: 0.03 };
 /** stood in a building, the exception (from play, "if the player is inside a building... we will thin whole roof no
@@ -440,7 +443,7 @@ export function judged(read: RuleRead): Checked {
     + `(${percent(seen.blocksOver)} of ${seen.blocks} blocks still covered); over ground he doesn't `
     + `${percent(unseen.opened)} opened (${percent(unseen.blocksOver)} of ${unseen.blocks} blocks open${stood})${atDoor}`;
   const wrong: string[] = [];
-  if (seen.blocks >= BLOCKS_LEAST && (seen.coverLeft > RUST.tune.houseLeft + SEEN_COVER.overLeft || seen.blocksOver > SEEN_COVER.blocksOver)) {
+  if (seen.blocks >= BLOCKS_LEAST && (seen.coverLeft > RUST.tune.houseLeft * COVER_FIRM + SEEN_COVER.overLeft || seen.blocksOver > SEEN_COVER.blocksOver)) {
     wrong.push(`ground he sees is still covered${read.coveredAt}`);
   }
   const enough = unseen.blocks >= BLOCKS_LEAST;

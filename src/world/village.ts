@@ -479,14 +479,16 @@ function makeMats(): Mats {
     return seeThrough(face, 'prop');
   };
   // (a house's walls and roof, which never open over the shoulder; the rest stands free, opening wide as it hides him)
-  for (const m of [mats.ashlar, mats.coping, mats.plaster, mats.timber, mats.planks, mats.logs, mats.window, mats.skyPane,
+  for (const m of [mats.ashlar, mats.coping, mats.plaster, mats.timber, mats.planks, mats.window, mats.skyPane,
     mats.doorLeaf, mats.doorIron]) {
     seeThrough(m, 'built');
   }
   // (the notice board's roof isn't a house's: no room under it, and a ghost over the lit grass it took the fog of what's
   // seen through a roof, a hard blue plate over the board, a review)
   seeThrough(mats.roof, 'roof');
-  const board = [mats.freeTimber, mats.freePlanks, mats.boardRoof, mats.paper];
+  // (the campfire's logs and the benches' stand free too: of the houses' kind, a house's rule opened them over the
+  // ground he saw under them, a fire burning on bare earth, from play "where are the logs? wth")
+  const board = [mats.freeTimber, mats.freePlanks, mats.boardRoof, mats.paper, mats.logs];
   const lectern = [mats.binding, mats.pagesLeft, mats.pagesRight, mats.pagesEdge, mats.ribbon, mats.wax, mats.freeBrass];
   for (const m of [mats.fireStones, mats.column, mats.iron, mats.steel, mats.rackTimber, mats.rackPlanks, mats.lantern, mats.lanternIron, mats.freeAshlar, mats.freeCoping, ...board,
     ...lectern]) {
