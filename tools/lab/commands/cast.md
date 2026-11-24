@@ -53,12 +53,16 @@ The rest of the commands are in [`COMMANDS.md`](../COMMANDS.md).
   but hasn't on a key is bound to its own first. Several skills go by commas (`cast pounce,wrath --class
   warrior`), each in every biome and view: every class's skills in three commands.
 - **A skill that needs something to cast at** (`InstantSkill.canCast`) is pressed once the game itself would cast
-  it at its own aim (`input.ground`: the crosshair's in the close views, not the lab's aim ahead), the aim and the
-  close views' crosshair kept meanwhile and through the press on the nearest foe at least 3 m off (`FOE_LEAST`).
-  With a fixed aim 8 m ahead, Pounce's foes walked up to him and stood at 1 m, 7 m short of it, and it never
-  leapt; ready by the lab's aim, it was pressed over the shoulder with the crosshair on no foe; at a foe at arm's
-  length the crosshair passed beside its body. Failing, it says where every foe was. `--frenzy n` gives the
-  warrior that many stacks as he presses (Wrath spends them and casts nothing with none).
-- **Hedgeward isn't measured by it yet:** from above it rises, but in the close views nothing is cast, with foes or
-  without (`--foes 0`), and with foes coming it waits in vain (they stand where it would rise). Its look is
-  measured by `lab hedgeward`.
+  it at its own aim (`input.ground`: the crosshair's in the close views, not the lab's aim ahead), judged after a
+  frame with the aim 8 m ahead. Ready at once, the foe that aim found is followed (`foeAimedAt`: under the
+  crosshair or within 2.5 m of its point, and at least 3 m off him, `FOE_LEAST`), the crosshair turned onto it and
+  the skill judged again; not ready, the aim and the close views' crosshair are kept on the nearest foe at least
+  3 m off until it is. Either way they stay on that foe through the press. With a fixed aim 8 m ahead, Pounce's
+  foes walked up to him and stood at 1 m, 7 m short of it, and it never leapt; ready by the lab's aim, it was
+  pressed over the shoulder with the crosshair on no foe; at a foe at arm's length the crosshair passed beside its
+  body; ready by a thornling walking past the crosshair's point, it was pressed with it gone. A press the game
+  refused says why (`Player.refused`: its cooldown, energy or target), where he, the game's aim and every foe
+  were; a wait that never ends says where every foe was. `--frenzy n` gives the warrior that many stacks as he
+  presses (Wrath spends them and casts nothing with none).
+- **Each scenario takes down what the last one's cast left** (`clearEffects`) and stands the props it broke again:
+  a Hedgeward's wall stood where the next scenario's would rise, and in the close views nothing was cast.

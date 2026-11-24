@@ -15,6 +15,8 @@ import type { EnemyId } from '../../../src/data/enemies';
 import type { ViewMode } from '../../../src/core/renderer';
 import { G } from '../../../src/state';
 import { input } from '../../../src/core/input';
+import type { Denial } from '../../../src/core/audio';
+import { clearEffects } from '../../../src/fx/effects';
 import { BIOMES, type BiomeId } from '../../../src/data/biomes';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { lateCompiles, programsCompiledInGame } from '../../../src/core/shaders';
@@ -319,8 +321,10 @@ function sightOn(foe: Enemy | undefined, view: ViewMode): THREE.Vector3 | undefi
 /** The cast's scene set up afresh: the hero stood in the biome and view, the skill his to cast, the foes coming. */
 async function castScene(lab: Lab, options: CastOptions): Promise<CastScene> {
   // (the props an earlier cast broke stand again: broken, they stay so until a run starts, and the next scenario in
-  // the biome saw another scene)
+  // the biome saw another scene), and what an earlier cast left is taken down (a Hedgeward's wall stood where the
+  // next scenario's would rise, and it was never cast)
   G.arena.restoreProps();
+  clearEffects();
   const { biome, view, facing, weapon, tune } = options;
   const gear = options.gear ?? gearFor(options.skill);
   const scenario = { biome, view, facing, gear, weapon, tune };
@@ -342,7 +346,15 @@ async function castScene(lab: Lab, options: CastOptions): Promise<CastScene> {
     // (judged at the game's own aim, as its press will be: the close views aim by the crosshair, not by the lab's
     // aim ahead, and Pounce, ready by that aim, was pressed with the crosshair on no foe)
     const ready = () => impl.canCast?.(hero, def, input.ground) ?? true;
-    if (!ready()) foe = await untilCastable(lab, ready, def, aim, view);
+    // (a frame first with the aim ahead, so the game's aim is the press's: judged on the aim the set-up left,
+    // Hedgeward wasn't ready, and the wait for a foe raised it into the foes walking in)
+    await lab.step(1, () => ({ aim }));
+    // (ready at once, the foe the game's aim found is followed to the press as a waited-for one is, the crosshair
+    // turned onto it and the skill judged again: Pounce, ready by a thornling walking past the crosshair's point,
+    // was pressed with it gone, and nothing cast)
+    foe = ready() ? foeAimedAt(input.ground) : undefined;
+    if (foe) await lab.step(1, () => onFoe(foe, aim, view));
+    if (!ready()) foe = await untilCastable(lab, ready, def, aim, view, input.ground.clone());
   }
   withFrenzy(options.frenzy);
   return { key, def, aim, foe, view };
@@ -353,18 +365,18 @@ async function castScene(lab: Lab, options: CastOptions): Promise<CastScene> {
  * one (`aim` moved with it, the cast's own): a fixed aim ahead, Pounce's foes walked up to him and stood at 1 m, its
  * aim 7 m past them, and it never leapt. Failing, where every foe was as it ended.
  */
-async function untilCastable(lab: Lab, ready: () => boolean, def: SkillDef, aim: THREE.Vector3, view: ViewMode):
-  Promise<Enemy | undefined> {
-  const onNearest = (): Frame => {
-    const foe = nearestFoe();
-    if (foe) aim.set(foe.pos.x, 0, foe.pos.z);
-    return { aim, sight: sightOn(foe, view) };
-  };
+async function untilCastable(lab: Lab, ready: () => boolean, def: SkillDef, aim: THREE.Vector3, view: ViewMode,
+  first: THREE.Vector3): Promise<Enemy | undefined> {
+  const onNearest = (): Frame => onFoe(nearestFoe(), aim, view);
   try {
     await lab.until(ready, 900, `${def.name} never had a foe to cast at`, onNearest);
     return nearestFoe();
   } catch (error) {
-    throw new Error(`${(error as Error).message}: ${foesWhere()}`);
+    const hero = G.player;
+    const at = (point: THREE.Vector3) => `${point.x.toFixed(1)}, ${point.z.toFixed(1)}`;
+    const where = `him at ${at(hero.pos)} facing ${hero.facing.toFixed(2)}, the game's aim at ${at(input.ground)} `
+      + `(${at(first)} at first)`;
+    throw new Error(`${(error as Error).message}: ${where}; ${foesWhere()}`);
   }
 }
 
@@ -379,6 +391,27 @@ function withFrenzy(stacks: number | undefined): void {
 /** the foe a skill that needs one is aimed at: the nearest at least this far off (m). One stood against him, over
  *  the shoulder the crosshair turned onto it passed beside its body and Pounce had no target */
 const FOE_LEAST = 3;
+
+/** how near the game's aim a foe stands to be the one it's on, where it isn't on a body (m: Pounce's own) */
+const AIMED_NEAR = 2.5;
+
+/** The frame's input with the aim (`aim` moved with it) and the close views' crosshair on `foe`, where there's one. */
+function onFoe(foe: Enemy | undefined, aim: THREE.Vector3, view: ViewMode): Frame {
+  if (foe) aim.set(foe.pos.x, 0, foe.pos.z);
+  return { aim, sight: sightOn(foe, view) };
+}
+
+/** The foe the game's aim at `point` is on (the one under the crosshair, else the nearest within `AIMED_NEAR`), if
+ *  it's at least `FOE_LEAST` off: nearer, over the shoulder the crosshair turned onto it passes beside it. */
+function foeAimedAt(point: THREE.Vector3): Enemy | undefined {
+  const hero = G.player.pos;
+  const fromHero = (foe: Enemy) => Math.hypot(foe.pos.x - hero.x, foe.pos.z - hero.z);
+  const fromAim = (foe: Enemy) => Math.hypot(foe.pos.x - point.x, foe.pos.z - point.z) - foe.radius;
+  const onBody = G.player.aimFoe;
+  const aimed = (foe: Enemy) => foe === onBody || fromAim(foe) < AIMED_NEAR;
+  const standing = G.enemies.filter((foe) => foe.alive && foe.spawning <= 0 && fromHero(foe) >= FOE_LEAST);
+  return standing.filter(aimed).sort((a, b) => fromAim(a) - fromAim(b))[0];
+}
 
 /** The living, risen foe nearest the hero at least `FOE_LEAST` off, if any. */
 function nearestFoe(): Enemy | undefined {
@@ -409,9 +442,17 @@ function foesWhere(): string {
   const words = G.enemies.map((foe) => {
     const off = Math.hypot(foe.pos.x - hero.x, foe.pos.z - hero.z);
     const state = !foe.alive ? ' dead' : foe.spawning > 0 ? ' rising' : '';
-    return `${foe.type} ${off.toFixed(1)} m${state}`;
+    return `${foe.type} ${off.toFixed(1)} m${state} (at ${foe.pos.x.toFixed(1)}, ${foe.pos.z.toFixed(1)})`;
   });
   return words.length ? words.join(', ') : 'no foes';
+}
+
+/** The game's refusal of a press as a line: why (`Player.refused`), and where its aim and the foes were then. */
+function refusal(reason: Denial): string {
+  const aim = input.ground;
+  const hero = G.player.pos;
+  return `refused for its ${reason}, him at ${hero.x.toFixed(1)}, ${hero.z.toFixed(1)}, the game's aim at `
+    + `${aim.x.toFixed(1)}, ${aim.z.toFixed(1)}; ${foesWhere()}`;
 }
 
 /** What lit a flashing cell's counted changes, and the most of a change any one thing was given. */
@@ -496,6 +537,7 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
   const met: string[] = [];
   const whatFrame = options.what ? Math.round(options.what[0] / frameTime) : -1;
   let cast = false;
+  let refused = '';
   lab.drawing = true;
   try {
     await lab.step(1, () => ({ aim: aimOf(scene) }));
@@ -506,6 +548,7 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
       reader.take();
       if (frame === whatFrame && options.what) met.push(...metAt(options.what));
       cast ||= hero.cooldowns.has(def.impl) || Boolean(hero.casting) || Boolean(hero.channel);
+      if (!cast && !refused && hero.refused) refused = refusal(hero.refused);
       const time = pictureFrames.get(frame);
       if (options.pictures && time !== undefined) {
         const label = `${options.biome} ${options.view}, ${def.name}, ${seconds(time)} after the press`;
@@ -523,7 +566,7 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
   const sources = flashing.most >= SOURCES_FROM
     ? await flashSources(lab, options, frames, flashing, frameTime)
     : null;
-  return judged(def, options, { before, frames, frameTime, cast, moments, met, compiled, late, flashing, sources });
+  return judged(def, options, { before, frames, frameTime, cast, refused, moments, met, compiled, late, flashing, sources });
 }
 
 /** the frame's mean is listed every this long through the cast (s) */
@@ -579,6 +622,8 @@ interface Seen {
   frames: FrameCells[];
   frameTime: number;
   cast: boolean;
+  /** why the game refused the press, where nothing was cast: the reason, the game's aim and the foes as it was */
+  refused: string;
   moments: Pictured[];
   /** what `--what` found */
   met: string[];
@@ -611,7 +656,7 @@ function judged(def: SkillDef, options: CastOptions, seen: Seen): Report {
   const budget = budgetJudged(seen.frames, seen.frameTime, seen.before);
   lines.push(...budget.notes);
   const found: string[] = [];
-  if (!seen.cast) found.push('nothing was cast');
+  if (!seen.cast) found.push(`nothing was cast${seen.refused ? ` (${seen.refused})` : ''}`);
   found.push(...budget.problems);
   if (flashing.most >= FLASHES_MOST) found.push(`${flashing.most} flashes in a second (${cellName(flashing.cell)})`);
   if (compiled > 0) found.push(`${compiled} shaders compiled after loading`);
