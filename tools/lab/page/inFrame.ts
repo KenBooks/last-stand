@@ -168,9 +168,9 @@ function widened(box: Box, i: number, j: number): void {
 
 /** The grid's cells through `weapon` and `arm` (drawn once, page/pickGrid.ts; a ray through each cell the weapon
  *  shows, for whether it's its head); `onHead` says whether a point of the weapon is on its head. */
-function coverOf(lab: Lab, weapon: THREE.Mesh[], arm: THREE.Mesh[], onHead: (point: THREE.Vector3) => boolean):
-  Cover {
-  const shows = pickGrid(lab, armsLens(), [weapon, arm], GRID_ACROSS, GRID_DOWN);
+async function coverOf(lab: Lab, weapon: THREE.Mesh[], arm: THREE.Mesh[], onHead: (point: THREE.Vector3) => boolean):
+  Promise<Cover> {
+  const shows = await pickGrid(lab, armsLens(), [weapon, arm], GRID_ACROSS, GRID_DOWN);
   let onWeapon = 0;
   let onHeadCount = 0;
   let onArm = 0;
@@ -227,7 +227,7 @@ function buttOf(grip: THREE.Object3D, weapon: THREE.Mesh[]): THREE.Vector3 {
  * (from the grip, a hand in the frame read as where its haft came into it). Throws if a part of it is in the frame
  * but no ray met it there: a measure that saw nothing.
  */
-export function framed(lab: Lab): Framed | null {
+export async function framed(lab: Lab): Promise<Framed | null> {
   const tip = lab.model.tip;
   const grip = tip?.parent;
   if (!tip || !grip || grip === lab.model.root) return null;
@@ -260,7 +260,7 @@ export function framed(lab: Lab): Framed | null {
   const butt = grip.worldToLocal(from.clone()).y;
   const length = grip.worldToLocal(to.clone()).y - butt;
   const onHead = (point: THREE.Vector3) => (grip.worldToLocal(point.clone()).y - butt) / length >= HEAD_FROM;
-  const cover = coverOf(lab, weapon, arm, onHead);
+  const cover = await coverOf(lab, weapon, arm, onHead);
   // (a weapon wider than a cell covers one: none is a pick that drew nothing, as one did while the lab held its draws)
   if (wide > 1 / GRID_ACROSS && cover.weapon === 0) {
     throw new Error('lab: the weapon is in the frame, but no cell of the grid shows it: the measure saw nothing');

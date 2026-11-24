@@ -359,11 +359,21 @@ async function compiles(lab: Lab, options: TwinsOptions, lines: string[], proble
     fx('twinMended', reliquary.id, slab.id);
     fx('bossPhase', reliquary.id, 1);
     if (options.canary) {
-      const odd = new THREE.Mesh(new THREE.TorusKnotGeometry(0.3, 0.1), new THREE.MeshPhongMaterial({ color: 0x123456, flatShading: true }));
+      // (a blending, side and depth no other material has together: the engine's pipelines are set apart by those,
+      // and a three material of its own, flat-shaded Phong, made none under it: `compiles.ts`'s canary)
+      const material = new THREE.MeshBasicMaterial({
+        color: 0x123456,
+        blending: THREE.AdditiveBlending,
+        side: THREE.BackSide,
+        depthWrite: true,
+      });
+      const odd = new THREE.Mesh(new THREE.TorusKnotGeometry(0.3, 0.1), material);
       odd.position.copy(slab.pos).setY(2);
       G.scene.add(odd);
       await lab.step(4);
       G.scene.remove(odd);
+      odd.geometry.dispose();
+      material.dispose();
     }
     await lab.step(60);
     const compiled = PIPELINES.made - before;

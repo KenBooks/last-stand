@@ -325,7 +325,9 @@ interface Sources {
 /**
  * What lit the changes counted in `flashing`'s cell: the cast played again from its set-up, and at each change's
  * two frames the frame drawn with each thing in the scene taken out in turn (page/flashSources.ts). The replay's
- * light is held to the cast's: where the two differ, what it names lit another frame.
+ * light is held to the cast's: where the two differ, what it names lit another frame. A change's start is read at its
+ * end's exposure too (the engine's, `TUNE.exposure`), so a change of the exposure alone (the canary's strobe) is left
+ * to the rest: read each at its own, it scaled every thing's light, and the brightest was given most of it.
  */
 async function flashSources(lab: Lab, options: CastOptions, frames: FrameCells[], flashing: FlashCount,
   frameTime: number): Promise<Sources> {
@@ -337,14 +339,24 @@ async function flashSources(lab: Lab, options: CastOptions, frames: FrameCells[]
   const holdFrames = Math.max(1, Math.round(holdFor(def) / frameTime));
   const exposure = TUNE.exposure;
   const drawing = lab.drawing;
+  const exposureAt = (frame: number): number => (options.canary ? strobed(frame, exposure) : exposure);
+  /** each wanted frame's light by thing, at its own exposure and at the exposure of the frame its change ends on */
   const lit = new Map<number, Lit>();
+  const litAtEnd = new Map<number, Lit>();
+  const endOf = new Map(spans.map((span) => [span.from, span.to]));
   lab.drawing = true;
   try {
     await lab.step(1, () => ({ aim }));
     for (let frame = 0; frame <= last; frame++) {
-      if (options.canary) TUNE.exposure = strobed(frame, exposure);
+      TUNE.exposure = exposureAt(frame);
       await lab.step(1, () => pressing(key, aim, frame < holdFrames));
-      if (wanted.has(frame)) lit.set(frame, litNow(lab, flashing.cell));
+      if (!wanted.has(frame)) continue;
+      lit.set(frame, litNow(lab, flashing.cell));
+      const end = endOf.get(frame);
+      if (end === undefined) continue;
+      TUNE.exposure = exposureAt(end);
+      litAtEnd.set(frame, litNow(lab, flashing.cell));
+      TUNE.exposure = exposureAt(frame);
     }
   } finally {
     TUNE.exposure = exposure;
@@ -357,8 +369,9 @@ async function flashSources(lab: Lab, options: CastOptions, frames: FrameCells[]
   for (const span of spans) {
     const from = lit.get(span.from)!;
     const to = lit.get(span.to)!;
-    lines.push(changeLine(span, from, to, time));
-    mostShare = Math.max(mostShare, mostOf(from, to)?.share ?? 0);
+    const fromAtEnd = litAtEnd.get(span.from)!;
+    lines.push(changeLine(span, from, to, time, fromAtEnd));
+    mostShare = Math.max(mostShare, mostOf(fromAtEnd, to, from)?.share ?? 0);
     if (Math.abs(to.whole - lights[span.to]) > REPLAY_OFF) off++;
   }
   if (off) lines.push(`      (the replay's light was not the cast's at ${off} of ${spans.length} changes)`);

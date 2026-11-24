@@ -129,11 +129,13 @@ export function litNow(lab: Lab, cell: number): Lit {
 
 const signed = (light: number): string => `${light >= 0 ? '+' : '-'}${Math.abs(light).toFixed(3)}`;
 
-/** A change as a line: how much of it each source lit, the most first, and what none of them accounts for. */
-export function changeLine(span: ChangeSpan, from: Lit, to: Lit, time: (frame: number) => string): string {
+/** A change as a line: how much of it each source lit, the most first, and what none of them accounts for. Each
+ *  source's part is read against `fromAtEnd`, the change's start drawn as its end is graded (by default `from`). */
+export function changeLine(span: ChangeSpan, from: Lit, to: Lit, time: (frame: number) => string,
+  fromAtEnd: Lit = from): string {
   const change = to.whole - from.whole;
-  const shares = [...new Set([...from.bySource.keys(), ...to.bySource.keys()])]
-    .map((name) => ({ name, lit: (to.bySource.get(name) ?? 0) - (from.bySource.get(name) ?? 0) }))
+  const shares = [...new Set([...fromAtEnd.bySource.keys(), ...to.bySource.keys()])]
+    .map((name) => ({ name, lit: (to.bySource.get(name) ?? 0) - (fromAtEnd.bySource.get(name) ?? 0) }))
     .sort((a, b) => Math.abs(b.lit) - Math.abs(a.lit));
   const accounted = shares.reduce((total, share) => total + share.lit, 0);
   const listed = shares.filter((share) => Math.abs(share.lit) >= LISTED_FROM).slice(0, LISTED_MOST)
@@ -142,9 +144,11 @@ export function changeLine(span: ChangeSpan, from: Lit, to: Lit, time: (frame: n
   return `      ${head}: ${[...listed, `the rest ${signed(change - accounted)}`].join('; ')}`;
 }
 
-/** The source that lit the most of a change, and its share of the change (0 to 1; null when none lit any). */
-export function mostOf(from: Lit, to: Lit): { name: string; share: number } | null {
-  const change = to.whole - from.whole;
+/** The source that lit the most of a change, and its share of the change (0 to 1; null when none lit any): each
+ *  source's part against `from`, the change itself from `start` (by default `from`; the change's start as it was
+ *  graded, `from` it drawn as its end is). */
+export function mostOf(from: Lit, to: Lit, start: Lit = from): { name: string; share: number } | null {
+  const change = to.whole - start.whole;
   let most: { name: string; share: number } | null = null;
   for (const [name, lit] of to.bySource) {
     const share = change ? (lit - (from.bySource.get(name) ?? 0)) / change : 0;

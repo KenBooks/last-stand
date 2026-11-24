@@ -11,6 +11,7 @@ import type { WeaponStyle } from '../../../src/loot/loadout';
 import type { ViewMode } from '../../../src/core/renderer';
 import type { BiomeId } from '../../../src/data/biomes';
 import * as renderer from '../../../src/core/renderer';
+import { TUNE } from '../../../src/engine/globals';
 import { G } from '../../../src/state';
 import { bindKnown, holdFor, pressing, skillNamed, type BoundSkill } from './cast';
 import { lookAlong } from './light';
@@ -294,9 +295,17 @@ function drawnBytes(lab: Lab, screen: Screen): Uint8Array {
   return bytes;
 }
 
-/** The game's renderer as far as it goes: `--ab` runs this on main's game, which can't leave its bloom out (its
- *  trail-less frames are the same with it). */
-const holdBloom = (renderer as Partial<typeof renderer>).holdBloom;
+/** The engine's bloom left out (`TUNE.bloom` 0) while `run` runs: the game's own hold (`holdBloom`) reaches three's
+ *  passes alone, which the engine never draws, and the trail was read with its glow. */
+function withoutBloom<T>(run: () => T): T {
+  const bloom = TUNE.bloom;
+  TUNE.bloom = 0;
+  try {
+    return run();
+  } finally {
+    TUNE.bloom = bloom;
+  }
+}
 
 /**
  * The frame drawn with the trail and without it, both without bloom: the pixels it lit, and the frame with it. None
@@ -306,8 +315,7 @@ const holdBloom = (renderer as Partial<typeof renderer>).holdBloom;
 function trailDrawn(lab: Lab, screen: Screen): { lit: Lit; shown: Uint8Array } | null {
   const shownTrails = trailMeshes().filter((mesh) => mesh.visible);
   if (!shownTrails.length) return null;
-  holdBloom?.(true);
-  try {
+  return withoutBloom(() => {
     const shown = drawnBytes(lab, screen);
     for (const mesh of shownTrails) mesh.visible = false;
     try {
@@ -315,9 +323,7 @@ function trailDrawn(lab: Lab, screen: Screen): { lit: Lit; shown: Uint8Array } |
     } finally {
       for (const mesh of shownTrails) mesh.visible = true;
     }
-  } finally {
-    holdBloom?.(false);
-  }
+  });
 }
 
 /** A lit pixel's place on the screen (down from its top), from its place in the drawing buffer. */

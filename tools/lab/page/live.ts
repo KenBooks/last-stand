@@ -87,7 +87,7 @@ export async function picture(lab: Lab, options: LivePicture): Promise<LivePictu
     return `${tile.view}: ${describeParts(tile.parts!, PARTS_LISTED)}`;
   });
   // (through the eyes, the weapon as they frame it: where it comes in, its tip and head, what it and the arm cover)
-  const seen = renderer.viewMode() === 'first' ? framed(lab) : null;
+  const seen = renderer.viewMode() === 'first' ? await framed(lab) : null;
   if (seen) notes.unshift(describeFramed(seen));
   const finished: Tile[] = [];
   for (const tile of tiles) finished.push(await finish(tile, options));

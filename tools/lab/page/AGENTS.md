@@ -46,6 +46,10 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
 <!-- sorted -->
 - `behind.ts`, `villageBuiltBehind.ts`: the browser let go every frame of the building, not only frames with no piece built: the guide's pictures, queued behind the heroes, wait a piece a frame for a boss's file to load and for the card's fence, both on the browser's own time, and stepped without a break they spun the 1200 (1500) frames away ("still building", on main too). What's left queued is named (`queuedBehind`), and the guide's slowest pieces said: the mage's picture staged, shrunk and asked to compile in one piece was 31 to 34 ms, now a frame each. `hallBuiltBehind` builds them all again once where a frame's building passed 30 ms, and fails only if that build does too: on the lent laptop held to 86% of its clock with 8 sessions at once, the hall mage's piece 84 took 78 ms once, its other pieces 23 ms at most, where here it's not among the 8 slowest (all under 10 ms): a pause landing in one piece, not its work, which is slow both times.
 - `bossWave.ts`: what the game's own clock brings (a boss's rise, as the wave's first group would reach him) is waited for by the game's time (`stepUntilInGame`, 120 s of it), what the browser's brings (a warm-up's links) by the browser's: waited for by the browser's 60 s, on a shared PC and on the lent laptop with 8 sessions at once the Twins "never came" with nothing readying, and came run alone. Its error says the run as it stands (its phase, the boss's time to come, the foes come, the hero).
+- `cast.ts`, `flashSources.ts`: a flash's change is shared out among the scene's things with its start read at its
+  end's exposure too (`TUNE.exposure`), so a change of the exposure alone is left to the rest: read each at its own, the
+  canary's strobe scaled every thing's light and was given to the sun's light (0.091 of 0.126). It names Steel Tempest
+  through the eyes in the forest, 3 flashes a second at the screen's foot, not looked into.
 - `compiles.ts`, `programs.ts`: a pipeline first asked for is counted off the engine's census (`PIPELINES_ASKED`), named
   by its descriptor (`what`). Under the engine three's programs are none, and three's `renderBufferDirect` watcher threw
   at its first draw; a canary of a three material of its own (sheen, iridescence) makes no pipeline of its own there,
@@ -62,7 +66,9 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   (`WARM_BEHIND.givenUp` holds the fight, the heroes and the rooms as a command begins), so `hallnear` clears it
   and sets `heldMost` itself (0 held, none not held) before walking him up: read as the boot left it, the heroes'
   warm-up never began near the hall in any run. Its run is left for the village first (`toLobby`): the set-up's
-  run kept him out of it.
+  run kept him out of it. Under the engine a return's boot asks for the heroes as it ends (`main.ts`), so
+  they're warm before he nears the hall, `--cold` or not: it says there's nothing to measure (it failed asking for
+  `--cold`).
 - `haze.ts`: the weapons are the named ones a blow is measured by and whatever else a hand holds (`isHeld`: the staff, the bow): by name alone the mage's and the ranger's runs said "no weapons in the frame" with the staff filling a third of it.
 - `houses.ts`, `housesFaces.ts`: `lab houses` hung on main, unseen, its page held in one task: the faces round a door are read by some 80 thousand rays, sent at each of the room's meshes whole, and the rooms' still parts had become merged meshes of thousands of triangles (`mergeRoom`). They go at chunks now (`rayChunks.ts`), and only those that reach the front wall, where every ray starts (`reachesFront`): 6.5 s a room, the check 61 s. While it couldn't run three more of its readings went stale, found by its canary once it ran: the chandeliers against the beams read each one's meshes, of which a merge leaves none, so it passed with nothing read (it reads `mergedParts` now, the box of each mesh a merge took, kept by `mergeStill` in dev builds, and throws where a chandelier or a ceiling has no part); the programs compiled going in were three's, none under the engine (it counts the engine's pipelines made, `PIPELINES.made`, 0 in every visit; the plant that compiled one is gone); and it found a real fault, the shop's crates' posts in their lids' top face. A check that sends thousands of rays at a place sends them at chunks, and a command's work on its page has a limit now (`COMMAND_TIMEOUT_MS` in `node/side.mjs`, 20 minutes), so one held so fails saying it.
 - `lab.ts`: `drawn`'s lit pictures (`lab.drawn`, the close-ups `glow` and others read) are read off the engine's canvas in the task that drew them (`shownIn`, `readOpaque`): they were cropped from three's canvas, blank under the engine, and `lab glow` read no glow on any item, every reading of it passing over nothing. A measure that reads pixels names the canvas it reads (`drawnCanvas` in `pixels.ts`), never `G.renderer.domElement`, which is three's (the pointer's target still).
@@ -77,10 +83,24 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   are the engine's (the scene's and the sun's map's), and what it calls compiled as it was timed is named: the
   village's walk at High asked for two lit pipelines at 1 sample, culling back faces, not looked into.
 - `perf.ts`, `programSwitches.ts`, `matrixWalks.ts`: each phase counts the programs switched and the objects walked as well as the draws (`gl.useProgram` and three's `updateMatrixWorld` wrapped as the page loads; no switches on WebGPU): a switch sets again every uniform a program reads that its material's don't, and the walk went down every hidden part too. Exact counts, where the page's ms moved by a millisecond or two with the shared PC's load: compare those first, then time on the lent 4080 (`--exclusive`).
+- `perfParts.ts`: the ways of drawing timed in turns are the engine's switches (`TUNE.depthFirst`, `nearFirst`,
+  `shadows`, `shadowTurns`): three's draw order, a depth pass of three's own and three's shadow map's `autoUpdate`
+  reached nothing the engine draws (it reads no `renderOrder`). What the switches ask for themselves (15 pipelines:
+  the depth in one pass) is said apart from what play compiled late, which `perf` failed on. Its canary is caught
+  with the GPU loaded (`--screen 2880x1800@2`) and missed at 2 Mpx, as its entry says.
+- `pickGrid.ts`, `inFrame.ts`: the picked meshes are drawn by the engine (`drawRust`, flat unlit, a channel a group,
+  on a layer of their own over black) and read off its canvas in the task that drew it, drawn again on the browser's
+  time while their pipelines compile: three's render target and `readRenderTargetPixels` had nothing to draw into,
+  and `framed` (the eyes' notes of `sheet`, `live`, `fitrest`) threw at its first frame. `framed` is async now.
 - `programCost.ts`: a time is the browser's clock's (`__labClock.realNow`): by the page's `performance.now`, the lab's,
   every compile read 0 ms. Salted by a comment at the code's end, the 80 pipelines took 21.5 s here; the same salt
   again came back in 1 ms of 519, the browser's caches keying a shader by its code.
 - `screenCells.ts`, `trail.ts`, `fire.ts`: a frame is read off the engine's canvas in the task that drew it (`webGpuPixels`) and summed on the CPU. The sums were made on the GPU by a WebGL program of the lab's own (`gridSums.ts`, gone), and `cast`, `fire` and `trail` stopped at their first frame under the engine ("gl.readPixels is not a function"). What still meant three under the engine, and what reads the engine now: a wait for the GPU is the engine's device's queue (`gpuDone` in `core/webgpu.ts`, `engineWorkDone`: three's queue alone never waited for the engine's frame), the exposure a canary strobes is the engine's (`TUNE.exposure`: three's `toneMappingExposure` reached nothing, and `cast`'s strobe went unseen), a count of what compiled is the engine's pipelines (`PIPELINES.made`: three's `info.programs` is undefined on its WebGPU renderer, and sixteen checks read 0 whatever compiled), and a particle pool hidden by `visible` is hidden from the engine too (`engine/sprites.ts`). **The engine's first frame after the camera is aimed isn't its steady one**: `fire`'s fire put out read lit by the fire's bed (77 pixels 0.09 of white apart from the next frame), so a reading taken right after a camera cut draws a frame first and lets it go.
+- `shadows.ts`: the hero's shadow from fewer triangles (the engine's `casterGeometry`, held whole by
+  `castingAsOne.whole`) against every triangle, the pieces counted by the engine's `casters`, and his shadow taken away
+  in every case: it compared his pieces cast as one (`castAsOne.ts`) in three's shadow pass, which the engine never
+  runs. Through the eyes his shadow isn't drawn at all under the engine (his body on the layer no camera draws, which
+  the engine's walk passes by; his pieces cast as one cast it before): it fails there till the game draws it.
 - `studio.ts`, `looks.ts`: the studio draws by the engine (`drawRust` with a scene and a camera of its own), its
   tile read off the engine's canvas in the task that drew it; three's `readPixels` it used before has no drawing
   buffer under the engine, and `hood`, `hands`, `weapons`, `turnaround`, `neck`, `herolooks` and `maps --pictures`
@@ -91,6 +111,10 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   slack. The `faces` look is a front material and a back-faces twin of each mesh: chosen by `gl_FrontFacing` in a
   patch of three's shader, every face drew alike, and the fist read as seen through from every side.
 - `throws.ts`: the vine's shot lets the bow go `SHOT.loosedAfter` frames into the hold, drawn as far as it is: held for its whole draw and the quiver's fetch from the throw, the arrow left a frame after the vine let him go (on main too).
+- `trail.ts`: the trail is read with the engine's bloom out (`TUNE.bloom` 0): the game's `holdBloom` holds three's
+  passes alone, and the trail was read with its glow.
+- `twins.ts`: the compiles' canary is a material of a blending, side and depth none else has together (as `compiles`'s):
+  a flat-shaded Phong of its own made no pipeline under the engine, and went uncaught.
 - `uiCloudIdentity.ts`: the service's health is asked once a visit (`serviceHealth` in `loot/cloudApi.ts`), so the state forgets it before and after its stub answers: a state before it asked the lab's server, and Google's button stayed hidden in a run of every state, alone it passed.
 - `uiPerfAsk.ts`, `uiStates/decisionTouch.ts`: a canary's plant must land where it's judged: the prompt's moved to the window's top, onto the choice (moved down to the middle it left the choice on a 1080 screen, and went unseen on main), and the choice's padding is planted and judged on a short screen alone.
 - `villageBloomLow.ts`: the bloom's pixels are the engine's own sizes at the share it was told (`Levels.now`'s
@@ -98,6 +122,9 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   ways. Low's level switched in play makes its plain set aside (`plainSet.ts`), 72 pipelines, waited for with frames
   drawn (the switch begins as a frame tells the engine the level); and what a view first draws at Low asks for its
   own, so the bloom's switches are counted from a frame of each view on.
+- `villageDaisOpens.ts`: in the hall it reads the heroes' pieces cast from fewer triangles in its frame (the engine's
+  `casters`) and no mesh the shadow map alone draws shown: it drew three's shadow map to make his shadow cast as one
+  again, which three's WebGPU renderer and the engine never do, and stopped there.
 - `villageHallCull.ts`, `villageStillHeroes.ts`, `villageSweep.ts`: a frame is counted by the engine's own stats
   (`countedFrame`: its scene's draws and triangles, the meadow's blades among them): it was three's draws round
   `renderBufferDirect`, which three's WebGPU renderer hasn't got, and all three stopped there. The sweep's budgets were
