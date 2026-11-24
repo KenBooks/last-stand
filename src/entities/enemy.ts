@@ -103,6 +103,8 @@ export interface EnemyOpts {
   /** a body that stands in for something else (a duel's rival for a hero, entities/rival.ts): its own definition and
    *  a body to be met by, drawn by nothing and in no crowd */
   standIn?: { def: EnemyDef; model: Model; reach: Reach };
+  /** the way it faces as it stands (rad about y: 0 faces +z), else toward the arena's middle */
+  facing?: number;
 }
 
 let nextId = 1;
@@ -229,7 +231,7 @@ export class Enemy {
   /** felled with its partner by the blow that killed it: it pays no spoils (the pair pays once) */
   noSpoils = false;
 
-  constructor(typeId: EnemyId, { wave = 1, hero = false, training = !!G.run?.training, pos, lifeMult = 1, id, name, maxLife, standIn }: EnemyOpts) {
+  constructor(typeId: EnemyId, { wave = 1, hero = false, training = !!G.run?.training, pos, lifeMult = 1, id, name, maxLife, standIn, facing }: EnemyOpts) {
     const def = standIn?.def ?? ENEMIES[typeId];
     this.standIn = !!standIn;
     this.type = typeId;
@@ -249,7 +251,7 @@ export class Enemy {
     this.score = def.score + (hero ? HERO.score : 0);
 
     this.pos = pos.clone();
-    this.facing = this.targetFacing = Math.atan2(-pos.x, -pos.z);
+    this.facing = this.targetFacing = facing ?? Math.atan2(-pos.x, -pos.z);
 
     this.model = standIn?.model ?? buildModel(def.model);
     // The rising branch skips updateLooks: set the projection before its first crowd row or draw.

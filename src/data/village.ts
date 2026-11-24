@@ -110,6 +110,9 @@ export const RACK = (() => {
 
 /** where the yard's dummies stand */
 export const YARD_DUMMIES: readonly Spot[] = [yardToWorld(-3, 1.7), yardToWorld(0, 2.9), yardToWorld(3, 1.7)];
+/** the way they face (rad about y): square to the yard, toward its gate side, where a hero comes in and stands to
+ *  strike them (#754: turned to the village's middle, as a foe faces the arena's, they stood diagonally across it) */
+export const YARD_DUMMY_FACING = YARD.turn + Math.PI;
 
 /** The palisade's line round the village, a closed curve through these points (clockwise from the east), and where
  *  its two ways out open in it (the middles of the gaps) and how wide (m). */
