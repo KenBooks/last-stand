@@ -21,12 +21,13 @@ label shows through, which must be caught.
 
 `summarySkip` (`uiStates/summarySkip.ts`, #734): a bank of 90 items, its reveal ending within 3.8 s whatever the bag holds (the last chip's delay: 3.76 s, 19.9 s at a fixed 0.22 s a chip), and a click on the summary's title as they open opening every chip still to open (none left running; its canary leaves the click out, 90 still opening). Reduced motion is let go for it: the reveal is its motion.
 `floorDespawn` (`uiStates/floorDespawn.ts`, #736): an item thrown on the lobby's floor, pictured with its name and time left (2:00), then the game's minutes run at 20 frames a second: about 59 s left after one, gone after two (its canary holds the floor's clock, the drop still there).
+`waveAfterDuel` (`uiStates/waveAfterDuel.ts`, #855: "players sometimes see the wrong wave number (often wave 1)"): the run's wave set to 7, the badge written over with "1" as a duel writes its round there (`ui/duelHud.ts`), and two frames later it must show 7 again (main's HUD skipped the write, as what it last wrote was 7, and showed 1). Its canary writes the round over it again after those frames.
 
 `sitHint`: the hint to sit, E Sit (`src/ui/sitHint.ts`; from play: "when pointing at object to sit on, we need to display a hint like E Sit"). The mouse is put on the lobby's seat nearest the hero that shows on the screen: the seat outlined at once, the prompt (the village's objects' own, drawn over the world) shown and within the window; then on the floor beside him, and the prompt gone (`uiSitHint.ts`). `--canary` makes the shown prompt clear, which must be caught.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,guideKeys,saves,heroes,readying,
 readyingHeroes,clicked,views,behindProps,sitHint,floorDespawn,logLobby,perfAsk,pauseLobby,coop,coopRename,bugReport,skillTipsTouch,sheetTouch,litTouch,coopTouch,autoFull,
-run,scores,perf,perfMini,perfGraph,perfParty,decision,perfAskBreak,pause,pauseSettings,pausePerformance,profiling,pauseVolume,pauseTabKept,pauseAbandon,summary,summarySkip,skillTips,log,logTouch,hudTouch,
+run,waveAfterDuel,scores,perf,perfMini,perfGraph,perfParty,decision,perfAskBreak,pause,pauseSettings,pausePerformance,profiling,pauseVolume,pauseTabKept,pauseAbandon,summary,summarySkip,skillTips,log,logTouch,hudTouch,
 decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch,bugReportTouch`, every one by default (the bug report's form,
 `page/uiBugReport.ts`: `bugReport` opens it from the lobby's pause menu by a click on Report a bug and makes a report
 as a player does, `bugReportTouch` opens it over a run by a tap: the form within the window and not scrolling, every

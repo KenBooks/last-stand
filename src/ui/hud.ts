@@ -320,6 +320,8 @@ const hudEls = new Map<string, HTMLElement>();
 const h = (s: string): HTMLElement => { let e = hudEls.get(s); if (!e) hudEls.set(s, e = $(s)); return e; };
 const written = new WeakMap<Element, string>();
 function setText(el: Element, v: string): void { if (written.get(el) !== v) { el.textContent = v; written.set(el, v); } }
+/** `v` shown in `el`, whatever wrote it last (its text read: a single node's, no layout) */
+function showText(el: Element, v: string): void { if (el.textContent !== v) el.textContent = v; }
 function setStyle(el: HTMLElement, prop: string, v: string): void {
   const key = `${prop}:${v}`;
   if (written.get(el) !== key) { el.style.setProperty(prop, v); written.set(el, key); }
@@ -348,7 +350,10 @@ export function updateHud(): void {
   setStyle(h('.bar.energy .fill'), 'width', pct(p.energy / s.maxEnergy));
   setText(h('.bar.energy .txt'), `${Math.floor(p.energy)} / ${Math.round(s.maxEnergy)}`);
   updateFrenzy(p);
-  if (r && !r.duel) setText(h('.gem-num'), String(r.wave));
+  // (against what it shows, not what it last wrote: a duel writes its rounds there (ui/duelHud.ts), and a run after
+  // one at the wave last written here kept the duel's last round, from play: "players sometimes see the wrong wave
+  // number (often wave 1)", #855)
+  if (r && !r.duel) showText(h('.gem-num'), String(r.wave));
 
   for (const slot of slots) {
     const sk = p.skillAt(slot.key);
