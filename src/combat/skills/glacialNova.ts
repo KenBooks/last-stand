@@ -12,8 +12,13 @@ import type { InstantSkill, Needs } from './types';
 import { blastCorpses } from '../../entities/corpse';
 import type { SkillDef } from '../../types';
 import { rand } from '../../util';
+import { tunable } from '../../core/tuning';
 
 const ICE = 0x8fd8ff;
+/** Its rings (#214): the ice ring alone (`rings` 1), or with a white one inside it (2, compared in the lab: `--tune
+ *  glacialNova.rings=2`). Over the shoulder in the crypt the two held up 3.5 of its 5.2% bright share, past the
+ *  budget's 5%; the ice ring alone, 4.1% (two rings half as wide, 4.0%: the owner chose one ring). */
+const NOVA_RINGS = tunable('glacialNova', { rings: 1 });
 
 const skill: InstantSkill = {
   anim: 'slam',
@@ -22,7 +27,7 @@ const skill: InstantSkill = {
     const def = rawDef as Needs<'damage' | 'radius' | 'freeze'>;
     const c = player.pos.clone();
     shockwave(c, { color: ICE, intensity: 3, from: 0.5, to: def.radius, life: 0.45 });
-    shockwave(c, { color: 0xffffff, intensity: 2, from: 0.3, to: def.radius * 0.7, life: 0.3 });
+    if (NOVA_RINGS.rings > 1) shockwave(c, { color: 0xffffff, intensity: 2, from: 0.3, to: def.radius * 0.7, life: 0.3 });
     // a faint flash of frost: bright over the whole radius, it blooms into a milky dome
     groundFlash(c, { color: ICE, intensity: 0.9, radius: def.radius, life: 0.3 });
     // none through the caster (in first person they'd rise through the camera)
