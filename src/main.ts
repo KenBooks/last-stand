@@ -9,7 +9,7 @@ import { rustSwitching } from './engine';
 import { pipelinesAtOnceFromNow } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
 import { CAMERA, COOP } from './data/balance';
-import { START_SPOTS, YARD_DUMMIES, biomeOfHour, inHall, type VillageObject } from './data/village';
+import { START_SPOTS, YARD_DUMMIES, YARD_DUMMY_FACING, biomeOfHour, inHall, type VillageObject } from './data/village';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, escapeSpentOnLock, releaseInput } from './core/input';
 import { initAudio, sfx } from './core/audio';
 import { InputDelivery } from './core/inputDelivery';
@@ -545,7 +545,7 @@ function enterMenu(keepSummary = false, dummiesLater = false) {
 /** The training yard's dummies (the lobby's only foes), and the ghost by its gate (built once, with the village). */
 function spawnDummies() {
   clearEnemies();
-  for (const [x, z] of YARD_DUMMIES) spawnEnemy('dummy', new THREE.Vector3(x, 0, z));
+  for (const [x, z] of YARD_DUMMIES) spawnEnemy('dummy', new THREE.Vector3(x, 0, z), { facing: YARD_DUMMY_FACING });
   standGhost(G.arena.groupOf('village'));
 }
 
@@ -554,7 +554,7 @@ function spawnDummies() {
  *  dummies stand up in this task, their random numbers drawn as `spawnDummies` draws them. */
 async function spawnDummiesInSteps(): Promise<void> {
   clearEnemies();
-  for (const [x, z] of YARD_DUMMIES) spawnEnemy('dummy', new THREE.Vector3(x, 0, z));
+  for (const [x, z] of YARD_DUMMIES) spawnEnemy('dummy', new THREE.Vector3(x, 0, z), { facing: YARD_DUMMY_FACING });
   await standGhostInSteps(G.arena.groupOf('village'), painted);
 }
 
