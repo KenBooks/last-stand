@@ -1,8 +1,9 @@
 // `lab village --only sightBlacksOut`: what he can't see from where he stands, from above (from play, "we have a bug
 // that allows character to see inside buildings while staying outside ... hide the areas player cannot possibly see",
 // "solid black does not look good"). At noon, so nothing is dark by itself, and each place read with the fog on and
-// held off at one moment: what he can't see keeps a share of its light and little of its colour, the inside of a
-// building shut to him far less; what he can see is untouched, a wall he faces among it; over the shoulder none of it
+// held off at one moment: what he can't see loses at least a third of its colour's warmth, and where it was bright
+// keeps at least three quarters of its light (#755: "Reduce the intensity of the grey effect (top down view) to make
+// it less harsh": pressed to 0.35 of its light and turned cold, the village past a wall read as a grey slab); what he can see is untouched, a wall he faces among it; over the shoulder none of it
 // is fogged. `canary` holds the fog off, which must be found.
 import * as THREE from 'three';
 import type { Lab, Pictured } from './lab';
@@ -18,11 +19,13 @@ import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
 
 /** the frames given to settle (the fog eases in), half the box read (px); the least of its light a seen place keeps,
- *  the most an unseen one does */
+ *  the least an unseen bright one does (no longer harsh), and the least share of its warmth an unseen place loses (it
+ *  still reads as fog) */
 const SETTLE = 90;
 const HALF_BOX = 10;
 const SEEN_KEEPS = 0.85;
-const UNSEEN_KEEPS = 0.65;
+const UNSEEN_KEEPS_LEAST = 0.75;
+const UNSEEN_COLDER = 1 / 3;
 const DARK_ALREADY = 0.3;
 /** the least over the shoulder's frame's mean may be */
 const LEAST_OVER_SHOULDER = 0.05;
@@ -150,8 +153,9 @@ function judged(reading: Reading, fogged: Box, clear: Box): string | null {
   // (a place already dark isn't dimmed by half: the fog holds a floor, not to fall to black;
   // its colour says it's fogged)
   // (in a building shut to him as in the open: its room is fogged as the ground is, grey and cold)
-  if (clear.light > DARK_ALREADY && kept > UNSEEN_KEEPS) return `keeps ${kept.toFixed(2)} of its light, unseen`;
-  return fogged.warmth < clear.warmth && fogged.warmth < 0 ? null : `its colour no colder, ${fogged.warmth.toFixed(3)}`;
+  if (clear.light > DARK_ALREADY && kept < UNSEEN_KEEPS_LEAST) return `keeps ${kept.toFixed(2)} of its light, unseen: harsh`;
+  const colder = fogged.warmth <= clear.warmth - UNSEEN_COLDER * Math.max(Math.abs(clear.warmth), 0.1);
+  return colder ? null : `its colour not a third colder, ${fogged.warmth.toFixed(3)} of ${clear.warmth.toFixed(3)}`;
 }
 
 /** He placed at `stand`, settled, and the frame drawn. */

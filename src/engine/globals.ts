@@ -117,8 +117,11 @@ export const TUNE = tunable('rust', {
   /** three's canvas over the engine's cleared by the first draw of a frame's overlays as its pass begins (0: by
    *  a pass of its own before them, as it was: each draw after it reads the whole canvas back) */
   overCleared: 1,
-  /** the village's fog over what the hero can't see (0: none, to compare) */
-  sightFog: 1,
+  /** the village's fog over what the hero can't see: how strongly the engine mixes it in (0: none, to compare). 0.7
+   *  (#755, from play: "Reduce the intensity of the grey effect (top down view) to make it less harsh"): at its whole
+   *  the village past a wall went grey-blue and dark; at 0.7 what he can't see keeps its light and a third of its
+   *  colour, still plainly fogged */
+  sightFog: 0.7,
   /** how far off a face turned to the hero the fog reads its place (m; 0: on the face, as the game's own pass
    *  reads it: the wall he stands against greys further along it) */
   sightOffFace: 0.6,

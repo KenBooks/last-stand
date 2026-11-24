@@ -20,7 +20,8 @@ export class SightFog {
 
   /** The frame's sight told; with `few`, a level's, the rays are read three times a surface where nine. */
   tell(few: boolean): void {
-    const n = this.numbers, on = TUNE.sightFog > 0 ? SIGHT.uSightOn.value : 0;
+    // (its strength the game's on-share times `TUNE.sightFog`: the engine mixes the fog in by that share)
+    const n = this.numbers, on = TUNE.sightFog > 0 ? SIGHT.uSightOn.value * TUNE.sightFog : 0;
     const from = SIGHT.uSightFrom.value, door = SIGHT.uSightDoor.value;
     n[0] = from.x; n[1] = from.y; n[2] = on; n[3] = SIGHT.uSightShut.value;
     SIGHT.uSightSealed.value.toArray(n, 4);
