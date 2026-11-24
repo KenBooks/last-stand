@@ -35,11 +35,14 @@ export function colourPickerHtml(compact = false): string {
   const any = swatch('', ANY, 'transparent');
   const wheel = `<button type="button" class="cc-wheel-open" aria-expanded="${wheelOpen}" title="${WHEEL}"`
     + ` aria-label="${WHEEL}"></button>`;
-  const swatches = `<div class="cc-swatches" role="radiogroup" aria-label="Your hero's colour">`
-    + `${HERO_COLOURS.map((c) => swatch(c.id, c.name, c.swatch)).join('')}${any}${wheel}</div>${wheelHtml()}`;
-  if (!compact) return `<div class="coop-colour"><span>Your colour</span>${swatches}</div>`;
+  const row = (after: string): string => `<div class="cc-swatches" role="radiogroup" aria-label="Your hero's colour">`
+    + `${HERO_COLOURS.map((c) => swatch(c.id, c.name, c.swatch)).join('')}${any}${after}</div>${wheelHtml()}`;
+  // (in Settings the wheel's button stands by the label, in the room its line leaves: after Any, on a phone held
+  // sideways the twelve swatches and Any filled their row at a finger's size and it took a row of its own, and the tab
+  // scrolled)
+  if (!compact) return `<div class="coop-colour"><span>Your colour</span>${wheel}${row('')}</div>`;
   return `<details class="coop-colour colour-drop"${dropOpen ? ' open' : ''}><summary><span class="cc-label">Your colour</span>`
-    + `<span class="cc-now"></span><span class="cc-now-name"></span></summary>${swatches}</details>`;
+    + `<span class="cc-now"></span><span class="cc-now-name"></span></summary>${row(wheel)}</details>`;
 }
 
 /** The wheel's panel: its disc, its marker, its lightness slider and the colour as picked. */

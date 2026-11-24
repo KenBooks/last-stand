@@ -59,6 +59,12 @@
 #hero-colour-settings .coop-colour { justify-content: flex-start; gap: 6px; }
 #hero-colour-settings .cc-swatches { justify-content: flex-start; }
 #hero-colour-settings { grid-column: 1 / -1; margin-bottom: 8px; }
+// (a short touch screen: the label's row is the wheel button's finger height, so the rows sit closer and the tab
+// keeps from scrolling, as without the wheel it didn't: #732)
+@media (max-height: 520px) {
+  body.touch #hero-colour-settings { margin-bottom: 0; }
+  body.touch #hero-colour-settings .coop-colour { gap: 3px 6px; }
+}
 .cc-swatch {
   width: 32px; height: 32px; padding: 0; border-radius: 50%; cursor: $cursor-hand; background: var(--swatch);
   border: 2px solid rgba($frame, .55); box-shadow: inset 0 0 0 2px rgba(0,0,0,.45);

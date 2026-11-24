@@ -12,7 +12,8 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 - **The hero's colour is picked in Settings and Play together** (`colourPicker.ts`, `net/heroColour.ts`): twelve
   colours, Any and the colour wheel (#732, from the owner: "More niche colours can be selected using the colour
   wheel"; the twelve kept, from review: "Lets keep the original colors, they were tested and look good"): its button, a
-  ring of hues, opens a disc of
+  ring of hues (in Settings beside the label: after Any, on a phone held sideways the touch swatches filled their row and
+  it took a row of its own, the tab scrolling; in Play together after Any), opens a disc of
   hue round and saturation out and a slider of lightness under the swatches, the colour picked as the pointer lifts off
   the disc or the slider is let go (a party's host asked once a pick), held to what reads as cloth (`CUSTOM_RANGE` in
   `data/heroColours.ts`: saturation 0.65 at most, lightness 0.12 to 0.66, as the presets' own run); its id is its
