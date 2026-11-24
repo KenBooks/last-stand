@@ -23,6 +23,8 @@ export interface RoundsRoom {
   /** the room's half width and depth (m) */
   half: readonly [number, number];
   obstacles: Obstacle[];
+  /** which of them are the cases' fronts: he stands nearer them to take a book than his ways keep */
+  cases: readonly Obstacle[];
   /** each spine's books on the shelves: its covers' instanced mesh, every book's pages' mesh and where this spine's begin
    *  in it, and each book's matrix and colour */
   shelves: { mesh: THREE.InstancedMesh; pages: THREE.InstancedMesh; offset: number; matrices: THREE.Matrix4[]; colours: THREE.Color[] }[];
@@ -71,14 +73,21 @@ export interface Rounds {
   readonly out: ShelfBookOut | null;
   /** a task begun now, whatever he's doing (a harness's) */
   begin(task: Task): void;
+  /** where he stands at the cases (the room's frame): each spot, whether a clear way from his table reaches it, and how
+   *  often he's gone to it this visit (a harness's) */
+  readonly spots: readonly SpotSeen[];
 }
+/** a spot at the cases as a harness sees it: where he stands, the way he faces there, whether he can walk to it, how
+ *  often he's gone to it */
+export interface SpotSeen { readonly stand: THREE.Vector2; readonly out: THREE.Vector3; readonly reachable: boolean; readonly used: number }
 
 /** the floor's grid his paths are found on (m a cell), and how far his body keeps from what's in the room (m) */
 const CELL = 0.2;
 const BODY = 0.3;
-/** how far from a case he stands to take a book (m from its spine), the heights a book is taken from (m), and where
- *  he holds one: ahead of him and its height (m) */
-const SHELF = { stand: 0.5, low: 0.85, high: 1.6 };
+/** how far from a case he stands to take a book (m from its spine), the heights a book is taken from (m: from his
+ *  chest to over his head; the row under, a metre up, pushed back in, was 0.76 m from his shoulder, past his reach, as
+ *  he doesn't stoop), and where he holds one: ahead of him and its height (m) */
+const SHELF = { stand: 0.5, low: 1.1, high: 1.6 };
 const HOLD = { ahead: 0.3, high: 1.24, tilt: 0.55 };
 /** how far back from upright the open book is held to read (rad from horizontal of its pages' facing: 55 degrees,
  *  the book 35 from upright) */
@@ -129,6 +138,15 @@ const STACK = { most: 8, fewest: 1, stands: [new THREE.Vector3(1.02, 0, 0.72), n
 /** A book on a shelf he can take: its spine's mesh and instance, where it stands, how it's turned, its size, the way
  *  its spine faces (out of the case) and where he stands for it. */
 interface Slot { shelf: number; index: number; at: THREE.Vector3; turn: THREE.Quaternion; size: THREE.Vector3; out: THREE.Vector3; stand: THREE.Vector2 }
+/** a stretch of a case's front he stands at: its first book's stand, the way out of the case, its books, whether a clear
+ *  way from his table reaches it, how often he's gone to it */
+interface Spot { stand: THREE.Vector2; out: THREE.Vector3; slots: Slot[]; reachable: boolean; used: number }
+/** how wide a spot is along its case (m: a step either way reaches its books), and how near facing its books are (the
+ *  cosine of the angle between their ways out: a corner's two cases are two spots) */
+const SPOT = { wide: 0.7, facing: 0.9 };
+/** how near a case's front he stands at it (m past its circle: his body's front, a forearm off its shelves), and how far
+ *  off the walls (m): kept a body's width off the cases as his ways are, he stood at 4 stretches of the room's 33 */
+const AT_CASE = { near: 0.25, walls: 0.3 };
 
 /** a hand's aim as a turn: its fingers +y, its palm +z (made square to the fingers), and back */
 function aimTurn(fingers: THREE.Vector3, palm: THREE.Vector3): THREE.Quaternion {
@@ -144,7 +162,9 @@ export function mixAim(a: HandAim, b: HandAim, t: number): HandAim {
 
 export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   const { g, desk, act } = { ...room, act: s.act };
-  const rng = mulberry(1701);
+  // (each visit its own: seeded the same every visit, he went to the same cases in the same order, from play: "add more
+  // spots for him to stand/pick books, not just two". A harness's runs fix the page's randomness, so its are the same)
+  const rng = mulberry((Math.random() * 0x7fffffff) | 0);
   desk.updateMatrix();
   const deskInv = desk.matrix.clone().invert(), deskYaw = desk.rotation.y;
   const seat = room.sat.clone().applyMatrix4(desk.matrix);
@@ -242,6 +262,10 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     return path;
   }
 
+  /** whether he can stand at `p` to take a book: off the walls, near the cases' fronts, and a body's width off all else
+   *  (the ladder, the tables and chairs, the globe, the hearth) */
+  const standFree = (p: THREE.Vector2) => Math.abs(p.x) < hx - AT_CASE.walls && Math.abs(p.y) < hz - AT_CASE.walls
+    && room.obstacles.every((o) => o === body || Math.hypot(p.x - o.x, p.y - o.z) >= o.r + (room.cases.includes(o) ? AT_CASE.near : BODY));
   // --- the books he can take: standing on a shelf at a hand's height, with room before their case ---
   const slots: Slot[] = [], everySlot: Slot[] = [];
   /** the ladder's foot (the room's frame, on the floor) */
@@ -253,10 +277,32 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     if (up.y < 0.95 || at.y < SHELF.low || at.y > SHELF.high) return;
     const stand = new THREE.Vector2(at.x + out.x * (SHELF.stand + size.z / 2), at.z + out.z * (SHELF.stand + size.z / 2));
     everySlot.push({ shelf, index, at, turn, size, out, stand });
-    if (isFree(stand.x, stand.y)) slots.push(everySlot[everySlot.length - 1]);
+    if (standFree(stand)) slots.push(everySlot[everySlot.length - 1]);
   }));
+  // (the stretches of the cases' fronts he stands at, from the room's own books: those he can walk to from his table)
+  const spots: Spot[] = [];
+  for (const slot of slots) {
+    let spot = spots.find((sp) => sp.out.dot(slot.out) > SPOT.facing && sp.stand.distanceTo(slot.stand) < SPOT.wide);
+    if (!spot) spots.push(spot = { stand: slot.stand.clone(), out: slot.out.clone(), slots: [], reachable: false, used: 0 });
+    spot.slots.push(slot);
+  }
+  {
+    const from = new THREE.Vector2(exit.x, exit.z);
+    for (const spot of spots) spot.reachable = found(route(from, spot.stand), from);
+  }
   /** the slots whose books are off their shelves now: in his hands, or kept on a stack (their gaps) */
   const gaps: Slot[] = [];
+  /** A book's slot to go to (`can` it be one), at the spot he's gone to least this visit he can walk to: round the cases,
+   *  not the same two again and again. */
+  const pickSlot = (can: (slot: Slot) => boolean = () => true): Slot | undefined => {
+    const open = spots.filter((sp) => sp.reachable && sp.slots.some((sl) => !gaps.includes(sl) && can(sl)));
+    if (!open.length) return undefined;
+    const least = Math.min(...open.map((sp) => sp.used)), fewest = open.filter((sp) => sp.used === least);
+    const spot = fewest[(rng() * fewest.length) | 0];
+    spot.used++;
+    const books = spot.slots.filter((sl) => !gaps.includes(sl) && can(sl));
+    return books[(rng() * books.length) | 0];
+  };
   const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
   const showSlot = (slot: Slot, on: boolean) => {
     const { mesh, pages, offset, matrices } = room.shelves[slot.shelf];
@@ -853,6 +899,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     gaps.splice(gaps.indexOf(slot), 1);
     room.shelves[slot.shelf].matrices[slot.index] = new THREE.Matrix4().compose(into, upright, new THREE.Vector3(1, 1, 1));
     slots.splice(slots.indexOf(slot), 1);
+    for (const spot of spots) if (spot.slots.includes(slot)) spot.slots.splice(spot.slots.indexOf(slot), 1);
     carried = null;
     act.grip = 0;
     yield* over(BEAT.release, (k) => hands(1 - smooth(k)));
@@ -864,7 +911,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     // (the canary: the book where the ladder leans, its spot under the ladder)
     // (and for a picture, the book nearest it he may take: `byLadder`)
     const nearest = (of: Slot[]) => of.reduce((a, b) => (b.stand.distanceTo(foot) < a.stand.distanceTo(foot) ? b : a));
-    const slot = roundsPlant.underLadder ? nearest(everySlot) : roundsPlant.byLadder ? nearest(slots) : slots.filter((sl) => !gaps.includes(sl))[(rng() * slots.length) | 0] ?? slots[0];
+    const slot = roundsPlant.underLadder ? nearest(everySlot) : roundsPlant.byLadder ? nearest(slots) : pickSlot();
     if (!slot) return;
     doing = 'walking to a case';
     yield* walkTo(slot.stand);
@@ -903,7 +950,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   /** A case dusted: his cloth from his belt, its spines wiped along a row at a time from the top, a puff of dust off
    *  each stroke, and the cloth put away. */
   function* dust(): Generator<void, void, void> {
-    const slot = slots[(rng() * slots.length) | 0];
+    const slot = pickSlot();
     if (!slot) return;
     doing = 'walking to a case to dust it';
     yield* toCase(slot);
@@ -950,7 +997,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
 
   /** A row of books squared: his hands flat on their spines, pressing them back in line along the shelf. */
   function* tidy(): Generator<void, void, void> {
-    const slot = slots[(rng() * slots.length) | 0];
+    const slot = pickSlot();
     if (!slot) return;
     doing = 'walking to a case';
     yield* toCase(slot);
@@ -1082,6 +1129,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     get carried() { return carried; },
     get gaps() { return gaps.length; },
     get out() { return out; },
+    get spots() { return spots; },
     begin(task) {
       if (act.sit < 1 || carried) return;
       asked = task;

@@ -19,7 +19,7 @@ import { closeTalk, talkOpen } from '../../../src/ui/screens/talk/talk';
 import type { Scholar } from '../../../src/entities/models/scholar';
 import type { Rounds } from '../../../src/world/scholarRounds';
 import { jointsOf, offHero } from './scholar';
-import { scholarPlant } from '../../../src/entities/models/scholar';
+import { HOOD, scholarPlant } from '../../../src/entities/models/scholar';
 import { roundsPlant } from '../../../src/world/scholarRounds';
 import { CASE_R, type LadderPart } from '../../../src/world/houses/library';
 import type { Obstacle } from '../../../src/types';
@@ -47,6 +47,8 @@ const HERO_STAYS = 0.1;
  *  frame of whatever length: a cut where one beat hands on to the next (a pose or a place jumped) changes them as no
  *  body moving does (from play: "it snaps, its not smooth (sitting down and standing up)") */
 const HIPS_SPEEDS_MOST = 20, JOINT_SPEEDS_MOST = 25000;
+/** how often the hood's edge is read (frames) */
+const HOOD_EVERY = 30;
 /** the frames' lengths (s) of a pass of uneven frames, in turn: a fast screen's, a slow one's, the game's, a hitch's */
 const UNEVEN = [0.008, 0.033, 0.016, 0.05] as const;
 const HEAD_OFF_MOST = 15;
@@ -86,10 +88,74 @@ export function cowlClearance(s: Scholar): { intoNeck: number; gap: number; into
   return { intoNeck, gap, intoHead };
 }
 
-/** how far into the ladder's rails and rungs he may go (m: his body as rounds about his middle, his palms and the books in
- *  his hands as points; from play, "should not go through the ladder when standing/walking"), and his body's rounds:
- *  where (m over his feet, or a joint's) and how wide */
-const LADDER_INTO_MOST = 0.005;
+/** how far the hood's edge may stand off what it lies on (m: the cowl's foot at its top, his back at its sides and
+ *  point; from play, "Hoodie still does not connect. Connect it properly": a shell off his back, open at its edges) */
+const HOOD_GAP_MOST = 0.008;
+
+/** How far the hood's edge stands off his cowl and chest now (m, the furthest point of it from them), and where. */
+export function hoodGap(s: Scholar): { gap: number; at: string } {
+  s.root.updateMatrixWorld(true);
+  // (meshes by name: his chest's joint has the chest's mesh's name)
+  const meshes: THREE.Mesh[] = [];
+  s.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
+  const hood = meshes.find((m) => m.name === 'scholar hood')!;
+  const under = meshes.filter((m) => m.name === 'scholar chest' || m.name === 'scholar cowl');
+  const pos = hood.geometry.attributes.position, n = HOOD.round + 1, rows = pos.count / n;
+  const edge: { at: THREE.Vector3; what: string }[] = [];
+  for (let k = 0; k < rows; k++) for (let i = 0; i < n; i++) {
+    const what = k === 0 ? 'its top' : k === rows - 1 ? 'its point' : i === 0 || i === n - 1 ? 'its side' : '';
+    if (what) edge.push({ at: new THREE.Vector3().fromBufferAttribute(pos, k * n + i).applyMatrix4(hood.matrixWorld), what });
+  }
+  // (each against the triangles near the hood: what it lies on)
+  const centre = new THREE.Box3().setFromObject(hood).getCenter(new THREE.Vector3());
+  const triangles: THREE.Triangle[] = [];
+  for (const m of under) {
+    const p = m.geometry.attributes.position, index = m.geometry.index!;
+    for (let t = 0; t < index.count; t += 3) {
+      const tri = new THREE.Triangle(...[0, 1, 2].map((c) => new THREE.Vector3().fromBufferAttribute(p, index.getX(t + c)).applyMatrix4(m.matrixWorld)) as [THREE.Vector3, THREE.Vector3, THREE.Vector3]);
+      if (tri.getMidpoint(new THREE.Vector3()).distanceTo(centre) < 0.3) triangles.push(tri);
+    }
+  }
+  let gap = 0, at = '';
+  const near = new THREE.Vector3();
+  for (const e of edge) {
+    let least = Infinity;
+    for (const tri of triangles) least = Math.min(least, tri.closestPointToPoint(e.at, near).distanceTo(e.at));
+    if (least > gap) { gap = least; at = e.what; }
+  }
+  return { gap, at };
+}
+
+/** how far into the ladder's rails and rungs, and the margin kept off them, he may go (m: his body as rounds about his
+ *  middle, his elbows in their sleeves as rounds, his palms and the books in his hands as points; from play, "should
+ *  not go through the ladder when standing/walking", and "he often stands near the ladder, and book goes through the
+ *  ladder, he should not stand there"), how wide the margin is, and how wide an elbow; and his body's rounds: where
+ *  (m over his feet, or a joint's) and how wide */
+const LADDER_INTO_MOST = 0.005, LADDER_MARGIN = 0.03, ELBOW_R = 0.07;
+/** him as he stands at a spot, as rounds (m: ahead toward the case and up from his feet, to his left, and how wide):
+ *  his body, his elbows out at his sides, the book he holds out to read */
+const AT_A_SPOT: { ahead: number; up: number; left: number; r: number }[] = [
+  { ahead: 0, up: 0.3, left: 0, r: 0.27 }, { ahead: 0, up: 0.75, left: 0, r: 0.22 }, { ahead: 0, up: 1.35, left: 0, r: 0.16 },
+  { ahead: 0.05, up: 1.1, left: 0.25, r: ELBOW_R }, { ahead: 0.05, up: 1.1, left: -0.25, r: ELBOW_R }, { ahead: 0.3, up: 1.24, left: 0, r: 0.17 },
+];
+/** how many of the reachable spots the tasks of `lab scholar` take him to, at the least (each task's going to the one
+ *  he's gone to least: a second time to one, while another's not been gone to, is the same two again) */
+const SPOTS_LEAST = 5;
+
+/** The spots at the cases he can walk to, each against the ladder as he'd stand there (`AT_A_SPOT`): the deepest into
+ *  it and the margin, and where. */
+export function spotsAgainstLadder(rounds: Rounds, room: THREE.Object3D): { into: number; at: string } {
+  room.updateMatrixWorld(true);
+  let into = 0, at = '';
+  for (const spot of rounds.spots) {
+    if (!spot.reachable) continue;
+    const ahead = spot.out.clone().negate(), left = new THREE.Vector3(ahead.z, 0, -ahead.x);
+    const points = AT_A_SPOT.map((p) => ({ r: p.r, at: new THREE.Vector3(spot.stand.x, p.up, spot.stand.y).addScaledVector(ahead, p.ahead).addScaledVector(left, p.left).applyMatrix4(room.matrixWorld) }));
+    const depth = ladderDepth(points);
+    if (depth > into) { into = depth; at = `the spot at ${spot.stand.x.toFixed(2)}, ${spot.stand.y.toFixed(2)}`; }
+  }
+  return { into, at };
+}
 const BODY_ROUNDS: { joint?: string; up: number; r: number }[] = [
   { up: 0.3, r: 0.27 }, { up: 0.75, r: 0.22 }, { joint: 'scholar chest', up: 0.12, r: 0.16 }, { joint: 'scholar head', up: 0.09, r: 0.1 },
 ];
@@ -121,16 +187,10 @@ export function intoFurniture(s: Scholar, obstacles: readonly Obstacle[]): numbe
 
 /** what keeps the ladder's parts (the library's room, found once) */
 let ladderRoom: THREE.Object3D | undefined;
-/** How far into the room's ladder he goes now (m): his body's rounds, his palms and the corners of the book in his hands
- *  against each rail and rung (each a box, in its own frame). */
+/** How far into the room's ladder, and the margin kept off it, he goes now (m): his body's rounds, his elbows', his palms
+ *  and the corners of the book in his hands against each rail and rung (each a box, in its own frame). */
 export function intoLadder(s: Scholar): number {
-  // (kept by the room as it's built: its merge takes the ladder's meshes away)
-  if (!ladderRoom?.parent) { ladderRoom = undefined; G.scene.traverse((o) => { if (o.userData.ladderParts) ladderRoom = o; }); }
-  const room = ladderRoom;
-  if (!room) throw new Error("the library keeps no ladder's parts");
   s.root.updateMatrixWorld(true);
-  room.updateMatrixWorld(true);
-  const parts = (room.userData.ladderParts as LadderPart[]).map((p) => ({ inverse: room.matrixWorld.clone().multiply(p.matrix).invert(), box: p.box }));
   const points: { at: THREE.Vector3; r: number }[] = [];
   const feet = s.root.getWorldPosition(new THREE.Vector3());
   for (const b of BODY_ROUNDS) {
@@ -138,12 +198,30 @@ export function intoLadder(s: Scholar): number {
     points.push({ at, r: b.r });
   }
   for (const palm of hands(s)) points.push({ at: palm, r: 0 });
+  for (const elbow of ['scholar elbowL', 'scholar elbowR']) points.push({ at: s.root.getObjectByName(elbow)!.getWorldPosition(new THREE.Vector3()), r: ELBOW_R });
   for (const name of ['library held book', 'library open held book']) {
     const book = G.scene.getObjectByName(name);
     if (!book?.visible) continue;
     const box = new THREE.Box3().setFromObject(book), c = new THREE.Vector3();
     for (let k = 0; k < 8; k++) points.push({ at: c.set(k & 1 ? box.max.x : box.min.x, k & 2 ? box.max.y : box.min.y, k & 4 ? box.max.z : box.min.z).clone(), r: 0 });
   }
+  return ladderDepth(points);
+}
+
+/** the ladder's rails and rungs (each a box, in its own frame, with the world into it), kept by the room as it's built:
+ *  its merge takes the ladder's meshes away */
+function ladderParts(): { inverse: THREE.Matrix4; box: THREE.Box3 }[] {
+  if (!ladderRoom?.parent) { ladderRoom = undefined; G.scene.traverse((o) => { if (o.userData.ladderParts) ladderRoom = o; }); }
+  const room = ladderRoom;
+  if (!room) throw new Error("the library keeps no ladder's parts");
+  room.updateMatrixWorld(true);
+  return (room.userData.ladderParts as LadderPart[]).map((p) => ({ inverse: room.matrixWorld.clone().multiply(p.matrix).invert(), box: p.box }));
+}
+
+/** How far `points` (world, each a round `r` wide, the margin added) go into the ladder's rails and rungs (m). */
+function ladderDepth(points: { at: THREE.Vector3; r: number }[]): number {
+  const parts = ladderParts();
+  for (const p of points) p.r += LADDER_MARGIN;
   let into = 0;
   const local = new THREE.Vector3(), near = new THREE.Vector3();
   for (const p of points) {
@@ -269,7 +347,7 @@ interface Followed {
   turned: number; turnedAt: string; headOff: number; shoeOut: number; shoeAt: string;
   cowlInto: number; cowlGap: number; cowlAt: string; bookFrames: number; notBook: string; backInPlace: boolean;
   ladderInto: number; ladderAt: string; furnitureInto: number; furnitureAt: string;
-  hipsSpeeds: number; hipsAt: string; jointSpeeds: number; jointAt: string;
+  hipsSpeeds: number; hipsAt: string; jointSpeeds: number; jointAt: string; hoodGap: number; hoodAt: string;
 }
 
 /** A part of him by name, or by its parents' where it has none. */
@@ -337,7 +415,7 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
   const joints = jointsOf(s), before = joints.map((o) => o.quaternion.clone());
   const at = s.root.getWorldPosition(new THREE.Vector3()), was = at.clone(), way = new THREE.Vector3();
   // (his hips' speed and each joint's turning speed, frame to frame; the frames of `dts`' lengths, where given)
-  let hipsSpeeds = 0, hipsAt = '', jointSpeeds = 0, jointAt = '', dt = 1 / 60, dtWas = dt, fresh = 0;
+  let hipsSpeeds = 0, hipsAt = '', jointSpeeds = 0, jointAt = '', dt = 1 / 60, dtWas = dt, fresh = 0, hoodWorst = 0, hoodAt = '';
   const hipsJoint = s.root.getObjectByName('scholar hips')!, hips = hipsJoint.getWorldPosition(new THREE.Vector3()), hipsWas = hips.clone();
   const speed = new THREE.Vector3(), speedWas = new THREE.Vector3(), turn = new THREE.Quaternion();
   const spins = joints.map(() => new THREE.Vector3()), spinsWas = joints.map(() => new THREE.Vector3());
@@ -411,6 +489,12 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
       obstacles.push({ x: stood.x, z: stood.z, r: 0.12, h: stood.y + 0.3 });
     }
     if (rounds.out) lastOut = rounds.out;
+    // (the hood's edge on what it lies on, every so often: it rides his chest with it, and the cowl's foot under its top
+    // doesn't follow his neck)
+    if (frames % HOOD_EVERY === 0) {
+      const hood = hoodGap(s);
+      if (hood.gap > hoodWorst) { hoodWorst = hood.gap; hoodAt = `${hood.at}, ${rounds.doing}`; }
+    }
     // (his body, his hands and the book he holds against the ladder, while he's up)
     if (s.act.sit < 1) {
       const into = intoLadder(s);
@@ -428,7 +512,12 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
       if (canary) carried.position.y += 0.5;
       carried.updateMatrixWorld(true);
       const near = Math.min(...hands(s).map((h) => fromBook(carried as THREE.Mesh, h)));
-      if (s.act.grip >= 1 && near > farthest) { farthest = near; farAt = rounds.doing; }
+      if (s.act.grip >= 1 && near > farthest) {
+        farthest = near;
+        // (and where: the book's height, and how far it is from his shoulder, his reach)
+        const book = carried.getWorldPosition(new THREE.Vector3()), shoulder = s.root.getObjectByName('scholar shoulderR')!.getWorldPosition(new THREE.Vector3());
+        farAt = `${rounds.doing} (the book ${book.y.toFixed(2)} m up, ${book.distanceTo(shoulder).toFixed(2)} m from his right shoulder)`;
+      }
       if (canary) carried.position.y -= 0.5;
     }
     // (his middle against what stands in the room, while he's up and clear of his own table)
@@ -451,7 +540,7 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
   }
   return { frames, beats, farthest, farAt, tightest, tightAt, gapsAtEnd: rounds.gaps, satAtEnd: s.act.sit, turned, turnedAt, headOff, shoeOut, shoeAt,
     cowlInto, cowlGap, cowlAt, bookFrames, notBook, backInPlace, ladderInto, ladderAt, furnitureInto, furnitureAt,
-    hipsSpeeds, hipsAt, jointSpeeds, jointAt };
+    hipsSpeeds, hipsAt, jointSpeeds, jointAt, hoodGap: hoodWorst, hoodAt };
 }
 
 /** What's wrong with a round. */
@@ -468,8 +557,9 @@ function problemsOf(name: string, r: Followed): string[] {
   if (r.cowlGap > COWL_GAP_MOST) problems.push(`rounds (${name}): his cowl's top ${(r.cowlGap * 100).toFixed(1)} cm off his neck, ${r.cowlAt} (at most ${COWL_GAP_MOST * 100}: his neck and back seen down inside it)`);
   if (r.notBook) problems.push(`rounds (${name}): the book in his hands isn't the shelf's: ${r.notBook}`);
   problems.push(...jumpsOf(name, r));
+  if (r.hoodGap > HOOD_GAP_MOST) problems.push(`rounds (${name}): the hood's edge ${(r.hoodGap * 100).toFixed(1)} cm off what it lies on, ${r.hoodAt} (at most ${HOOD_GAP_MOST * 100})`);
   if (!r.backInPlace) problems.push(`rounds (${name}): the shelf's book not back in its place as it stood`);
-  if (r.ladderInto > LADDER_INTO_MOST) problems.push(`rounds (${name}): he goes ${(r.ladderInto * 100).toFixed(1)} cm into the ladder, ${r.ladderAt} (at most ${LADDER_INTO_MOST * 100})`);
+  if (r.ladderInto > LADDER_INTO_MOST) problems.push(`rounds (${name}): he comes ${(r.ladderInto * 100).toFixed(1)} cm inside ${LADDER_MARGIN * 100} cm of the ladder, ${r.ladderAt} (at most ${LADDER_INTO_MOST * 100})`);
   if (r.furnitureInto > FURNITURE_INTO_MOST) problems.push(`rounds (${name}): his hands or book ${(r.furnitureInto * 100).toFixed(1)} cm into the room's furniture, ${r.furnitureAt} (at most ${FURNITURE_INTO_MOST * 100})`);
   if (r.shoeOut > SHOE_OUT_MOST) problems.push(`rounds (${name}): a shoe ${(r.shoeOut * 100).toFixed(1)} cm out through his robe above its hem, ${r.shoeAt} (at most ${SHOE_OUT_MOST * 100})`);
   return problems;
@@ -480,8 +570,8 @@ const lineOf = (name: string, r: Followed) => `his rounds, ${name}: ${r.beats.jo
   + `a joint at most ${r.turned.toFixed(1)}° in a frame (${r.turnedAt}); his head at most ${r.headOff.toFixed(0)}° off his way walking; `
   + `a shoe at most ${(r.shoeOut * 100).toFixed(1)} cm out through his robe; his cowl at most ${(r.cowlInto * 100).toFixed(1)} cm into his neck `
   + `or head and its top ${(r.cowlGap * 100).toFixed(1)} cm off his neck; the shelf's own book in his hands ${r.bookFrames} frames${r.notBook ? ` (not: ${r.notBook})` : ''}; `
-  + `at most ${(r.ladderInto * 100).toFixed(1)} cm into the ladder, his hands and book ${(r.furnitureInto * 100).toFixed(1)} cm into the other furniture; `
-  + continuity(r);
+  + `at most ${(r.ladderInto * 100).toFixed(1)} cm inside ${LADDER_MARGIN * 100} cm of the ladder, his hands and book ${(r.furnitureInto * 100).toFixed(1)} cm into the other furniture; `
+  + `${continuity(r)}; the hood's edge at most ${(r.hoodGap * 1000).toFixed(1)} mm off what it lies on (${r.hoodAt})`;
 /** how fast his hips' speed and a joint's turning changed, at most */
 const continuity = (r: Followed) => `his hips' speed changing at most ${r.hipsSpeeds.toFixed(1)} m/s a second (${r.hipsAt}), a joint's `
   + `turning ${Math.round(r.jointSpeeds)}°/s a second (${r.jointAt})`;
@@ -541,6 +631,13 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
     const stand = planted.furnitureInto > FURNITURE_INTO_MOST;
     lines.push(`canary: a stand where the shelf's book stood, his hands on it ${stand ? 'caught' : 'went unseen'} (${(planted.furnitureInto * 100).toFixed(1)} cm into it, ${planted.furnitureAt})`);
     if (!stand) problems.push('rounds: the canary\'s stand by the shelf went unseen');
+    // (the hood lifted off his back, as it hung before)
+    const hood = s.root.getObjectByName('scholar hood')!;
+    hood.position.set(0, 0.02, -0.03);
+    const lifted = hoodGap(s);
+    hood.position.set(0, 0, 0);
+    lines.push(`canary: the hood lifted 3 cm off his back ${lifted.gap > HOOD_GAP_MOST ? 'caught' : 'went unseen'} (${(lifted.gap * 100).toFixed(1)} cm off, ${lifted.at})`);
+    if (lifted.gap <= HOOD_GAP_MOST) problems.push('rounds: the canary\'s hood lifted off his back went unseen');
     const cut = planted.hipsSpeeds > HIPS_SPEEDS_MOST || planted.jointSpeeds > JOINT_SPEEDS_MOST;
     lines.push(`canary: the end of his rise cut as he sets off ${cut ? 'caught' : 'went unseen'} (${continuity(planted)})`);
     if (!cut) problems.push('rounds: the canary\'s cut at the end of his rise went unseen');
@@ -726,6 +823,17 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
   const uneven = await follow(lab, s, rounds, false, undefined, UNEVEN);
   lines.push(`a browse on frames of ${UNEVEN.map((d) => d * 1000).join(', ')} ms in turn: ${continuity(uneven)}`);
   problems.push(...jumpsOf('browse, uneven frames', uneven));
+  // (where he stands at the cases: many, round every case he can walk to, gone to in turn; none by the ladder)
+  const spots = rounds.spots, reachable = spots.filter((sp) => sp.reachable), used = reachable.filter((sp) => sp.used > 0);
+  const twice = reachable.some((sp) => sp.used > 1) && used.length < reachable.length;
+  const near = spotsAgainstLadder(rounds, G.arena.rooms!.library!.group);
+  lines.push(`spots at the cases: ${spots.length}, ${reachable.length} reachable from his table; he went to ${used.length} of them `
+    + `(${used.map((sp) => sp.used).join(', ')} times)${twice ? ', one again before every one once' : ''}; standing at any, at most `
+    + `${(near.into * 100).toFixed(1)} cm inside ${LADDER_MARGIN * 100} cm of the ladder`);
+  if (reachable.length < SPOTS_LEAST) problems.push(`rounds: ${reachable.length} spots at the cases he can walk to (at least ${SPOTS_LEAST}: "add more spots for him to stand/pick books, not just two")`);
+  if (used.length < Math.min(SPOTS_LEAST, reachable.length)) problems.push(`rounds: he went to ${used.length} spots at the cases (at least ${Math.min(SPOTS_LEAST, reachable.length)})`);
+  if (twice) problems.push('rounds: he went to a spot again before every spot he can walk to once');
+  if (near.into > LADDER_INTO_MOST) problems.push(`rounds: standing at ${near.at}, he'd come ${(near.into * 100).toFixed(1)} cm inside ${LADDER_MARGIN * 100} cm of the ladder ("he should not stand there")`);
   const compiled = G.renderer.info.programs!.length - programs;
   lines.push(`programs the game's renderer compiled over his rounds (pictured as he walks, takes and reads a book): ${compiled}`);
   if (compiled) problems.push(`rounds: the game's renderer compiled ${compiled} programs over his rounds (none may be)`);

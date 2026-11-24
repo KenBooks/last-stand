@@ -904,9 +904,32 @@ function keyGeometry(len: number): THREE.BufferGeometry {
 /** his cowl (his chest's frame): its rows up it and points round, how much lower its front falls, how far its top is set
  *  back with his neck, and from where up it follows his neck (a share of the way up it) */
 const COWL = { rows: 14, round: 36, dip: 0.018, back: -0.012, follows: 0.3 };
+/** the hood's bag down his back: where up the cowl its top is (below where the cowl follows his neck: it stays on its
+ *  foot), how far down his chest its point comes (m), how far round his back it reaches at its top and at its point
+ *  (rad either side), how far it swells out at its fullest, how far off what it lies on its edges are (m), its rows and
+ *  columns */
+export const HOOD = { from: 0.2, to: 0.02, wide: 1.25, point: 0.12, deep: 0.05, off: 0.004, rows: 14, round: 16 };
+/** His chest's surface at height `y` (its rows: y, across, deep, folds), as a back the hood lies on: across and deep,
+ *  blended into the cowl's foot (`foot`: across, deep, height) above the chest's shoulders. */
+function backAt(rows: readonly [number, number, number, number][], y: number, foot: [number, number, number]): [number, number] {
+  let k = 0;
+  while (k < rows.length - 2 && rows[k + 1][0] < y) k++;
+  const [y0, w0, d0] = rows[k], [y1, w1, d1] = rows[k + 1], u = clamp((y - y0) / (y1 - y0), 0, 1);
+  // (the chest's back pushed out by the cowl's foot over it, where the cowl sits on his shoulders)
+  const up = smooth(clamp((y - (foot[2] - 0.05)) / 0.05, 0, 1));
+  return [lerp(lerp(w0, w1, u), foot[0], up), lerp(lerp(d0, d1, u), foot[1], up)];
+}
 /** The cowl at `t` of the way up it: across, deep, its height (his chest's frame). On his shoulders a hair inside the
  *  habit's own (its edge hidden in it), up and out in a rolled fold, and in over the fold to close round his neck 1.2 cm
  *  off it (his neck 6.6 cm round at its foot, 5.4 at its top, its joint 25 cm up his chest). */
+/** A point of the cowl `t` of the way up it, `a` round it (0 its front): lower in front, where it falls open over the
+ *  chest; set back as his neck is; a fold's ripple round it. */
+function cowlPoint(t: number, a: number): THREE.Vector3 {
+  const [w, d, y] = cowlAt(t), [x, z] = oval(a, w, d, lerp(2.4, 2, t));
+  const front = Math.max(0, Math.cos(a)) ** 2, ripple = 1 + 0.03 * Math.sin(a * 6 + 0.8) * Math.sin(Math.PI * t);
+  return V(x * ripple, y - COWL.dip * front * smooth(t), z * ripple + lerp(0, COWL.back, smooth(t)));
+}
+
 function cowlAt(t: number): [number, number, number] {
   const keys: [number, number, number, number][] = [
     // t, across, deep, height
@@ -1004,27 +1027,30 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
   {
     const collar: THREE.Vector3[][] = [];
     for (let k = 0; k <= COWL.rows; k++) {
-      const t = k / COWL.rows, [w, d, y] = cowlAt(t);
+      const t = k / COWL.rows;
       const row: THREE.Vector3[] = [];
-      for (let i = 0; i <= COWL.round; i++) {
-        const a = (i / COWL.round) * Math.PI * 2, [x, z] = oval(a, w, d, lerp(2.4, 2, t));
-        // (lower in front, where it falls open over the chest; set back as his neck is; a fold's ripple round it)
-        const front = Math.max(0, Math.cos(a)) ** 2, ripple = 1 + 0.03 * Math.sin(a * 6 + 0.8) * Math.sin(Math.PI * t);
-        row.push(V(x * ripple, y - COWL.dip * front * smooth(t), z * ripple + lerp(0, COWL.back, smooth(t))));
-      }
+      for (let i = 0; i <= COWL.round; i++) row.push(cowlPoint(t, (i / COWL.round) * Math.PI * 2));
       collar.push(row);
     }
     add(rowsSurface(collar, 1.3), M.habitD, j.chest, 'cowl');
-    // (the hood's bag: a deep fold lying down his back, its point near his shoulder blades)
+    // (the hood's bag: the cloth swelling out of the cowl's back over his back, its point between his shoulder blades;
+    // its edges on him all round, on the cowl at its top and on his back at its sides and point. A half tube hung off
+    // his back, it stood off his neck and shoulders and showed into it from the side, from play: "Hoodie still does
+    // not connect. Connect it properly")
     const rows: THREE.Vector3[][] = [];
-    for (let k = 0; k <= 12; k++) {
-      const s = k / 12, y = lerp(0.27, 0.0, s), w = 0.12 * Math.sin(Math.PI * Math.min(1, 0.25 + s * 0.85)) * (1 - 0.6 * s ** 2) + 0.008;
+    const top = cowlAt(HOOD.from);
+    for (let k = 0; k <= HOOD.rows; k++) {
+      const s = k / HOOD.rows, y = lerp(top[2], HOOD.to, s);
+      // (the surface it lies on at this height: the cowl's at its foot, the chest's below it)
+      const [w, d] = y >= top[2] - 1e-6 ? [top[0], top[1]] : backAt(chestRows, y, top);
+      const half = lerp(HOOD.wide, HOOD.point, s ** 0.7), deep = HOOD.deep * Math.sin(Math.PI * s) ** 0.8;
       const row: THREE.Vector3[] = [];
-      for (let i = 0; i <= 16; i++) {
-        const a = Math.PI * (i / 16), x = -Math.cos(a) * w;
-        // (its outer face rounded out from the back, its inner lying on it)
-        const out = Math.sin(a) * (0.035 + 0.02 * Math.sin(s * Math.PI)) + 0.004 * Math.sin(i * 1.3 + k);
-        row.push(V(x, y, -0.13 - 0.02 * (1 - s) - out + 0.035 * s * s));
+      for (let i = 0; i <= HOOD.round; i++) {
+        const u = i / HOOD.round, a = Math.PI + lerp(-half, half, u), [x, z] = oval(a, w, d);
+        // (out from the surface, most down its middle, none at its edges; a hair off it, the cloth's own thickness)
+        const out = HOOD.off + deep * Math.sin(Math.PI * u) ** 0.8 * (1 + 0.06 * Math.sin(i * 1.3 + k)), r = Math.hypot(x, z);
+        // (its top on the cowl's own surface there, its ripple and all)
+        row.push(k === 0 ? cowlPoint(HOOD.from, a) : V(x * (1 + out / r), y, z * (1 + out / r)));
       }
       rows.push(row);
     }

@@ -43,6 +43,23 @@ export interface ScholarOptions {
   moments?: boolean;
 }
 
+/** the room's leather (`rooms.ts`): a book drawn in it is a box of the old kind */
+const OLD_BOOK = 'room leather';
+
+/** The room's books: how many are drawn as the shelves' model (the instances of its covers' meshes), and how many of its
+ *  meshes are drawn in the leather the old boxes were (merged or not). */
+function roomBooks(group: THREE.Object3D): { model: number; boxes: number } {
+  let model = 0, boxes = 0;
+  group.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    if (/^library books \d+$/.test(m.name)) model += (m as THREE.InstancedMesh).count;
+    const materials = Array.isArray(m.material) ? m.material : [m.material];
+    if (materials.some((x) => x.name === OLD_BOOK)) boxes++;
+  });
+  return { model, boxes };
+}
+
 /** the frame a pose is stepped by (s): the game at 60 a second */
 const FRAME = 1 / 60;
 /** the most a joint may turn in a frame of his loop (deg): his quickest moves (the page lifted over, a hand back to
@@ -584,6 +601,19 @@ export async function scholar(lab: Lab, options: ScholarOptions): Promise<Report
   let triangles = 0;
   s.root.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.visible) triangles += (m.geometry.index?.count ?? m.geometry.attributes.position.count) / 3; });
   lines.push(`Brother Hollis seated, ${Math.round(triangles / 1000)}k triangles`);
+
+  // --- every book in the room the shelves' model: none a leather box, as the stacks on the floor were ---
+  const books = roomBooks(room.group);
+  lines.push(`the room's books: ${books.model} drawn as the shelves' model; ${books.boxes} meshes of the old leather boxes`);
+  if (books.boxes) problems.push(`the library has ${books.boxes} meshes of leather book boxes (from play: "These models are not same as books on shelves")`);
+  if (options.canary) {
+    const old = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.055, 0.24), new THREE.MeshStandardMaterial({ name: OLD_BOOK }));
+    room.group.add(old);
+    const planted = roomBooks(room.group).boxes;
+    old.removeFromParent();
+    lines.push(`canary: a leather box laid in the room ${planted ? 'found' : 'went unseen'}`);
+    if (!planted) problems.push('canary: a leather box laid in the room went unseen');
+  }
 
   // --- the book: its printed pages to the spine, its halves meeting there ---
   const gaps = spineGaps(s);
