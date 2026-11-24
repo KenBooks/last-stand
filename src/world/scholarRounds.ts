@@ -325,6 +325,22 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     s.root.position.copy(local);
     s.root.rotation.set(0, me.yaw - deskYaw, 0);
   };
+  /** What he holds (a book shut or open, his cloth) and where his hands are aimed, moved by `by` (the world's), as he
+   *  is. */
+  const turnHeld = (by: THREE.Matrix4) => {
+    for (const o of [room.held, room.openHeld, room.cloth]) {
+      if (!o.visible || !o.parent) continue;
+      o.updateMatrixWorld(true);
+      const local = o.parent.matrixWorld.clone().invert().multiply(by).multiply(o.matrixWorld);
+      local.decompose(o.position, o.quaternion, o.scale);
+    }
+    for (const aim of [act.handL, act.handR]) {
+      if (!aim) continue;
+      aim.at.applyMatrix4(by);
+      aim.palm.transformDirection(by);
+      aim.fingers.transformDirection(by);
+    }
+  };
   const toWorld = (p: THREE.Vector3) => g.localToWorld(p.clone());
   const dirWorld = (d: THREE.Vector3) => d.clone().transformDirection(g.matrixWorld);
   const aim = (at: THREE.Vector3, palm: THREE.Vector3, fingers: THREE.Vector3): HandAim =>
@@ -1147,8 +1163,15 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
         act.walk = 0;
         if (act.sit <= 0 && heroAt) {
           const off = angleTo(me.yaw, Math.atan2(heroAt.x - me.p.x, heroAt.z - me.p.y));
+          s.root.updateMatrixWorld(true);
+          const was = s.root.matrixWorld.clone();
           me.yaw += Math.sign(off) * Math.min(Math.abs(off), 2 * dt);
           act.walk = Math.abs(off) > 0.05 ? 0.1 : 0;
+          // (what he holds turned with him: his beats, which place it, wait meanwhile, and it stayed where it was as
+          // his hands turned away from it)
+          place();
+          s.root.updateMatrixWorld(true);
+          turnHeld(s.root.matrixWorld.clone().multiply(was.invert()));
         }
       } else {
         if (alongside && !alongside()) alongside = null;

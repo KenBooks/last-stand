@@ -725,8 +725,14 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
       // follows him; Esc ends it)
       if (talkFrames === 30) {
         const me = s.root.getWorldPosition(new THREE.Vector3()), f = new THREE.Vector3(0, 0, 1).applyQuaternion(s.root.getWorldQuaternion(new THREE.Quaternion()));
-        const at = me.clone().addScaledVector(f, 1.2);
-        hero.place(at, Math.atan2(me.x - at.x, me.z - at.z));
+        // (before him, else round him, where a player can stand: put before him into the case he reads at, the hero
+        // was pushed out of it, too far off to talk to him)
+        for (const turn of [0, 1, -1, 1.6, -1.6, 2.4, -2.4]) {
+          const at = me.clone().addScaledVector(f.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), turn), 1.2);
+          hero.place(at, Math.atan2(me.x - at.x, me.z - at.z));
+          await lab.step(1);
+          if (hero.pos.distanceTo(at) < HERO_STAYS && objectNear()?.id === 'scholar') break;
+        }
         nearAtE = objectNear()?.id ?? 'nothing';
         await lab.step(1, () => ({ keys: ['e'] }));
         opened = talkOpen();
