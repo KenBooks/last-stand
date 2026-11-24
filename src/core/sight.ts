@@ -442,10 +442,14 @@ export const DOOR_WHOLE = { within: 3.2, past: 5.2 };
  *  its front wall opens over that alone). Eased by the door's own share (`uSightDoorOn`) and by his walk. The
  *  wall with that door in it opens whole by this share (`engine/seeKinds.ts`; from play, "he just needs to
  *  see whole wall behind it"), and its room is drawn whole meanwhile (`world/hallPortal.ts`). */
-export function seesInAt(x: number, z: number): number {
+export function seesInAt(x: number, z: number, room?: readonly [number, number, number, number]): number {
+  // (and stood aside of the door, by his own rays through it into `room`: at the lectern beside the hall's
+  // door the wall opened over the wedge of floor he saw past the jamb alone, a slanted ghost on one side of
+  // the door, from play "also glitch on right side")
+  const aside = room && seesIntoRoom(room) ? 1 : 0;
   const cast = SIGHT.uSightDoor.value;
-  if (Math.hypot(cast.x - x, cast.y - z) > 1.5) return 0;
-  return SIGHT.uSightDoorOn.value * nearDoorAt(x, z);
+  const before = Math.hypot(cast.x - x, cast.y - z) > 1.5 ? 0 : SIGHT.uSightDoorOn.value;
+  return Math.max(before, aside) * nearDoorAt(x, z);
 }
 
 /** How near the door whose inner sill's middle is (x, z) he stands, 0 to 1 (`DOOR_WHOLE`), whichever side of it:
@@ -514,6 +518,36 @@ function seenAround(dx: number, dz: number, row: number): number {
   let open = 0;
   for (let tap = -4; tap <= 4; tap++) open += seenAlongRay(across + (aside * tap) / 4, away, row) / 9;
   return open;
+}
+
+/** how far apart a room's floor is tried for whether he sees any of it (m), how far in from its walls (past the
+ *  fog's soft end beyond a wall, `SIGHT_LOOK.wall`, which sees no room), and how far seen a place counts */
+const ROOM_SEEN = { step: 0.7, inset: 0.9, share: 0.5 };
+/** the room last asked of, where he stood and how far the door's rays were on then, and the answer */
+const roomSeen = { key: '', seen: false };
+
+/** Whether he sees any of the floor of `room` (its least x and z, its most) from where he stands, by the rays:
+ *  in it, or through a door or a gap from outside it. A roof over a room he sees into is gone whole (the
+ *  owner's rule: "if player can see inside the home (anything), we will thin whole roof 100%"). Tried again
+ *  only when he or the door's rays have moved. */
+export function seesIntoRoom(room: readonly [number, number, number, number]): boolean {
+  if (SIGHT.uSightOn.value <= 0) return false;
+  const from = SIGHT.uSightFrom.value;
+  const door = SIGHT.uSightDoor.value;
+  const on = SIGHT.uSightDoorOn.value;
+  const key = [room.join(), from.x.toFixed(2), from.y.toFixed(2), door.x.toFixed(2), door.y.toFixed(2), on.toFixed(2)].join();
+  if (key === roomSeen.key) return roomSeen.seen;
+  roomSeen.key = key;
+  roomSeen.seen = false;
+  const { step, inset, share } = ROOM_SEEN;
+  for (let x = room[0] + inset; x <= room[2] - inset && !roomSeen.seen; x += step) {
+    for (let z = room[1] + inset; z <= room[3] - inset; z += step) {
+      if (seenShareAt(x, z) < share) continue;
+      roomSeen.seen = true;
+      break;
+    }
+  }
+  return roomSeen.seen;
 }
 
 /** The frame's camera told to the fog, as it's about to be drawn. */

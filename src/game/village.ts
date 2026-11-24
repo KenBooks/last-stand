@@ -28,7 +28,7 @@ import { meadowFromAbove } from '../world/meadow';
 import { onWholeView, wholeView } from '../core/wholeView';
 import { CLASS_IDS } from '../data/classes/index';
 import { LAMP_SOFT } from '../core/lamps';
-import { standHeroes } from './hall';
+import { showStanding, standHeroes } from './hall';
 import { dropNameAt } from './groundItems';
 import { leaveSeatsTo, useWhileSatBy } from '../entities/sitting';
 import type { Seat } from '../world/seats';
@@ -551,6 +551,8 @@ function hallInside(dt: number): void {
   // (still from the square: too far to read a glance, and posed there they cost as much as inside)
   const byDoor = Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_SEEN;
   standHeroes(lobby && seen && isWarm('heroes'), dt, !inside && !byDoor);
+  // (from above each is shown while his own plinth is seen, not while any is: the close views have no fog)
+  showStanding((x, z) => view !== 'top' || seenShareAt(x, z) > 0);
 }
 
 /** whether the hall's room's loose parts are shown (`hallInside`), and whether the game's own view sees them and the

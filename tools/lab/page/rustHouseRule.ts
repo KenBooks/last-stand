@@ -11,7 +11,7 @@ import { type Checked, failed, passed } from './rustPixels';
 import { standAt } from './draws';
 import { faceCamera } from '../../../src/core/renderer';
 import { seeValue, type SeeThrough } from '../../../src/core/seeThrough';
-import { DOOR_WHOLE, seenShareAt } from '../../../src/core/sight';
+import { DOOR_WHOLE, seenShareAt, seesIntoRoom } from '../../../src/core/sight';
 import { HALL, TERRACE, inHall } from '../../../src/data/village';
 import { RUST } from '../../../src/engine';
 import { ROOMS } from '../../../src/engine/ahead';
@@ -56,6 +56,8 @@ const HOUSE_KINDS = ['built', 'roof', 'gable', 'hallFront', 'hallBack', 'hallBea
   'hallRoof'] as const;
 /** the roof of the one building he can stand in (the hall of heroes) */
 const INSIDE_ROOFS = ['hallRoof'] as const;
+/** the room that roof is over: the hall's, inside its walls (its least x and z, its most) */
+const HALL_ROOM = [TERRACE.x - HALL.inHalf, HALL.wall, TERRACE.x + HALL.inHalf, HALL.inFront] as const;
 /** the walls with the hall's door in them: opened whole while he stands before the door and sees in (from play,
  *  "he just needs to see whole wall behind it") */
 const DOOR_WALLS = ['hallFront', 'hallBeam'] as const;
@@ -366,7 +368,10 @@ export async function readView(lab: Lab, view: RuleView): Promise<[RuleRead, Pic
     // without it, where a wall's ghost isn't read against the roof that covered it)
     // (so it is with the camera over the hall, he outside it: "if camera OR hero is inside the building, we
     // thin the whole roof")
-    const roofGone = inHall(view.at[0], view.at[1]) || inHall(G.camera.position.x, G.camera.position.z);
+    // (and with any of its room seen from outside it: "if player can see inside the home (anything), we will
+    // thin whole roof 100%")
+    const underRoof = inHall(view.at[0], view.at[1]) || inHall(G.camera.position.x, G.camera.position.z);
+    const roofGone = underRoof || seesIntoRoom(HALL_ROOM);
     if (roofGone) show(INSIDE_ROOFS, false, true);
     // (so is the front wall before whose door he stands: opened whole, whatever he sees past it)
     const atDoor = beforeDoor(view);
@@ -390,7 +395,9 @@ export async function readView(lab: Lab, view: RuleView): Promise<[RuleRead, Pic
       RUST.tune.housesWhole = 1;
       const roofWhole = await shotAfter(lab, `${view.name}: its roof alone, nothing thinned`);
       RUST.tune.housesWhole = 0;
-      read.roof = readRoof(blockColours(roof.pixels), blockColours(roofWhole.pixels), colours[2]);
+      const roofRead = readRoof(blockColours(roof.pixels), blockColours(roofWhole.pixels), colours[2]);
+      // (seen into from outside alone, its roof may be out of the frame: nothing of it to hold then)
+      if (underRoof || roofRead.blocks >= BLOCKS_LEAST) read.roof = roofRead;
       pictures.push(roof.pictured);
     }
     if (atDoor) {
@@ -468,7 +475,8 @@ export async function houseRule(lab: Lab, only = ''): Promise<[Checked[], Pictur
 /** the views `lab rustcheck` holds the rule from (all of them: `lab houserule`), and the one its canary reads */
 const CHECKED_VIEWS = ['the portico case, camera before the hall', 'the portico case, camera from the east',
   'the portico case, camera over the hall', 'the portico case, camera from the west', 'beside a cottage'];
-const CANARY_VIEW = 'the portico case, camera from the east';
+// (not one before the hall's door: there its roof and front wall are read alone, and nothing else covers ground he sees)
+const CANARY_VIEW = 'terrace end, from the side';
 /** the share the canary leaves of a house over ground he sees, and the least of the cover it must then read left */
 const CANARY_LEFT = 0.85;
 const CANARY_LEAST = 0.6;

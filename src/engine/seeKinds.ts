@@ -2,7 +2,7 @@
 // hides the hero, each kind's numbers written to the frame's globals as the game has them (core/seeThrough.ts).
 import * as THREE from 'three';
 import { BLEND_GONE, SIGHT_CONE, coverRuleNow, type SeeThrough } from '../core/seeThrough';
-import { SIGHT, nearDoorAt, seesInAt } from '../core/sight';
+import { SIGHT, nearDoorAt, seesInAt, seesIntoRoom } from '../core/sight';
 import { HALL, TERRACE } from '../data/village';
 import type { Core } from './core';
 import { GLOBALS, TUNE } from './globals';
@@ -122,7 +122,14 @@ export class SeeKinds {
       // (not till the pipelines its room's layers are drawn apart with have compiled, `ROOMS`)
       // (and from in its room by the door, by how far he stands in the room: "same problem but the other way
       // around")
-      if (cover) g[at + 6] = ROOMS.ready && see.walls && see.door ? this.seesIn(see.door.value, inside) : 0;
+      // (eased as the roof is: seen aside of the door, by his rays, it's on or off)
+      if (cover) {
+        const asked = ROOMS.ready && see.walls && see.door ? this.seesIn(see.door.value, inside, see.walls) : 0;
+        const had = this.opens.get(see) ?? asked;
+        const opens = had + Math.sign(asked - had) * Math.min(Math.abs(asked - had), passed / INSIDE_FADE);
+        this.opens.set(see, opens);
+        g[at + 6] = opens;
+      }
       // (`rust.see` off: nothing of any kind thinned; `rust.housesWhole`: nothing of a house's, a harness's frame)
       if (!TUNE.see || (TUNE.housesWhole && see.cover)) { g[at + 2] = 0; g[at + 6] = 0; g[at + 10] = 0; g[at + 18] = 0; }
     }
@@ -137,14 +144,18 @@ export class SeeKinds {
 
   /** How far he stands by the door between `jambs` (x, z, x, z) seeing through it: before it, seeing in
    *  (`seesInAt`), or `inside` its room (0 to 1), seeing out (`nearDoorAt`). */
-  private seesIn(jambs: THREE.Vector4, inside: number): number {
+  private seesIn(jambs: THREE.Vector4, inside: number, room: readonly [number, number, number, number]): number {
     const x = (jambs.x + jambs.z) / 2;
-    return Math.max(seesInAt(x, jambs.y), inside * nearDoorAt(x, jambs.y) * DOOR_FROM_INSIDE);
+    // (not by his rays while he stands in the room itself: there it opens by the lesser share)
+    const before = inside > 0 ? seesInAt(x, jambs.y) : seesInAt(x, jambs.y, room);
+    return Math.max(before, inside * nearDoorAt(x, jambs.y) * DOOR_FROM_INSIDE);
   }
 
   /** when the kinds were last written (the page's ms), and how far he stands in each kind's room, 0 to 1 */
   private wrote = 0;
   private readonly inside = new Map<SeeThrough, number>();
+  /** how far each kind's wall is opened whole by its door, eased */
+  private readonly opens = new Map<SeeThrough, number>();
 
   /** Whether the watcher stands in the room `see`'s kind roofs or walls (`roofs`, `walls`). */
   under(see: SeeThrough): boolean {
@@ -157,7 +168,13 @@ export class SeeKinds {
     // is inside the building, we thin the whole roof". By the floor he saw alone, the roof before a camera
     // over the hall was a dark sheet with slanted edges over the room, "and this looks weird too")
     const eye = G.camera?.position;
-    return !!see.roofs && !!eye && within(eye.x, eye.z);
+    if (!see.roofs) return false;
+    if (eye && within(eye.x, eye.z)) return true;
+    // (and a roof over a room he sees any of from outside, through its door: by the floor he saw alone the roof
+    // opened over a strip of it, wider or narrower with the zoom, "logical incoherence at different zoom
+    // levels, either can or cannot see the right side of the hall... if player can see inside the home
+    // (anything), we will thin whole roof 100%")
+    return seesIntoRoom(see.roofs);
   }
 
   /** Whether `see`'s kind is a cover now: a part of a house, with the houses' rule on. */

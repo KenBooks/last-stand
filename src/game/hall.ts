@@ -185,10 +185,27 @@ function holdStill(p: Player, held: boolean): void {
   stillOf.set(p, new StillAsOne(p.obj));
 }
 
+/** those standing whose plinth he can't see now, left out of the frame (`showStanding`) */
+const unseen = new Set<Player>();
+
+/** Each of those standing shown only while `seen` says he sees the hero's place (x, z): one in the fog of what
+ *  he can't see is not drawn, nor his halo (from play, with one plinth seen through the door and all three
+ *  heroes shown: "he should not see another character model if its in fog of war"). */
+export function showStanding(seen: (x: number, z: number) => boolean): void {
+  for (const p of standing) {
+    const hidden = !seen(p.obj.position.x, p.obj.position.z);
+    if (hidden === unseen.has(p)) continue;
+    if (hidden) unseen.add(p);
+    else unseen.delete(p);
+    p.obj.visible = !hidden && heroShare(p.cls.model) >= 1;
+  }
+}
+
 /** Those standing in the village's hall taken down, their shadows back. */
 function standDown(): void {
   for (const p of standing) {
     holdStill(p, false);
+    if (unseen.delete(p)) p.obj.visible = heroShare(p.cls.model) >= 1;
     G.scene.remove(p.obj);
     castShadows(p, true);
   }
@@ -803,7 +820,7 @@ const breathing = (): number => (reduced() ? 1 : 1 + HALO.breath * Math.sin(G.ti
 /** The halo round `p`'s glowing weapon head and the light at its heart, this frame of `dt` s (`HALO`, `CORE`). */
 function haloRound(p: Player, dt: number): void {
   const halo = halos.get(p);
-  if (!halo || dt <= 0) return;
+  if (!halo || dt <= 0 || unseen.has(p)) return;
   halo.gem.getWorldPosition(_gemAt);
   const share = breathing() * dt * 30;
   glowAt(_gemAt, HALO.size, halo.colour.clone().multiplyScalar(HALO.strength * share));
