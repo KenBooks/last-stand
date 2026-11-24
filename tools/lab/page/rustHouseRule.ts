@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import type { Lab, Pictured } from './lab';
 import { type Checked, failed, passed } from './rustPixels';
+import { STRIP_MOST, type StripRead, stripsPastRoom } from './rustRoomStrips';
 import { standAt } from './draws';
 import { faceCamera } from '../../../src/core/renderer';
 import { seeValue, type SeeThrough } from '../../../src/core/seeThrough';
@@ -37,6 +38,9 @@ export const RULE_VIEWS: readonly RuleView[] = [
   { name: 'the portico case, camera from the east', at: [-1.5, -13.6], turned: 90, zoom: 0.5 },
   { name: 'the portico case, camera over the hall', at: [-1.5, -13.6], turned: 180, zoom: 0.5 },
   { name: 'the portico case, camera from the west', at: [-1.5, -13.6], turned: 270, zoom: 0.5 },
+  // (from play, in the owner's own game (lab join): the side walls opened on the terrace past them he saw out of
+  // their windows, "can see grass in top right corner", "there is also a white strip on the other side")
+  { name: 'at the door, seeing in, as played', at: [-1.76, -14.24], turned: -18, zoom: 0.6 },
   { name: 'foot of the stair', at: [-1.5, -9.0], turned: 0, zoom: 0.5 },
   { name: 'before the hall, camera past its roof', at: [-0.6, -5.9], turned: 178, zoom: 0.5 },
   { name: 'behind the hall', at: [-1.5, -36], turned: 180, zoom: 0.71 },
@@ -113,6 +117,8 @@ export interface RuleRead {
   roof?: { blocks: number; coverLeft: number; blocksOver: number };
   /** before the hall's door: its front wall pictured alone, read the same way */
   doorWall?: { blocks: number; coverLeft: number; blocksOver: number };
+  /** seeing into the hall from outside it: its walls opened on ground past the room he sees through it */
+  strips?: StripRead;
 }
 
 /** Each block's mean colour, row by row. */
@@ -390,6 +396,14 @@ export async function readView(lab: Lab, view: RuleView): Promise<[RuleRead, Pic
     const columns = Math.floor(played.pixels.width / BLOCK);
     const colours = [rest, whole, bare].map((shot) => blockColours(shot.pixels));
     const read = readBlocks(view, colours[0], colours[1], colours[2], columns);
+    // (seen into from outside: no wall of the room opens on ground past it he sees through it, a strip too thin
+    // for a block to hold)
+    // (read from the frame as played, its front wall's ghost in it: a wall behind that ghost, itself a ghost, isn't
+    // drawn at all, and with the front wall hidden the strip doesn't form)
+    if (roofGone && !underRoof) {
+      const frames = { played: played.pixels, whole: whole.pixels, bare: bare.pixels };
+      read.strips = stripsPastRoom(frames, view.at, HALL_ROOM, groundThrough);
+    }
     const pictures = [marked(played, read, columns), whole.pictured, bare.pictured];
     if (roofGone) {
       // (the roof of the building he stands in alone: all of it must be opened, whatever he sees under it)
@@ -441,7 +455,8 @@ export function judged(read: RuleRead): Checked {
     : '';
   const line = `${read.view}: over ground he sees ${percent(seen.coverLeft)} of the cover left `
     + `(${percent(seen.blocksOver)} of ${seen.blocks} blocks still covered); over ground he doesn't `
-    + `${percent(unseen.opened)} opened (${percent(unseen.blocksOver)} of ${unseen.blocks} blocks open${stood})${atDoor}`;
+    + `${percent(unseen.opened)} opened (${percent(unseen.blocksOver)} of ${unseen.blocks} blocks open${stood})${atDoor}`
+    + (read.strips ? `; its walls opened on ground past the room: ${read.strips.pixels} pixels` : '');
   const wrong: string[] = [];
   if (seen.blocks >= BLOCKS_LEAST && (seen.coverLeft > RUST.tune.houseLeft * COVER_FIRM + SEEN_COVER.overLeft || seen.blocksOver > SEEN_COVER.blocksOver)) {
     wrong.push(`ground he sees is still covered${read.coveredAt}`);
@@ -459,6 +474,9 @@ export function judged(read: RuleRead): Checked {
     wrong.push('he stands before its door and its front wall is not opened whole');
   }
   if (enough && read.inside && read.stands < INSIDE.stands) wrong.push('he is inside and its walls do not stand');
+  if (read.strips && read.strips.pixels > STRIP_MOST) {
+    wrong.push(`its walls are opened on ground past the room he sees through it, ${read.strips.pixels} pixels${read.strips.at}`);
+  }
   return wrong.length ? failed(`${line}: ${wrong.join(', ')}`) : passed(line);
 }
 
@@ -475,9 +493,12 @@ export async function houseRule(lab: Lab, only = ''): Promise<[Checked[], Pictur
   return [checks, moments];
 }
 
+/** the view the strips were played at, and the canary's: its walls read by their terrace's floor (`rust.wallsSeenIn` 0) */
+const STRIP_VIEW = 'at the door, seeing in, as played';
+
 /** the views `lab rustcheck` holds the rule from (all of them: `lab houserule`), and the one its canary reads */
 const CHECKED_VIEWS = ['the portico case, camera before the hall', 'the portico case, camera from the east',
-  'the portico case, camera over the hall', 'the portico case, camera from the west', 'beside a cottage'];
+  'the portico case, camera over the hall', 'the portico case, camera from the west', 'beside a cottage', STRIP_VIEW];
 // (not one before the hall's door: there its roof and front wall are read alone, and nothing else covers ground he sees)
 const CANARY_VIEW = 'terrace end, from the side';
 /** the share the canary leaves of a house over ground he sees, and the least of the cover it must then read left */
@@ -501,6 +522,14 @@ export async function houseRuleHolds(lab: Lab): Promise<Checked> {
     }
   } finally {
     RUST.tune.houseLeft = left;
+  }
+  RUST.tune.wallsSeenIn = 0;
+  try {
+    const [read] = await readView(lab, RULE_VIEWS.find((each) => each.name === STRIP_VIEW)!);
+    const pixels = read.strips?.pixels ?? 0;
+    if (pixels <= STRIP_MOST) broken.push(`canary: a room's walls read by their terrace's floor, only ${pixels} pixels read opened past the room`);
+  } finally {
+    RUST.tune.wallsSeenIn = 1;
   }
   if (broken.length) return failed(`a house from above: ${broken.join('; ')}`);
   return passed(`a house from above opens over ground he sees alone: the portico case from four sides, and a cottage (lab houserule: all)`);

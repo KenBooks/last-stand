@@ -18,6 +18,9 @@ const SEE_KINDS_MOST = 32, SEE_KIND_FLOATS = 20, SEE_FLOOR_CLEAR = 0.12;
  *  the page's own: all of it is thinned to nothing, and it's in the frame for its shadow alone. */
 /** how long a room's roof and walls take to open as he walks in, and to close as he leaves (s) */
 const INSIDE_FADE = 0.4;
+/** how far in its room a wall reads him while he sees into it from outside: enough for it to open over that room's
+ *  floor alone, as from inside, and too little for any of it to go as the wall before him does there */
+const SEEN_IN = 0.002;
 /** the share of the opening a wall seen from in its room by its door takes: about two fifths of it left, over twice what's
  *  left from outside. Its inner face is dark, and at a sixth nothing of it showed but the door frame's edges (from
  *  play, "Make it stronger") */
@@ -89,6 +92,7 @@ export class SeeKinds {
       g[at + 14] = room ? room.z : 1e5; g[at + 15] = room ? room.w : 1e5;
       g[at + 16] = door ? door.x : 0; g[at + 17] = door ? door.y : 0;
       // (a cover reads these as where its raised floor lies, in two boxes, and the ground's height past them)
+      let seenIn = 0;
       if (cover) {
         // (how far he stands in the room it roofs or walls, eased: from play, "lets make thinning a fade in/out...
         // not instant appear/disappear")
@@ -99,7 +103,11 @@ export class SeeKinds {
         this.inside.set(see, inside);
         // (a wall of the room he stands in reads its room as its floor's one box)
         // (and the floor past its walls he may see out to as the other: its porch)
-        const [box, more] = (inside > 0 && see.walls ? [see.walls, see.porch] : see.floorBoxes) ?? [];
+        // (and a wall of a room he sees into from outside, through its door, the same, `SEEN_IN`: read by the floor
+        // its terrace gives it, a side wall opened on the paving past it he saw out of its window, a strip of lit
+        // meadow in the room's far corner, from play "can see grass in top right corner", "you didn't fix the issue")
+        if (TUNE.wallsSeenIn && see.walls && inside <= 0 && ROOMS.ready && seesIntoRoom(see.walls)) seenIn = SEEN_IN;
+        const [box, more] = ((inside > 0 || seenIn > 0) && see.walls ? [see.walls, see.porch] : see.floorBoxes) ?? [];
         g[at + 12] = box ? box[0] : -1e5; g[at + 13] = box ? box[1] : -1e5;
         g[at + 14] = box ? box[2] : 1e5; g[at + 15] = box ? box[3] : 1e5;
         g[at + 8] = more ? more[0] : 0; g[at + 9] = more ? more[1] : 0;
@@ -118,7 +126,7 @@ export class SeeKinds {
       // (a roof by how far he stands under it; a wall of his room the same under 0: over its room alone)
       // (`rust.housesWhole`, a harness's frame of nothing thinned: neither then)
       const inside = TUNE.housesWhole ? 0 : this.inside.get(see) ?? 0;
-      if (cover) g[at + 19] = see.roofs ? inside : -inside;
+      if (cover) g[at + 19] = see.roofs ? inside : -Math.max(inside, TUNE.housesWhole ? 0 : seenIn);
       // (and a wall with the door he stands before and sees in through opens whole, to the rule's ghost: from
       // play, "he just needs to see whole wall behind it")
       // (not till the pipelines its room's layers are drawn apart with have compiled, `ROOMS`)

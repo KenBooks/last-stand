@@ -116,6 +116,10 @@ export const TUNE = tunable('rust', {
    *  from over ground he saw, from play: "the building geometry should not completely disappear, it should be
    *  possible to tell what the original building looked like" */
   houseLeft: 0.3125,
+  /** whether a wall of a room he sees into from outside opens over that room's floor alone, as from in it (0: by
+   *  the floor its terrace gives it, a check's canary: stood at the hall's door its side walls opened on the terrace
+   *  past them he saw out of their windows, from play "can see grass in top right corner") */
+  wallsSeenIn: 1,
   /** the share of a column left where the rule opens it (a thing that stands as one, its foot always whole): more
    *  than a roof's, as it is slim and hides little. Left a third, the portico's four seen along their row were
    *  faint streaks over the paving, from play: "how many columns do you see ? I see one" */
