@@ -99,7 +99,7 @@ interface Step {
 export interface TavernKeeper {
   /** him built and stood behind the bar (once) */
   /** him seated a piece at a time (models/steps.ts), as the tavern is first walked into (game/rooms.ts `folkComing`) */
-  seatSteps(): Generator<void, void, undefined>;
+  seatSteps(): Generator<void | PromiseLike<unknown>, void, undefined>;
   /** his work moved on, whether the tavern is shown or not (the host serves a guest in it from outside) */
   always(dt: number): void;
   /** the keeper, once seated (tools/lab `tavern`) */
@@ -869,9 +869,8 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
       if (keeper) return;
       // (his own head and face asked of the workers now, as he's first needed, and waited for a frame at a time: made
       // at the boot, they were the boot's to wait on for a house a visit may never open)
-      let ready = false;
-      void Promise.all([readyHead(KEEPER_HEAD, heroDetail()), readyFace('keeper')]).then(() => { ready = true; });
-      while (!ready) yield;
+      // (handed to the slices to wait for, `builtInSlices`: spun on a flag, the lab's boot held its page in one task)
+      yield Promise.all([readyHead(KEEPER_HEAD, heroDetail()), readyFace('keeper')]);
       const built = yield* keeperSteps();
       if (keeper) return;
       keeper = built;

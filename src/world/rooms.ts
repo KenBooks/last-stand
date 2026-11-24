@@ -75,7 +75,7 @@ export interface Room {
    *  workers have made them: as the house is first walked into (game/rooms.ts `folkComing`), a piece at a time
    *  (models/steps.ts), a frame painted between slices: built whole at the boot, each was one task of seconds on a
    *  player's laptop (#838) */
-  seatFolk?(): Generator<void, void, undefined>;
+  seatFolk?(): Generator<void | PromiseLike<unknown>, void, undefined>;
   /** the library's scholar, once seated (tools/lab `houses`, `scholar`) */
   folk?(): Scholar | undefined;
   /** what a hero sits on in it (from the owner: "dont forget to add sitting in houses, where possible, some houses have
