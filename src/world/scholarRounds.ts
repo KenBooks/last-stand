@@ -23,8 +23,9 @@ export interface RoundsRoom {
   /** the room's half width and depth (m) */
   half: readonly [number, number];
   obstacles: Obstacle[];
-  /** each spine's books on the shelves: its instanced mesh, and each book's matrix and colour */
-  shelves: { mesh: THREE.InstancedMesh; matrices: THREE.Matrix4[]; colours: THREE.Color[] }[];
+  /** each spine's books on the shelves: its covers' instanced mesh, every book's pages' mesh and where this spine's begin
+   *  in it, and each book's matrix and colour */
+  shelves: { mesh: THREE.InstancedMesh; pages: THREE.InstancedMesh; offset: number; matrices: THREE.Matrix4[]; colours: THREE.Color[] }[];
   /** the stack of books on his table, bottom first, in its frame (each book's box size in its `userData.size`) */
   stack: THREE.Mesh[];
   /** a book for his hands, one of the shelves' (its material's map and colour set to the book's), and an open one */
@@ -37,7 +38,15 @@ export interface RoundsRoom {
   cloth: THREE.Object3D;
   puff(at: THREE.Vector3): void;
   globe: THREE.Object3D;
+  /** the open book made the book he took, opened (its size: thick, tall, deep; its colour) */
+  openAs(size: THREE.Vector3, colour: THREE.Color): void;
 }
+
+/** a book of the shelves' out of its place: its covers' mesh and instance, its pages' mesh and instance, and its place */
+export interface ShelfBookOut { mesh: THREE.InstancedMesh; index: number; pages: THREE.InstancedMesh; page: number; matrix: THREE.Matrix4 }
+
+/** a harness's planted fault (`lab scholar --canary`): the book in his hands another than the one off the shelf */
+export const roundsPlant = { otherBook: false };
 
 /** what he does when he gets up from his table */
 export type Task = 'browse' | 'keep' | 'restock' | 'dust' | 'tidy' | 'globe';
@@ -54,6 +63,9 @@ export interface Rounds {
   /** the book in his hands now (or null), the books in their gaps, and a slot's book shown on its shelf (a harness's) */
   readonly carried: THREE.Object3D | null;
   readonly gaps: number;
+  /** the shelf's book he has out now (taken, read, carried): its covers' mesh and instance, its pages' and where it
+   *  stood; null once it's back or laid on his table (a harness's: the book in his hand the shelf's own) */
+  readonly out: ShelfBookOut | null;
   /** a task begun now, whatever he's doing (a harness's) */
   begin(task: Task): void;
 }
@@ -231,9 +243,10 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   const gaps: Slot[] = [];
   const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
   const showSlot = (slot: Slot, on: boolean) => {
-    const { mesh, matrices } = room.shelves[slot.shelf];
+    const { mesh, pages, offset, matrices } = room.shelves[slot.shelf];
     mesh.setMatrixAt(slot.index, on ? matrices[slot.index] : hidden);
-    mesh.instanceMatrix.needsUpdate = true;
+    pages.setMatrixAt(offset + slot.index, on ? matrices[slot.index] : hidden);
+    mesh.instanceMatrix.needsUpdate = pages.instanceMatrix.needsUpdate = true;
   };
 
   // --- where he is: his place and the way he faces (yaw, the room's frame) ---
@@ -260,6 +273,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   let carried: THREE.Object3D | null = null;
   /** which of the books for his hands shows: put on them each frame, as the room's warm-up shows both for its draw */
   const shown = { held: false, openHeld: false, cloth: false };
+  let out: ShelfBookOut | null = null;
   const pose = { at: new THREE.Vector3(), turn: new THREE.Quaternion() };
   /** what keeps what he carries in his hands as he walks and turns, each frame (null: he carries nothing that way) */
   let carry: (() => void) | null = null;
@@ -453,11 +467,13 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     const mat = (room.held.material as THREE.Material[])[0] as THREE.MeshStandardMaterial;
     mat.map = (mesh.material as THREE.MeshStandardMaterial).map;
     mat.color.copy(colours[slot.index]);
+    if (roundsPlant.otherBook) mat.color.setRGB(1, 1, 1);
     room.held.scale.copy(slot.size);
     shown.held = true;
     carried = room.held;
     showSlot(slot, false);
     gaps.push(slot);
+    out = { mesh: room.shelves[slot.shelf].mesh, pages: room.shelves[slot.shelf].pages, index: slot.index, page: room.shelves[slot.shelf].offset + slot.index, matrix: room.shelves[slot.shelf].matrices[slot.index].clone() };
     putCarried(p);
     // (tipped out: turned on its bottom's front edge, its top coming out of the row)
     const up = new THREE.Vector3(0, 1, 0), axis = new THREE.Vector3().crossVectors(up, slot.out).normalize();
@@ -561,7 +577,9 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     });
     doing = 'opening a book';
     const r = { at: new THREE.Vector3(), turn: new THREE.Quaternion() };
-    const open = new THREE.Vector3(0.26, 0.04, 0.2);
+    // (the open book the very book he took, opened, and his hands on it as it's sized)
+    room.openAs(slot.size, room.shelves[slot.shelf].colours[slot.index]);
+    const open = new THREE.Vector3(0.26, 0.04, 0.2).multiply(room.openHeld.scale);
     /** his hands under the open book at `r`: his left palm behind its spine low down, his right behind its right
      *  board, his fingers straight up the boards (curled, they came through its pages, from play) */
     const readHands = (q: typeof r, behind: number) => {
@@ -631,6 +649,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     });
     showSlot(slot, true);
     gaps.splice(gaps.indexOf(slot), 1);
+    out = null;
     shown.held = false;
     carried = null;
     act.grip = 0;
@@ -698,6 +717,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     // (in his table's frame, as the stack is)
     desk.attach(kept);
     stack.push(kept);
+    out = null;
     shown.held = false;
     carried = null;
     act.grip = 0;
@@ -1007,6 +1027,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     body,
     get carried() { return carried; },
     get gaps() { return gaps.length; },
+    get out() { return out; },
     begin(task) {
       if (act.sit < 1 || carried) return;
       asked = task;

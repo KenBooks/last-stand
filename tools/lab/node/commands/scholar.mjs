@@ -11,14 +11,15 @@ export default {
     + 'sleeves, his fingertips never sunk into what they rest on; a hero come near glanced up at and walked off '
     + 'from, the hero held in his eye while talked to; then his rounds (a browse, a keep, a restock, a dusting, a '
     + 'row squared and the globe turned, each frame: no joint turning over 8 degrees, his head on his way as he '
-    + 'walks, no shoe through his robe, never into what stands in the room, a book in his hands at a '
+    + 'walks, no shoe through his robe, his cowl clear of his neck and head and close round his neck, the book in his '
+    + 'hands the shelf\'s own and its gap on the shelf, never into what stands in the room, a book in his hands at a '
     + 'hand, its shelf\'s book hidden while it\'s off it, a hero come close looked up at and his task going on, the '
     + 'hero in his way gone round, talked to and he stops; nothing compiled over them, the frame sat and walking); '
     + 'pictured at the loop\'s beats close up from each side and over his shoulder, his face, and as the player sees '
     + 'him); `--film` a picture a moment; `--moments` him pictured at each beat of each task; `--canary` jumps his '
     + 'loop on mid-way, raises his table, lowers the page\'s spine, draws the prints back from the spine, drops the '
     + 'page on his resting hand, strips his undersleeves, puts his quill back under his arm and holds a book he '
-    + 'carries off his hands and jumps his pose from sat to standing.',
+    + 'carries off his hands, jumps his pose from sat to standing, loosens his cowl and gives him another book.',
   help: "the library's scholar, Brother Hollis: his reading loop posed through frame by frame, its wrap included (no "
     + 'joint snapping, his head and hands moving), glancing up at a hero come near and holding his eye while talked '
     + 'to; pictured at points of the loop close up from each side and over his shoulder, and as the player sees him',

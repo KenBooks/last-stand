@@ -20,6 +20,7 @@ import type { Scholar } from '../../../src/entities/models/scholar';
 import type { Rounds } from '../../../src/world/scholarRounds';
 import { jointsOf, offHero } from './scholar';
 import { scholarPlant } from '../../../src/entities/models/scholar';
+import { roundsPlant } from '../../../src/world/scholarRounds';
 
 /** the most frames a round may take (a minute and a half at 60 a second), how far a book may be from his nearer hand
  *  (m), how near what stands in the room his middle may come (m past its circle), how far off the hero his face must
@@ -45,6 +46,62 @@ const STRAIGHT = 8;
 /** how near the hero may be (m) for his head to be read on his way */
 const HERO_NEAR = 2.2;
 const SHOE_OUT_MOST = 0.004;
+/** his cowl against him (m): how far into his neck or his head a point of it may go, and how far its top may stand off
+ *  his neck (from play: "the Librarian's hoodie is broken", a ring standing off his neck, his neck and back showing down
+ *  inside it); his neck's radius at its foot and its top, and his head's round its middle over its joint */
+export const COWL_INTO_MOST = 0.003;
+export const COWL_GAP_MOST = 0.03;
+const NECK_R = { foot: 0.064, top: 0.053 };
+const HEAD = { up: 0.09, ahead: 0.01, r: 0.092 };
+
+/** His cowl against his neck and head now: how far into his neck a point of it goes, how far its top (its last row of
+ *  points) stands off his neck at most, and how far into his head a point goes (m). */
+export function cowlClearance(s: Scholar): { intoNeck: number; gap: number; intoHead: number } {
+  const cowl = s.root.getObjectByName('scholar cowl') as THREE.Mesh;
+  const neck = s.root.getObjectByName('scholar neck')!, head = s.root.getObjectByName('scholar head')!;
+  s.root.updateMatrixWorld(true);
+  const a = neck.getWorldPosition(new THREE.Vector3()), b = head.getWorldPosition(new THREE.Vector3()), ab = b.clone().sub(a), len = ab.length();
+  ab.normalize();
+  const middle = head.localToWorld(new THREE.Vector3(0, HEAD.up, HEAD.ahead));
+  const p = cowl.geometry.attributes.position, v = new THREE.Vector3(), round = 37;
+  let intoNeck = 0, gap = 0, intoHead = 0;
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i).applyMatrix4(cowl.matrixWorld);
+    const t = v.clone().sub(a).dot(ab), off = v.clone().sub(a).addScaledVector(ab, -t).length();
+    const r = THREE.MathUtils.lerp(NECK_R.foot, NECK_R.top, THREE.MathUtils.clamp(t / len, 0, 1));
+    if (t > 0 && t < len) intoNeck = Math.max(intoNeck, r - off);
+    if (i >= p.count - round) gap = Math.max(gap, off - r);
+    intoHead = Math.max(intoHead, HEAD.r - v.distanceTo(middle));
+  }
+  return { intoNeck, gap, intoHead };
+}
+
+/** The book in his hands against the shelf's he took: why it isn't the very book (its model, its spine, its colour, its
+ *  size, its gap on the shelf), or '' where it is. */
+function notTheShelfBook(rounds: Rounds, held: THREE.Mesh): string {
+  const out = rounds.out;
+  if (!out) return '';
+  const [cover] = held.material as THREE.MeshStandardMaterial[];
+  const shelfCover = out.mesh.material as THREE.MeshStandardMaterial;
+  if (held.geometry.attributes.position.count !== out.mesh.geometry.attributes.position.count + out.pages.geometry.attributes.position.count) return 'another model';
+  if (cover.map !== shelfCover.map) return 'another spine';
+  const colour = new THREE.Color();
+  out.mesh.getColorAt(out.index, colour);
+  if (Math.abs(colour.r - cover.color.r) + Math.abs(colour.g - cover.color.g) + Math.abs(colour.b - cover.color.b) > 0.01) return 'another colour';
+  const size = new THREE.Vector3();
+  out.matrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), size);
+  if (size.distanceTo(held.scale) > 0.001) return 'another size';
+  const m = new THREE.Matrix4();
+  out.mesh.getMatrixAt(out.index, m);
+  if (!hiddenAt(m)) return 'its cover still on the shelf';
+  out.pages.getMatrixAt(out.page, m);
+  if (!hiddenAt(m)) return 'its pages still on the shelf';
+  return '';
+}
+
+/** Whether an instance's matrix hides it (scaled to nothing: its columns none long; decomposed, three reads a scale of
+ *  1 from it) */
+const hiddenAt = (m: THREE.Matrix4) => Math.hypot(m.elements[0], m.elements[1], m.elements[2]) < 1e-6;
 const GLOBE_TURNS = 1;
 
 /** Where the middle of each of his palms is (world): 7 cm down the hand from its joint at the wrist, the way his fingers
@@ -129,6 +186,7 @@ function readHold(s: Scholar): { tilt: number; off: number; palms: number[]; tip
 interface Followed {
   frames: number; beats: string[]; farthest: number; farAt: string; tightest: number; tightAt: string; gapsAtEnd: number; satAtEnd: number;
   turned: number; turnedAt: string; headOff: number; shoeOut: number; shoeAt: string;
+  cowlInto: number; cowlGap: number; cowlAt: string; bookFrames: number; notBook: string; backInPlace: boolean;
 }
 
 /** A part of him by name, or by its parents' where it has none. */
@@ -187,6 +245,8 @@ async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boolean, eac
   const beats: string[] = [];
   let farthest = 0, farAt = '', tightest = Infinity, tightAt = '', frames = 0;
   let turned = 0, turnedAt = '', headOff = 0, shoeOut = 0, shoeAt = '';
+  let cowlInto = 0, cowlGap = 0, cowlAt = '', bookFrames = 0, notBook = '', lastOut = rounds.out;
+  const held = G.scene.getObjectByName('library held book') as THREE.Mesh;
   const obstacles = G.arena.obstacles.filter((o) => o !== rounds.body);
   const joints = jointsOf(s), before = joints.map((o) => o.quaternion.clone());
   const at = s.root.getWorldPosition(new THREE.Vector3()), was = at.clone(), way = new THREE.Vector3();
@@ -214,6 +274,17 @@ async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boolean, eac
       const out = shoeThroughRobe(s);
       if (out > shoeOut) { shoeOut = out; shoeAt = rounds.doing; }
     }
+    // (his cowl against his neck and head, every frame; the book in his hands the shelf's own while it's out)
+    const cowl = cowlClearance(s);
+    if (Math.max(cowl.intoNeck, cowl.intoHead) > cowlInto || cowl.gap > cowlGap) cowlAt = `${rounds.doing} (into his neck ${(cowl.intoNeck * 100).toFixed(1)}, his head ${(cowl.intoHead * 100).toFixed(1)} cm)`;
+    cowlInto = Math.max(cowlInto, cowl.intoNeck, cowl.intoHead);
+    cowlGap = Math.max(cowlGap, cowl.gap);
+    if (rounds.out && rounds.carried === held && held.visible) {
+      bookFrames++;
+      const why = notTheShelfBook(rounds, held);
+      if (why && !notBook) notBook = `${why}, ${rounds.doing}`;
+    }
+    if (rounds.out) lastOut = rounds.out;
     if (frames > 30 && rounds.doing === 'reading at his table' && s.act.sit >= 1) break;
     // (the book he carries, but while he reads it open: the closed one waits hidden meanwhile)
     const carried = rounds.carried;
@@ -233,7 +304,16 @@ async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boolean, eac
       }
     }
   }
-  return { frames, beats, farthest, farAt, tightest, tightAt, gapsAtEnd: rounds.gaps, satAtEnd: s.act.sit, turned, turnedAt, headOff, shoeOut, shoeAt };
+  // (put back: the shelf's own book stood in its place again, as it stood; or, kept on his table, its gap left)
+  let backInPlace = true;
+  if (lastOut && !rounds.out) {
+    const m = new THREE.Matrix4();
+    lastOut.mesh.getMatrixAt(lastOut.index, m);
+    // (as it stood to a hair: stored as single floats, an instance's matrix is never the same double for double)
+    backInPlace = m.elements.every((e, i) => Math.abs(e - lastOut!.matrix.elements[i]) < 1e-5) || hiddenAt(m);
+  }
+  return { frames, beats, farthest, farAt, tightest, tightAt, gapsAtEnd: rounds.gaps, satAtEnd: s.act.sit, turned, turnedAt, headOff, shoeOut, shoeAt,
+    cowlInto, cowlGap, cowlAt, bookFrames, notBook, backInPlace };
 }
 
 /** What's wrong with a round. */
@@ -246,6 +326,10 @@ function problemsOf(name: string, r: Followed): string[] {
   if (r.satAtEnd < 1) problems.push(`rounds (${name}): not sat at his table at its end`);
   if (r.turned > JOINT_MOST) problems.push(`rounds (${name}): a joint turned ${r.turned.toFixed(1)}° in a frame (${r.turnedAt}; at most ${JOINT_MOST})`);
   if (r.headOff > HEAD_OFF_MOST) problems.push(`rounds (${name}): his head ${r.headOff.toFixed(0)}° off the way he walked (at most ${HEAD_OFF_MOST})`);
+  if (r.cowlInto > COWL_INTO_MOST) problems.push(`rounds (${name}): his cowl ${(r.cowlInto * 100).toFixed(1)} cm into his neck or head, ${r.cowlAt} (at most ${COWL_INTO_MOST * 100})`);
+  if (r.cowlGap > COWL_GAP_MOST) problems.push(`rounds (${name}): his cowl's top ${(r.cowlGap * 100).toFixed(1)} cm off his neck, ${r.cowlAt} (at most ${COWL_GAP_MOST * 100}: his neck and back seen down inside it)`);
+  if (r.notBook) problems.push(`rounds (${name}): the book in his hands isn't the shelf's: ${r.notBook}`);
+  if (!r.backInPlace) problems.push(`rounds (${name}): the shelf's book not back in its place as it stood`);
   if (r.shoeOut > SHOE_OUT_MOST) problems.push(`rounds (${name}): a shoe ${(r.shoeOut * 100).toFixed(1)} cm out through his robe above its hem, ${r.shoeAt} (at most ${SHOE_OUT_MOST * 100})`);
   return problems;
 }
@@ -253,7 +337,8 @@ function problemsOf(name: string, r: Followed): string[] {
 const lineOf = (name: string, r: Followed) => `his rounds, ${name}: ${r.beats.join(' > ')}; ${r.frames} frames; a held book at most `
   + `${r.farthest.toFixed(2)} m from his nearer hand; his middle at least ${r.tightest.toFixed(2)} m clear of what stands in the room; `
   + `a joint at most ${r.turned.toFixed(1)}° in a frame (${r.turnedAt}); his head at most ${r.headOff.toFixed(0)}° off his way walking; `
-  + `a shoe at most ${(r.shoeOut * 100).toFixed(1)} cm out through his robe`;
+  + `a shoe at most ${(r.shoeOut * 100).toFixed(1)} cm out through his robe; his cowl at most ${(r.cowlInto * 100).toFixed(1)} cm into his neck `
+  + `or head and its top ${(r.cowlGap * 100).toFixed(1)} cm off his neck; the shelf's own book in his hands ${r.bookFrames} frames${r.notBook ? ` (not: ${r.notBook})` : ''}`;
 
 /**
  * His rounds checked: a browse, with a hero stood close as he looks for a book (he glances up and goes on), then talked
@@ -275,8 +360,12 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
     const drawingC = lab.drawing;
     lab.drawing = false;
     scholarPlant.noSeatBlend = true;
+    scholarPlant.cowlLoose = true;
+    roundsPlant.otherBook = true;
     const planted = await follow(lab, s, rounds, true);
     scholarPlant.noSeatBlend = false;
+    scholarPlant.cowlLoose = false;
+    roundsPlant.otherBook = false;
     lab.drawing = drawingC;
     rounds.hold = true;
     const caught = planted.farthest > HAND_MOST, jumped = planted.turned > JOINT_MOST;
@@ -284,6 +373,11 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
     lines.push(`canary: his pose jumped from sat to standing, not followed, ${jumped ? 'caught' : 'went unseen'} (${planted.turned.toFixed(1)}° in a frame, ${planted.turnedAt})`);
     if (!caught) problems.push('rounds: the canary\'s book off his hands went unseen');
     if (!jumped) problems.push('rounds: the canary\'s jump from sat to standing went unseen');
+    const loose = planted.cowlGap > COWL_GAP_MOST, other = planted.notBook !== '';
+    lines.push(`canary: his cowl's top opened off his neck ${loose ? 'caught' : 'went unseen'} (${(planted.cowlGap * 100).toFixed(1)} cm)`);
+    lines.push(`canary: another book in his hands than the shelf's ${other ? `caught (${planted.notBook})` : 'went unseen'}`);
+    if (!loose) problems.push('rounds: the canary\'s loose cowl went unseen');
+    if (!other) problems.push('rounds: the canary\'s other book went unseen');
     return { lines, problems, moments };
   }
   // (followed undrawn, a frame at a time: drawn, its 7000 frames took over three minutes; each picture draws its own)

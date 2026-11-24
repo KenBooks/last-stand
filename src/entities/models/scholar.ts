@@ -44,8 +44,9 @@ const NOD = { time: 0.55, pitch: 0.14, neck: 0.35 };
 export const WALK = { step: 0.44, speed: 0.68, stride: Math.asin(0.44 / 1.8), knee: 0.5, bob: 0.016, arm: 0.11, hips: 0.07 };
 /** how much of the rise his sat pose still has a share in (`act.sit` from 1 down to this) */
 const SEAT_BLEND = 0.62;
-/** a harness's planted fault: his pose jumped from sat to standing, and not followed (`lab scholar --canary`) */
-export const scholarPlant = { noSeatBlend: false };
+/** a harness's planted faults (`lab scholar --canary`): his pose jumped from sat to standing, and not followed; his
+ *  cowl's top opened out off his neck, as the old ring stood */
+export const scholarPlant = { noSeatBlend: false, cowlLoose: false };
 /** how fast his pose follows what it's set to each frame (1/s): on his feet, and sat (his fingers on the page he turns
  *  kept close); how long after he sits it's let go of (s); and the fastest a joint of him turns on his feet (rad/s:
  *  where one hold handed on to another, a hand turned 12 to 37 degrees in a frame). Set straight to it, each new beat
@@ -302,6 +303,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   const seatedSet = parts.filter((m) => ['scholar skirt', 'scholar trim hem', 'scholar tabard lap'].includes(m.name));
   const standingSet = dressRobe(j, add, M);
   const robeFollow = followLegs(j, standingSet);
+  const cowlFollow = followNeck(j, parts.find((m) => m.name === 'scholar cowl')!);
 
   // --- the page he turns: the top page of the half on his right (-x), from the spine to its edge and along the whole
   // depth, shaped as the book is (models/book.ts); hidden but while it's turned, the print under it the same page ---
@@ -407,6 +409,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
       standing(dt, heroAt, talking, said);
       follow(dt, scholarPlant.noSeatBlend ? 0 : FOLLOW.up, 0, scholarPlant.noSeatBlend ? Infinity : FOLLOW.most);
       if (act.sit < 0.5) robeFollow();
+      cowlFollow();
       satFor = 0;
       return;
     }
@@ -419,6 +422,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     // fingers on the page he turns: followed, the page went 5 mm into his hand)
     satFor = act.sit >= 1 ? satFor + dt : 0;
     follow(dt, FOLLOW.up, smooth(clamp(satFor / FOLLOW.settle, 0, 1)));
+    cowlFollow();
   }
   let satFor = 0;
 
@@ -874,6 +878,49 @@ function keyGeometry(len: number): THREE.BufferGeometry {
   return mergeAll([bow, shaft, bit]);
 }
 
+/** his cowl (his chest's frame): its rows up it and points round, how much lower its front falls, how far its top is set
+ *  back with his neck, and from where up it follows his neck (a share of the way up it) */
+const COWL = { rows: 14, round: 36, dip: 0.018, back: -0.012, follows: 0.3 };
+/** The cowl at `t` of the way up it: across, deep, its height (his chest's frame). On his shoulders a hair inside the
+ *  habit's own (its edge hidden in it), up and out in a rolled fold, and in over the fold to close round his neck 1.2 cm
+ *  off it (his neck 6.6 cm round at its foot, 5.4 at its top, its joint 25 cm up his chest). */
+function cowlAt(t: number): [number, number, number] {
+  const keys: [number, number, number, number][] = [
+    // t, across, deep, height
+    [0, 0.205, 0.112, 0.2], [0.22, 0.19, 0.13, 0.225], [0.45, 0.152, 0.138, 0.262], [0.66, 0.112, 0.114, 0.292],
+    [0.84, 0.089, 0.089, 0.312], [1, 0.076, 0.073, 0.33],
+  ];
+  let k = 0;
+  while (k < keys.length - 2 && keys[k + 1][0] < t) k++;
+  const [t0, w0, d0, y0] = keys[k], [t1, w1, d1, y1] = keys[k + 1], u = smooth(clamp((t - t0) / (t1 - t0), 0, 1));
+  return [lerp(w0, w1, u), lerp(d0, d1, u), lerp(y0, y1, u)];
+}
+
+/** His cowl's top following his neck: each point from where it hangs on his chest towards where his neck carries it,
+ *  by how far up the cowl it is (`COWL.follows` and up), as his neck bows and turns. Rigid on his chest, his neck came out
+ *  of it as he bowed over his book. Returns what does it, a frame. */
+function followNeck(j: Joints, cowl: THREE.Mesh): () => void {
+  const p = cowl.geometry.attributes.position as THREE.BufferAttribute, base = Float32Array.from(p.array as ArrayLike<number>);
+  const top = Math.max(...Array.from({ length: p.count }, (_, v) => base[v * 3 + 1])), foot = Math.min(...Array.from({ length: p.count }, (_, v) => base[v * 3 + 1]));
+  const share = Float32Array.from({ length: p.count }, (_, v) => smooth(clamp(((base[v * 3 + 1] - foot) / (top - foot) - COWL.follows) / (1 - COWL.follows), 0, 1)));
+  j.neck.updateMatrix();
+  const rest = j.neck.matrix.clone().invert(), move = new THREE.Matrix4(), at = new THREE.Vector3(), carried = new THREE.Vector3();
+  cowl.frustumCulled = false;
+  return () => {
+    j.neck.updateMatrix();
+    move.multiplyMatrices(j.neck.matrix, rest);
+    const arr = p.array as Float32Array;
+    for (let v = 0; v < p.count; v++) {
+      at.set(base[v * 3], base[v * 3 + 1], base[v * 3 + 2]);
+      if (scholarPlant.cowlLoose) { at.x *= 1 + 0.7 * share[v]; at.z *= 1 + 0.7 * share[v]; }
+      if (share[v] > 0) at.lerp(carried.copy(at).applyMatrix4(move), share[v]);
+      arr[v * 3] = at.x; arr[v * 3 + 1] = at.y; arr[v * 3 + 2] = at.z;
+    }
+    p.needsUpdate = true;
+    cowl.geometry.computeVertexNormals();
+  };
+}
+
 /** His habit on the rig: its body on the spine and the chest, the skirt over his lap down to the floor on the hips, the
  *  sleeves over his upper arms, his tabard over it from the cowl to his knees, the rope belt with his keys and a
  *  pouch, the cowl, shoes. (The sleeves' bells come after his first pose: `dressBells`.) */
@@ -928,16 +975,23 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
     }
   }
   yield;
-  // --- the cowl: his hood down, rolled round his neck, its bag lying on his back ---
+  // --- the cowl: his hood down, one cloth from his shoulders up round his neck, rolled over in a soft fold, closing
+  // on his neck (its top follows it: `followNeck`), its bag lying on his back. A ring of cord standing off his neck with a
+  // trim ring round it, his neck and back showed down inside it, from play: "the Librarian's hoodie is broken" ---
   {
-    const pts: THREE.Vector3[] = [];
-    for (let i = 0; i < 20; i++) {
-      const a = (i / 20) * Math.PI * 2, [x, z] = oval(a, 0.105, 0.098, 2.2);
-      // (lower in front, where it falls open over the chest; higher behind the neck)
-      pts.push(V(x, 0.285 - 0.035 * Math.max(0, Math.cos(a)) ** 2 + 0.05 * Math.max(0, -Math.cos(a)) ** 1.5, z - 0.012));
+    const collar: THREE.Vector3[][] = [];
+    for (let k = 0; k <= COWL.rows; k++) {
+      const t = k / COWL.rows, [w, d, y] = cowlAt(t);
+      const row: THREE.Vector3[] = [];
+      for (let i = 0; i <= COWL.round; i++) {
+        const a = (i / COWL.round) * Math.PI * 2, [x, z] = oval(a, w, d, lerp(2.4, 2, t));
+        // (lower in front, where it falls open over the chest; set back as his neck is; a fold's ripple round it)
+        const front = Math.max(0, Math.cos(a)) ** 2, ripple = 1 + 0.03 * Math.sin(a * 6 + 0.8) * Math.sin(Math.PI * t);
+        row.push(V(x * ripple, y - COWL.dip * front * smooth(t), z * ripple + lerp(0, COWL.back, smooth(t))));
+      }
+      collar.push(row);
     }
-    add(cord(pts, 0.034, true, 60), M.habit, j.chest, 'cowl');
-    add(cord(pts.map((p) => V(p.x * 1.32, p.y + 0.012, (p.z + 0.012) * 1.32 - 0.012)), 0.004, true, 80), M.trim, j.chest, 'cowl trim', false);
+    add(rowsSurface(collar, 1.3), M.habitD, j.chest, 'cowl');
     // (the hood's bag: a deep fold lying down his back, its point near his shoulder blades)
     const rows: THREE.Vector3[][] = [];
     for (let k = 0; k <= 12; k++) {

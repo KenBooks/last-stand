@@ -247,3 +247,48 @@ export async function eyesOn(lab: Lab, ahead: number, aside: number, high = 1.0)
   void high;
   return `the hero at ${stood.x.toFixed(2)},${stood.z.toFixed(2)} facing him (${G.player.pos.distanceTo(at).toFixed(2)} m)`;
 }
+
+/** What the library costs to draw, from where the hero stands by its door, through his eyes: the game renderer's draw
+ *  calls and triangles in a frame (its own count, `renderer.info`), and how many books its shelves hold. */
+export async function roomCost(lab: Lab): Promise<string> {
+  const room = G.arena.rooms!.library!;
+  await viewAs(lab, 'third');
+  G.player.place(new THREE.Vector3(1.6, 0, 2.5).applyMatrix4(room.group.matrixWorld), Math.PI);
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  const info = G.renderer.info as unknown as { autoReset: boolean; reset(): void; render: { calls: number; triangles: number } };
+  const auto = info.autoReset;
+  await lab.step(5);
+  info.autoReset = false;
+  info.reset();
+  await lab.step(1);
+  const { calls, triangles } = info.render;
+  info.autoReset = auto;
+  lab.drawing = drawing;
+  let books = 0, tris = 0, meshes = 0;
+  room.group.traverse((o) => {
+    const m = o as THREE.InstancedMesh;
+    if (m.isInstancedMesh && m.name.startsWith('library books')) books += m.count;
+    if (!(m as THREE.Mesh).isMesh || !m.visible) return;
+    // (its triangles, each instance's: the renderer's own count reads none on this engine)
+    const g = m.geometry, one = (g.index ? g.index.count : g.attributes.position.count) / 3;
+    tris += one * (m.isInstancedMesh ? m.count : 1);
+    meshes++;
+  });
+  return `draws ${calls} (the renderer's${triangles ? `, triangles ${triangles}` : ''}); the room's meshes ${meshes}, their triangles ${Math.round(tris)}; books on the shelves ${books}`;
+}
+
+/** The shelf's book he has out now against the one in his hands: its instance's matrix (its scale), its colour and the
+ *  held one's, and its spine's map against the held's. */
+export function outRead(lab: Lab): string {
+  void lab;
+  const room = G.arena.rooms!.library!, rounds = room.rounds!()!, out = rounds.out;
+  if (!out) return 'nothing out';
+  const m = new THREE.Matrix4(), size = new THREE.Vector3(), c = new THREE.Color();
+  out.mesh.getMatrixAt(out.index, m);
+  m.decompose(new THREE.Vector3(), new THREE.Quaternion(), size);
+  out.mesh.getColorAt(out.index, c);
+  const held = G.scene.getObjectByName('library held book') as THREE.Mesh, [cover] = held.material as THREE.MeshStandardMaterial[];
+  return `instance ${out.index} of ${out.mesh.name} (count ${out.mesh.count}): scale ${size.toArray().map((v) => v.toFixed(3))}, matrix[0..3] ${Array.from(m.elements.slice(0, 4)).map((v) => v.toFixed(3))}; `
+    + `colour ${c.getHexString()} held ${cover.color.getHexString()}; map same ${cover.map === (out.mesh.material as THREE.MeshStandardMaterial).map}`;
+}

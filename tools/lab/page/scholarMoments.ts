@@ -118,8 +118,15 @@ export async function scholarMoments(lab: Lab): Promise<Report> {
   // (the hero by the door, out of his ways)
   G.player.place(new THREE.Vector3(1.6, 0, 2.5).applyMatrix4(room.group.matrixWorld), Math.PI);
   lab.drawing = false;
-  // (his page turn, close: as he takes the page, lifts it, lets it go, and it falls over)
+  // (sat at his book: his cowl from behind and above, as a player standing behind him sees it, and from before him; his
+  // table's stack from its spines' side)
   rounds.hold = true;
+  s.loopAt = 10;
+  await lab.step(1);
+  moments.push(closeHim(lab, s, 'cowl-sat', 'his cowl sat at his book: from behind, above and before him', ['back', 'above', 'front'], overHim(s, 1.05), FAR.belt));
+  const stackAt = placeOf(room.group.getObjectByName('scholar desk books')!);
+  moments.push(closeHim(lab, s, 'table-books', "the books on his table, from their spines' side", ['front', 'right'], stackAt, FAR.book * 0.75));
+  // (his page turn, close: as he takes the page, lifts it, lets it go, and it falls over)
   for (const t of PAGE_TURN) {
     s.loopAt = t;
     await lab.step(1);

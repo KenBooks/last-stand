@@ -31,7 +31,7 @@ import { pageHeight } from '../../../src/entities/models/book';
 import { toVillage } from './village';
 import { DOOR_FRAMES, stand, useByE, viewAs } from './houses';
 import { holdThroughDoor } from './housesDoor';
-import { roundsChecked } from './scholarRounds';
+import { COWL_GAP_MOST, COWL_INTO_MOST, cowlClearance, roundsChecked } from './scholarRounds';
 
 export interface ScholarOptions {
   /** the views of the close-ups (`front,left,right,back,above` by default) */
@@ -385,6 +385,8 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
   let cutDeepest = 0, cutAt = '', bareAt = '', forearmReads = 0;
   /** the deepest any of his table's things came into his arms (m), what and when */
   let pokeDeepest = 0, pokeAt = '';
+  /** his cowl against his neck and head over the loop (m), and when its worst */
+  let cowlInto = 0, cowlGap = 0, cowlAt = '';
   /** the stretches of the loop his sleeves were through the table (s, from and to, and the deepest in it, m) */
   const spans: { from: number; to: number; depth: number; mesh: string }[] = [];
   const headTurn = { min: Infinity, max: -Infinity }, handAt = new THREE.Vector3();
@@ -440,6 +442,11 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
         if (share !== null && !bareAt) bareAt = `his ${h ? 'right' : 'left'} forearm ${(share * 100).toFixed(0)}% of the way to the wrist at ${t.toFixed(2)} s`;
       }
     }
+    // (his cowl against his neck and head, as he bows over his book and looks up)
+    const cowl = cowlClearance(s);
+    if (Math.max(cowl.intoNeck, cowl.intoHead) > cowlInto || cowl.gap > cowlGap) cowlAt = `${t.toFixed(2)} s`;
+    cowlInto = Math.max(cowlInto, cowl.intoNeck, cowl.intoHead);
+    cowlGap = Math.max(cowlGap, cowl.gap);
     const sunk = tipsSunk(s);
     if (sunk.depth > tipDeepest) { tipDeepest = sunk.depth; tipAt = `${sunk.finger} at ${t.toFixed(2)} s`; }
     // (his sleeves against the table, but where the canary's jump has posed him: that's the snap's to find)
@@ -464,12 +471,15 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
     `his fingers on its edge while he holds it (${heldFrames} frames): ${(edgeFar * 100).toFixed(1)} cm from it at the farthest (${edgeAt})`,
     `the page against his hands: ${cutDeepest > 0 ? `through one by ${(cutDeepest * 1000).toFixed(1)} mm at the deepest (${cutAt})` : 'never through either'}`,
     `his forearms, read ${forearmReads} times: ${bareAt ? `bare at ${bareAt}` : `clothed from the elbow to the wrist every time`}`,
-    `his table's things: ${pokeDeepest > 0 ? `${(pokeDeepest * 100).toFixed(1)} cm into his arm at the deepest (${pokeAt})` : 'never into his arms'}`];
+    `his table's things: ${pokeDeepest > 0 ? `${(pokeDeepest * 100).toFixed(1)} cm into his arm at the deepest (${pokeAt})` : 'never into his arms'}`,
+    `his cowl over the loop: at most ${(cowlInto * 100).toFixed(1)} cm into his neck or head, its top at most ${(cowlGap * 100).toFixed(1)} cm off his neck (${cowlAt})`];
   const problems: string[] = [];
   const caught = canary && worst > SNAP;
   if (canary) lines.push(`canary: his loop jumped 20 s at once ${caught ? 'found' : 'unseen'} (${worst.toFixed(0)}° in a frame)`);
   if (!canary && worst > SNAP) problems.push(`a snap in his loop: ${worstAt} turned ${worst.toFixed(1)}° in a frame (most ${SNAP})`);
   if (wrap > SNAP) problems.push(`his loop snaps at its wrap: ${wrap.toFixed(1)}° in a frame`);
+  if (cowlInto > COWL_INTO_MOST) problems.push(`his cowl goes into his neck or head over his loop: ${(cowlInto * 100).toFixed(1)} cm (${cowlAt})`);
+  if (cowlGap > COWL_GAP_MOST) problems.push(`his cowl's top stands off his neck over his loop: ${(cowlGap * 100).toFixed(1)} cm (${cowlAt})`);
   if (deepest > THROUGH.most) problems.push(`his sleeves go through the table: ${(deepest * 100).toFixed(1)} cm below its top (${deepestAt})`);
   if (!pageFrames) problems.push('the page he turns was never shown over the loop');
   if (pageDeepest > 0 && !canary) problems.push(`the page he turns goes under the book's page blocks: ${(pageDeepest * 1000).toFixed(1)} mm, ${(pageShare * 100).toFixed(0)}% of it (${pageAt})`);
