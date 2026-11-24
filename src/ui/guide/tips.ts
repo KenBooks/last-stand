@@ -1,5 +1,6 @@
 // The guide's tips: how a run works and what helps, each with its figures from the game's data (the run's and the
 // loot's rules, block, co-op, the skills that daze, freeze or slow), so none goes stale as the tuning moves.
+import { LASTS } from '../../game/groundItems';
 import { BLOCK, COOP, PARTY, PVP, RUN } from '../../data/balance';
 import { DUEL_WINS, WINS_USUAL } from '../../game/duel';
 import { LOOT, WAVES } from '../../data/waves';
@@ -72,7 +73,7 @@ export const TIPS_PAGES: Tip[] = [
     html: () => points('', [
       'Open the inventory with I (or the Bag button on touch). Hover an item to compare it with what you wear; right-click (or tap, then Equip) to put it on.',
       'To get rid of an item, <b>drag it out onto the floor</b>, Shift-click it, or tap it and press Drop. It lands on the ground in the lobby.',
-      'Changed your mind? Click its name on the floor to pick it up again. <b class="red">Anything left on the floor is gone once a run starts.</b>',
+      `Changed your mind? Click its name on the floor to pick it up again: the time after its name is how long it has left. <b class="red">Anything left on the floor is gone after ${LASTS / 60} minutes, or once a run starts.</b>`,
       'An item you wear comes off at the stash, the chest by the hall.',
       `The stash holds ${RUN.bagLimit} items. Filter it by stat to find what you need.`,
       'Each hero, and each save slot, keeps its own gear, stash and records.',

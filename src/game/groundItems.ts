@@ -27,7 +27,11 @@ import { emit } from '../events';
 const floorShown = (): boolean => G.mode === 'menu' && !hallOpen();
 
 /** A drop as the games tell each other about it: the item, where it lies and where it was thrown from. */
-export interface GroundDrop { id: string; item: Item; x: number; z: number; fx: number; fz: number }
+export interface GroundDrop {
+  id: string; item: Item; x: number; z: number; fx: number; fz: number;
+  /** seconds left before it's lost (`LASTS` as it's thrown): told with it, so a game joining counts what's left */
+  left?: number;
+}
 
 /** How a drop reaches the other games (set by net/session while in a room). */
 export interface GroundNet {
@@ -47,6 +51,12 @@ const TOSS = 0.55;
 const ASK_AGAIN = 2;
 /** drops the floor's meshes have room for at first (they double when it fills) */
 const ROOM = 32;
+/** seconds a drop lies on the floor before it's lost, its time left shown on its name (#736: "Any items that remain
+ *  uncollected for 2 minutes should automatically despawn. A small countdown timer should be displayed") */
+export const LASTS = 120;
+/** the lab's canary (`lab ui --states floorDespawn --canary`): the drops' time held, none ever lost */
+let clockHeld = false;
+export function holdFloorClock(held: boolean): void { clockHeld = held; }
 
 interface Drop extends GroundDrop {
   /** its name over it, with its icon, in its rarity's colour (pickable: a click, or a tap and another) */
@@ -57,6 +67,9 @@ interface Drop extends GroundDrop {
   asked: number;
   /** the canvas's pixels per px of its label its icon was made for (`iconRatio`) */
   ratio: number;
+  /** seconds left before it's lost, and the whole second its label last showed */
+  left: number;
+  shownSecond: number;
 }
 
 const drops = new Map<string, Drop>();
@@ -158,7 +171,7 @@ export function throwItem(item: Item, at?: { x: number; z: number }): void {
     if (r > max) { x *= max / r; z *= max / r; }
     if (![...drops.values()].some((d) => Math.hypot(d.x - x, d.z - z) < 0.7)) break;
   }
-  const d: GroundDrop = { id: `${TAG}.${seq++}`, item, x, z, fx: p.pos.x, fz: p.pos.z };
+  const d: GroundDrop = { id: `${TAG}.${seq++}`, item, x, z, fx: p.pos.x, fz: p.pos.z, left: LASTS };
   addDrop(d);
   net?.dropped(d);
   emit('itemThrown', item);
@@ -176,15 +189,22 @@ export function floorAt(cx: number, cy: number): { x: number; z: number } | null
  *  it, so it's drawn at its own size. */
 const iconRatio = (): number => G.renderer.getPixelRatio() * uiScales.ui;
 
+/** how a drop's time left is written after its name: small, dim, lining digits */
+const CLOCK_STYLE: TextStyle = { face: 'body', size: 11, color: '#b8b0a2', shadows: OUTLINE };
+/** whole seconds as the label shows them: 1:59, 0:07 */
+const clockOf = (seconds: number): string => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+
 /** A drop's label, its icon made for `ratio` canvas pixels per px: its icon and name in its rarity's colour on a dark
  *  plate edged in it. */
 function dropArt(d: Drop, ratio: number): LabelArt {
   const color = rarityOf(d.item.rarity).color;
   const style: TextStyle = { face: 'display', size: 13, color, shadows: OUTLINE };
   const name = measure(d.item.name, style), icon = 20, gap = 5;
+  // (the time left after the name, small and dim, in whole seconds: 1:59)
+  const clock = measure(clockOf(d.shownSecond), CLOCK_STYLE);
   const pad = { top: 2, right: 8, bottom: 2, left: 4 };
   const inner = Math.max(icon, name.h);
-  const w = 2 + pad.left + icon + gap + name.w + pad.right, h = 2 + pad.top + inner + pad.bottom;
+  const w = 2 + pad.left + icon + gap + name.w + gap + clock.w + pad.right, h = 2 + pad.top + inner + pad.bottom;
   const img = svgImage(itemIconImage(d.item, Math.ceil(icon * ratio)), () => d.label.show(dropArt(d, d.ratio)));
   return {
     w, h,
@@ -200,6 +220,7 @@ function dropArt(d: Drop, ratio: number): LabelArt {
       const x = 1 + pad.left, y = 1 + pad.top;
       if (img) c.drawImage(img, x, y + (inner - icon) / 2, icon, icon);
       drawText(c, name, x + icon + gap, y + (inner - name.h) / 2, style, s);
+      drawText(c, clock, x + icon + gap + name.w + gap, y + (inner - clock.h) / 2, CLOCK_STYLE, s);
     },
   };
 }
@@ -212,7 +233,8 @@ export function addDrop(g: GroundDrop, toss = true): void {
   label.ax = label.ay = 0;
   label.sizedBy = 'ui';
   label.shown = false;
-  const d: Drop = { ...g, label, t: toss ? 0 : TOSS + 1, asked: -Infinity, ratio: iconRatio() };
+  const left = Math.max(0, Math.min(LASTS, g.left ?? LASTS));
+  const d: Drop = { ...g, label, t: toss ? 0 : TOSS + 1, asked: -Infinity, ratio: iconRatio(), left, shownSecond: Math.ceil(left) };
   label.show(dropArt(d, d.ratio));
   drops.set(d.id, d);
   recolour = true;
@@ -223,7 +245,7 @@ export function addDrop(g: GroundDrop, toss = true): void {
 function cardOf(d: Drop): TooltipContent {
   const own = usersOf(d.item).some((c) => c.id === G.player.cls.id);
   const how = own ? (input.touchMode ? 'Tap again to pick it up' : 'Click to pick it up') : `Only a ${usersOf(d.item).map((c) => c.name).join(' or ') || 'nobody'} can use it`;
-  return { ...(own ? itemTooltip(d.item)() : itemTooltipHTML(d.item)), foot: `${how}<br>Left on the floor, it's lost when a run starts` };
+  return { ...(own ? itemTooltip(d.item)() : itemTooltipHTML(d.item)), foot: `${how}<br>Left on the floor, it's lost in ${clockOf(Math.ceil(d.left))} or when a run starts` };
 }
 
 /** Whether a drop's name is under a point of the page: a press there is the floor's (game/village.ts lets it by). */
@@ -297,7 +319,7 @@ export function removeDrop(id: string): GroundDrop | null {
   d.label.remove();
   if (hovered === d) hovered = null;
   hideTooltip();
-  return { id: d.id, item: d.item, x: d.x, z: d.z, fx: d.fx, fz: d.fz };
+  return { id: d.id, item: d.item, x: d.x, z: d.z, fx: d.fx, fz: d.fz, left: d.left };
 }
 
 /** The host gave us a drop: into the stash, or back on the floor at our feet if it has filled up meanwhile. */
@@ -309,7 +331,7 @@ export function receiveItem(item: Item): void {
 }
 
 /** Everything on the floor, as the games tell each other about it (for a guest joining). */
-export const groundDrops = (): GroundDrop[] => [...drops.values()].map((d) => ({ id: d.id, item: d.item, x: d.x, z: d.z, fx: d.fx, fz: d.fz }));
+export const groundDrops = (): GroundDrop[] => [...drops.values()].map((d) => ({ id: d.id, item: d.item, x: d.x, z: d.z, fx: d.fx, fz: d.fz, left: d.left }));
 
 /** Whatever is left on the floor is lost (a run starts, or a guest leaves the host's lobby). */
 export function clearGround(): void { for (const id of [...drops.keys()]) removeDrop(id); }
@@ -423,8 +445,20 @@ function pickUp(d: Drop): void {
 
 /** Every frame: the drops' motion and labels. */
 export function updateGround(dt: number): void {
-  for (const d of drops.values()) {
+  for (const d of [...drops.values()]) {
     d.t += dt;
+    // (its time running out, its label painted again as each whole second goes; at none it's lost, on every game by
+    // its own clock: what's lost was nobody's to keep)
+    if (!clockHeld) d.left = Math.max(0, d.left - dt);
+    if (d.left <= 0) {
+      removeDrop(d.id);
+      continue;
+    }
+    const second = Math.ceil(d.left);
+    if (second !== d.shownSecond) {
+      d.shownSecond = second;
+      d.label.show(dropArt(d, d.ratio));
+    }
     // the class on show can change (a class or save slot switch in the lobby): another class's drop dimmed
     d.label.alpha = usersOf(d.item).some((c) => c.id === G.player.cls.id) ? 1 : 0.6;
   }
