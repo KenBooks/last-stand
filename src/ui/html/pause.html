@@ -32,6 +32,23 @@
         <div class="opt-row quality-row"><span title="The mage's Void Lance: its circle in first person. Off leaves the beam alone.">Spell circle (1st person)</span>
           <div class="seg" id="opt-eyes-portal"><button data-g="on">On</button><button data-g="off">Off</button></div>
         </div>
+        <!-- advanced graphics (core/quality.ts `setAdvanced`, #747): each of a level's live settings held to the
+             player's choice or left to the level (Level); folded away, so the page keeps its size until opened -->
+        <details class="opt-advanced">
+          <summary>Advanced graphics</summary>
+          <div class="opt-row quality-row"><span title="The soft glow round bright light and effects">Bloom</span>
+            <div class="seg" id="opt-adv-bloomShare"><button data-v="">Level</button><button data-v="1">On</button><button data-v="0">Off</button></div></div>
+          <div class="opt-row quality-row"><span title="How close the village's blades of grass stand">Grass</span>
+            <div class="seg" id="opt-adv-grassSpread"><button data-v="">Level</button><button data-v="1">Dense</button><button data-v="2">Normal</button><button data-v="4">Sparse</button></div></div>
+          <div class="opt-row quality-row"><span title="Weeds, ferns and fallen leaves on the floors">Floor plants</span>
+            <div class="seg" id="opt-adv-floorPlants"><button data-v="">Level</button><button data-v="true">On</button><button data-v="false">Off</button></div></div>
+          <div class="opt-row quality-row"><span title="Trees grown in full, or a simpler tree in their place">Trees</span>
+            <div class="seg" id="opt-adv-simpleTrees"><button data-v="">Level</button><button data-v="false">Full</button><button data-v="true">Simple</button></div></div>
+          <div class="opt-row quality-row"><span title="Sparks, puffs and debris">Particles</span>
+            <div class="seg" id="opt-adv-particles"><button data-v="">Level</button><button data-v="1">All</button><button data-v="0.5">Half</button></div></div>
+          <div class="opt-row quality-row"><span title="The shadows the village's street lamps cast">Lamp shadows</span>
+            <div class="seg" id="opt-adv-lampShadows"><button data-v="">Level</button><button data-v="true">On</button><button data-v="false">Off</button></div></div>
+        </details>
         <!-- HDR output (core/hdr.ts): its levels shown only while it's on -->
         <div class="opt-row quality-row hdr-row"><span>HDR</span>
           <div class="seg" id="opt-hdr"><button data-hdr="auto">Auto<small></small></button><button data-hdr="off">Off</button></div>
