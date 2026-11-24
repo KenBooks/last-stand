@@ -7,7 +7,7 @@ import { COMMON_OPTIONS } from '../optionKit.mjs';
 const GEAR_SETS = 400;
 
 /** the rarities loot rolls (src/data/items.ts `RARITIES`) */
-const RARITIES = ['common', 'magic', 'rare', 'epic', 'legendary', 'ascendant'];
+const RARITIES = ['common', 'magic', 'rare', 'epic', 'legendary', 'ascendant', 'ultimate'];
 
 /** A `gear` tier from its option (`epic@30`: a rarity at an item level), checked. */
 function gearTier(text) {

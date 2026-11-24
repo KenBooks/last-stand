@@ -47,8 +47,8 @@ export const SETUP_OPTIONS = {
   },
   rarity: {
     kind: 'choice',
-    choices: ['common', 'magic', 'rare', 'epic', 'legendary', 'ascendant'],
-    usage: 'common|magic|rare|epic|legendary|ascendant',
+    choices: ['common', 'magic', 'rare', 'epic', 'legendary', 'ascendant', 'ultimate'],
+    usage: 'common|magic|rare|epic|legendary|ascendant|ultimate',
     help: 'every item he wears of this rarity, as its look shows it (Rare and up glow in its colour; as rolled by '
       + 'default)',
   },

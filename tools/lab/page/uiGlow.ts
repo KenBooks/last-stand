@@ -34,7 +34,7 @@ import type { Lab, Pictured } from './lab';
  *  in turn of these slots and rarities */
 const STASH_ITEMS = 60;
 const SLOTS: Slot[] = ['weapon', 'chest', 'head'];
-const RARITIES: RarityId[] = ['common', 'magic', 'rare', 'epic', 'legendary', 'ascendant'];
+const RARITIES: RarityId[] = ['common', 'magic', 'rare', 'epic', 'legendary', 'ascendant', 'ultimate'];
 /** the slot whose stash item is hovered */
 const HOVERED: Slot = 'weapon';
 /** the moments of the glow's loops pictured (ms into each) */

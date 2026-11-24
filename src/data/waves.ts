@@ -16,10 +16,12 @@ export const WAVES = {
 
 /** the first wave an Ascendant item (#403) can drop in */
 const ASCENDANT_FROM = 8;
+/** the first wave an Ultimate item can drop in */
+const ULTIMATE_FROM = 12;
 
 // Loot rules per wave.
 export const LOOT = {
-  // rarity weights by wave: [common, magic, rare, epic, legendary, ascendant]
+  // rarity weights by wave: [common, magic, rare, epic, legendary, ascendant, ultimate]
   rarityWeights: (w: number, bonus = 0): number[] => [
     Math.max(4, 55 - w * 5 - bonus * 20),
     30,
@@ -28,6 +30,9 @@ export const LOOT = {
     Math.max(0, (w - 3) * 0.55) + bonus * 3,
     // from wave ASCENDANT_FROM on, whatever the bonus: a wave's reward 1 in 160 there, 1 in 70 by wave 15
     w < ASCENDANT_FROM ? 0 : (w - ASCENDANT_FROM + 1) * 0.12 + bonus * 0.8,
+    // from wave ULTIMATE_FROM on, a quarter of Ascendant's rise: a wave's reward 1 in 590 there, 1 in 390 by wave 15,
+    // 1 in 300 by wave 20
+    w < ULTIMATE_FROM ? 0 : (w - ULTIMATE_FROM + 1) * 0.03 + bonus * 0.2,
   ],
   killDropChance: 0.05,
   heroDropChance: 0.65,

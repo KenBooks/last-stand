@@ -27,6 +27,9 @@ export const RARITIES: RarityInfo[] = [
   // (#403, from play: "orange rarity, more rare than purple": a deep orange, well off Magic's yellow and the Gold a
   // co-op hero can be dyed)
   { id: 'ascendant', name: 'Ascendant', color: '#ff7417', affixes: [5, 6], power: 2.5 },
+  // (from the owner: "Add ultimate rarity, higher then acsendant. Red colour. Should be even more rare": a deep
+  // crimson, well off Ascendant's orange and the life bar's red)
+  { id: 'ultimate', name: 'Ultimate', color: '#ff2b45', affixes: [6, 7], power: 3.0 },
 ];
 
 // base: value at item level 1 (before rarity), grow: fractional growth per ilvl,
@@ -84,6 +87,12 @@ export const AFFIX_NAMES: Record<StatKey, [prefix: string, suffix: string]> = {
 export const LEGENDARY_NAMES = [
   'Starfall Covenant', 'Whisper of the Rift', 'Emberheart', 'The Last Candle', 'Oathbreaker',
   'Veil of Nine Moons', 'Stormcaller\'s Due', 'Hollow Crown', 'Ashen Requiem', 'The Unbound Eye',
+];
+
+/** an Ultimate item's name: its base, then "of" one of these ("Staff of the Crimson Eclipse") */
+export const ULTIMATE_NAMES = [
+  'the Crimson Eclipse', 'the Sundered Throne', 'the Red Meridian', 'Endless Embers', 'the Bleeding Star',
+  'the Final Vigil', 'the Scarlet Reckoning', 'the Ninth Wound', 'the Blood Tide', 'the Burning Heart',
 ];
 
 /** an Ascendant item's name: one of these, its base after it ("Dawnbearer's Staff") */

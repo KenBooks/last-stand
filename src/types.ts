@@ -276,7 +276,7 @@ export type GlowSlot = 'weapon' | 'offhand' | 'head' | 'chest' | 'hands';
 // Items
 
 export type Slot = 'weapon' | 'offhand' | 'head' | 'chest' | 'hands' | 'amulet' | 'ring';
-export type RarityId = 'common' | 'magic' | 'rare' | 'epic' | 'legendary' | 'ascendant';
+export type RarityId = 'common' | 'magic' | 'rare' | 'epic' | 'legendary' | 'ascendant' | 'ultimate';
 
 export interface Item {
   id: string;
