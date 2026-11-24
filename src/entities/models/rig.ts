@@ -287,6 +287,56 @@ export function deathFall(j: Joints, k: number, dirSign = -1): void {
   j.shoulderL.rotation.z += e * 0.9; j.shoulderR.rotation.z -= e * 0.9;
 }
 
+/** how a hero falls (`heroFall`): the share of the fall his knees give way over, the share his back meets the
+ *  ground at, how long his body rebounds off it after (a share) and how far it rebounds (rad), and how far he lies back */
+const HERO_FALL = { buckle: 0.3, lands: 0.55, rebound: 0.22, bounce: 0.09, back: 1.5 };
+/** where a fallen hero's arms lie (`heroFall`), each joint's turn from the rig's rest: the right out on the ground and
+ *  bent a little, the left by his side, a little out and bent */
+const ARMS_LYING = {
+  shoulderR: new THREE.Euler(0, 0, -0.85), elbowR: new THREE.Euler(-0.35, 0, 0),
+  shoulderL: new THREE.Euler(0, 0, 0.35), elbowL: new THREE.Euler(-0.5, 0, 0),
+};
+const _lie = new THREE.Quaternion();
+
+/**
+ * A hero falling, `k` from 0 (standing) to 1 (lying), played back the other way as he's raised (#751: "Improve
+ * Character Death and Ground Impact Animation": the foes' keyed fall tipped him straight back, stiff, his arms out
+ * as a T and his legs straight). His knees give way first, his body drops and goes back faster and faster as a
+ * falling body does, meets the ground and rebounds off it a little, and lies loose: one knee up, the right arm flung
+ * out, the left across him, his head turned and rolled aside. The limbs go limp from his landing on (`limp`).
+ */
+export function heroFall(j: Joints, k: number, dirSign = -1): void {
+  const F = HERO_FALL;
+  const buckle = smooth(ramp(k, 0, F.buckle));
+  // (falling: from rest faster and faster to the ground, as gravity takes it)
+  const fall = Math.min(1, k / F.lands) ** 2;
+  // (the rebound off the ground: up and back down once, dying away)
+  const after = ramp(k, F.lands, F.lands + F.rebound);
+  const rebound = after > 0 && after < 1 ? Math.sin(after * Math.PI) * (1 - after * 0.5) : 0;
+  const limp = smooth(ramp(k, F.lands * 0.7, 1));
+  j.body.rotation.x = dirSign * (fall * F.back - rebound * F.bounce);
+  j.body.rotation.z += dirSign * limp * 0.1;
+  j.body.position.y -= buckle * 0.14 * (1 - fall) + fall * 0.1 - rebound * 0.04;
+  // (the knees give way as he goes, then the left draws up as he lies)
+  j.kneeL.rotation.x += buckle * 0.5 + limp * 0.7;
+  j.kneeR.rotation.x += buckle * 0.4 - limp * 0.15;
+  j.thighL.rotation.x -= limp * 0.55;
+  j.thighR.rotation.z -= limp * 0.12;
+  // (the arms, from whatever they held, eased onto the ground as he goes limp: the right flung out, bent a little, the
+  // left fallen loose by his side. Added to the pose as offsets, the warrior's guard, held forward, stood up at the
+  // sky with his axe and shield in it, and the ranger's left arm raised across him held his bow up)
+  for (const [bone, euler] of [[j.shoulderR, ARMS_LYING.shoulderR], [j.elbowR, ARMS_LYING.elbowR],
+    [j.shoulderL, ARMS_LYING.shoulderL], [j.elbowL, ARMS_LYING.elbowL]] as const) {
+    bone.quaternion.slerp(_lie.setFromEuler(euler), limp);
+  }
+  // (his head turned and rolled to his right)
+  j.neck.rotation.y += limp * 0.45;
+  j.head.rotation.z -= limp * 0.18;
+}
+
+/** Smoothstep of a share already within 0 to 1. */
+const smooth = (x: number): number => x * x * (3 - 2 * x);
+
 /** Bell curve 0 → 1 → 0 over t in [a, b]. */
 export const pulse = (t: number, a: number, b: number): number => (t <= a || t >= b ? 0 : Math.sin(((t - a) / (b - a)) * Math.PI));
 /** Ramp 0 → 1 between a and b. */

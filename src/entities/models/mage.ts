@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather as leatherMaps, cloth as clothMaps, steel as steelMaps, wood as woodMaps, wool as woolMaps, oiled, pbrMaterialMaps, ctx2d } from '../../core/textures';
 import { engravedSteel, embroidered, projectUV, steelRegion } from '../../core/engraving';
-import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm, runShareOf, disposeGeometries } from './rig';
+import { buildHumanoid, joint, part, resetPose, walkCycle, idle, heroFall, pulse, ramp, groundFeet, reachArm, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { ovalTube, wristBent, wristOf } from './wrist';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, stitches, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
@@ -1486,7 +1486,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
     // (the staff hand to his knee once he's well down: from the start, his fist round the staff as it went, the wrist
     // bent 19 degrees past its range)
     if (staffDown > 0) restHands(j, { ...st.sit!, w: ramp(staffDown, STAFF_HAND[0], STAFF_HAND[1]) }, [1]);
-    if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
+    if (st.dead >= 0) { heroFall(j, st.dead, -1); legs.reset(); }
     else {
       // the legs: planted feet, a pelvis that follows them (ik.ts); then a crouch bends the knees instead of sinking the feet
       if (!fp) legs.captureArms();
