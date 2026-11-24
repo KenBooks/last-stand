@@ -362,9 +362,8 @@ export async function pauseColourChecked(lab: Lab): Promise<PauseFound> {
   const picker = document.getElementById('hero-colour-settings');
   if (!picker) return { ...found, problems: [...found.problems, 'settings: no solo colour picker in this tree'] };
   const swatches = [...picker.querySelectorAll<HTMLButtonElement>('.cc-swatch')];
-  // (the main colours and Any, #732; every colour in a tree from before it)
-  const main = (colourData as { MAIN_COLOURS?: readonly unknown[] }).MAIN_COLOURS?.length ?? 12;
-  if (swatches.length !== main + 1) found.problems.push(`settings: expected ${main} colours and Any`);
+  const shown = colourData.HERO_COLOURS.length;
+  if (swatches.length !== shown + 1) found.problems.push(`settings: expected ${shown} colours and Any`);
   for (const button of swatches) {
     const box = button.getBoundingClientRect();
     const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
@@ -382,7 +381,7 @@ export async function pauseColourChecked(lab: Lab): Promise<PauseFound> {
       found.problems.push('settings: solo colour was not applied, kept and selected');
     }
     if (!colourData.heroColour(G.player.colour)) found.problems.push('settings: no valid worn colour');
-    found.lines.push(`  solo colour: ${main} swatches and Any reachable; Purple clicked, saved and worn`);
+    found.lines.push(`  solo colour: ${shown} swatches and Any reachable; Purple clicked, saved and worn`);
     await wheelPicked(lab, picker, found);
   } finally {
     (colourSession as { chooseColour?: (id: HeroColourId | null) => void }).chooseColour?.(previous);

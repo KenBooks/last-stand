@@ -504,10 +504,7 @@ async function changeColours(pair, link, lines, canary) {
     return states;
   };
   let states = await pair.run(1);
-  // (the picker's own swatches, #732: the main colours; every colour from the seventh in a tree from before them)
-  const mainColours = HERO_COLOURS.filter(colour => colour.main);
-  const pickable = mainColours.length ? mainColours : HERO_COLOURS.slice(6);
-  const available = () => pickable.find(colour => !states.some(state => state.colour === colour.id)).id;
+  const available = () => HERO_COLOURS.slice(6).find(colour => !states.some(state => state.colour === colour.id)).id;
   const hostColour = available();
   await callPage(pair.host, 'coopPickColour', { colour: hostColour });
   states = await settled();

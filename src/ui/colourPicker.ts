@@ -1,12 +1,12 @@
-// The hero's colour picker in the Play together dialog (ui/coop.ts): a swatch a main colour (data/heroColours.ts), Any,
+// The hero's colour picker in the Play together dialog (ui/coop.ts): a swatch a colour (data/heroColours.ts), Any,
 // and the colour wheel, shared by Settings and Play together. The host reserves party colours; occupied swatches stay
 // unavailable. Play together shows it compact (from the owner, of #682: "just one color and a dropdown to change"):
 // the colour worn as one swatch with its name, the palette dropped down under it.
-// The wheel (#732, from the owner: "have main ones like red, blue, green, yellow, maybe a couple more. More niche
-// colours can be selected using the colour wheel", the wheel "opens from a button"): a disc of hue round and
+// The wheel (#732, from the owner: "More niche colours can be selected using the colour wheel", the wheel "opens from a
+// button"; every swatch kept beside it, from review: "Lets keep the original colors, they were tested and look good"): a disc of hue round and
 // saturation out, and a slider of lightness under it, held to what reads as cloth (`CUSTOM_RANGE`); picked as the
 // finger or the mouse lifts off the disc, or as the slider is let go, so a party's host is asked once a pick.
-import { CUSTOM_RANGE, MAIN_COLOURS, customColourId, heroColour } from '../data/heroColours';
+import { CUSTOM_RANGE, HERO_COLOURS, customColourId, heroColour } from '../data/heroColours';
 import { ownColour } from '../net/heroColour';
 import { chooseColour, session } from '../net/session';
 import { isCoop } from '../net/role';
@@ -36,7 +36,7 @@ export function colourPickerHtml(compact = false): string {
   const wheel = `<button type="button" class="cc-wheel-open" aria-expanded="${wheelOpen}" title="${WHEEL}"`
     + ` aria-label="${WHEEL}"></button>`;
   const swatches = `<div class="cc-swatches" role="radiogroup" aria-label="Your hero's colour">`
-    + `${MAIN_COLOURS.map((c) => swatch(c.id, c.name, c.swatch)).join('')}${any}${wheel}</div>${wheelHtml()}`;
+    + `${HERO_COLOURS.map((c) => swatch(c.id, c.name, c.swatch)).join('')}${any}${wheel}</div>${wheelHtml()}`;
   if (!compact) return `<div class="coop-colour"><span>Your colour</span>${swatches}</div>`;
   return `<details class="coop-colour colour-drop"${dropOpen ? ' open' : ''}><summary><span class="cc-label">Your colour</span>`
     + `<span class="cc-now"></span><span class="cc-now-name"></span></summary>${swatches}</details>`;
@@ -176,10 +176,10 @@ export function refreshColourPickers(): void {
     button.title = name + (id && taken.has(id) ? ' — already in use' : '');
     button.setAttribute('aria-label', button.title);
   }
-  // the wheel's button: the colour worn where it's none of the swatches (the wheel's, or a colour the picker no longer
-  // shows), lit then; its panel shown while open
+  // the wheel's button: the colour worn where it's none of the swatches (one picked on the wheel), lit then; its panel
+  // shown while open
   const worn = heroColour(ownColour());
-  const offSwatches = !!worn && !worn.main;
+  const offSwatches = !!worn && worn.id.startsWith('#');
   for (const open of document.querySelectorAll<HTMLButtonElement>('.cc-wheel-open')) {
     open.style.setProperty('--swatch', offSwatches ? worn.swatch : 'transparent');
     open.classList.toggle('cc-worn', offSwatches);
