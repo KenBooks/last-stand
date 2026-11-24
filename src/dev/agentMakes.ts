@@ -11,18 +11,23 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import type { AgentStep } from './agentSteps';
+import { gameModules, isGameModule } from './gameModules';
+import type { PlaceKit } from '../world/placeKit';
+import type { Obstacle } from '../types';
 
-/** What a made thing's `build` is handed. */
-export interface MakeKit {
+/** What a made thing's `build` is handed: what a place of the village is built with (world/placeKit.ts, so a place's
+ *  module builds as it is), its `scene` the thing's own group, and a few things more. */
+export interface MakeKit extends PlaceKit {
   THREE: typeof THREE;
   /** the game's state (src/state.ts) */
   G: typeof G;
-  /** the thing's own group, at its place on the ground: what `build` adds to it, or returns, is the thing */
+  /** the thing's own group, at its place on the ground: what `build` adds to it, or returns, is the thing (a
+   *  place's `scene` is this group too) */
   group: THREE.Group;
   /** the ground's height at a place of the world (m) */
   ground(x: number, z: number): number;
-  /** `fn` run each frame while the thing stands: the game's step (s, 0 while it's frozen) and its time since the
-   *  thing was made (s) */
+  /** `fn` run each frame while the thing stands (as one pushed to `updaters` is): the game's step (s, 0 while it's
+   *  frozen) and its time since the thing was made (s) */
   each(fn: MakeUpdater): void;
 }
 export type MakeUpdater = (dt: number, t: number) => void;
@@ -35,6 +40,8 @@ interface Made {
   /** the place it was made in, where alone it's shown */
   place: string;
   updaters: MakeUpdater[];
+  /** what it said stands, as circles: kept for `makes` to tell, not the game's (nobody is stopped by them) */
+  obstacles: Obstacle[];
   /** its own time (s) */
   t: number;
   /** what its updaters last threw, which stopped them */
@@ -56,14 +63,23 @@ function placeNow(): string {
 }
 
 // --- a module's code run -------------------------------------------------------------------------------------------
-/** What a made thing's module may import: three alone (a type's import is gone before it's sent). */
-function required(id: string): unknown {
-  if (id === 'three') return THREE;
-  throw new Error(`make: a made thing imports three alone (types are free): not "${id}". The game's state is kit.G`);
-}
+/** every module `code` asks for (`require("...")`, as a module's imports are once `lab join make` has sent it) */
+const asksFor = (code: string): string[] => [...new Set([...code.matchAll(/\brequire\("([^"]+)"\)/g)].map((found) => found[1]))];
 
-/** `code`'s `build`: a CommonJS module, as `lab join make` sends a TypeScript file. */
-function buildOf(code: string): MakeBuild {
+/**
+ * `code`'s `build`: a CommonJS module, as `lab join make` sends a TypeScript file. It may import three (the game's
+ * own) and the game's modules by their paths from the repository's root (`src/world/props`: gameModules.ts, the
+ * same instances the game runs on; `lab join make` writes a file's relative imports so).
+ */
+async function buildOf(code: string): Promise<MakeBuild> {
+  const ids = asksFor(code);
+  const game = await gameModules(ids.filter(isGameModule));
+  const required = (id: string): unknown => {
+    if (id === 'three') return THREE;
+    const found = game.get(id);
+    if (found) return found;
+    throw new Error(`make: a made thing imports three and the game's own modules (src/...): not "${id}"`);
+  };
   const module = { exports: {} as Record<string, unknown> };
   new Function('exports', 'require', 'module', code)(module.exports, required, module);
   const build = module.exports.build ?? module.exports.default;
@@ -117,7 +133,8 @@ function told(thing: Made): Record<string, unknown> {
   return {
     name: thing.name, place: thing.place, shown: thing.group.visible,
     at: [round(position.x), round(position.y), round(position.z)], turn: round(rotation.y),
-    ...sizeOf(thing.group), updaters: thing.updaters.length, ...(thing.error ? { error: thing.error } : {}),
+    ...sizeOf(thing.group), updaters: thing.updaters.length, obstacles: thing.obstacles.length,
+    ...(thing.error ? { error: thing.error } : {}),
   };
 }
 
@@ -154,16 +171,18 @@ export async function make(args: AgentStep): Promise<unknown> {
   group.position.copy(stand.at);
   group.rotation.y = stand.turn;
   const updaters: MakeUpdater[] = [];
+  const obstacles: Obstacle[] = [];
   const kit: MakeKit = {
     THREE, G, group,
+    scene: group, wall: G.arena.wall, M: G.arena.village.mats, obstacles, updaters,
     ground: (x, z) => G.arena.groundHeight(x, z),
     each: (fn) => { updaters.push(fn); },
   };
-  const built = await buildOf(args.code)(kit);
+  const built = await (await buildOf(args.code))(kit);
   if (built && built !== group) group.add(built);
   // (built whole: only now does the earlier one go)
   if (earlier) remove(earlier);
-  const thing: Made = { name, group, place: placeNow(), updaters, t: 0, error: '' };
+  const thing: Made = { name, group, place: placeNow(), updaters, obstacles, t: 0, error: '' };
   made.set(name, thing);
   G.scene.add(group);
   return { ...told(thing), replaced: Boolean(earlier) };
