@@ -3,7 +3,8 @@
 // off the page; the game's own state read beside it, for what an agent's steps are checked against.
 import { G } from '../../../src/state';
 import { session } from '../../../src/net/session';
-import { cheats } from '../../../src/dev/index';
+import { cheats, time } from '../../../src/dev/index';
+import { frameApart, frameShot } from '../../../src/core/renderer';
 import { freeCamOn } from '../../../src/dev/freeCam';
 import { panelOpen, togglePanel } from '../../../src/dev/panel';
 import type { Lab } from './lab';
@@ -122,4 +123,57 @@ export async function invitePictureDiff(_lab: Lab, { type, a, b }: { type: strin
     }
   }
   return changed / count;
+}
+
+/** Whether a picture from a camera of the agent's own waits for the next frame (`frameApart`). */
+export const inviteApartAsked = (): boolean => frameApart.take !== null;
+
+/** The next frame as the player is shown it (the engine's canvas after the frame's own draw). */
+async function frameShown(lab: Lab): Promise<ImageData> {
+  const taken = new Promise<HTMLCanvasElement>((resolve) => {
+    frameShot.take = resolve;
+  });
+  await inviteStep(lab, { frames: 1, drawn: true });
+  const canvas = await taken;
+  return canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+/**
+ * The frame an agent's picture from its own camera is drawn in, against the frame before it, the game frozen between
+ * them: the share of the player's frame that changed (none, if the picture is drawn apart from it). Call with the
+ * picture asked for and waiting (`inviteApartAsked`). `leak`, the canary: the game's camera left where the agent's
+ * stood as its picture was handed over, so the frame's own draw is from there.
+ */
+export async function inviteFrameBeside(lab: Lab, { leak }: { leak: boolean }): Promise<{ changed: number; taken: boolean }> {
+  const asked = frameApart.take;
+  if (!asked) throw new Error('lab: invite: no picture from a camera of its own is waiting');
+  const frozen = time.frozen;
+  time.frozen = true;
+  try {
+    // (the picture held back for the frame before it)
+    frameApart.take = null;
+    const before = await frameShown(lab);
+    let taken = false;
+    frameApart.take = {
+      camera: asked.camera,
+      taken(canvas) {
+        taken = true;
+        if (leak) {
+          G.camera.position.copy(asked.camera.position);
+          G.camera.quaternion.copy(asked.camera.quaternion);
+          G.camera.updateMatrixWorld();
+        }
+        asked.taken(canvas);
+      },
+    };
+    const beside = await frameShown(lab);
+    let changed = 0;
+    for (let i = 0; i < before.data.length; i += 4) {
+      const light = (data: Uint8ClampedArray): number => (data[i] + data[i + 1] + data[i + 2]) / 3;
+      if (Math.abs(light(before.data) - light(beside.data)) > CHANGED) changed++;
+    }
+    return { changed: changed / (before.data.length / 4), taken };
+  } finally {
+    time.frozen = frozen;
+  }
 }

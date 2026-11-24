@@ -19,6 +19,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { joinGame } from './agentLink.mjs';
 import { joinCommandChecked } from './joinCommandCheck.mjs';
+import { picturedBesideTheFrame } from './inviteApart.mjs';
 import { madeInTheScene, removedByThePanel } from './inviteMakes.mjs';
 import { labError } from './errors.mjs';
 import { OUT } from './paths.mjs';
@@ -39,7 +40,11 @@ const SIDE = 480;
 const RANGE_LEAST = 24;
 
 /** the canary's faults, each of which the check must catch: its name, and what it is */
-const CANARY_FAULTS = { reuse: 'a used code left good', unseen: 'a made thing left undrawn' };
+const CANARY_FAULTS = {
+  reuse: 'a used code left good',
+  unseen: 'a made thing left undrawn',
+  leak: 'the frame of the player drawn from the camera of the agent',
+};
 
 /** Calls `fn` of the page module `module` (under tools/lab/page) with `args`; a failure names the call. */
 export async function callPage(page, module, fn, args = {}) {
@@ -307,6 +312,7 @@ export async function runInvite(side, { canary = false } = {}) {
     found.expect(inside.badge && !inside.asked,'let in, the badge isn\'t up or the question still is');
     found.expect(!(await game.state()).marks.includes('early'), 'the step sent before the answer ran once the agent was let in');
     await stepsAnswered(game, found, link, dir);
+    await picturedBesideTheFrame(game, found, link);
     await madeInTheScene(game, found, link, dir);
     await kicked(game, found, server, link, code, dir);
     await removedByThePanel(game, found);

@@ -28,14 +28,14 @@ export default {
     at: {
       kind: 'list',
       usage: 'x,y,z',
-      help: 'picture: taken from a camera placed here (m), then put back; make: where the thing stands',
+      help: 'picture: the scene from a camera placed here (m), drawn beside his frame; make: where the thing stands',
     },
     to: { kind: 'list', usage: 'x,y,z', help: 'picture: the place the camera at --at looks at' },
     yaw: { kind: 'number', usage: 'rad', help: 'picture: the camera at --at turned this far round, without --to' },
     pitch: { kind: 'number', usage: 'rad', help: 'picture: the camera at --at looking this far up, without --to' },
     keep: {
       kind: 'switch',
-      help: 'picture: the owner is left looking from the camera at --at, flying and frozen as F9 leaves him',
+      help: 'picture: the owner is taken to the camera at --at instead, flying and frozen as F9 leaves him',
     },
     side: { kind: 'number', usage: 'px', help: 'picture: its longest side (1280; the frame\'s own if smaller)' },
     png: { kind: 'switch', help: 'picture: a PNG, exact but several times a JPEG\'s size' },

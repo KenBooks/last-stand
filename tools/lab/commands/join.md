@@ -19,7 +19,7 @@ headless one. `npm run lab -- invite` checks the whole path end to end.
 | --- | --- |
 | `join status` | `joined`, or that it waits for the owner's answer |
 | `join look` | JSON: the mode, biome and run; the hero (class, place, facing, life, energy); the camera (view, place, direction, yaw, pitch, fov); what the middle of the view looks at (`crosshair`: the mesh's path of names, its materials, the distance and place hit, the foe if it's one's); the time (frozen, speed); the settings (quality, screen, and `panel`: every control of the developer panel with what it holds and takes); the frame (the engine's draws, triangles, objects and culled, the pipelines made, fps and timings, and its parts, each in or taken out) |
-| `join picture` | The frame as drawn, without the page's UI, kept in `out/join/<time>.jpg` (its path printed: read it). `--at x,y,z` takes it from a camera placed there, looking at `--to x,y,z` or turned by `--yaw`, `--pitch` (rad), and puts the owner's view back after (three frames of his are the camera's, which he sees as a flicker: tell him before taking several); `--keep` leaves him looking from it instead, flying and frozen as F9 does. `--side px` its longest side (1280), `--png` exact |
+| `join picture` | The frame as drawn, without the page's UI, kept in `out/join/<time>.jpg` (its path printed: read it). `--at x,y,z` takes it from a camera placed there, looking at `--to x,y,z` or turned by `--yaw`, `--pitch` (rad): the scene from there, whole as the free camera shows it (nothing thinned for the hero, no fog, the grass over all the meadow), drawn beside the owner's frame, which doesn't change (one frame of his takes two draws); `--keep` takes him there instead, flying and frozen as F9 does, and the picture is his frame. `--side px` its longest side (1280), `--png` exact |
 | `join set name=value ...` | What the panel sets, by its controls' names (`join set`, bare, lists them): a toggle `god=true`, a choice `speed=0.25` `biome=forest` `class=mage`, a field `wave=12`, a part of the frame `"part:the particles=false"`, a button pressed `start=1` `spawn=5` |
 | `join eval <code>` | Code run in the game's page, an expression or statements with a `return`, awaited (`--file path` for code of several lines: through `npm run` on Windows an argument ends at its first newline): `G` (the game's state, `src/state.ts`), `THREE` and `dev` (`time`, `cheats`, `look()`, `frames(n)`, `placeFreeCam`, `setFreeCam`, `panelControls()`, `setControl`, `plain`) in scope. Its value comes back as plain data, cut short where it's deep (5 levels), long or loops |
 | `join make <name> --file thing.ts` | A thing built into the scene as the owner watches (below). `--at x,y,z` where it stands (else on the ground 4 m before the hero), `--turn rad`; `--resend` sends it again each time the file is saved |
@@ -90,16 +90,18 @@ say so when he is signed in there. A preview's storage is its own origin's: prod
 `npm run lab -- invite` runs it all against a relay of the lab's own (once: `npm ci --prefix server/relay`), the
 command's page the owner's game, every step of his a click on the page: the code read off the panel; an agent held at
 the question, a step it sends early never run; a second agent refused on the same code; let in, with `look`, `set`,
-`eval` and `picture` (the view, and a placed camera put back) checked against the page's own state; a thing made
+`eval` and `picture` (the view, and a placed camera) checked against the page's own state; a picture from a placed
+camera with the player's frame read beside it, the game frozen (0.00% of his frame changed as it was drawn); a thing made
 (`examples/beacon.ts`) and seen drawn (a placed camera's picture of its spot before and after: 18% of its middle
 changed, against 4% the scene changes alone), its updater running, made again in its place, a module that throws and
 one that imports the game's refused with the thing left standing, unmade; kicked, the thing it left taken out by the
 panel's Remove; the used
 code refused; then `lab join` itself, started as a process and its steps run as command lines; and a co-op room
-opened, which sends the agent away and offers none. About 17 s on a booted page; pictures in `out/invite/<screen>`,
+opened, which sends the agent away and offers none. About 18 s on a booted page; pictures in `out/invite/<screen>`,
 the relay's log beside them.
 
-`--canary` builds the made thing with its meshes hidden, which the picture must catch (0.8% changed), and starts the
+`--canary` leaves the game's camera where the agent's stood as its picture is handed over (57% of the player's frame
+changed), builds the made thing with its meshes hidden, which the picture must catch (0.8% changed), and starts the
 relay with two faults: a used code left good, which the check must catch (a second agent gets
 in), and its hold on an unaccepted agent's messages off, so the early step reaches the page, whose own hold must then
 stop it.
