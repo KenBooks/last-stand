@@ -20,6 +20,12 @@ function mayLayer(material: THREE.Material): boolean {
   return !!see?.blended && (!!see.oneLayer || (!!see.cover && !see.reach));
 }
 
+/** Whether `material` is a column's under the houses' rule: thinned as one, drawn under the layers. */
+function standsUnder(material: THREE.Material): boolean {
+  const see = (material as THREE.Material & { seeThrough?: SeeThrough }).seeThrough;
+  return !!see?.blended && !!see.cover && !!see.reach;
+}
+
 /** The rooms' own pipelines (a room's roof and walls drawn in two rounds while he stands in it): whether a walk
  *  of the whole scene has asked for them, and whether they've all compiled since. Till then a room is drawn as
  *  from outside it (`SeeKinds.write`): drawn in two rounds with its pipelines still compiling, the hall was
@@ -102,6 +108,9 @@ export class Ahead {
       // alone: a cottage's in view from the hall made its own at that draw, and was left out of the frame)
       const apart = this.late;
       if (mayLayer(material)) this.core.engine.ready_material_layers(id, skinned, counted, apart);
+      // (and a column's own depth, written before the layers' ghosts while a cover is opened whole: the
+      // engine's `draw_under_depth`. With the rooms' own, after the lobby shows)
+      else if (this.late && standsUnder(material)) this.core.engine.ready_material_layers(id, skinned, counted, false);
     }
   }
 }

@@ -141,11 +141,7 @@ export class Materials {
     const multiplied = material.blending === THREE.CustomBlending && material.blendSrc === THREE.OneFactor;
     const blend = multiplied ? 3 : material.blending === THREE.AdditiveBlending ? 2 : material.transparent ? 1 : 0;
     const side = material.side === THREE.DoubleSide ? 1 : material.side === THREE.BackSide ? 2 : 0;
-    // (a thing that stands as one, a column, writes its depth whatever the game's own thinning says of it: its
-    // ghost wrote none, and a wall's ghost past it, drawn after, lay over the column before it, from play "some
-    // glitches on columns, maybe render layering")
-    const standsAsOne = !!(material as { seeThrough?: { reach?: unknown; cover?: boolean } }).seeThrough?.reach;
-    return blend | (side << 2) | (material.depthWrite || standsAsOne ? 16 : 0);
+    return blend | (side << 2) | (material.depthWrite ? 16 : 0);
   }
 
   /** The engine's material for the numbers, maps and key in the scratch arrays: one for every material alike. */

@@ -92,7 +92,12 @@ over him, a roof in three layers, and a doorway into a room he sees a sector of.
    the door frame's edges ("Make it stronger", "geometry needs to be possible to tell").
    Two things a wall's ghost showed up: the open door leaves stood half in the wall's own edge at the doorway and
    fought it in slivers (they hang `DOOR.clear` into the doorway now), and a column the game thinned wrote no depth,
-   so the wall's ghost lay over a column before it (`engine/materials.ts` has a column write its depth always).
+   so the wall's ghost lay over a column before it: the engine writes a column's depth just before the layers'
+   ghosts (`draw_under_depth`; written as the column was drawn, it hid the flames behind it, "need to fix the fire").
+   The front wall's plinth course and the door's foot blocks are in the front wall's group and open with it: whole,
+   they lay past its ghost as a pale bar ("this white line doesn't belong there").
+10. **The roof goes whole with the camera over the room too**, he outside it (`under` in `engine/seeKinds.ts`; the
+   owner's rule, "if camera OR hero is inside the building, we thin the whole roof").
 
 Held by `npm run lab -- houserule` (its four `the portico case` views, with the terrace, the stair, the hall's
 inside and the cottages) and by `lab rustcheck`, which runs the four with a canary; and in the engine's own lab,

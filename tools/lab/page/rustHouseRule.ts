@@ -364,7 +364,10 @@ export async function readView(lab: Lab, view: RuleView): Promise<[RuleRead, Pic
     const played = await shotAfter(lab, `${view.name}: as played`);
     // (stood in a building its roof is gone whole, and read alone below: the rest is held against the frame
     // without it, where a wall's ghost isn't read against the roof that covered it)
-    if (inHall(view.at[0], view.at[1])) show(INSIDE_ROOFS, false, true);
+    // (so it is with the camera over the hall, he outside it: "if camera OR hero is inside the building, we
+    // thin the whole roof")
+    const roofGone = inHall(view.at[0], view.at[1]) || inHall(G.camera.position.x, G.camera.position.z);
+    if (roofGone) show(INSIDE_ROOFS, false, true);
     // (so is the front wall before whose door he stands: opened whole, whatever he sees past it)
     const atDoor = beforeDoor(view);
     if (atDoor) show(DOOR_WALLS, false, true);
@@ -380,7 +383,7 @@ export async function readView(lab: Lab, view: RuleView): Promise<[RuleRead, Pic
     const colours = [rest, whole, bare].map((shot) => blockColours(shot.pixels));
     const read = readBlocks(view, colours[0], colours[1], colours[2], columns);
     const pictures = [marked(played, read, columns), whole.pictured, bare.pictured];
-    if (read.inside) {
+    if (roofGone) {
       // (the roof of the building he stands in alone: all of it must be opened, whatever he sees under it)
       show(INSIDE_ROOFS, true, true);
       const roof = await shotAfter(lab, `${view.name}: its roof alone`);
@@ -418,7 +421,7 @@ export function judged(read: RuleRead): Checked {
   const { seen, unseen } = read;
   const roof = read.roof;
   const stood = roof
-    ? `, ${percent(read.stands)} standing; he is inside: of its roof alone ${percent(roof.coverLeft)} left `
+    ? `, ${percent(read.stands)} standing; he or the camera is inside: of its roof alone ${percent(roof.coverLeft)} left `
       + `(${percent(roof.blocksOver)} of ${roof.blocks} blocks still covered)`
     : '';
   const wall = read.doorWall;
@@ -439,7 +442,7 @@ export function judged(read: RuleRead): Checked {
   }
   const roofLeft = INSIDE.roofLeft;
   if (roof && (roof.blocks < BLOCKS_LEAST || roof.coverLeft > roofLeft || roof.blocksOver > INSIDE.roofBlocksOver)) {
-    wrong.push('he is inside and its roof is not opened whole');
+    wrong.push('he or the camera is inside and its roof is not opened whole');
   }
   const wallLeft = RUST.tune.houseLeft + SEEN_COVER.overLeft;
   if (wall && wall.blocks >= BLOCKS_LEAST && (wall.coverLeft > wallLeft || wall.blocksOver > SEEN_COVER.blocksOver)) {

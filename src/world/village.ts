@@ -1419,13 +1419,15 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
     const wingX = X + s * (dh + (wing - thick) / 2);
     wall.add(walling(frontWall, wing - thick, eaves, thick, wingX, y0, face - thick / 2, M.ashlar), true, 'wall', true);
     // (its plinth course whole: too low to hide him, and thinned it parted along its top in a dark line, a review)
-    wall.add(block(scene, wing - DOOR.frame, 0.45, 0.35, cx + s * DOOR.frame / 2, y0, face + 0.17, M.coping), true, 'wall', true);
+    // (in the front wall's group, opened whole with it by the door: left whole, from in the hall it lay past the
+    // wall's ghost as a pale bar across it, from play "this white line doesn't belong there")
+    wall.add(block(frontWall, wing - DOOR.frame, 0.45, 0.35, cx + s * DOOR.frame / 2, y0, face + 0.17, M.coping), true, 'wall', true);
     // (a plinth block at the foot of the door's frame, prouder than the course, which ends against it: the course stood
     // 17 cm prouder than the frame and stopped 2 cm short of it, its end a grey wedge beside the chest, from play "also
     // broken near chest (grey triangle)"; a hair wider than the frame each way, so no face of it lies in one of the
     // frame's; whole as the course is: in the front wall's group the door's cone cut a wedge out of its top)
     const footX = X + s * (dh + DOOR.frame / 2 - 0.02);
-    wall.add(block(scene, DOOR.frame + DOOR_FOOT.wider * 2, DOOR_FOOT.high, DOOR_FOOT.deep, footX, y0,
+    wall.add(block(frontWall, DOOR.frame + DOOR_FOOT.wider * 2, DOOR_FOOT.high, DOOR_FOOT.deep, footX, y0,
       face + DOOR_FOOT.deep / 2 - 0.02, M.coping), true, 'wall', true);
   }
   // (the lintel, the frame and the leaves are in the wall: stood in a leaf, he and the camera went through it)

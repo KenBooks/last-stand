@@ -8,6 +8,7 @@ import type { Core } from './core';
 import { GLOBALS, TUNE } from './globals';
 import { ROOMS } from './ahead';
 import { PIPELINES } from './pipelinesAside';
+import { G } from '../state';
 
 /** the kinds of see-through the engine holds, the floats of each (`SeeKind` in its common.wgsl), and how far under
  *  the hero's floor is still clear of his hole (`FLOOR_CLEAR` in core/seeThrough.ts) */
@@ -148,8 +149,15 @@ export class SeeKinds {
   /** Whether the watcher stands in the room `see`'s kind roofs or walls (`roofs`, `walls`). */
   under(see: SeeThrough): boolean {
     const room = see.roofs ?? see.walls;
+    if (!room) return false;
+    const within = (x: number, z: number): boolean => x > room[0] && x < room[2] && z > room[1] && z < room[3];
     const from = SIGHT.uSightFrom.value;
-    return !!room && from.x > room[0] && from.x < room[2] && from.y > room[1] && from.y < room[3];
+    if (within(from.x, from.y)) return true;
+    // (a roof with the camera over its room too, the watcher outside it: the owner's rule, "if camera OR hero
+    // is inside the building, we thin the whole roof". By the floor he saw alone, the roof before a camera
+    // over the hall was a dark sheet with slanted edges over the room, "and this looks weird too")
+    const eye = G.camera?.position;
+    return !!see.roofs && !!eye && within(eye.x, eye.z);
   }
 
   /** Whether `see`'s kind is a cover now: a part of a house, with the houses' rule on. */
