@@ -21,7 +21,7 @@ import { useQuality } from '../../../src/core/quality';
 import { webGpuPixels } from './pixels';
 import type { QualityLevel } from '../../../src/data/quality';
 import type { BiomeId } from '../../../src/data/biomes';
-import type { WeaponStyle } from '../../../src/loot/loadout';
+import type { HeldStyle } from '../../../src/types';
 import { TUNE } from '../../../src/engine/globals';
 
 /** One of the frames measured: the biome, the view and the way the view looks (degrees, 0 is +z). */
@@ -31,7 +31,7 @@ export interface LightScenario {
   facing: number;
   /** the way the hero holds his weapons (as rolled when not given), and with it the weapon, by its base
    *  (`Fixture.weapon`) */
-  gear?: WeaponStyle;
+  gear?: HeldStyle;
   weapon?: string;
   /** where he stands (x, z; the set-up's spot off the dais when not given) */
   at?: [number, number];

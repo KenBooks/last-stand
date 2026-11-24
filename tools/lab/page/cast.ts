@@ -9,12 +9,12 @@
 import { SKILL_IMPLS } from '../../../src/combat/skills/index';
 import * as THREE from 'three';
 import type { Frame, Lab, Pictured, Report } from './lab';
-import type { SkillDef, SkillKey } from '../../../src/types';
-import type { WeaponStyle } from '../../../src/loot/loadout';
+import type { HeldStyle, SkillDef, SkillKey } from '../../../src/types';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { EnemyId } from '../../../src/data/enemies';
 import type { ViewMode } from '../../../src/core/renderer';
 import { G } from '../../../src/state';
+import { input } from '../../../src/core/input';
 import { BIOMES, type BiomeId } from '../../../src/data/biomes';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { lateCompiles, programsCompiledInGame } from '../../../src/core/shaders';
@@ -44,11 +44,14 @@ export interface CastOptions {
   what?: [number, number, number];
   /** plant the fault the checks must catch: a strobe, the exposure raised on every other tenth of a second */
   canary: boolean;
-  /** the way the hero holds his weapons (as rolled when not given), and with it the weapon, by its base */
-  gear?: WeaponStyle;
+  /** the way the hero holds his weapons, and with it the weapon, by its base: when not given, the way the skill
+   *  needs (`gearFor`), else as rolled */
+  gear?: HeldStyle;
   weapon?: string;
   /** tunable values set for the cast, by their paths (`Fixture.tune`) */
   tune?: Record<string, number[]>;
+  /** his Frenzy's stacks as the key is pressed (Wrath spends them, and with none casts nothing) */
+  frenzy?: number;
 }
 
 /** how far ahead of the hero the aim is (m) */
@@ -283,11 +286,34 @@ function strobed(frame: number, exposure: number): number {
   return Math.floor(frame / STROBE_SPAN) % 2 ? exposure * STROBE_GAIN : exposure;
 }
 
-/** A cast's scene: the skill and its key, and the aim it's cast over. */
+/** A cast's scene: the skill and its key, and the aim it's cast over (kept on `foe` where it needed one). */
 interface CastScene {
   key: SkillKey;
   def: SkillDef;
   aim: THREE.Vector3;
+  foe?: Enemy;
+  view: ViewMode;
+}
+
+/** how high on a foe the crosshair of the close views is put, as a share of its height */
+const SIGHT_UP = 0.6;
+
+/** The scene's aim, on its foe where it was cast at one (it walks on as the key is pressed). */
+function aimOf(scene: CastScene): THREE.Vector3 {
+  if (scene.foe?.alive) scene.aim.set(scene.foe.pos.x, 0, scene.foe.pos.z);
+  return scene.aim;
+}
+
+/** The frame's input holding `key` (while `held`) over the scene's aim, the close views' crosshair turned onto its
+ *  foe: there the crosshair aims, not the mouse, and Pounce pressed with the crosshair ahead leapt at nothing. */
+function pressingAt(scene: CastScene, held: boolean): Frame {
+  return { ...pressing(scene.key, aimOf(scene), held), sight: sightOn(scene.foe, scene.view) };
+}
+
+/** Where the crosshair is turned in `view` to aim at `foe`: none from above, or with no foe. */
+function sightOn(foe: Enemy | undefined, view: ViewMode): THREE.Vector3 | undefined {
+  if (!foe?.alive || view === 'top') return undefined;
+  return new THREE.Vector3(foe.pos.x, foe.pos.y + foe.height * SIGHT_UP, foe.pos.z);
 }
 
 /** The cast's scene set up afresh: the hero stood in the biome and view, the skill his to cast, the foes coming. */
@@ -295,7 +321,8 @@ async function castScene(lab: Lab, options: CastOptions): Promise<CastScene> {
   // (the props an earlier cast broke stand again: broken, they stay so until a run starts, and the next scenario in
   // the biome saw another scene)
   G.arena.restoreProps();
-  const { biome, view, facing, gear, weapon, tune } = options;
+  const { biome, view, facing, weapon, tune } = options;
+  const gear = options.gear ?? gearFor(options.skill);
   const scenario = { biome, view, facing, gear, weapon, tune };
   await standIn(lab, { ...scenario, at: options.at });
   const hero = G.player;
@@ -308,12 +335,83 @@ async function castScene(lab: Lab, options: CastOptions): Promise<CastScene> {
   if (options.foes) await foesAhead(lab, options.biome, options.foes);
   // (a skill with nothing to cast at isn't cast, `InstantSkill.canCast`: the foes are let come on until it can be.
   // Pounce leaps only onto a foe within its reach, and pressed as they rose 13 m off, nothing was cast)
+  withFrenzy(options.frenzy);
   const impl = SKILL_IMPLS[def.impl];
+  let foe: Enemy | undefined;
   if (options.foes && !impl.channel && impl.canCast) {
-    const ready = () => impl.canCast?.(hero, def, aim) ?? true;
-    if (!ready()) await lab.until(ready, 900, `${def.name} never had a foe to cast at`, () => ({ aim }));
+    // (judged at the game's own aim, as its press will be: the close views aim by the crosshair, not by the lab's
+    // aim ahead, and Pounce, ready by that aim, was pressed with the crosshair on no foe)
+    const ready = () => impl.canCast?.(hero, def, input.ground) ?? true;
+    if (!ready()) foe = await untilCastable(lab, ready, def, aim, view);
   }
-  return { key, def, aim };
+  withFrenzy(options.frenzy);
+  return { key, def, aim, foe, view };
+}
+
+/**
+ * Frames run until `ready` (the skill has something to cast at), the aim on the nearest foe as a player puts it on
+ * one (`aim` moved with it, the cast's own): a fixed aim ahead, Pounce's foes walked up to him and stood at 1 m, its
+ * aim 7 m past them, and it never leapt. Failing, where every foe was as it ended.
+ */
+async function untilCastable(lab: Lab, ready: () => boolean, def: SkillDef, aim: THREE.Vector3, view: ViewMode):
+  Promise<Enemy | undefined> {
+  const onNearest = (): Frame => {
+    const foe = nearestFoe();
+    if (foe) aim.set(foe.pos.x, 0, foe.pos.z);
+    return { aim, sight: sightOn(foe, view) };
+  };
+  try {
+    await lab.until(ready, 900, `${def.name} never had a foe to cast at`, onNearest);
+    return nearestFoe();
+  } catch (error) {
+    throw new Error(`${(error as Error).message}: ${foesWhere()}`);
+  }
+}
+
+/** His Frenzy set to `stacks` (none given: left as it is), as if his last blow had just landed, so they don't decay
+ *  before the press: set before the wait for a foe (Wrath with none can't be cast) and again after it. */
+function withFrenzy(stacks: number | undefined): void {
+  if (stacks === undefined) return;
+  G.player.frenzy = stacks;
+  G.player.frenzyAt = G.time;
+}
+
+/** the foe a skill that needs one is aimed at: the nearest at least this far off (m). One stood against him, over
+ *  the shoulder the crosshair turned onto it passed beside its body and Pounce had no target */
+const FOE_LEAST = 3;
+
+/** The living, risen foe nearest the hero at least `FOE_LEAST` off, if any. */
+function nearestFoe(): Enemy | undefined {
+  const hero = G.player.pos;
+  const off = (foe: Enemy) => Math.hypot(foe.pos.x - hero.x, foe.pos.z - hero.z);
+  const standing = G.enemies.filter((foe) => foe.alive && foe.spawning <= 0 && off(foe) >= FOE_LEAST);
+  return standing.sort((a, b) => off(a) - off(b))[0];
+}
+
+/**
+ * The way of holding his weapons `skill` needs, from his class's data: its staff's school, or its `needs` (both
+ * hands empty for the fists' skills, a shield, a two-hander, two blades); none for a skill any weapon casts.
+ */
+export function gearFor(skill: string): HeldStyle | undefined {
+  const name = skill.toLowerCase();
+  const named = (def: SkillDef) => [def.impl, def.name].some((each) => each.toLowerCase() === name);
+  const def = G.player.cls.skills.find(named);
+  if (!def) return undefined;
+  if (def.school) return def.school;
+  if (def.needs === 'bare' || def.needs === 'fist') return 'bare';
+  if (def.needs === 'shield' || def.needs === 'twoHanded' || def.needs === 'dual') return def.needs;
+  return undefined;
+}
+
+/** Every foe in the arena as words: its kind, how far from the hero, and whether alive and risen. */
+function foesWhere(): string {
+  const hero = G.player.pos;
+  const words = G.enemies.map((foe) => {
+    const off = Math.hypot(foe.pos.x - hero.x, foe.pos.z - hero.z);
+    const state = !foe.alive ? ' dead' : foe.spawning > 0 ? ' rising' : '';
+    return `${foe.type} ${off.toFixed(1)} m${state}`;
+  });
+  return words.length ? words.join(', ') : 'no foes';
 }
 
 /** What lit a flashing cell's counted changes, and the most of a change any one thing was given. */
@@ -335,7 +433,8 @@ async function flashSources(lab: Lab, options: CastOptions, frames: FrameCells[]
   const spans = changeSpans(flashing.changes, lights);
   const wanted = new Set(spans.flatMap((span) => [span.from, span.to]));
   const last = Math.max(...wanted);
-  const { key, def, aim } = await castScene(lab, options);
+  const scene = await castScene(lab, options);
+  const { key, def } = scene;
   const holdFrames = Math.max(1, Math.round(holdFor(def) / frameTime));
   const exposure = TUNE.exposure;
   const drawing = lab.drawing;
@@ -346,10 +445,10 @@ async function flashSources(lab: Lab, options: CastOptions, frames: FrameCells[]
   const endOf = new Map(spans.map((span) => [span.from, span.to]));
   lab.drawing = true;
   try {
-    await lab.step(1, () => ({ aim }));
+    await lab.step(1, () => ({ aim: aimOf(scene) }));
     for (let frame = 0; frame <= last; frame++) {
       TUNE.exposure = exposureAt(frame);
-      await lab.step(1, () => pressing(key, aim, frame < holdFrames));
+      await lab.step(1, () => pressingAt(scene, frame < holdFrames));
       if (!wanted.has(frame)) continue;
       lit.set(frame, litNow(lab, flashing.cell));
       const end = endOf.get(frame);
@@ -380,7 +479,8 @@ async function flashSources(lab: Lab, options: CastOptions, frames: FrameCells[]
 
 /** `lab cast`, one biome and view: the skill cast, its frames measured; a problem for each check failed. */
 export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
-  const { key, def, aim } = await castScene(lab, options);
+  const scene = await castScene(lab, options);
+  const { key, def } = scene;
   const hero = G.player;
 
   const frameTime = window.__labClock.frame / 1000;
@@ -398,11 +498,11 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
   let cast = false;
   lab.drawing = true;
   try {
-    await lab.step(1, () => ({ aim }));
+    await lab.step(1, () => ({ aim: aimOf(scene) }));
     reader.take();
     for (let frame = 0; frame < lookFrames; frame++) {
       if (options.canary) TUNE.exposure = strobed(frame, exposure);
-      await lab.step(1, () => pressing(key, aim, frame < holdFrames));
+      await lab.step(1, () => pressingAt(scene, frame < holdFrames));
       reader.take();
       if (frame === whatFrame && options.what) met.push(...metAt(options.what));
       cast ||= hero.cooldowns.has(def.impl) || Boolean(hero.casting) || Boolean(hero.channel);
