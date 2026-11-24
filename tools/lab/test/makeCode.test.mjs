@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { madeLine, makeArgs, moduleText } from '../node/makeCode.mjs';
+import { importsFromRoot, madeLine, makeArgs, moduleText } from '../node/makeCode.mjs';
 import { REPO } from '../node/paths.mjs';
 
 const EXAMPLE = join(REPO, 'tools', 'lab', 'examples', 'beacon.ts');
@@ -32,6 +32,17 @@ test('types are taken off, and a default export is a build too', async () => {
   assert.equal(run(await moduleText(source, 'thing.ts')).default({ n: 21 }), 42);
 });
 
+test('a relative import is written from the repository\'s root, and one from outside the game refused', async () => {
+  const place = join(REPO, 'src', 'world', 'places', 'rack.ts');
+  const code = await moduleText(readFileSync(place, 'utf8'), place);
+  assert.match(code, /require\("src\/world\/props"\)/);
+  assert.match(code, /require\("src\/data\/village"\)/);
+  assert.match(code, /require\("three"\)/);
+  assert.doesNotMatch(code, /placeKit/, 'a type\'s import is gone');
+  assert.equal(importsFromRoot('require("./props.ts")', join(REPO, 'src', 'world', 'x.ts')), 'require("src/world/props")');
+  assert.throws(() => importsFromRoot('require("../node/paths.mjs")', join(REPO, 'tools', 'lab', 'examples', 'x.ts')), /isn't under src/);
+});
+
 test('a file that does not parse is said with its line, one with no build is refused', async () => {
   await assert.rejects(moduleText('export function build(kit) {\n  return (;\n}', 'thing.ts'), /thing\.ts:2: /);
   await assert.rejects(moduleText('export const size = 1;', 'thing.ts'), /exports no build/);
@@ -51,4 +62,5 @@ test('a made thing is a line: where it stands, what it holds, and what stopped i
   assert.equal(madeLine(thing), 'beacon: in village at 1, 0, 2 (2 meshes, 48 triangles, 1 updater)');
   assert.match(madeLine({ ...thing, updaters: 0, error: 'TypeError: x' }), /triangles\)  \[its updaters stopped: TypeError: x\]$/);
   assert.match(madeLine({ ...thing, shown: false }), /\[hidden: not this place\]$/);
+  assert.match(madeLine({ ...thing, obstacles: 3 }), /1 updater, 3 obstacles named\)$/);
 });

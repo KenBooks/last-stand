@@ -4,7 +4,10 @@
 //     before and after, its middle changed far more than the scene changes by itself over as many frames;
 //   its updater running by the game's step (the stone turned);
 //   made again from a changed file with no place given: one thing of the name, where the first stood;
-//   a module that throws, and one that imports the game's own modules: each refused, the thing left standing;
+//   a module that throws, one that imports what isn't the game's and one that imports the game's entry: each
+//     refused, the thing left standing;
+//   a place of the game's (src/world/places/rack.ts) built as a made thing as its module stands: its imports
+//     answered with the game's own modules, its materials the village's (the place kit);
 //   unmade: out of the scene;
 //   one more left made through the kick: it stays, the panel says so, and its Remove takes it out.
 // The canary builds the thing with its meshes hidden: the picture must say nothing appeared.
@@ -31,7 +34,10 @@ const TURN_FRAMES = 30;
 const TURN_LEAST = 0.2;
 
 const THROWS = 'export function build() { throw new Error("boom"); }';
-const IMPORTS = 'import { G } from "../state"; export function build() { return G; }';
+const IMPORTS = 'import { join } from "node:path"; export function build() { return join; }';
+/** a place of the game's, built as a made thing as its module stands; and a module of the game's none may import */
+const PLACE = join(REPO, 'src', 'world', 'places', 'rack.ts');
+const ENTRY = 'import { nothing } from "../../../src/main"; export function build() { return nothing; }';
 
 /** The example's source, the canary's with every mesh of it hidden. */
 function exampleSource(hidden) {
@@ -105,8 +111,13 @@ async function madeAgain(game, found, link, thing) {
   found.expect(groups.length === 1 && groups[0] === `agent:${NAME}`, `made again, the scene holds ${groups.join(', ')}`);
 
   const refusals = [];
-  for (const [what, source, said] of [['throws', THROWS, /boom/], ['imports the game\'s modules', IMPORTS, /three alone/]]) {
-    const code = await moduleText(source, 'broken.ts');
+  const broken = [
+    ['throws', THROWS, /boom/],
+    ['imports what isn\'t the game\'s', IMPORTS, /three and the game's own modules/],
+    ['imports the game\'s entry', ENTRY, /src\/main/],
+  ];
+  for (const [what, source, said] of broken) {
+    const code = await moduleText(source, EXAMPLE);
     const error = await game.whileStepping(link.step('make', { name: NAME, code })).then(() => 'built', (e) => e.message);
     refusals.push(`one that ${what}: "${error}"`);
     found.expect(said.test(error), `a module that ${what} was answered "${error}"`);
@@ -114,6 +125,22 @@ async function madeAgain(game, found, link, thing) {
   const standing = await game.whileStepping(link.step('makes'));
   found.say(`a module refused (${refusals.join('; ')}): ${standing.length} thing left standing`);
   found.expect(standing.length === 1 && standing[0].name === NAME && !standing[0].error, 'a refused module took the standing thing down');
+}
+
+/** A place of the game's built as a made thing, as its module stands: the rack, with the village's own materials. */
+async function placeBuilt(game, found, link) {
+  const code = await moduleText(readFileSync(PLACE, 'utf8'), PLACE);
+  const rack = await game.whileStepping(link.step('make', { name: 'rack', code, at: [0, 0, 0] }));
+  const own = await game.whileStepping(link.step('eval', {
+    code: `(() => { const made = new Set(); G.scene.getObjectByName('agent:rack').traverse((o) => { if (o.material) made.add(o.material); });
+      const village = new Set(Object.values(G.arena.village.mats)); return [...made].filter((m) => village.has(m)).length + ' of ' + made.size; })()`,
+  }));
+  found.say(`a place's module (src/world/places/rack.ts) made as it stands: ${rack.meshes} meshes, ${rack.triangles} `
+    + `triangles, obstacles named: ${rack.obstacles}, ${own} of its materials the village's own`);
+  found.expect(rack.meshes > 0 && rack.triangles > 500, `the rack built ${rack.meshes} meshes of ${rack.triangles} triangles`);
+  found.expect(rack.obstacles >= 1, 'the rack named no obstacle through the place kit');
+  found.expect(/^[1-9]\d* of /.test(own), `the rack's materials aren't the village's (${own})`);
+  await game.whileStepping(link.step('unmake', { name: 'rack' }));
 }
 
 /**
@@ -124,6 +151,7 @@ export async function madeInTheScene(game, found, link, dir) {
   const thing = await madeAndSeen(game, found, link, dir);
   await turns(game, found, link);
   await madeAgain(game, found, link, thing);
+  await placeBuilt(game, found, link);
   const left = await game.whileStepping(link.step('unmake', { name: NAME }));
   const groups = (await game.state()).groups;
   found.say(`unmake ${NAME}: ${left.length} made, the scene holding ${groups.length} of them`);

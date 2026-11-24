@@ -48,13 +48,21 @@ export function build(kit: MakeKit): void {
 
 - **`kit`**: `group` (the thing's own, at its place on the ground: what `build` adds to it, or returns, is the
   thing), `THREE`, `G` (the game's state), `ground(x, z)` (the ground's height) and `each(fn)` (run each frame with
-  the game's step, 0 while it's frozen, and the thing's own time). `build` may be async.
+  the game's step, 0 while it's frozen, and the thing's own time). `build` may be async. **It is a place's kit too**
+  (`world/placeKit.ts`: `scene`, the thing's group; `M`, the village's own materials; `wall`; `obstacles` and
+  `updaters`), so a place's module builds as it stands: `join make rack --file src/world/places/rack.ts --at 0,0,0`
+  (a place puts itself where the village has it, so its group goes at the origin; the game's own rack still stands
+  beside it, and the obstacles a made thing names are counted, not the game's).
 - **The file is TypeScript or JavaScript**, its types taken off here before it's sent (parsed, not type checked: a
   syntax error is said with its line; keep the file under `tools/lab/examples` or `src` and `npm run typecheck`
-  checks it). **It imports three alone** (answered with the game's own; a type's import is free): a built game has no
-  modules to import by path, so the game's own kits (`world/placeKit.ts`, the village's materials) aren't in reach. A
-  material of the game's is found in the scene (`kit.G.scene.getObjectByName(...)`) and may be borrowed: unmaking
-  leaves what the scene still uses.
+  checks it). **It imports three and the game's own modules** (`import { boxWithUV } from '../../../src/world/props'`, a
+  relative import written from the repository's root before it's sent): each is answered with the game's module as
+  it runs there, the same instance the game uses, not with the file in your tree (edit `props.ts` and the game still
+  runs its own). **A preview offers a list of kits** (`src/dev/gameModules.ts`: `world/props`, `world/fire`,
+  `world/ground`, `world/villagePlan`, `core/materials`, `core/pbr`, `core/textures`, `fx/effects`, `fx/lights`,
+  `fx/particles`, `data/village`, `data/balance`, `state`, `util`), and its refusal of another names them; a dev
+  build (`npm run dev`, the lab's own page) offers every module but the entry, the workers and `src/dev`. A material
+  or a geometry of the game's a thing uses is left as unmaking takes the thing out.
 - **Sent again under its name, the thing is built again in its place** (`replaced`, where the first stood unless
   `--at` says elsewhere): edit the file and send it, or leave `join make <name> --file thing.ts --resend` running as a
   background task and each save shows in the game within a second. A module that throws, in its parse here or its
@@ -94,7 +102,8 @@ the question, a step it sends early never run; a second agent refused on the sam
 camera with the player's frame read beside it, the game frozen (0.00% of his frame changed as it was drawn); a thing made
 (`examples/beacon.ts`) and seen drawn (a placed camera's picture of its spot before and after: 18% of its middle
 changed, against 4% the scene changes alone), its updater running, made again in its place, a module that throws and
-one that imports the game's refused with the thing left standing, unmade; kicked, the thing it left taken out by the
+ones that import what isn't the game's or the game's entry refused with the thing left standing, a place of the game's
+(`src/world/places/rack.ts`) made as its module stands in the village's own materials, unmade; kicked, the thing it left taken out by the
 panel's Remove; the used
 code refused; then `lab join` itself, started as a process and its steps run as command lines; and a co-op room
 opened, which sends the agent away and offers none. About 18 s on a booted page; pictures in `out/invite/<screen>`,

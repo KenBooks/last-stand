@@ -193,6 +193,8 @@ export interface Village extends Biome {
   hallCutaway: readonly THREE.Object3D[];
   /** the meadow's grass (left undrawn from inside the hall, its doorway out of sight: game/village.ts) */
   meadow: THREE.Object3D;
+  /** its materials (the developer mode's invited agent builds with them: dev/agentMakes.ts) */
+  mats: Mats;
   /** what stands loose in the hall's room, wholly within its walls (left undrawn from outside it in the close views,
    *  its doorway out of sight: game/village.ts) */
   hallRoom: readonly THREE.Object3D[];
@@ -831,6 +833,7 @@ export function* villageSteps(scene: THREE.Group): Generator<void, Village, unde
     sight: sightOfThePlace(),
     hallCutaway: hall.cutaway,
     meadow,
+    mats: M,
     hallRoom: looseInHall(scene, hall.cutaway),
     hallTorches: [...hall.dais, ...hall.torches],
     porchTorches: hall.porch,
