@@ -83,6 +83,14 @@ const HAND_LIGHT = { below: 0.25, out: 0.2 };
 const WALL_GRIP = 0.18;
 /** how hard he slows walking up to the wall (m/s²: a comfortable stop, not `BRAKE`'s hardest) */
 const WALL_BRAKE = 10;
+/** the most a body moves between two tests against the world (m): a dash covers 0.45 m a frame (Bloodrush at 26 m/s),
+ *  and in one frame his middle passed the training yard's fence (a slab 0.12 m thick) and was pushed off it on its far
+ *  side, out of the yard (#870: "Bloodrush going out of bounds in training grounds") */
+const WORLD_STEP = 0.1;
+
+/** the lab's canary for the steps (`lab village --only dashKeptInYard`): the world tested once a frame, as before */
+let worldOnce = false;
+export function holdWorldSteps(once: boolean): void { worldOnce = once; }
 /** how far over the top of his model a stun's stars circle (m), as a dazed foe's do over its crown */
 const STUN_STARS = 0.25;
 const angleOff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
@@ -1022,6 +1030,17 @@ export class Player {
     goal.z -= uz * (out - most);
   }
 
+  /** Moves him by (dx, dz) over `dt`, kept off the world (`kept`) in steps of `WORLD_STEP` at most, so nothing thinner
+   *  than a frame's move is passed through. */
+  private moveThroughWorld(dx: number, dz: number, dt: number, kept: boolean): void {
+    const steps = kept && !worldOnce ? Math.max(1, Math.ceil(Math.hypot(dx, dz) / WORLD_STEP)) : 1;
+    for (let i = 0; i < steps; i++) {
+      this.pos.x += dx / steps;
+      this.pos.z += dz / steps;
+      if (kept) this.resolveWorld(dt / steps);
+    }
+  }
+
   /** Kept off the props, then the wall, his speed into what pushed him back let go: pressed against the wall at a
    *  run, he kept running into it, his legs striding in place past their ranges. */
   private resolveWorld(dt: number): void {
@@ -1220,10 +1239,9 @@ export class Player {
       else this.vel.set(d.vx, 0, d.vz);
       this.dashOn(d, dt);
     }
-    this.pos.x += (this.vel.x + this.knock.x) * dt;
-    this.pos.z += (this.vel.z + this.knock.z) * dt;
+    this.moveThroughWorld((this.vel.x + this.knock.x) * dt, (this.vel.z + this.knock.z) * dt, dt,
+      (!d?.through || d.t >= d.dur) && !this.sitting.placed);
     this.knock.multiplyScalar(Math.exp(-dt * 6));
-    if ((!d?.through || d.t >= d.dur) && !this.sitting.placed) this.resolveWorld(dt);
     if (d) {
       d.step?.();
       if (d.t >= d.dur + d.hold) { this.dashOver(d); this.vel.multiplyScalar(this.stats.moveSpeed / Math.max(1e-3, Math.hypot(d.vx, d.vz))); }
