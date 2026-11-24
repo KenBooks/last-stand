@@ -5,7 +5,8 @@
 // frame's light is held to the budget taken from the owner's screenshots, the flashes in it are counted as WCAG
 // counts them (page/flashes.ts), and the shaders compiled after loading are counted: none may be. A cell that
 // flashes is then shared out among what's in the scene (page/flashSources.ts): the cast is played again, and at
-// each counted change the frame is drawn with each thing taken out in turn.
+// each counted change the frame is drawn with each thing taken out in turn; a frame past the budget is taken apart
+// so too (page/budgetSources.ts).
 import { SKILL_IMPLS } from '../../../src/combat/skills/index';
 import * as THREE from 'three';
 import type { Frame, Lab, Pictured, Report } from './lab';
@@ -22,11 +23,20 @@ import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { lateCompiles, programsCompiledInGame } from '../../../src/core/shaders';
 import { standIn } from './light';
 import { cellName, FrameReader, type FrameCells } from './screenCells';
+import { BRIGHTEST_SIXTEENTH, budgetJudged, lightLine, seconds, worstLine, worstOn, type Failed,
+  type Judged } from './castBudget';
+import { breakdownNow, sceneKeys } from './budgetSources';
+import { breakdownLine, mostLowering, type Breakdown } from './budgetLines';
 import { blinksIn, describeBlinks } from './blinks';
 import { whatIsAt } from './whatIsAt';
 import { changeSpans, worstFlashing, type FlashCount } from './flashes';
-import { changeLine, litNow, mostOf, type Lit } from './flashSources';
+import { changeLine, frameNow, litNow, mostOf, type Lit } from './flashSources';
+import { drawnWhole } from './gpuTurns';
 import { TUNE } from '../../../src/engine/globals';
+
+/** The faults `cast --canary` plants, a scenario each: either one alone, as each misleads the other's measure (the
+ *  ball's light, read under the strobe, was given the strobe's change). */
+export type CanaryPlant = 'strobe' | 'glare';
 
 export interface CastOptions {
   /** the skill: its key (`3`), its behaviour (`maelstrom`) or its name */
@@ -44,8 +54,9 @@ export interface CastOptions {
   pictures: boolean;
   /** a moment (s from the press) and a point of the screen (% across and down from its top left): what is met there */
   what?: [number, number, number];
-  /** plant the fault the checks must catch: a strobe, the exposure raised on every other tenth of a second */
-  canary: boolean;
+  /** the fault planted, which the checks must catch: a strobe of the exposure (the flashes, and what lit them), or a
+   *  white ball before the camera (what lit the frame's brightest sixteenth); none for a cast measured */
+  canary: CanaryPlant | null;
   /** the way the hero holds his weapons, and with it the weapon, by its base: when not given, the way the skill
    *  needs (`gearFor`), else as rolled */
   gear?: HeldStyle;
@@ -72,13 +83,6 @@ const CHANNEL_HOLD = 3;
 const AFTER = 1;
 const LEAST_SECONDS = 2;
 const MOST_SECONDS = 10;
-/** the budget for a frame's light (page/screenCells.ts), from the owner's screenshots of effects that read well: how
- *  far an effect may raise the frame's mean over the scene's own, and its brightest cell's mean (as stored, 0 to 255)
- *  and the share of it that's bright, at most. (The screenshots' mean of 75 was over crypt scenes of 20 to 25: the
- *  forest's daylight is 55 to 77 with nothing cast, where 75 left an effect no room at all.) */
-const MEAN_RISE_MOST = 50;
-const CELL_MOST = 150;
-const BRIGHT_MOST = 0.05;
 /** flashes in any one second of a cell that are a hazard */
 const FLASHES_MOST = 3;
 /** a cell with this many flashes in a second has them shared out among what's in the scene (a replay) */
@@ -87,6 +91,16 @@ const SOURCES_FROM = 2;
 const REPLAY_OFF = 0.03;
 /** the canary's strobe is the exposure's: no thing in the scene may be given more of a change than this */
 const CANARY_SHARE = 0.5;
+/** with --canary: the plant the budget's breakdown must name, a white ball before the camera (its name, its size and
+ *  how far from the camera, m, and where on the screen, the middle of the second row's second sixteenth: at the aim,
+ *  8 m ahead, it stood inside the crypt's wall; 3 m ahead of him his body hid it over the shoulder; at the screen's
+ *  middle, where four sixteenths meet, it lit a quarter of each, and the effect's was brighter) */
+const PLANT_NAME = 'lab canary: glare';
+const PLANT_RADIUS = 0.5;
+const PLANT_FROM_CAMERA = 2.5;
+const PLANT_ON_SCREEN = new THREE.Vector2(-0.25, 0.25);
+/** the replay's measure may differ from the cast's by this share of it before it's said */
+const BUDGET_REPLAY_OFF = 0.05;
 /** with --canary: the strobe's frames on and off, and how much it raises the exposure */
 const STROBE_SPAN = 6;
 const STROBE_GAIN = 6;
@@ -179,108 +193,21 @@ export async function foesAhead(lab: Lab, biome: BiomeId, count: number): Promis
   return foes;
 }
 
-const seconds = (at: number): string => `${at.toFixed(2)} s`;
-const percent = (share: number): string => `${(share * 100).toFixed(1)}%`;
-const whole = (value: number): string => value.toFixed(0);
-const brightestCell = (frame: FrameCells): number => Math.max(...frame.cellMeans);
-
-/** One of the budget's measures of a frame's light: its name, a frame's on it and that as words, and its most. */
-interface Measure {
-  name: string;
-  /** the most an effect's frame may be, after a scene that was `before` */
-  most: (before: FrameCells) => number;
-  /** whether the scene itself may be past it: no measure is judged on a scene already past its most */
-  absolute: boolean;
-  of: (frame: FrameCells) => number;
-  shown: (value: number) => string;
-  /** where in the frame it was, as words (the cell's place), for one that's of a part of it */
-  where?: (frame: FrameCells) => string;
-}
-
-const MEASURES: Measure[] = [
-  {
-    name: 'the frame\'s mean',
-    most: (before) => before.mean + MEAN_RISE_MOST,
-    absolute: false,
-    of: (frame) => frame.mean,
-    shown: whole,
-  },
-  {
-    name: 'its brightest sixteenth',
-    most: () => CELL_MOST,
-    absolute: true,
-    of: brightestCell,
-    shown: whole,
-    where: (frame) => cellName(frame.cellMeans.indexOf(brightestCell(frame))),
-  },
-  {
-    name: 'its bright share',
-    most: () => BRIGHT_MOST,
-    absolute: true,
-    of: (frame) => frame.brightShare,
-    shown: percent,
-  },
-];
-
-/** The frame of `frames` that's worst on `measure`, its value and when it was (s from the press). */
-interface WorstFrame {
-  frame: FrameCells;
-  value: number;
-  at: number;
-}
-
-/** The worst of `frames` on `measure`, the frames `frameTime` s apart. */
-function worstOn(measure: Measure, frames: FrameCells[], frameTime: number): WorstFrame {
-  let worst: WorstFrame = { frame: frames[0], value: measure.of(frames[0]), at: 0 };
-  frames.forEach((frame, f) => {
-    const value = measure.of(frame);
-    if (value > worst.value) worst = { frame, value, at: f * frameTime };
-  });
-  return worst;
-}
-
-/** Each measure's worst of `frames` as words. */
-function worstLine(frames: FrameCells[], frameTime: number): string {
-  const parts = MEASURES.map((measure) => {
-    const worst = worstOn(measure, frames, frameTime);
-    return `${measure.name} ${measure.shown(worst.value)} at ${seconds(worst.at)}`;
-  });
-  return `  its worst: ${parts.join(', ')}`;
-}
-
-/** What the frames came to against the budget: the problems, and notes on what wasn't judged. */
-interface Judged {
-  problems: string[];
-  notes: string[];
-}
-
-/**
- * What the effect took past the budget: a problem for each measure the scene before it was within, and a note for
- * each of the absolute ones it was already past, which isn't judged.
- */
-function budgetJudged(frames: FrameCells[], frameTime: number, before: FrameCells): Judged {
-  const problems: string[] = [];
-  const notes: string[] = [];
-  for (const measure of MEASURES) {
-    const scene = measure.of(before);
-    const most = measure.most(before);
-    if (measure.absolute && scene > most) {
-      notes.push(`  (the scene alone is past the budget on ${measure.name}, ${measure.shown(scene)}: not judged)`);
-      continue;
-    }
-    const worst = worstOn(measure, frames, frameTime);
-    if (worst.value <= most) continue;
-    const where = measure.where ? `, ${measure.where(worst.frame)}` : '';
-    problems.push(`${measure.name} at ${measure.shown(worst.value)} at ${seconds(worst.at)}${where} `
-      + `(at most ${measure.shown(most)})`);
-  }
-  return { problems, notes };
-}
-
-/** A frame's light as a line: its mean, its brightest sixteenth and its bright share. */
-function lightLine(frame: FrameCells): string {
-  const cell = Math.max(...frame.cellMeans);
-  return `mean ${frame.mean.toFixed(0)}, brightest sixteenth ${cell.toFixed(0)}, bright ${percent(frame.brightShare)}`;
+/** With the glare canary, a ball of plain white stood in the camera's sight (he stands still, and it with him), which
+ *  the budget's breakdown must name as the thing that lit its brightest sixteenth most; its pipeline made before the
+ *  press. One an earlier scenario planted is taken out first. */
+async function planted(lab: Lab, canary: CanaryPlant | null): Promise<void> {
+  G.scene.getObjectByName(PLANT_NAME)?.removeFromParent();
+  if (canary !== 'glare') return;
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(PLANT_RADIUS, 24, 12),
+    new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  ball.name = PLANT_NAME;
+  const camera = G.camera.getWorldPosition(new THREE.Vector3());
+  const onScreen = new THREE.Vector3(PLANT_ON_SCREEN.x, PLANT_ON_SCREEN.y, 0.5).unproject(G.camera);
+  const way = onScreen.sub(camera).normalize();
+  ball.position.copy(camera).addScaledVector(way, PLANT_FROM_CAMERA);
+  G.scene.add(ball);
+  await drawnWhole(() => frameNow(lab));
 }
 
 /** With a canary, the exposure for frame `frame` of the effect: raised on every other `STROBE_SPAN` frames. */
@@ -337,6 +264,7 @@ async function castScene(lab: Lab, options: CastOptions): Promise<CastScene> {
   const aim = hero.pos.clone().add(new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing))
     .multiplyScalar(AIM_AHEAD));
   if (options.foes) await foesAhead(lab, options.biome, options.foes);
+  await planted(lab, options.canary);
   // (a skill with nothing to cast at isn't cast, `InstantSkill.canCast`: the foes are let come on until it can be.
   // Pounce leaps only onto a foe within its reach, and pressed as they rose 13 m off, nothing was cast)
   withFrenzy(options.frenzy);
@@ -461,6 +389,41 @@ interface Sources {
   mostShare: number;
 }
 
+/** The exposure each frame of the effect is drawn at: strobed with a canary, else `exposure`. */
+function exposureFor(options: CastOptions, exposure: number): (frame: number) => number {
+  return (frame) => (options.canary === 'strobe' ? strobed(frame, exposure) : exposure);
+}
+
+/** Called at each frame of a replay with the exposure each frame is drawn at (one may be read at another's). */
+type OnFrame = (frame: number, exposureAt: (frame: number) => number) => void;
+
+/**
+ * The cast played again from its set-up to frame `last` (counted from the press, as `cast` counts them), each frame
+ * at the exposure the cast drew it at, `onFrame` called after each and `onStart` at the frame before the press. The
+ * engine's exposure and the lab's drawing are put back after.
+ */
+async function replayed(lab: Lab, options: CastOptions, frameTime: number, last: number, onFrame: OnFrame,
+  onStart?: () => void): Promise<void> {
+  const scene = await castScene(lab, options);
+  const holdFrames = Math.max(1, Math.round(holdFor(scene.def) / frameTime));
+  const exposure = TUNE.exposure;
+  const exposureAt = exposureFor(options, exposure);
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    await lab.step(1, () => ({ aim: aimOf(scene) }));
+    onStart?.();
+    for (let frame = 0; frame <= last; frame++) {
+      TUNE.exposure = exposureAt(frame);
+      await lab.step(1, () => pressingAt(scene, frame < holdFrames));
+      onFrame(frame, exposureAt);
+    }
+  } finally {
+    TUNE.exposure = exposure;
+    lab.drawing = drawing;
+  }
+}
+
 /**
  * What lit the changes counted in `flashing`'s cell: the cast played again from its set-up, and at each change's
  * two frames the frame drawn with each thing in the scene taken out in turn (page/flashSources.ts). The replay's
@@ -474,34 +437,19 @@ async function flashSources(lab: Lab, options: CastOptions, frames: FrameCells[]
   const spans = changeSpans(flashing.changes, lights);
   const wanted = new Set(spans.flatMap((span) => [span.from, span.to]));
   const last = Math.max(...wanted);
-  const scene = await castScene(lab, options);
-  const { key, def } = scene;
-  const holdFrames = Math.max(1, Math.round(holdFor(def) / frameTime));
-  const exposure = TUNE.exposure;
-  const drawing = lab.drawing;
-  const exposureAt = (frame: number): number => (options.canary ? strobed(frame, exposure) : exposure);
   /** each wanted frame's light by thing, at its own exposure and at the exposure of the frame its change ends on */
   const lit = new Map<number, Lit>();
   const litAtEnd = new Map<number, Lit>();
   const endOf = new Map(spans.map((span) => [span.from, span.to]));
-  lab.drawing = true;
-  try {
-    await lab.step(1, () => ({ aim: aimOf(scene) }));
-    for (let frame = 0; frame <= last; frame++) {
-      TUNE.exposure = exposureAt(frame);
-      await lab.step(1, () => pressingAt(scene, frame < holdFrames));
-      if (!wanted.has(frame)) continue;
-      lit.set(frame, litNow(lab, flashing.cell));
-      const end = endOf.get(frame);
-      if (end === undefined) continue;
-      TUNE.exposure = exposureAt(end);
-      litAtEnd.set(frame, litNow(lab, flashing.cell));
-      TUNE.exposure = exposureAt(frame);
-    }
-  } finally {
-    TUNE.exposure = exposure;
-    lab.drawing = drawing;
-  }
+  await replayed(lab, options, frameTime, last, (frame, exposureAt) => {
+    if (!wanted.has(frame)) return;
+    lit.set(frame, litNow(lab, flashing.cell));
+    const end = endOf.get(frame);
+    if (end === undefined) return;
+    TUNE.exposure = exposureAt(end);
+    litAtEnd.set(frame, litNow(lab, flashing.cell));
+    TUNE.exposure = exposureAt(frame);
+  });
   const time = (frame: number): string => seconds(frame * frameTime);
   const lines = ['    what lit them (the cast played again, each thing in the scene taken out of the frame in turn):'];
   let mostShare = 0;
@@ -516,6 +464,47 @@ async function flashSources(lab: Lab, options: CastOptions, frames: FrameCells[]
   }
   if (off) lines.push(`      (the replay's light was not the cast's at ${off} of ${spans.length} changes)`);
   return { lines, mostShare };
+}
+
+/** What took the frames past the budget, as lines, and each breakdown read (for the canary's). */
+interface BudgetSources {
+  lines: string[];
+  breakdowns: Breakdown[];
+}
+
+/**
+ * What took the frames past the budget on each of `failed`'s measures: the cast played again to the frame it was
+ * worst on, and the measure read there (at that cell, for the brightest sixteenth) with each thing in the scene
+ * taken out in turn, then without what the cast brought into the scene together (page/budgetSources.ts). The
+ * replay's reading is held to the cast's.
+ */
+async function budgetSources(lab: Lab, options: CastOptions, failed: Failed[], frameTime: number,
+  before: FrameCells): Promise<BudgetSources> {
+  const head = '    what took it past (the cast played again, each thing in the scene taken out of the frame in turn):';
+  const lines = [head];
+  const breakdowns: Breakdown[] = [];
+  const last = Math.max(...failed.map(({ worst }) => worst.index));
+  let keysBefore = new Set<string>();
+  await replayed(lab, options, frameTime, last, (frame) => {
+    for (const { measure, worst } of failed.filter((failure) => failure.worst.index === frame)) {
+      const read = measure.readAt?.(worst.frame) ?? measure.of;
+      const breakdown = breakdownNow(lab, read, keysBefore);
+      breakdowns.push(breakdown);
+      lines.push(`     at ${seconds(worst.at)}:`, breakdownLine({ ...measure, read }, breakdown, read(before)));
+      if (Math.abs(breakdown.whole - worst.value) <= BUDGET_REPLAY_OFF * worst.value) continue;
+      const readings = `${measure.shown(breakdown.whole)} there, the cast ${measure.shown(worst.value)}`;
+      lines.push(`      (the replay read ${readings})`);
+    }
+  }, () => {
+    keysBefore = sceneKeys();
+  });
+  return { lines, breakdowns };
+}
+
+/** With the glare canary, the frame the budget's breakdown is read at, past the budget or not (the ball there
+ *  before the press, the scene is past it, and isn't judged): the one brightest in a sixteenth. */
+function plantFailed(frames: FrameCells[], frameTime: number): Failed {
+  return { measure: BRIGHTEST_SIXTEENTH, worst: worstOn(BRIGHTEST_SIXTEENTH, frames, frameTime) };
 }
 
 /** `lab cast`, one biome and view: the skill cast, its frames measured; a problem for each check failed. */
@@ -543,7 +532,7 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
     await lab.step(1, () => ({ aim: aimOf(scene) }));
     reader.take();
     for (let frame = 0; frame < lookFrames; frame++) {
-      if (options.canary) TUNE.exposure = strobed(frame, exposure);
+      if (options.canary === 'strobe') TUNE.exposure = strobed(frame, exposure);
       await lab.step(1, () => pressingAt(scene, frame < holdFrames));
       reader.take();
       if (frame === whatFrame && options.what) met.push(...metAt(options.what));
@@ -566,7 +555,12 @@ export async function cast(lab: Lab, options: CastOptions): Promise<Report> {
   const sources = flashing.most >= SOURCES_FROM
     ? await flashSources(lab, options, frames, flashing, frameTime)
     : null;
-  return judged(def, options, { before, frames, frameTime, cast, refused, moments, met, compiled, late, flashing, sources });
+  const budget = budgetJudged(frames, frameTime, before);
+  const takenApart = options.canary === 'glare' ? [plantFailed(frames, frameTime)] : budget.failed;
+  const budgetTaken = takenApart.length ? await budgetSources(lab, options, takenApart, frameTime, before) : null;
+  return judged(def, options, {
+    before, frames, frameTime, cast, refused, moments, met, compiled, late, flashing, sources, budget, budgetTaken,
+  });
 }
 
 /** the frame's mean is listed every this long through the cast (s) */
@@ -633,6 +627,9 @@ interface Seen {
   flashing: FlashCount;
   /** what lit the flashing cell's changes, where it flashed enough to ask */
   sources: Sources | null;
+  /** the frames against the budget, and what took them past it where they went past (with a canary, the plant) */
+  budget: Judged;
+  budgetTaken: BudgetSources | null;
 }
 
 /** The cast's frames as lines, and a problem for each check they failed (with a canary, for one it missed). */
@@ -653,8 +650,8 @@ function judged(def: SkillDef, options: CastOptions, seen: Seen): Report {
     ...seen.met,
   ];
   for (const late of seen.late) lines.push(`    ${late}`);
-  const budget = budgetJudged(seen.frames, seen.frameTime, seen.before);
-  lines.push(...budget.notes);
+  const { budget } = seen;
+  lines.push(...budget.notes, ...(seen.budgetTaken?.lines ?? []));
   const found: string[] = [];
   if (!seen.cast) found.push(`nothing was cast${seen.refused ? ` (${seen.refused})` : ''}`);
   found.push(...budget.problems);
@@ -662,12 +659,29 @@ function judged(def: SkillDef, options: CastOptions, seen: Seen): Report {
   if (compiled > 0) found.push(`${compiled} shaders compiled after loading`);
   const problems = found.map((problem) => `${name}: ${problem}`);
   if (!options.canary) return { text: lines.join('\n'), problems, moments: seen.moments };
-  const caught = flashing.most >= FLASHES_MOST;
+  const missed = options.canary === 'strobe' ? strobeMissed(name, seen, lines) : glareMissed(name, seen, lines);
+  return { text: lines.join('\n'), problems: missed, moments: seen.moments };
+}
+
+/** With the strobe canary, whether the flashes caught it and what lit them left it to the rest: a problem for each
+ *  missed, and a line for each said in `lines`. */
+function strobeMissed(name: string, seen: Seen, lines: string[]): string[] {
+  const caught = seen.flashing.most >= FLASHES_MOST;
   lines.push(`  canary, a strobe of the exposure: ${caught ? 'caught' : 'missed'}`);
   const missed = caught ? [] : [`${name}: the canary's strobe went unseen`];
   // (the strobe is the exposure's: shared out among the scene's things, it must be left as the rest)
   const blamed = (seen.sources?.mostShare ?? 0) > CANARY_SHARE;
   if (caught) lines.push(`  canary, the strobe given to no thing in the scene: ${blamed ? 'missed' : 'caught'}`);
   if (blamed) missed.push(`${name}: the canary's strobe was given to a thing in the scene`);
-  return { text: lines.join('\n'), problems: missed, moments: seen.moments };
+  return missed;
+}
+
+/** With the glare canary, whether the budget's breakdown named the ball first (it's a thing of the scene, and the
+ *  brightest): a problem if not, and a line said in `lines`. */
+function glareMissed(name: string, seen: Seen, lines: string[]): string[] {
+  const read = seen.budgetTaken?.breakdowns[0];
+  const named = read ? mostLowering(read)[0]?.name === PLANT_NAME : false;
+  lines.push(`  canary, a white ball before the camera named first of what lit the brightest sixteenth: `
+    + `${named ? 'caught' : 'missed'}`);
+  return named ? [] : [`${name}: the canary's white ball wasn't named first in the budget's breakdown`];
 }
