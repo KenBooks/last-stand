@@ -4,9 +4,10 @@ import * as THREE from 'three';
 import { initRubble, updateRubble, clearRubble } from './rubble';
 import { G } from '../state';
 import { additive, nearGlow } from '../core/materials';
-import { radialDecal, runeCircle } from '../core/textures';
+import { radialBand, radialDecal, runeCircle } from '../core/textures';
 import { rand } from '../util';
 import { groundHeight } from '../world/ground';
+import { tunable } from '../core/tuning';
 import type { Effect, XYZ } from '../types';
 
 /** Positions accept any {x, z} with optional y (ground height). */
@@ -17,7 +18,7 @@ const floor = (pos: Pos): number => Math.max(pos.y ?? 0, groundHeight(pos.x, pos
 
 const active: Effect[] = [];
 const GEO = {} as Record<'ring' | 'disc' | 'plane' | 'spike' | 'pillar' | 'crystal', THREE.BufferGeometry>;
-const TEX = {} as Record<'scorch' | 'frost' | 'soft' | 'rune' | 'cracks', THREE.Texture>;
+const TEX = {} as Record<'scorch' | 'frost' | 'soft' | 'band' | 'rune' | 'cracks', THREE.Texture>;
 
 export function initEffects(): void {
   initRubble();
@@ -28,6 +29,7 @@ export function initEffects(): void {
   TEX.scorch = radialDecal('rgba(8,6,10,0.85)', 'rgba(8,6,10,0)', true, 5);
   TEX.frost = radialDecal('rgba(170,225,255,0.55)', 'rgba(170,225,255,0)', true, 9);
   TEX.soft = radialDecal('rgba(255,255,255,1)', 'rgba(255,255,255,0)', false);
+  TEX.band = radialBand();
   TEX.rune = runeCircle(3, 512);
   TEX.cracks = crackTexture();
   GEO.pillar = new THREE.CylinderGeometry(1, 1, 1, 24, 1, true).translate(0, 0.5, 0);
@@ -70,10 +72,17 @@ export function shockwave(pos: Pos, { color = 0xffffff, intensity = 3, from = 0.
   });
 }
 
-// Flat glow disc (flash on ground).
+/** The ground flash's look (#214): a band of light round a dark middle, a wave spreading out (`hollow` 1), or a lit
+ *  disc (0, compared in the lab: `--tune groundFlash.hollow=0`). Over the shoulder the camera looks down on the floor
+ *  at the hero's feet, and the disc lit it whole: Iron Bellow's brightest sixteenth was 150 (92 without the flash),
+ *  Glacial Nova's 163; hollow, 114 and 149. Made smaller or spreading from its middle, the disc still lit that floor
+ *  (163 at 0.6 of its size). Its strength is never tuned: effects stay at full strength (`src/core/AGENTS.md`). */
+export const GROUND_FLASH = tunable('groundFlash', { hollow: 1 });
+
+// Flat glow on the ground (a flash under a blow or a cast).
 export function groundFlash(pos: Pos, { color = 0xffffff, intensity = 2, radius = 3, life = 0.35 } = {}) {
   const mat = additive(color, intensity);
-  mat.map = TEX.soft;
+  mat.map = GROUND_FLASH.hollow ? TEX.band : TEX.soft;
   const m = new THREE.Mesh(GEO.plane, mat);
   m.name = 'ground flash';
   m.position.set(pos.x, floor(pos) + 0.06, pos.z);
