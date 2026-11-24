@@ -5,6 +5,7 @@
 // A room's frame: x across it, z from its back wall (-) to its door (+), its middle at the origin, its floor at 0.
 import { FOE_ENTRIES, type EnemyId } from './enemies';
 import { COTTAGES, type VillageObject } from './village';
+import { TROPHY_PLACES } from './houses/records';
 
 /** The houses' ids, each declared by its file in data/houses/ (`declare module '../houses'`): a new house is a file
  *  there and one in world/houses/, and touches no list. */
@@ -72,14 +73,44 @@ export const HOUSE_OBJECTS: readonly VillageObject[] = (() => {
 })();
 
 /**
- * A trophy the house of records hangs for a boss beaten, keyed by the boss's enemy id: its name, its look (`TrophyLook`
- * in world/rooms.ts: a new boss may have one of its own, or take `crest`, a shield in its colours that needs nothing
- * else), its colour (hex) and a second one. A boss with no `trophy` in its file in data/foes/ hangs nothing; a boss
- * being built needs only its `trophy` there. They hang in the folder's order.
+ * A trophy the house of records shows for a boss beaten, keyed by the boss's enemy id: its name (its brass plate's),
+ * where it's shown (`kind`: mounted on a shield on the back wall, or set on a stand in the trophy cabinet), the place it
+ * takes (one of `TROPHY_PLACES`' of its kind, data/houses/records.ts; left out, the first free one), its colour (hex)
+ * and a second one. Its model is its own file in world/trophies/ (`<boss id>.ts`, a small mesh of its own: never the
+ * boss's lazy chunk, entities/bosses/, which the village never loads); a boss with none there is shown by its kind's
+ * plain one in its colours. A boss with no `trophy` in its file in data/foes/ shows nothing; a new boss adds its
+ * `trophy` there and its model there, and touches neither the room nor its places.
  */
-export interface TrophyDef { name: string; look: TrophyLook; colour: number; trim: number }
-export type TrophyLook = 'mask' | 'antlers' | 'crest';
+export interface TrophyDef { name: string; kind: TrophyKind; place?: TrophyPlace; colour: number; trim: number }
+/** where a trophy is shown: mounted on the back wall, or in the trophy cabinet */
+export type TrophyKind = 'wall' | 'cabinet';
+export type TrophyPlace = (typeof TROPHY_PLACES)[TrophyKind][number];
 
 export const TROPHIES = Object.fromEntries(
   Object.entries(FOE_ENTRIES).filter(([, entry]) => entry.trophy).map(([id, entry]) => [id, entry.trophy]),
 ) as Partial<Record<EnemyId, TrophyDef>>;
+
+/**
+ * Each trophy's place: its own where it names one, else the first of its kind's places no other has, in the folder's
+ * order (a place named twice, or a kind with no place left, is a mistake in the data: thrown as the game loads).
+ */
+export const TROPHY_AT = ((): Partial<Record<EnemyId, TrophyPlace>> => {
+  const at: Partial<Record<EnemyId, TrophyPlace>> = {};
+  const taken = new Set<TrophyPlace>();
+  const entries = Object.entries(TROPHIES) as [EnemyId, TrophyDef][];
+  for (const [boss, def] of entries.filter(([, d]) => d.place)) {
+    if (taken.has(def.place!)) throw new Error(`Trophy place ${def.place} named twice (${boss})`);
+    if (!(TROPHY_PLACES[def.kind] as readonly string[]).includes(def.place!)) {
+      throw new Error(`Trophy place ${def.place} isn't a ${def.kind} place (${boss})`);
+    }
+    taken.add(def.place!);
+    at[boss] = def.place;
+  }
+  for (const [boss, def] of entries.filter(([, d]) => !d.place)) {
+    const free = TROPHY_PLACES[def.kind].find((p) => !taken.has(p));
+    if (!free) throw new Error(`No ${def.kind} place left for ${boss}'s trophy (data/houses/records.ts)`);
+    taken.add(free);
+    at[boss] = free;
+  }
+  return at;
+})();

@@ -164,7 +164,8 @@ function cutAwayProblems(id: RoomId, view: ViewMode): string[] {
 
 /** The house of records' trophies against the bosses beaten (`beaten`): what's wrong. */
 function trophyProblems(beaten: readonly string[]): { line: string; problems: string[] } {
-  const shown = G.arena.rooms!.records.trophiesShown?.() ?? {};
+  const places = G.arena.rooms!.records.trophyPlaces?.() ?? [];
+  const shown = Object.fromEntries(places.filter((p) => p.boss).map((p) => [p.boss!, p.shown]));
   const problems = Object.entries(shown).flatMap(([boss, on]) => {
     const want = beaten.includes(boss);
     if (on === want) return [];

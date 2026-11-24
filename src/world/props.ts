@@ -928,6 +928,12 @@ function placedPart(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4): THRE
   return part;
 }
 
+/** The nearest of `object` and what's over it that's merged within itself (`userData.mergeWithin`), if any. */
+function withinOf(object: THREE.Object3D): THREE.Object3D | null {
+  for (let o: THREE.Object3D | null = object; o; o = o.parent) if (o.userData.mergeWithin) return o;
+  return null;
+}
+
 /** The mergeable meshes under `root` drawn as one a material, the merged ones added to it; `kept`: those kept out
  *  of the place's merge (`noMerge`), merged among themselves and kept out still. */
 function mergeUnder(root: THREE.Object3D, kept: boolean): void {
@@ -936,6 +942,10 @@ function mergeUnder(root: THREE.Object3D, kept: boolean): void {
   root.traverse((object) => {
     const mesh = object as THREE.Mesh;
     if (!mergeable(mesh, kept) || (kept && !mesh.userData.noMerge)) return;
+    // (a part merged within itself takes its own meshes alone, never those of another such part within it: the house
+    // of records' trophies hang on a wall merged within itself, and merged into the wall's mesh each was shown with
+    // the wall, its boss beaten or not)
+    if (kept && withinOf(mesh) !== root) return;
     const key = mergeKey(mesh);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(mesh);

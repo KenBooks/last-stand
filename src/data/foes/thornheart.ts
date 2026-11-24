@@ -23,7 +23,8 @@ export const FOES: FoeFile = {
       beat: ['Keep to medium range and leave the ring when it appears.', 'Turn on the Thornlings the moment it roars.', 'Strafe across volleys rather than running from them.', 'Spend your cooldowns in the gap after a slam.'],
       vs: { ranger: 'Strawman pulls its Thornlings off you while you keep shooting the boss.' },
     },
-    // (the Elder Thornheart's crown of thorned antlers, a green heartwood knot at its root)
-    trophy: { name: "The Elder Thornheart's Crown", look: 'antlers', colour: 0xb89068, trim: 0x7aff50 },
+    // (the Elder Thornheart's crown of branching antlers in blossom over its heart in its cage of roots, mounted;
+    // world/trophies/thornheart.ts)
+    trophy: { name: "The Elder Thornheart's Crown", kind: 'wall', place: 'wall-inner-right', colour: 0x9a846a, trim: 0xb8ff4a },
   },
 };
