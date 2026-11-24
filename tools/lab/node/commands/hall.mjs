@@ -27,7 +27,11 @@ export default {
       help: 'the light round the weapon\'s tip instead (the mage\'s staff\'s crystal) frame by frame: its near '
         + 'white share, its peak against its mean and its flashes, pictured at its brightest and dimmest',
     },
-    pictures: { kind: 'switch', help: 'with --glow, picture the tip (on by default; --pictures=false for none)' },
+    pictures: {
+      kind: 'switch',
+      help: 'picture his blow at the top of its raise and as it lands; with --glow, the tip '
+        + '(on by default; --pictures=false for none)',
+    },
     lobby: {
       kind: 'switch',
       help: 'with --glow, the hero as he stands in the lobby, the run\'s camera on him, not in the hall '
@@ -35,7 +39,8 @@ export default {
     },
     canary: {
       kind: 'switch',
-      help: 'plant a fault the measure must catch: the right shoulder turned for a frame after the showcase '
+      help: 'plant a fault the measure must catch: the right shoulder turned for a frame after the showcase, '
+        + 'and his blow held at the top of its raise '
         + '(with --glow, the tip\'s glow lit up three times over for a second)',
     },
     ...SETUP_OPTIONS,

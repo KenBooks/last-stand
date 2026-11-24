@@ -19,11 +19,17 @@ The rest of the commands are in [`COMMANDS.md`](../COMMANDS.md).
   top), and the hall's went back to its guard from where the lobby's hero had drawn his weapon, the axe's tip 2.2 m in
   a frame. Found with it too: the first frame of the landing's hold turned the arm 65 degrees down onto the stage
   under the plinth, the hands 84 cm; the left hand onto the haft off the shoulder in a frame, 39 cm; the way back
-  into the guard stopping dead, the lift onto the shoulder and the move off it starting at full speed. Then the hall
-  is opened again and left by Back 1 s into his showcase, and any oscillator still not told to stop 60 frames on in
-  the lobby is a sound left playing (`page/soundsLeft.ts`); its canary starts Void Lance's hum there and never stops
-  it. From play: "if mage was attacking in hall of heroes, going back to lobby keeps the attack sound": the hall
-  closed with his channel open, and its hum (3 tones) played on.
+  into the guard stopping dead, the lift onto the shoulder and the move off it starting at full speed. A blow brought
+  down (Power Strike's `chop`) must land, its tip at its lowest within 30 cm of the floor under him; its canary holds
+  the blow at the top of its raise. The screen is pictured at the top of the raise and two frames after the blow's
+  action ends (`--pictures=false` for none). From play (#738): "For the hammer weapon only, when it plays the
+  animation in character selection menu, it lags and does not do its ability": every two-hander's blow met the
+  village's props and wall where the hall's stage is bare (the hall shown, `obstacles` stay the place's), stood
+  overhead at 1.9 m, and was pulled down 2.2 m in a frame after; `propTopAt` and `wallTopAt` read none while the hall
+  is shown. Then the hall is opened again and left by Back 1 s into his showcase, and any oscillator still not told
+  to stop 60 frames on in the lobby is a sound left playing (`page/soundsLeft.ts`); its canary starts Void Lance's
+  hum there and never stops it. From play: "if mage was attacking in hall of heroes, going back to lobby keeps the
+  attack sound": the hall closed with his channel open, and its hum (3 tones) played on.
   `--glow` (`page/hallGlow.ts`) reads the light round the weapon's tip instead, the mage's staff's crystal, frame by
   frame from his showcase on (540 frames, the camera's flight in left out), read back from the frame drawn as the
   player sees it: a box 0.5 m across there, its share near white (0.75 of white), its mean light, the median frame's
