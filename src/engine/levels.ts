@@ -85,9 +85,13 @@ export class Levels {
   /** whether a switch of the lit shaders' making waits on its pipelines (Auto judges none of its frames) */
   get plainSwitching(): boolean { return this.plain.switching; }
 
-  /** A harness's: the samples and the shadow map's side the engine draws with, and the level's bloom. */
-  now(): { samples: number; shadowSize: number; bloomShare: number } {
-    return { samples: this.samples, shadowSize: this.shadowSize, bloomShare: this.bloomShare };
+  /** A harness's: the samples and the shadow map's side the engine draws with, the level's bloom, and the share the
+   *  engine was told to draw its bloom at (the level's, halved on a dense screen) and whether it draws it at all. */
+  now(): { samples: number; shadowSize: number; bloomShare: number; bloomSent: number; bloomOn: boolean } {
+    return {
+      samples: this.samples, shadowSize: this.shadowSize, bloomShare: this.bloomShare, bloomSent: this.bloomSent,
+      bloomOn: this.bloom,
+    };
   }
 
   /** A frame's settings told, as its `grade` and the sun's map (`shadowSize`, a side) have them. */

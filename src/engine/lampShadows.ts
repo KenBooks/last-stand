@@ -54,6 +54,9 @@ export class LampShadows {
   /** how far one of them reaches in the frame's loop, which reads its faces that far (set by the bridge) */
   ownReachOf: (light: THREE.PointLight) => number = (light) => light.distance;
 
+  /** the faces drawn this frame: of what stands still, and of the movers' holding one (the frame's stats) */
+  readonly facesNow = { still: 0, movers: 0 };
+
   constructor(private core: Core) {}
 
   /** The first `lamps` lamps' shadows asked for, of `casters` as they stand (their world matrices made). A lamp
@@ -169,6 +172,7 @@ export class LampShadows {
           .toArray(core.globals, GLOBALS.shadowView);
         at.toArray(core.globals, GLOBALS.camPos);
         core.engine.bake_lamp_face(layer, inFace ? core.count : 0, inFace ? core.boneFloats : 0);
+        if (inFace) this.facesNow.movers++;
       }
       this.taking.push({ lamp, slot: LAMPS_MOST + k });
     }
@@ -237,6 +241,7 @@ export class LampShadows {
         .toArray(core.globals, GLOBALS.shadowView);
       at.toArray(core.globals, GLOBALS.camPos);
       core.engine.bake_lamp_face(slot * FACES.length + k, core.count, 0);
+      this.facesNow.still++;
     }
     core.freshViews();
     core.count = core.boneFloats = 0;

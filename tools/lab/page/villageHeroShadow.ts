@@ -359,6 +359,9 @@ export async function heroShadowBetweenLamps(lab: Lab, canary: boolean): Promise
   const casts = new Map<THREE.Object3D, boolean>();
   const read: BetweenRead[] = [];
   holdShadowsOnMove('every');
+  // (the moon's map drawn on every frame read: kept on a frame between its turns, it held him casting as he
+  // stopped, and his moon shadow read 0% between every two lamps)
+  engineShadowTurns(false);
   try {
     await lab.step(SETTLE);
     const pairs = pairsToStandBetween();
@@ -383,6 +386,7 @@ export async function heroShadowBetweenLamps(lab: Lab, canary: boolean): Promise
     }
   } finally {
     holdShadowsOnMove('level');
+    engineShadowTurns(true);
     heroCasts(true, casts);
     holdHour(null);
   }

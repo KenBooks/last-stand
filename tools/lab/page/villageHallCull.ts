@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
+import { RUST } from '../../../src/engine';
 import { holdHour } from '../../../src/game/clock';
 import { groundHeight } from '../../../src/world/ground';
 import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
@@ -54,34 +55,14 @@ const MOST_CHANGED_OUTSIDE = 0.00002;
  *  triangles they drew. */
 export interface Counted { canvas: Canvas; draws: number; triangles: number }
 
-/** The triangles a draw of `geometry` by `object` draws: its range's, times an instanced mesh's instances (the
- *  grass's, an instanced geometry, is counted by its vertices apart: `grassVertices`). */
-function trianglesOf(geometry: THREE.BufferGeometry, object: THREE.Object3D): number {
-  const indices = geometry.index?.count ?? geometry.getAttribute('position')?.count ?? 0;
-  const ranged = Math.min(indices, geometry.drawRange.count);
-  const instanced = object as THREE.InstancedMesh;
-  const instances = instanced.isInstancedMesh ? instanced.count : 1;
-  return Math.floor(ranged / 3) * instances;
-}
-
-/** The frame drawn now, its scene's draws and their triangles counted. */
+/** The frame drawn now, its scene's draws and their triangles counted: the engine's own counts of its frame (its
+ *  scene's pass, the sun's map and the lamps' apart). They were three's draws by the game's camera, counted round its
+ *  `renderBufferDirect`, which three's WebGPU renderer hasn't got: every check that counted a frame stopped there. */
 export function countedFrame(lab: Lab): Counted {
-  const renderer = G.renderer;
-  const own = renderer.renderBufferDirect.bind(renderer);
-  let draws = 0;
-  let triangles = 0;
-  renderer.renderBufferDirect = (camera, scene, geometry, material, object, group) => {
-    if (camera === G.camera) {
-      draws++;
-      triangles += trianglesOf(geometry, object);
-    }
-    own(camera, scene, geometry, material, object, group);
-  };
-  try {
-    return { canvas: drawFrame(lab), draws, triangles };
-  } finally {
-    renderer.renderBufferDirect = own;
-  }
+  const canvas = drawFrame(lab);
+  const stats = RUST.bridge?.stats;
+  if (!stats) throw new Error('lab: village: the engine is not drawing');
+  return { canvas, draws: stats.draws, triangles: stats.triangles };
 }
 
 /** The share of the pixels whose light moved between `a` and `b`. */
