@@ -24,6 +24,16 @@ export function leaveSeatsTo(left: (seat: Seat) => boolean): void {
   leftAlone = left;
 }
 
+/** Whether something he sits by takes E while he's sat (`useWhileSatBy`). */
+let usedWhileSat: () => boolean = () => false;
+
+/** Tells whether something he sits by takes E while he's sat (`game/village.ts`: an object within whose reach he sits,
+ *  the campfire's Play together among them, #721: "No way to interact with campfire while sitting, can't start a
+ *  party"). Sat there, E is that object's and doesn't get him up; anything else still does. */
+export function useWhileSatBy(used: () => boolean): void {
+  usedWhileSat = used;
+}
+
 export const SIT = {
   /** whether he goes to sit by himself once he's stood idle `after` (off: from the owner, "lets also disable automatic
    *  sitting"; E on the seat the cursor rests on sits him), how long he stands idle first (s), and how far off a seat
@@ -171,7 +181,13 @@ export class Sitting {
    *  object he stands by leaves it alone (the campfire's benches are in its reach, and E there opened Play together
    *  as he sat down or got up). */
   get takesKey(): boolean {
-    return this.lit || this.phase !== null;
+    return this.lit || (this.phase !== null && !this.keyLeft);
+  }
+
+  /** Whether E is left to what he sits by (`useWhileSatBy`): sat down whole, never on his way down or up (the
+   *  campfire's benches are in its reach, and E there opened Play together as he sat down or got up). */
+  get keyLeft(): boolean {
+    return this.phase === 'sat' && usedWhileSat();
   }
 
   /** The seat the cursor points at, followed a frame (`ray`: the cursor's, none on touch; `peace`: no wave under way):

@@ -686,7 +686,9 @@ export class Player {
     if (mx || mz) this.walkTo = null;
     const len = Math.hypot(mx, mz);
     // (E sits him down at once, and gets him up again; a partner down within reach is raised by it instead)
-    const sitKey = this.local && wasPressed('e') && !this.downedNear() && !this.sitting.ask();
+    // (sat by something that takes E, the campfire: E is its, and doesn't get him up, #721)
+    const keyLeft = this.sitting.keyLeft;
+    const sitKey = this.local && wasPressed('e') && !keyLeft && !this.downedNear() && !this.sitting.ask();
     // (sat or getting up: any key gets him up, and nothing else is done until he's up; a key still held then acts)
     const acted = sitKey || len > 0 || SKILL_KEYS.some((k) => isDown(k) || wasPressed(k));
     if (this.sitting.update(this, dt, this.freeToSit(), acted)) {
