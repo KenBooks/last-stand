@@ -3,8 +3,8 @@
 // one (from play, in the hall, three heroes in view: "1.3m not expected either"). Past `FAR.out` from the camera each
 // of his meshes draws a geometry of the same vertices under an index of fewer triangles (`farIndex`, three's
 // meshoptimizer: no vertex moved, so his colours, normals and skin are as they were), and its own again within
-// `FAR.back`. A swap of geometry: no program, no material. WebGL's alone (on WebGPU he's merged as he's built,
-// `drawAsOne.ts`). `?farDetail=0` draws every triangle at any distance, for A/B.
+// `FAR.back`. A swap of geometry: no program, no material. `?farDetail=0` draws every triangle at any distance, for
+// A/B.
 import * as THREE from 'three';
 import { coarseIndex, detailSettled, farIndex, shadowDetailVersion, shadowsWhole, tickDetail } from './shadowDetail';
 
@@ -33,9 +33,9 @@ const casterOf = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
 /**
  * The geometry a hero's `mesh` casts its shadow from under the Rust engine: its own vertices under the shadow's
  * fewer triangles (`coarseIndex`), or null where it casts as it's drawn (not a hero's, a card cut by its picture,
- * its fewer triangles not made yet). three casts a hero as one such mesh from inside its own shadow pass
- * (`castAsOne.ts`), which the engine never runs: there each piece cast every triangle of his, about 140k a hero
- * at High, into the sun's map each frame.
+ * its fewer triangles not made yet). three cast a hero as one such mesh from inside its own shadow pass
+ * (`castAsOne.ts`, taken out with three's drawing of the scene), which the engine never ran: there each piece cast
+ * every triangle of his, about 140k a hero at High, into the sun's map each frame.
  */
 export function casterGeometry(mesh: THREE.Mesh): THREE.BufferGeometry | null {
   const whole = wholeOf.get(mesh);
@@ -120,12 +120,11 @@ function coarseGeometry(geometry: THREE.BufferGeometry, cards: boolean): THREE.B
   return coarse;
 }
 
-/** Whether `mesh` can draw from fewer triangles: one material, no morphs, and drawn by the frame (not a shadow's own
- *  caster). */
+/** Whether `mesh` can draw from fewer triangles: one material, no morphs. */
 function goesCoarse(mesh: THREE.Mesh): boolean {
   if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || mesh.morphTargetInfluences?.length) return false;
   if (Array.isArray(mesh.material)) return false;
-  return !mesh.userData.shadowTwin && mesh.name !== 'shadow cast as one';
+  return true;
 }
 
 /** `root`'s meshes (a hero's model) drawn coarse from afar. */

@@ -31,9 +31,7 @@ import { emit } from '../events';
 import { angleDamp, damp, hitFlash, rand, smooth } from '../util';
 import { applyShadowDetail, qualityLevel } from '../core/quality';
 import { QUALITY } from '../data/quality';
-import { castAsOne, type OneShadow } from './models/castAsOne';
 import { farDetail, type FarDetail } from './models/farDetail';
-import { drawAsOne, type OneDraw } from './models/drawAsOne';
 import { countDown, countHealed, countTaken } from '../game/stats';
 import { ownColour } from '../net/heroColour';
 import type { HeroColourId } from '../data/heroColours';
@@ -200,12 +198,8 @@ export class Player {
   readonly staffLight: THREE.PointLight | null;
   /** at the off-hand, lit where it glows (`ClassDef.aura.hand`); every class has one too, unlit without it */
   readonly handLight: THREE.PointLight | null;
-  /** his pieces' shadow, cast in one draw (`models/castAsOne.ts`) */
-  readonly shadow: OneShadow;
   /** his meshes drawn from fewer triangles seen from afar (`models/farDetail.ts`) */
   readonly farDetail: FarDetail;
-  /** his parts drawn as one mesh a material, on WebGPU (`models/drawAsOne.ts`) */
-  readonly drawn: OneDraw;
   /** how lit a light lit only at full draw is (`ClassDef.aura.drawn`), eased in and out */
   private auraLit = 0;
   /** played here (a co-op partner is remote: driven by what its own game reports) */
@@ -428,9 +422,7 @@ export class Player {
     this.obj.add(this.model.root);
     this.obj.name = `hero ${classId}`;   // names show up in the perf report
     applyShadowDetail(this.obj);
-    this.drawn = drawAsOne(this.model);
     if (local) this.setColour(ownColour());
-    this.shadow = castAsOne(this.model.root, this.obj);
     this.farDetail = farDetail(this.model.root);
     G.scene.add(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.handLight ? [this.handLight] : []));
 
@@ -476,9 +468,7 @@ export class Player {
     this.ward?.onEnd?.();
     // The two local lights belong to the scene, shared with cached heroes. Removing them changes every shader's key.
     G.scene.remove(this.obj);
-    this.shadow.dispose();
     this.farDetail.dispose();
-    this.drawn.dispose();
     this.obj.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) { m.skeleton.dispose(); (m.material as THREE.Material).dispose(); } });   // (skinned meshes own a copy of their material)
     this.model.dispose();
     // (its lights stay in the scene, the next hero's: `heroLights`. Taken out with a spare hero let go, the frame's 20

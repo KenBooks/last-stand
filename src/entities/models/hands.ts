@@ -191,7 +191,7 @@ function skinnedOn(vis: THREE.Object3D, geometry: THREE.BufferGeometry, material
   // (its bounds are the pose it was sculpted in)
   mesh.frustumCulled = false;
   mesh.customDepthMaterial = HAND_DEPTH;
-  // (its bones blended and its maps read as it alone is: models/drawAsOne.ts would merge it skinned as the rest)
+  // (its bones blended and its maps read as it alone is: a merge of the hero's parts would skin it as the rest)
   mesh.userData.drawsAlone = true;
   vis.add(mesh);
   mesh.bind(skeleton);

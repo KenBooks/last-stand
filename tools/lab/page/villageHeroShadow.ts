@@ -10,7 +10,6 @@ import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
 import { groundHeight } from '../../../src/world/ground';
 import { drawFrame, topLight, type Canvas } from './light';
-import { castingAsOne } from '../../../src/entities/models/castAsOne';
 import { roadLines, SQUARE_R, toPolyline } from '../../../src/world/villagePlan';
 import { holdShadowsOnMove } from '../../../src/world/shadowsOnMove';
 import type { LightsChecked } from './villageLights';
@@ -113,10 +112,9 @@ function readOver(lab: Lab, patches: THREE.Vector3[], strength: number | null): 
   }
 }
 
-/** The hero casting no shadow (the canary's fault, and the reading without his): every part of him, and the shadow
- *  his pieces are cast as one by (`castAsOne`, which casts whatever they say), or casting again as he did. */
+/** The hero casting no shadow (the canary's fault, and the reading without his): every part of him, or casting
+ *  again as he did. */
 function heroCasts(on: boolean, kept: Map<THREE.Object3D, boolean>): void {
-  castingAsOne.on = on;
   G.player.obj.traverse((part) => {
     if (!on) {
       if (!kept.has(part)) kept.set(part, part.castShadow);

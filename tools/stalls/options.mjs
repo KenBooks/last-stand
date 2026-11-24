@@ -38,7 +38,7 @@ const TRIPS = 5;
 const HELP = {
   url: ['a,b', 'the game at these URLs (production, a PR preview), each in turn; `this` this tree, built and served '
     + '(as it is with none); `ref:<git ref>` a commit, exported, built and served alike (`ref:HEAD~2`); either '
-    + 'with a query asked of its page (`this,this?castAsOne=0`: a switch of the game\'s in turns, one build)'],
+    + 'with a query asked of its page (`this,this?farDetail=0`: a switch of the game\'s in turns, one build)'],
   scenario: ['name', `what the player does: ${Object.keys(SCENARIOS).join(', ')} (fight by default); ${BOOT}: the `
     + 'game loaded as a first visit, then a return, each step of its loading timed; '
     + `${WEBGPU_CACHE}: whether Chrome's cache serves a WebGPU page's pipelines as it loads again (a page of its own); `

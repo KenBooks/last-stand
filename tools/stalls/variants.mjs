@@ -30,7 +30,7 @@ function cpuCanvas() {
 
 /**
  * `Math.random` drawn from one seed (mulberry32), so every page rolls alike: a fresh profile's gear is rolled, and
- * two URLs' heroes in one A/B wore different gear, a different count of draws (WebGPU's draws merged, `drawAsOne`).
+ * two URLs' heroes in one A/B wore different gear, a different count of draws (WebGPU's draws merged, `drawAsOne`, since taken out).
  */
 function seeded(seed) {
   let state = seed >>> 0;

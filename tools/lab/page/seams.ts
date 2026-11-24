@@ -125,10 +125,7 @@ function findSeams(lab: Lab): { seams: Seam[]; pieces: Piece[] } {
   const meshes: THREE.SkinnedMesh[] = [];
   lab.model.root.traverse((object) => {
     const mesh = object as THREE.SkinnedMesh;
-    // (a coarse shadow twin, castAsOne.ts, shares its piece's points: "sewn" to it, the canary moved the hand with its
-    // twin and read 0.1 mm of a 10 mm move)
-    const twin = Boolean(mesh.userData.shadowTwin);
-    if (mesh.isSkinnedMesh && mesh.geometry.attributes.skinIndex && !twin) meshes.push(mesh);
+    if (mesh.isSkinnedMesh && mesh.geometry.attributes.skinIndex) meshes.push(mesh);
   });
   const points = builtPoints(meshes);
   const cell = (value: number) => Math.round(value / SAME_PLACE);
