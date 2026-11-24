@@ -123,22 +123,26 @@ export async function fogHoldsSteady(lab: Lab, canary: boolean): Promise<LightsC
   }
 }
 
-/** A fire's flames: its uniforms, by the place it burns at. */
-function flamesNear(x: number, z: number): { uFrame: { value: number } } {
-  let found: { uFrame: { value: number } } | null = null;
+/** A fire's flames: the loop's frame they show, and whether they're drawn. */
+interface Flames { uFrame: { value: number }; drawn: () => boolean }
+
+/** A fire's flames, by the place it burns at (`userData.flames` on its volume, world/fire.ts: the material it's
+ *  drawn with shows no uniforms, and read off the material the check found no flames at all). */
+function flamesNear(x: number, z: number): Flames {
+  let found: Flames | null = null;
   let nearest = 3;
   G.scene.traverse((object) => {
-    const uniforms = ((object as THREE.Mesh).material as THREE.ShaderMaterial | undefined)?.uniforms;
+    const uniforms = object.userData.flames as THREE.ShaderMaterial['uniforms'] | undefined;
     const centre = uniforms?.uCentre?.value as THREE.Vector3 | undefined;
     if (!uniforms?.uFrame || !centre) return;
     const away = Math.hypot(centre.x - x, centre.z - z);
     if (away < nearest) {
       nearest = away;
-      found = uniforms as unknown as { uFrame: { value: number } };
+      found = { uFrame: uniforms.uFrame as { value: number }, drawn: () => object.visible };
     }
   });
   if (!found) throw new Error('lab: village: no flames at the campfire');
-  return found as { uFrame: { value: number } };
+  return found as Flames;
 }
 
 /** The campfire's flames stand still from the back of the hall, and burn beside it. */
@@ -153,17 +157,20 @@ export async function firesStillInFog(lab: Lab, canary: boolean): Promise<Lights
     const before = flames.uFrame.value;
     await lab.step(30);
     const inFog = Math.abs(flames.uFrame.value - before);
+    const drawnInFog = flames.drawn();
     await standAt(lab, CAMPFIRE[0] + 2.4, CAMPFIRE[1], 0);
     const seenFrom = flames.uFrame.value;
     await lab.step(30);
     const seen = Math.abs(flames.uFrame.value - seenFrom);
-    const line = `the campfire's flames in 30 frames: ${inFog.toFixed(2)} frames of its loop in the fog, `
-      + `${seen.toFixed(2)} beside it`;
-    const moved = inFog > 0.001;
+    const line = `the campfire's flames in 30 frames: ${inFog.toFixed(2)} frames of its loop in the fog`
+      + `${drawnInFog ? ', drawn there' : ', not drawn there'}, ${seen.toFixed(2)} beside it`
+      + `${flames.drawn() ? '' : ', not drawn'}`;
+    // (nor drawn there: from play, "why is fire still burning in fog of war")
+    const moved = inFog > 0.001 || drawnInFog;
     if (canary) return { lines: [line], problems: [], caught: moved, moments: [] };
     const problems: string[] = [];
     if (moved) problems.push(`${line}: it burns on in the fog`);
-    if (seen < 0.1) problems.push(`${line}: it stands still in sight`);
+    if (seen < 0.1 || !flames.drawn()) problems.push(`${line}: it stands still in sight, or isn't drawn`);
     return { lines: [line], problems, caught: null, moments: [] };
   } finally {
     holdSightOff(false);

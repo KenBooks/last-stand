@@ -627,6 +627,8 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
   volume.renderOrder = 15;
   // (the lab's handle on it: `lab sit` pictures a hero sat by it from beyond it, it hidden)
   volume.name = 'flames';
+  // (and on its uniforms, which the material it's drawn with doesn't show: `lab village --only firesStillInFog`)
+  volume.userData.flames = flames.uniforms;
   scene.add(volume);
   const lightAt = light.position.clone();
   const due = runPhase({ embers: 0, smoke: 0 });
@@ -634,7 +636,11 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
     emberTime.value = t;
     // (what he can't see plays out nothing, from play, "fire should not animate when in fog of war": its flames held at
     // the moment they had, none of the loop decoded for it, no embers or smoke)
-    if (inTheFog(inWorld.x, inWorld.z)) return;
+    // (nor are its flames drawn there: held still they burned on in the grey, from play "why is fire still
+    // burning in fog of war"; its bed and its light stay, as the place he remembers)
+    const fogged = inTheFog(inWorld.x, inWorld.z);
+    volume.visible = !fogged;
+    if (fogged) return;
     const puff = puffAt(t, seed);
     flames.uniforms.uPuff.value = 1 + (puff - 1) * PUFF_SHOWS;
     // (every fire at one moment of the loop, so the GPU holds two frames of it, each fire turned its own way and puffing
