@@ -21,7 +21,9 @@ const INSIDE_FADE = 0.4;
 /** the share of the opening a wall seen from in its room by its door takes: about two fifths of it left, over twice what's
  *  left from outside. Its inner face is dark, and at a sixth nothing of it showed but the door frame's edges (from
  *  play, "Make it stronger") */
-const DOOR_FROM_INSIDE = 0.6;
+// (0.6 of it: its jambs and leaves were too faint to tell what he walked into, from play "you thinned door
+// geometry too much, can't see I'm stuck because of it")
+const DOOR_FROM_INSIDE = 0.35;
 export const SEE_FLAGS = { solid: 16, thinned: 64, oneLayer: 256, cover: 512, underLayers: 1024, gone: 1 << 20 } as const;
 
 /** A material as the kinds read it: three's, with the game's see-through on it. */
