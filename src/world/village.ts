@@ -2506,7 +2506,13 @@ const CAMPFIRE_BARE = 3.0;
 /** the logs round the campfire: where round it (rad), how far out (m), their radius at each end, length and how far
  *  their middle stands up (their top a seat's height: at 0.22 m round, their top at 0.44 was under `SEAT.low`, a step),
  *  and how far off their line a body sits on one (m) */
-const BENCH = { at: [0.4, 2.3, 4.2], out: 2.2, r: [0.26, 0.28], long: 1.7, y: 0.26, sit: 0.12 };
+/** the campfire's seat logs: where round it (rad), how far out, their radii, length, their middles' height and the
+ *  seat's along them. Bedded into the ground (#756, from play: "Adjust Campfire Logs to Sit More Naturally in the
+ *  Ground Instead of Appearing to Float": radii 0.26 to 0.28 on a middle 0.26 up met the ground along one line):
+ *  2 cm thicker and 2 cm lower, the thick end 6 cm into the ground and the seat's top where it was, 0.49 m (sunk
+ *  alone to 0.46 m, the ranger's bow sat 5.5 cm off in his hand as he rose, `lab sit --seats bench`; under
+ *  `SEAT.low`, 0.45, it's a step) */
+const BENCH = { at: [0.4, 2.3, 4.2], out: 2.2, r: [0.28, 0.3], long: 1.7, y: 0.24, sit: 0.12 };
 
 /** Logs to sit on round the campfire, one draw (an instance each, as the outline of the one pointed at needs it
  *  apart), each a seat along its middle (`world/seats.ts`). */
