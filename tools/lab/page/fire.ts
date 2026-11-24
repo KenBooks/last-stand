@@ -36,7 +36,7 @@ import { belowFound, readBelow, type BelowReading } from './fireBelow';
 import { knowsLogs, logsFound, logsUnknown, readOverLogs, type LogsReading } from './fireLogs';
 import { fadeFound, readFade, type FadeFrames } from './fireFade';
 import { seeHoleEnd } from '../../../src/core/seeThrough';
-import { drawLookOf, partAt } from './looks';
+import { drawLookOf, partAt, readyLook } from './looks';
 
 export interface FireOptions {
   biome: BiomeId;
@@ -272,9 +272,12 @@ function logsIn(group: THREE.Object3D, fire: Fire): THREE.Mesh[] {
 }
 
 /** `fire` read from above its logs (its light shown, as the player sees it). */
-function readFromAbove(lab: Lab, fire: Fire, flames: THREE.Mesh, logs: THREE.Mesh[], canary: boolean): LogsReading {
+async function readFromAbove(lab: Lab, fire: Fire, flames: THREE.Mesh, logs: THREE.Mesh[], canary: boolean):
+  Promise<LogsReading> {
   const restore = aim(fire, overLogsShot(fire));
   try {
+    // (the parts look's pipelines made first: its picture is drawn and read in one task, `readyLook`)
+    await readyLook('parts', logs);
     const logsDrawn = () => coverOf(lab, logs, closeArea());
     return readOverLogs({ draw: () => drawnNow(lab, closeArea()), logsDrawn, flames, canary });
   } finally {
@@ -374,7 +377,8 @@ function coverOf(lab: Lab, meshes: THREE.Mesh[], area: Area): Uint8Array {
   const drawing = lab.drawing;
   lab.drawing = true;
   try {
-    const parts = partAt(drawLookOf('parts', meshes, area, () => '').image, meshes);
+    const drawn = drawLookOf('parts', meshes, area, () => '');
+    const parts = partAt(drawn.image, drawn.shown);
     return Uint8Array.from(parts, (part) => (part >= 0 ? 1 : 0));
   } finally {
     lab.drawing = drawing;
@@ -382,10 +386,11 @@ function coverOf(lab: Lab, meshes: THREE.Mesh[], area: Area): Uint8Array {
 }
 
 /** `fire` read from under its bowl (its light shown, as the player sees it). */
-function readFromBelow(lab: Lab, fire: Fire, flames: THREE.Mesh, solids: THREE.Mesh[], canary: boolean):
-  BelowReading {
+async function readFromBelow(lab: Lab, fire: Fire, flames: THREE.Mesh, solids: THREE.Mesh[], canary: boolean):
+  Promise<BelowReading> {
   const restore = aim(fire, belowShot(fire));
   try {
+    await readyLook('parts', solids);
     const glows = [...fire.parts.filter((part) => part !== flames && !(part as THREE.Light).isLight),
       particles.glow.points];
     const solidsDrawn = () => coverOf(lab, solids, closeArea());
@@ -848,7 +853,7 @@ export async function fire(lab: Lab, options: FireOptions): Promise<Report> {
   const above = readFire(lab, fire, shots.above);
   const flames = flamesOf(fire);
   const solids = solidsUnder(G.arena.groupOf(G.arena.biome), fire);
-  const below = flames && inBowl(solids, fire) ? readFromBelow(lab, fire, flames, solids, canary) : null;
+  const below = flames && inBowl(solids, fire) ? await readFromBelow(lab, fire, flames, solids, canary) : null;
   if (below) {
     const found = belowFound(below, canary);
     lines.push(found.line);
@@ -863,7 +868,7 @@ export async function fire(lab: Lab, options: FireOptions): Promise<Report> {
     problems.push(`${biome}: from beside it the flames' box is face-on: no hole's end across its faces alone`);
   }
   const logs = logsIn(G.arena.groupOf(G.arena.biome), fire);
-  const overLogs = flames && logs.length && knowsLogs(flames) ? readFromAbove(lab, fire, flames, logs, canary) : null;
+  const overLogs = flames && logs.length && knowsLogs(flames) ? await readFromAbove(lab, fire, flames, logs, canary) : null;
   if (overLogs) {
     const found = logsFound(overLogs, canary);
     lines.push(found.line);

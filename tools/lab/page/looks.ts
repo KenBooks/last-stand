@@ -10,7 +10,10 @@ import * as THREE from 'three';
 import { G } from '../../../src/state';
 import * as gameRenderer from '../../../src/core/renderer';
 import type { Joints } from '../../../src/entities/models/rig';
-import { readOpaque, type Area } from './pixels';
+import { drawRust } from '../../../src/engine';
+import { PLAIN_GRADE, type Grade } from '../../../src/engine/globals';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
+import { readOpaque, webGpuPixels, type Area } from './pixels';
 
 export const LOOKS = ['lit', 'wire', 'faces', 'parts', 'bones'] as const;
 export type Look = (typeof LOOKS)[number];
@@ -29,8 +32,13 @@ const SKY = new THREE.Color(0x101114);
 /** the faces' colours: the front of a face, and its back */
 const FRONT = new THREE.Color(0x3d6fe0);
 const BACK = new THREE.Color(0xe0402e);
-/** how far a pixel's channels may be from a part's colour and still count as it (0-255; an edge blends two) */
-const PART_SLACK = 2;
+/** how far a pixel's channels may be from a part's colour as shown and still count as it (0-255: an edge blends two,
+ *  and the engine's grade lays a grain of 3 to 4 levels a channel over its frame) */
+const PART_SLACK = 5;
+/** the grade a look is drawn with, as the studio's: the eye held, no vignette and no bloom */
+const LOOK_GRADE: Grade = { ...PLAIN_GRADE, vignette: 0, bloomShare: 0 };
+/** how long the browser is given to compile a look's pipelines (ms of its own clock) */
+const COMPILE_MS = 30000;
 /** the skeleton's lines and joints over the frame, and the joints it names */
 const BONE_COLOUR = '#ffe14d';
 const JOINT_RADIUS = 4;
@@ -213,55 +221,187 @@ export function armsLens(): THREE.Camera {
   return own?.() ?? G.camera;
 }
 
-/** The arms drawn by their own camera over what's drawn already, as the game draws them: depth cleared first, no
- *  background. */
-function drawArmsOver(arms: THREE.Camera): void {
-  const renderer = G.renderer;
-  const { autoClear } = renderer;
-  const background = G.scene.background;
-  renderer.autoClear = false;
-  G.scene.background = null;
-  try {
-    renderer.clearDepth();
-    renderer.render(G.scene, arms);
-  } finally {
-    renderer.autoClear = autoClear;
-    G.scene.background = background;
+/**
+ * The scene as it's dressed now drawn by the engine through the game's camera, the arms by their own through the eyes
+ * as the game draws them, at the canvas's size the game draws at; returns how many of its draws were left out, their
+ * pipelines still compiling aside. Three drew it before (`render`, the arms over it), onto a canvas of its own, and
+ * the engine's, last drawn as the player sees it, was read: `sheet --look parts` found none of the hero in any view.
+ */
+function drawnByEngine(): number {
+  const size = gameRenderer.sceneSize(new THREE.Vector2());
+  const arms = armsLens();
+  const grade: Grade = { ...LOOK_GRADE, arms: arms === G.camera ? null : arms as THREE.PerspectiveCamera };
+  const host = G.renderer as unknown as THREE.WebGLRenderer;
+  const unready = PIPELINES.unready;
+  drawRust(G.scene, G.camera as THREE.PerspectiveCamera, G.time, size.x, size.y, host, grade);
+  return PIPELINES.unready - unready;
+}
+
+/**
+ * `look`'s pipelines made, `meshes` dressed in it: the scene drawn by the engine on the browser's time until no draw
+ * is left out, as the studio's pictures are. Its pictures (`drawLook`, `lab.picture` with a `look`) are drawn in one
+ * task, read in the task that drew them, so a command awaits this before them.
+ */
+export async function readyLook(look: Look, meshes: THREE.Mesh[]): Promise<void> {
+  if (look === 'lit' || look === 'bones') return;
+  const began = window.__labClock.realNow();
+  for (;;) {
+    const changes = dress(look, meshes);
+    let leftOut: number;
+    try {
+      leftOut = drawnByEngine();
+    } finally {
+      undress(changes);
+    }
+    // (and the parts' palette, read with each picture in it: `shownPartColours`)
+    if (look === 'parts') leftOut += paletteLeftOut(meshes.length);
+    if (leftOut === 0) return;
+    if (window.__labClock.realNow() - began > COMPILE_MS) {
+      throw new Error(`lab: looks: ${leftOut} draws of the ${look} look still left out after ${COMPILE_MS} ms`);
+    }
+    await window.__labClock.realFrame();
   }
+}
+
+/** A frame drawn in a look: its picture, in `parts` each of the subject's parts in it and each part's colour as the
+ *  engine shows it (`shownPartColours`, by index: what `partAt` reads the picture by). */
+export interface LookDrawn {
+  image: ImageData;
+  parts: PartOnScreen[];
+  shown: number[][];
 }
 
 /**
  * The frame drawn as `look` (wire, faces or parts) has it with the game's camera as it is now, `subject` the part
  * of the scene the look is of, read back within `area` as an opaque picture. With `parts`, also each of `subject`'s
- * meshes in it (`named` names them), the most first.
+ * meshes in it (`named` names them), the most first. Its pipelines must be made (`readyLook`): a draw left out
+ * throws, never a picture with parts missing.
  */
 export function drawLook(look: Look, subject: THREE.Object3D, area: Area, named: (mesh: THREE.Mesh) => string):
-  { image: ImageData; parts: PartOnScreen[] } {
+  LookDrawn {
   return drawLookOf(look, meshesOf(subject), area, named);
 }
 
 /** The frame drawn as `look` has it (`drawLook`), its subject `meshes` (a prop's, from anywhere in the scene). */
 export function drawLookOf(look: Look, meshes: THREE.Mesh[], area: Area, named: (mesh: THREE.Mesh) => string):
-  { image: ImageData; parts: PartOnScreen[] } {
+  LookDrawn {
   const changes = dress(look, meshes);
-  const renderer = G.renderer;
+  let image: ImageData;
   try {
-    renderer.setRenderTarget(null);
-    renderer.render(G.scene, G.camera);
-    const arms = armsLens();
-    if (arms !== G.camera) drawArmsOver(arms);
+    const leftOut = drawnByEngine();
+    if (leftOut > 0) {
+      throw new Error(`lab: looks: ${leftOut} draws of the ${look} look left out, their pipelines compiling (await `
+        + '`readyLook` before picturing in it)');
+    }
+    image = readOpaque(area);
   } finally {
     undress(changes);
   }
-  const image = readOpaque(area);
-  const parts = look === 'parts' ? partsIn(image, meshes, named) : [];
-  return { image, parts };
+  const shown = look === 'parts' ? shownPartColours(meshes.length) : [];
+  const parts = look === 'parts' ? partsIn(image, meshes, shown, named) : [];
+  return { image, parts, shown };
 }
 
-/** Each pixel of `image` (drawn in the `parts` look, rows from the top) as the index in `meshes` of the part it
- *  shows, -1 where none does. */
-export function partAt(image: ImageData, meshes: THREE.Mesh[]): Int32Array {
-  const partOf = partsByPixel(meshes.map((_, i) => partColour(i)));
+/** how far before the camera the palette of the parts' colours is laid, in its near planes (just past it, before
+ *  the hero: at 0.3 m the far views' near plane cut it away, and their parts were matched to the backdrop) */
+const PALETTE_AT = 1.5;
+/** the share of a palette's cell its swatch covers, and how far round a cell's middle it's read (px) */
+const SWATCH = 0.8;
+const SWATCH_READ = 2;
+
+/** A palette of the parts' colours laid before the game's camera in a grid of `count` cells, a swatch each in
+ *  `flat`'s material, filling the view: what takes it away again, and its rows and columns. */
+function layPalette(count: number): { columns: number; rows: number; remove: () => void } {
+  const camera = G.camera as THREE.PerspectiveCamera;
+  const at = camera.near * PALETTE_AT;
+  const high = 2 * at * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  const wide = high * camera.aspect;
+  const columns = Math.ceil(Math.sqrt(count * camera.aspect));
+  const rows = Math.ceil(count / columns);
+  const group = new THREE.Group();
+  const swatch = new THREE.PlaneGeometry(wide / columns * SWATCH, high / rows * SWATCH);
+  const made: THREE.Material[] = [];
+  for (let i = 0; i < count; i++) {
+    const material = flat(partColour(i));
+    made.push(material);
+    const mesh = new THREE.Mesh(swatch, material);
+    const column = i % columns;
+    const row = Math.floor(i / columns);
+    mesh.position.set((column + 0.5) / columns * wide - wide / 2, high / 2 - (row + 0.5) / rows * high, -at);
+    group.add(mesh);
+  }
+  group.position.copy(camera.position);
+  group.quaternion.copy(camera.quaternion);
+  group.layers.mask = camera.layers.mask;
+  group.traverse((object) => {
+    object.layers.mask = camera.layers.mask;
+  });
+  G.scene.add(group);
+  group.updateMatrixWorld(true);
+  return {
+    columns,
+    rows,
+    remove: () => {
+      group.removeFromParent();
+      swatch.dispose();
+      for (const material of made) material.dispose();
+    },
+  };
+}
+
+/**
+ * Each of `count` parts' colours as the engine shows it: drawn in a palette before the camera and read back, a swatch's
+ * middle averaged ([r, g, b], 0-255). The engine grades every pixel it draws, a flat unlit colour too (it has no way
+ * round its grade for a material of three's `toneMapped` off), so a part is found in a picture by the colour it's
+ * shown in, not the one it's given: matched to that, every part but the first was lost.
+ */
+function shownPartColours(count: number): number[][] {
+  const palette = layPalette(count);
+  try {
+    const leftOut = drawnByEngine();
+    if (leftOut > 0) throw new Error(`lab: looks: ${leftOut} draws of the parts' palette left out (await \`readyLook\`)`);
+    const size = gameRenderer.sceneSize(new THREE.Vector2());
+    const image = webGpuPixels({ left: 0, top: 0, width: size.x, height: size.y });
+    const shown: number[][] = [];
+    for (let i = 0; i < count; i++) {
+      const x = Math.round(((i % palette.columns) + 0.5) / palette.columns * image.width);
+      const y = Math.round((Math.floor(i / palette.columns) + 0.5) / palette.rows * image.height);
+      shown.push(meanAround(image, x, y));
+    }
+    return shown;
+  } finally {
+    palette.remove();
+  }
+}
+
+/** How many draws of a palette of `count` parts' colours the engine left out, its pipelines compiling. */
+function paletteLeftOut(count: number): number {
+  const palette = layPalette(count);
+  try {
+    return drawnByEngine();
+  } finally {
+    palette.remove();
+  }
+}
+
+/** The mean colour of `image`'s pixels within `SWATCH_READ` of (`x`, `y`), rows from the top ([r, g, b], 0-255). */
+function meanAround(image: ImageData, x: number, y: number): number[] {
+  const sum = [0, 0, 0];
+  let count = 0;
+  for (let dy = -SWATCH_READ; dy <= SWATCH_READ; dy++) {
+    for (let dx = -SWATCH_READ; dx <= SWATCH_READ; dx++) {
+      const k = ((y + dy) * image.width + (x + dx)) * 4;
+      for (let channel = 0; channel < 3; channel++) sum[channel] += image.data[k + channel];
+      count++;
+    }
+  }
+  return sum.map((total) => Math.round(total / count));
+}
+
+/** Each pixel of `image` (drawn in the `parts` look, rows from the top) as the index of the part it shows, by each
+ *  part's colour as shown (`shown`, from `drawLookOf`), -1 where none does. */
+export function partAt(image: ImageData, shown: number[][]): Int32Array {
+  const partOf = partsByPixel(shown);
   const { data } = image;
   const parts = new Int32Array(data.length / 4);
   for (let pixel = 0; pixel < parts.length; pixel++) {
@@ -272,9 +412,10 @@ export function partAt(image: ImageData, meshes: THREE.Mesh[]): Int32Array {
 }
 
 /** Each of `meshes` found in `image` (drawn in the `parts` look), by the share of it it covers, the most first. */
-function partsIn(image: ImageData, meshes: THREE.Mesh[], named: (mesh: THREE.Mesh) => string): PartOnScreen[] {
+function partsIn(image: ImageData, meshes: THREE.Mesh[], shown: number[][], named: (mesh: THREE.Mesh) => string):
+  PartOnScreen[] {
   const colours = meshes.map((_, i) => partColour(i));
-  const parts = partAt(image, meshes);
+  const parts = partAt(image, shown);
   const tally = meshes.map(() => ({ count: 0, left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity }));
   const { width, height } = image;
   for (let y = 0; y < height; y++) {
@@ -321,13 +462,11 @@ export function describeParts(parts: PartOnScreen[], count = PARTS_NAMED): strin
 /** A pixel's colour as one number. */
 const packed = (r: number, g: number, b: number) => (r << 16) | (g << 8) | b;
 
-/** Each part by the pixels that are its colour (`colours`, by index), each channel within `PART_SLACK` of it: a
- *  pixel looked up once, where matched against every part's colour a picture took 10 s to read. */
-function partsByPixel(colours: THREE.Color[]): Map<number, number> {
+/** Each part by the pixels that are its colour as shown (`shown`, by index, 0-255), each channel within `PART_SLACK`
+ *  of it: a pixel looked up once, where matched against every part's colour a picture took 10 s to read. */
+function partsByPixel(shown: number[][]): Map<number, number> {
   const parts = new Map<number, number>();
-  colours.forEach((colour, i) => {
-    const shown = colour.getRGB({ r: 0, g: 0, b: 0 }, THREE.SRGBColorSpace);
-    const [r, g, b] = [shown.r, shown.g, shown.b].map((channel) => Math.round(channel * 255));
+  shown.forEach(([r, g, b], i) => {
     for (let dr = -PART_SLACK; dr <= PART_SLACK; dr++) {
       for (let dg = -PART_SLACK; dg <= PART_SLACK; dg++) {
         for (let db = -PART_SLACK; db <= PART_SLACK; db++) {

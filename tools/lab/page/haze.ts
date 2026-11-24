@@ -24,8 +24,9 @@ import type { BiomeId } from '../../../src/data/biomes';
 import type { WeaponStyle } from '../../../src/loot/loadout';
 import type { RarityId } from '../../../src/types';
 import { canvasSize, drawFrame, lookAlong, type Canvas } from './light';
-import { drawLook, meshesOf, partAt } from './looks';
+import { drawLook, meshesOf, partAt, readyLook, type LookDrawn } from './looks';
 import { isWeapon } from './strike';
+import { drawnWhole } from './gpuTurns';
 import { TUNE } from '../../../src/engine/globals';
 
 export interface HazeOptions {
@@ -206,16 +207,17 @@ function surfaceOf(lab: Lab, isPart: IsPart): Uint8Array {
   // (the lab draws nothing unless it's asked to)
   const drawing = lab.drawing;
   lab.drawing = true;
-  let image: ImageData;
+  let drawn: LookDrawn;
   try {
-    image = drawLook('parts', lab.model.root, area, () => '').image;
+    drawn = drawLook('parts', lab.model.root, area, () => '');
   } finally {
     lab.drawing = drawing;
   }
+  const { image, shown } = drawn;
   if (image.width !== width || image.height !== height) {
     throw new Error(`the parts look's ${image.width}x${image.height} isn't the canvas's ${width}x${height}`);
   }
-  const parts = partAt(image, meshes);
+  const parts = partAt(image, shown);
   const weapon = meshes.map((mesh) => within(mesh, isPart));
   const surface = new Uint8Array(width * height);
   for (let y = 0; y < height; y++) {
@@ -348,11 +350,28 @@ function hazeLine(haze: Haze, noun: string): string {
 /** Nothing planted. */
 const asItIs: Plant = () => () => {};
 
-/** The frame as it stands, with the weapons and without, measured; `exposure` the shown frame's and `plant` a fault
- *  planted in it (the canaries'). */
-function measureNow(lab: Lab, isPart: IsPart, exposure = 1, plant = asItIs):
-  { haze: Haze; losses: Float32Array; shown: Drawn } {
+/**
+ * The part's pixels as he stands now (`surfaceOf`), its look's pipelines made first and the frame drawn whole after:
+ * the look puts his meshes in materials of its own and back, and the engine makes their pipelines again, so the
+ * frames drawn next left out his weapons, shown and hidden alike (their light read 0% of the frame).
+ */
+async function surfaceNow(lab: Lab, isPart: IsPart): Promise<Uint8Array> {
+  await readyLook('parts', meshesOf(lab.model.root));
   const surface = surfaceOf(lab, isPart);
+  const drawing = lab.drawing;
+  lab.drawing = true;
+  try {
+    await drawnWhole(() => rendererCode.render());
+  } finally {
+    lab.drawing = drawing;
+  }
+  return surface;
+}
+
+/** The frame as it stands, with the weapons and without, measured, `surface` the part's pixels (`surfaceOf`);
+ *  `exposure` the shown frame's and `plant` a fault planted in it (the canaries'). */
+function measureNow(lab: Lab, isPart: IsPart, surface: Uint8Array, exposure = 1, plant = asItIs):
+  { haze: Haze; losses: Float32Array; shown: Drawn } {
   const unplant = plant(lab);
   let shown: Drawn;
   try {
@@ -380,8 +399,9 @@ export async function haze(lab: Lab, options: HazeOptions): Promise<Report> {
   const moments: Pictured[] = [];
   for (const facing of options.facings) {
     await standIn(lab, options, facing);
+    const surface = await surfaceNow(lab, isPart);
     const name = `${options.biome}, looking ${facing}°`;
-    const { haze: found, losses, shown } = measureNow(lab, isPart);
+    const { haze: found, losses, shown } = measureNow(lab, isPart, surface);
     lines.push(`${name}: ${hazeLine(found, noun)}`);
     if (found.own === 0) problems.push(`${name}: no ${noun} in the frame`);
     if (found.hazed > HAZE_MOST) {
@@ -397,20 +417,21 @@ export async function haze(lab: Lab, options: HazeOptions): Promise<Report> {
         + `${percent(haloMost(found))})`);
     }
     if (options.pictures) moments.push(pictureOf(name, shown, losses, [hazeLine(found, noun)]));
-    if (options.canary && facing === options.facings[0]) canaries(lab, isPart, noun, lines, problems);
+    if (options.canary && facing === options.facings[0]) canaries(lab, isPart, surface, noun, lines, problems);
   }
   return { text: lines.join('\n'), problems, moments };
 }
 
 /** The faults the measures must catch, planted in the frame as it stands: a veil over all of it, which hazes it,
  *  and the part lit white, which glares. */
-function canaries(lab: Lab, isPart: IsPart, noun: string, lines: string[], problems: string[]): void {
-  const veiled = measureNow(lab, isPart, CANARY_EXPOSURE).haze;
+function canaries(lab: Lab, isPart: IsPart, surface: Uint8Array, noun: string, lines: string[], problems: string[]):
+  void {
+  const veiled = measureNow(lab, isPart, surface, CANARY_EXPOSURE).haze;
   const veilCaught = veiled.hazed > HAZE_MOST;
   lines.push(`canary, the frame with the ${noun} drawn at ${CANARY_EXPOSURE} of its exposure: `
     + `${veilCaught ? 'caught' : 'missed'}: ${percent(veiled.hazed)} of it darkened`);
   if (!veilCaught) problems.push('the haze\'s canary was missed');
-  const glowing = measureNow(lab, isPart, 1, (planted) => glowPart(planted, isPart)).haze;
+  const glowing = measureNow(lab, isPart, surface, 1, (planted) => glowPart(planted, isPart)).haze;
   const glareCaught = glowing.glared > GLARE_MOST && glowing.halo > haloMost(glowing);
   lines.push(`canary, the ${noun} lit white: ${glareCaught ? 'caught' : 'missed'}: ${percent(glowing.glared)} of `
     + `their surface near white, their halo ${percent(glowing.halo)} of the frame`);

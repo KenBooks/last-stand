@@ -8,7 +8,7 @@ import { G } from '../../../src/state';
 import * as renderer from '../../../src/core/renderer';
 import type { Joints } from '../../../src/entities/models/rig';
 import type { Lab, Fixture, Tile, ViewName } from './lab';
-import { describeParts, jointsByObject, lensOf, meshesOf, type Look } from './looks';
+import { describeParts, jointsByObject, lensOf, meshesOf, readyLook, type Look } from './looks';
 import { describeFramed, framed } from './inFrame';
 
 /** `lab live picture`'s options. */
@@ -74,6 +74,8 @@ export async function picture(lab: Lab, options: LivePicture): Promise<LivePictu
   const views = asked.filter((view): view is ViewName => view !== SCREEN);
   if (views.length) lab.checkCapture(views, renderer.viewMode(), options.focus);
   lab.model.root.updateMatrixWorld(true);
+  // (a look's pipelines made first: its picture is drawn and read in one task, `readyLook`)
+  if (views.length && options.look) await readyLook(options.look, meshesOf(lab.model.root));
   const tiles = views.length
     ? lab.capture(views, {
       focus: options.focus,
