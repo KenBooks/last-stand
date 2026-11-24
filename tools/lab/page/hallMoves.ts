@@ -5,6 +5,9 @@
 // various poses after he finishes power strike, in char selection screen ... like an introvert on public speech".
 // The hall's heroes are remote copies, posed from what their game reports, beside the lobby's own hero, hidden but
 // still posed, so the lobby hero's measures (`range`) never saw them. The canary turns his right shoulder for a frame.
+// A blow brought down (Power Strike's `chop`) must land: its tip within `LANDS_WITHIN` of the floor under him at its
+// lowest (#738: a two-hander's met the village's props where the hall's stage is bare, and stood overhead). Its canary
+// holds the blow at the top of its raise.
 // Then the hall is opened again and left as his showcase is under way, and any sound it leaves playing is a problem
 // (from play: "if mage was attacking in hall of heroes, going back to lobby keeps the attack sound"); its canary
 // starts Void Lance's hum there and never stops it.
@@ -16,7 +19,7 @@ import { sfx } from '../../../src/core/audio';
 import { makeItem } from '../../../src/loot/items';
 import type { WeaponStyle } from '../../../src/loot/loadout';
 import type { Model } from '../../../src/types';
-import { realWait, type Lab, type Report } from './lab';
+import { realWait, type Lab, type Pictured, type Report } from './lab';
 import { ABANDON_HOLD_MS } from '../../../src/ui/menus';
 import { OpenTones } from './soundsLeft';
 import * as heroesUi from './uiHeroes';
@@ -31,6 +34,8 @@ export interface HallOptions {
   /** list every point on each frame from the first of these to the second */
   trace?: number[];
   canary?: boolean;
+  /** picture his blow at the top of its raise and as it lands, as the player sees it (on by default) */
+  pictures?: boolean;
 }
 
 /** the points followed: the joint (or the weapon's tip) each is */
@@ -65,6 +70,15 @@ const CANARY_TURN = 0.5;
  *  after, for what was stopped to have stopped */
 const LEAVE_AT = 60;
 const AFTER_LEAVING = 60;
+/** the action a blow is brought down in, its tip's lowest at most this far over the floor under him (m): a maul's
+ *  head rests on the stage 4 cm under his plinth's top, held at the top of its raise it stood 2.8 m over it */
+const BLOW = 'chop';
+const LANDS_WITHIN = 0.3;
+/** the canary's hold of the blow: its action's share kept under this, at the top of the raise */
+const HELD_AT = 0.85;
+/** his blow pictured as its action passes this share (the top of the raise) and this many frames after it ends */
+const RAISED_AT = 0.86;
+const LANDED_AFTER = 2;
 
 /** One point's place over the last three frames, its jerks, the worst and where, and each, as words. */
 interface Followed {
@@ -234,10 +248,16 @@ export async function hallMoves(lab: Lab, options: HallOptions): Promise<Report>
   const model = hero.player.model;
   // (each frame's action as the model is given it, for the frames listed)
   let acting = 'no action';
+  let held = false;
   const animate = model.animate;
   model.animate = (state) => {
     acting = state.action ? `${state.action.name} ${state.action.t.toFixed(2)}` : 'no action';
-    animate(state);
+    held = !!options.canary && state.action?.name === BLOW && state.action.t > HELD_AT;
+    if (!held || !state.action) {
+      animate(state);
+      return;
+    }
+    animate({ ...state, action: { ...state.action, t: HELD_AT } });
   };
   const points: Followed[] = POINTS.map((name) => ({
     name, places: [0, 1, 2].map(() => new THREE.Vector3()), frames: 0, worst: 0, worstAt: '', listed: [],
@@ -246,16 +266,38 @@ export async function hallMoves(lab: Lab, options: HallOptions): Promise<Report>
   let frame = 0;
   let shownAt = -1;
   let canaryJerk: number | null = null;
+  // (the blow's tip at its lowest over his feet, m: null while no blow is brought down; and the frames since the
+  // canary last held it, whose jerks are its own)
+  let lowest: number | null = null;
+  let sinceHeld = Infinity;
   const [traceFrom, traceTo] = options.trace ?? [1, 0];
   const trace: string[] = [];
-  await lab.step(FRAMES, undefined, () => {
+  // (the moments of his blow to picture: the top of its raise, and its landing once its action has ended)
+  const moments: Pictured[] = [];
+  let due: string | null = null;
+  let raised = false;
+  let endedAt = -1;
+  const onFrame = (): void => {
     if (shownAt < 0 && hero.cast) shownAt = frame;
     const planted = !!options.canary && frame === CANARY_FRAME;
     if (planted) model.joints!.shoulderR.rotateX(CANARY_TURN);
     model.root.updateMatrixWorld(true);
     const since = shownAt < 0 ? 'before his showcase' : `${((frame - shownAt) / 60).toFixed(2)} s into his showcase`;
     // (the canary's frame and the two after it are its own: its point's move there is the canary's)
-    const judged = frame >= 3 && !(options.canary && frame >= CANARY_FRAME && frame <= CANARY_FRAME + 2);
+    sinceHeld = held ? 0 : sinceHeld + 1;
+    const plantedNear = options.canary && frame >= CANARY_FRAME && frame <= CANARY_FRAME + 2;
+    const judged = frame >= 3 && !plantedNear && sinceHeld > 2;
+    if (acting.startsWith(`${BLOW} `)) {
+      const tipY = placeOf(model, 'tip', now).y;
+      lowest = lowest === null ? tipY : Math.min(lowest, tipY);
+      if (!raised && Number(acting.slice(BLOW.length + 1)) >= RAISED_AT) {
+        raised = true;
+        due = 'the top of his raise';
+      }
+    } else if (raised && endedAt < 0) {
+      endedAt = frame;
+    }
+    if (endedAt >= 0 && frame === endedAt + LANDED_AFTER) due = 'his blow landed';
     const tip = points.find((point) => point.name === 'tip')!;
     const tipMoves = movesOf(tip, placeOf(model, 'tip', now));
     const flying = tipMoves.some((moved) => moved >= FLYING);
@@ -273,13 +315,40 @@ export async function hallMoves(lab: Lab, options: HallOptions): Promise<Report>
     if (frame >= traceFrom && frame <= traceTo) trace.push(`  frame ${frame} (${since}, ${acting}): ${parts.join('; ')}`);
     if (planted) model.joints!.shoulderR.rotateX(-CANARY_TURN);
     frame++;
-  });
+  };
+  for (let step = 0; step < FRAMES; step++) {
+    await lab.step(1, undefined, onFrame);
+    if (!due) continue;
+    const notes = [`${hero.player.gear.weapon ?? 'no weapon'}, ${acting}`];
+    if (options.pictures !== false) moments.push(await lab.screen(due, notes));
+    due = null;
+  }
   model.animate = animate;
   if (shownAt < 0) throw new Error('lab: hall: the hero never showed off his skill');
   const report = reportOf(hero.id, hero.player.gear.weapon, shownAt, points, canaryJerk);
+  const landing = landingReport(lowest, !!options.canary);
+  report.text += landing.text;
+  report.problems.push(...landing.problems);
   if (trace.length) report.text += `\ntraced, frames ${traceFrom} to ${traceTo}:\n${trace.join('\n')}`;
   const leaving = leavingReport(await leaveMidShowcase(lab, !!options.canary));
-  return { text: `${report.text}\n${leaving.text}`, problems: [...report.problems, ...leaving.problems] };
+  const problems = [...report.problems, ...leaving.problems];
+  return { text: `${report.text}\n${leaving.text}`, problems, moments };
+}
+
+/** The line and problems of his blow's landing: its tip's lowest over his feet (`lowest`, null: no blow brought down,
+ *  nothing to judge), and the canary's (the blow held at the top of its raise) caught if it never landed. */
+function landingReport(lowest: number | null, canary: boolean): Report {
+  if (lowest === null) return { text: '', problems: [] };
+  const lands = lowest <= LANDS_WITHIN;
+  const line = `his blow's tip at its lowest ${cm(lowest)} cm over the floor under him (within ${cm(LANDS_WITHIN)})`;
+  if (canary) {
+    const caught = !lands;
+    const problems = caught ? [] : ['hall: the canary (the blow held at the top of its raise) was missed'];
+    const verdict = `canary, the blow held at the top of its raise: ${caught ? 'caught' : 'MISSED'}`;
+    return { text: `\n  ${line}\n${verdict}`, problems };
+  }
+  const problems = lands ? [] : [`hall: his blow never landed, its tip ${cm(lowest)} cm over the floor at its lowest`];
+  return { text: `\n  ${line}`, problems };
 }
 
 /** The lines and problems of leaving the hall mid-showcase. */

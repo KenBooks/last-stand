@@ -36,7 +36,9 @@ export function resolveProps(pos: { x: number; z: number }, radius: number, rela
  *  pillars in the center area"). */
 export function propTopAt(x: number, z: number): number {
   let top = -Infinity;
-  if (!G.arena) return top;
+  // (the hall of heroes' stage stands no props: its obstacles stay the village's, and a hall hero's two-handed Power
+  // Strike met a village prop where the stage is bare, held overhead and snapped down after, #738)
+  if (!G.arena || G.arena.hallShown) return top;
   for (const o of G.arena.obstacles) {
     if (o.prop?.broken) continue;
     const dx = x - o.x, dz = z - o.z;
@@ -56,7 +58,8 @@ export function propTopAt(x: number, z: number): number {
  *  strike is not hitting obstacles if they are walls of the arena, it should stop on them same like destructible
  *  props"). */
 export function wallTopAt(x: number, z: number): number {
-  if (!G.arena) return -Infinity;
+  // (the hall's own walls stand out of a blow's reach; the village's would be met where the stage is: `propTopAt`)
+  if (!G.arena || G.arena.hallShown) return -Infinity;
   const wall = G.arena.wall;
   if (Math.hypot(x, z) < wall.near) return -Infinity;
   return topOf(wallTile(wall, Math.floor(x / WALL_TILE), Math.floor(z / WALL_TILE)), x, z);
