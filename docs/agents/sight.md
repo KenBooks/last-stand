@@ -87,6 +87,9 @@ over him, a roof in three layers, and a doorway into a room he sees a sector of.
    `lab houserule` pictures the front wall alone in the six views that stand him there (14 to 20% of it left).
    From in the hall by the door it opens whole the same, by how near the door he stands (`nearDoorAt`; from play,
    "same problem but the other way around"): pictured, no view of the check reads it from inside.
+   More of it is left there, about two fifths (`DOOR_FROM_INSIDE` in `engine/seeKinds.ts`), and the engine lights
+   that ghost by its own colour (`GHOST_LIT`): at a sixth of its unlit inner face nothing of the wall showed but
+   the door frame's edges ("Make it stronger", "geometry needs to be possible to tell").
 
 Held by `npm run lab -- houserule` (its four `the portico case` views, with the terrace, the stair, the hall's
 inside and the cottages) and by `lab rustcheck`, which runs the four with a canary; and in the engine's own lab,

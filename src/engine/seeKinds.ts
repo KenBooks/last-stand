@@ -17,6 +17,10 @@ const SEE_KINDS_MOST = 32, SEE_KIND_FLOATS = 20, SEE_FLOOR_CLEAR = 0.12;
  *  the page's own: all of it is thinned to nothing, and it's in the frame for its shadow alone. */
 /** how long a room's roof and walls take to open as he walks in, and to close as he leaves (s) */
 const INSIDE_FADE = 0.4;
+/** the share of the opening a wall seen from in its room by its door takes: about two fifths of it left, over twice what's
+ *  left from outside. Its inner face is dark, and at a sixth nothing of it showed but the door frame's edges (from
+ *  play, "Make it stronger") */
+const DOOR_FROM_INSIDE = 0.6;
 export const SEE_FLAGS = { solid: 16, thinned: 64, oneLayer: 256, cover: 512, underLayers: 1024, gone: 1 << 20 } as const;
 
 /** A material as the kinds read it: three's, with the game's see-through on it. */
@@ -134,7 +138,7 @@ export class SeeKinds {
    *  (`seesInAt`), or `inside` its room (0 to 1), seeing out (`nearDoorAt`). */
   private seesIn(jambs: THREE.Vector4, inside: number): number {
     const x = (jambs.x + jambs.z) / 2;
-    return Math.max(seesInAt(x, jambs.y), inside * nearDoorAt(x, jambs.y));
+    return Math.max(seesInAt(x, jambs.y), inside * nearDoorAt(x, jambs.y) * DOOR_FROM_INSIDE);
   }
 
   /** when the kinds were last written (the page's ms), and how far he stands in each kind's room, 0 to 1 */
