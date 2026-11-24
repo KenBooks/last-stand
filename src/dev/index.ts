@@ -107,7 +107,7 @@ export function initDev(hooks: DevHooks): DevApi {
         G.player.energy = G.player.stats.maxEnergy;
         G.player.cooldowns.clear();
       }
-      agentFrame();
+      agentFrame(time.frozen ? 0 : dt * time.scale);
       applyFreeCam(dt);
       // Labels must project through the flown camera even while simulation is frozen.
       if (freeCamOn()) updateFloaters(0);

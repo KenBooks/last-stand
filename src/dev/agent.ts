@@ -12,6 +12,7 @@ import { session } from '../net/session';
 import { serverHttp, serverUp } from '../net/transport';
 import { signedIn } from '../loot/cloud';
 import { initSteps, runStep, stepsFrame, type AgentStep, type StepHooks } from './agentSteps';
+import { madeCount, makesFrame, unmake } from './agentMakes';
 
 type Phase = 'off' | 'opening' | 'invited' | 'asking' | 'connected';
 const link = {
@@ -36,7 +37,7 @@ const ENDS: Record<string, string> = {
   refused: 'The agent was refused.',
   cancelled: 'The invitation was withdrawn.',
 };
-const WHAT_IT_MAY = 'It can look at the game, take pictures of it, set what this panel sets and run code in this page.';
+const WHAT_IT_MAY = 'It can look at the game, take pictures of it, set what this panel sets, build things into the scene and run code in this page.';
 const CLOUD = 'You are signed in to cloud saves here: code run in this page can read that sign-in and this site\'s saves.';
 const inCoop = (): boolean => session.status !== 'off';
 /** the command the owner pastes to his session (the relay named where it isn't the build's own) */
@@ -126,9 +127,10 @@ function accept(): void {
 export const agentConnected = (): boolean => link.phase === 'connected';
 
 /** Once a frame (index.ts): co-op opened sends the agent away and withdraws an invitation; an unjoined code's time
- *  runs down. */
-export function agentFrame(): void {
+ *  runs down; what an agent made is shown in its place and moved by the game's step `dt` (s). */
+export function agentFrame(dt: number): void {
   stepsFrame();
+  makesFrame(dt);
   if (link.phase !== 'off' && inCoop()) end(ENDS.coop);
   render();
 }
@@ -137,7 +139,7 @@ export function agentFrame(): void {
 function render(): void {
   if (!section) return;
   const left = link.phase === 'invited' ? Math.max(0, Math.ceil((link.until - Date.now()) / 60_000)) : 0;
-  const state = [link.phase, link.code, link.note, inCoop(), left, signedIn()].join('|');
+  const state = [link.phase, link.code, link.note, inCoop(), left, signedIn(), madeCount()].join('|');
   if (state === shown) return;
   shown = state;
   const off = link.phase === 'off';
@@ -154,6 +156,9 @@ function render(): void {
     connected: 'An agent is connected.',
   };
   section.querySelector('.dv-agent-note')!.textContent = notes[link.phase];
+  const count = madeCount();
+  section.querySelector<HTMLElement>('.dv-agent-made')!.classList.toggle('hidden', count === 0);
+  section.querySelector('.dv-agent-made span')!.textContent = `Made by an agent: ${count}`;
   ask.classList.toggle('hidden', link.phase !== 'asking');
   ask.querySelector('.da-cloud')!.textContent = signedIn() ? CLOUD : '';
   badge.classList.toggle('hidden', link.phase !== 'connected');
@@ -168,6 +173,7 @@ function onClick(event: MouseEvent): void {
   else if (act === 'accept') accept();
   else if (act === 'refuse') end(ENDS.refused);
   else if (act === 'kick') end(ENDS.kicked);
+  else if (act === 'unmake') { unmake(); render(); }
 }
 
 /** The panel's Agent section, the question and the badge built (the panel is: `initPanel` first). */
@@ -180,7 +186,8 @@ export function initAgent(hooks: StepHooks): void {
   section.innerHTML = `<summary>Agent</summary>
     <div class="dv-row"><button data-agent="invite" title="Lets your coding session look at this game and run code in it">Invite agent</button><button data-agent="cancel" class="hidden">Withdraw</button></div>
     <div class="dv-row dv-agent-code hidden"><input data-agent="command" readonly aria-label="The command to paste to your coding session"><button data-agent="copy">Copy</button></div>
-    <div class="dv-note dv-agent-note"></div>`;
+    <div class="dv-note dv-agent-note"></div>
+    <div class="dv-row dv-agent-made hidden"><span></span><button data-agent="unmake" title="Takes what an agent built into the scene out of it">Remove</button></div>`;
   const panel = document.getElementById('dev-panel')!;
   panel.insertBefore(section, panel.querySelector('.dv-scroll-cue'));
 

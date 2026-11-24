@@ -9,11 +9,14 @@ export default {
     + 'and `join look` (the hero, the camera, what\'s under the crosshair, the settings and the panel\'s controls, '
     + 'the frame\'s parts), `join picture` (the player\'s view, or from a camera placed with `--at`, in '
     + '`out/join`), `join set name=value...` (what the developer panel sets; bare, its controls), `join eval '
-    + '<code>` (run in the game\'s page, `G`, `THREE` and `dev` in scope), `join status` and `join leave` go through '
+    + '<code>` (run in the game\'s page, `G`, `THREE` and `dev` in scope), `join make <name> --file thing.ts` (a '
+    + 'module built into the scene as he watches, and built again in its place each time it is sent; `join makes`, '
+    + '`join unmake`), `join status` and `join leave` go through '
     + 'it (never production: the relay opens agent rooms for previews and dev builds alone)',
   help: 'the game the owner is playing on a PR preview or a dev build, joined as he invited it (F8, Invite agent): '
     + 'join <code> holds the link (a background task) until the game ends it; then join look, join picture [--at '
-    + 'x,y,z --to x,y,z], join set name=value..., join eval <code>, join status, join leave run on that live game '
+    + 'x,y,z --to x,y,z], join set name=value..., join eval <code>, join make <name> --file thing.ts [--resend], '
+    + 'join makes, join unmake [name], join status, join leave run on that live game '
     + '(pictures in tools/lab/out/join; tools/lab/commands/join.md)',
   argument: 'code or step',
   options: {
@@ -22,7 +25,11 @@ export default {
       usage: 'url',
       help: 'join <code>: the relay the game invited through, where the invitation names one (wss://ls.wellscoped.dev)',
     },
-    at: { kind: 'list', usage: 'x,y,z', help: 'picture: taken from a camera placed here (m), then put back' },
+    at: {
+      kind: 'list',
+      usage: 'x,y,z',
+      help: 'picture: taken from a camera placed here (m), then put back; make: where the thing stands',
+    },
     to: { kind: 'list', usage: 'x,y,z', help: 'picture: the place the camera at --at looks at' },
     yaw: { kind: 'number', usage: 'rad', help: 'picture: the camera at --at turned this far round, without --to' },
     pitch: { kind: 'number', usage: 'rad', help: 'picture: the camera at --at looking this far up, without --to' },
@@ -32,7 +39,13 @@ export default {
     },
     side: { kind: 'number', usage: 'px', help: 'picture: its longest side (1280; the frame\'s own if smaller)' },
     png: { kind: 'switch', help: 'picture: a PNG, exact but several times a JPEG\'s size' },
-    file: { kind: 'text', usage: 'path', help: 'eval: the code read from this file (code of several lines)' },
+    file: {
+      kind: 'text',
+      usage: 'path',
+      help: 'eval: the code read from this file (code of several lines); make: the module of the thing',
+    },
+    turn: { kind: 'number', usage: 'rad', help: 'make: the thing turned this far round' },
+    resend: { kind: 'switch', help: 'make: sent again each time its file is saved, until stopped' },
     timeout: { kind: 'number', usage: 's', help: 'how long a step waits for the game\'s answer (30)' },
   },
   async run(options) {

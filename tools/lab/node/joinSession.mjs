@@ -9,13 +9,14 @@ import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { AGENT_SERVER, endedText, joinGame, STEP_MS } from './agentLink.mjs';
 import { labError } from './errors.mjs';
+import { madeLine, makeArgs } from './makeCode.mjs';
 import { OUT } from './paths.mjs';
 import { isAlive, stopWhenAsked } from './running.mjs';
 
 const DIR = join(OUT, 'join');
 const NOTE = join(DIR, 'session.json');
 /** the steps a held game takes; anything else after `join` is a code */
-export const STEPS = ['look', 'picture', 'set', 'eval', 'status', 'leave'];
+export const STEPS = ['look', 'picture', 'set', 'eval', 'make', 'makes', 'unmake', 'status', 'leave'];
 
 /** The held session's note, if its process is alive. */
 function heldSession() {
@@ -145,8 +146,10 @@ export function pictureArgs(options) {
 }
 
 /** A step's arguments from the command line's words and options. */
-function argsOf(step, words, options) {
+async function argsOf(step, words, options) {
   if (step === 'picture') return pictureArgs(options);
+  if (step === 'make') return makeArgs(words[0], options.file, options);
+  if (step === 'unmake') return words[0] ? { name: words[0] } : {};
   if (step === 'set') return { values: valuesOf(words) };
   if (step === 'eval') {
     // (code of several lines comes from a file: through `npm run` on Windows an argument ends at its first newline,
@@ -179,6 +182,8 @@ function savePicture(result) {
 /** A step's result as the command prints it. */
 function textOf(step, args, result) {
   if (step === 'picture') return savePicture(result);
+  if (step === 'make') return `${result.replaced ? 'made again' : 'made'}: ${madeLine(result)}`;
+  if (step === 'makes' || step === 'unmake') return result.length ? result.map(madeLine).join('\n') : 'nothing is made';
   if (step === 'set') {
     // (with nothing set, every control; else those named)
     const named = Object.keys(args.values);
@@ -192,7 +197,7 @@ function textOf(step, args, result) {
 async function send(step, words, options) {
   const held = heldSession();
   if (!held) throw labError('no game is joined: npm run lab -- join <code> (the code from F8, Invite agent)');
-  const args = argsOf(step, words, options);
+  const args = await argsOf(step, words, options);
   const ms = options.timeout ? options.timeout * 1000 : STEP_MS;
   const answer = await fetch(`http://127.0.0.1:${held.port}/`, {
     method: 'POST',
@@ -205,9 +210,60 @@ async function send(step, words, options) {
   return 0;
 }
 
+/** how often a file sent on each save is looked at (ms) */
+const SAVED_MS = 300;
+
+/**
+ * `make` sent now and again each time its file is saved, until the game's link ends or the command is stopped: the
+ * thing changes in the game as its file does. A file that doesn't parse, or a build that throws in the game, is said
+ * and waited out (the thing as last built stands). Returns the exit code once the link is gone.
+ */
+async function sendOnSave(words, options) {
+  /** the file's text as last sent: a save is a text that differs (one that lands while a send is out, too) */
+  let sent = null;
+  const sendIfSaved = async () => {
+    let text;
+    try {
+      text = readFileSync(options.file, 'utf8');
+    } catch {
+      // (an editor's save may take the file away for a moment)
+      return;
+    }
+    if (text === sent) return;
+    sent = text;
+    try {
+      await send('make', words, options);
+    } catch (error) {
+      console.log(error.message);
+    }
+  };
+  await sendIfSaved();
+  console.log(`join make: sending ${options.file} again on each save (npm run lab -- stop ends it)`);
+  return new Promise((resolve) => {
+    let busy = false;
+    const end = (code) => {
+      clearInterval(looking);
+      resolve(code);
+    };
+    stopWhenAsked('join-make', () => end(0));
+    const looking = setInterval(async () => {
+      if (busy) return;
+      if (!heldSession()) {
+        console.log('join make: the link to the game is gone');
+        end(1);
+        return;
+      }
+      busy = true;
+      await sendIfSaved();
+      busy = false;
+    }, SAVED_MS);
+  });
+}
+
 /** Runs `lab join`: a step for the held game, or a code to join one with. Returns the exit code. */
 export function runJoin(options) {
   const [first, ...words] = options._;
+  if (first === 'make' && options.resend) return sendOnSave(words, options);
   if (STEPS.includes(first)) return send(first, words, options);
   if (words.length) throw labError(`join takes a code, or one of ${STEPS.join(', ')}`);
   return hold(first, options.server ?? AGENT_SERVER);
