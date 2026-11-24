@@ -1,18 +1,18 @@
-// `lab compiles`: whether the boot's warm-up compiled what a fight draws (tools/lab). The game compiles every program
-// at boot (`game/warmup.ts`, `core/shaders.ts`), and one compiled mid-fight is a hitch of 10 to 30 ms, longer on a
-// phone. In each biome the hero stands in the view asked for, and a prop of every kind the biome has (stone, wood,
-// glowcap, embers) is broken in turn, its rubble, debris and smoke drawn as they fly and settle. Every program compiled
-// meanwhile is a problem, said as the game's performance report says it (`lateCompiles`: what drew it and how its
-// program differs from the nearest one compiled before). (#243's phone compiled a rubble program mid-fight: the empty
-// pools were hidden after the first of the boot's warm-ups, so the lobby's warm-up in each biome, whose light makes
-// programs of its own, drew none of them.) Each round counts the point lights each pass lights its materials with (the
-// scene's, and through the eyes the arms', drawn by a camera of their own) against the boot's: a program is compiled
-// for a count, and a pass drawn with another compiles all it draws again (#268: a hero built afresh, as a class switch
-// builds him, had his light missing from the arms' pass). The first biome's wave is fought again by such a hero.
-// In each biome a Cinder Brute and a Barkhide Hulk throw at him from afar, every piece of their throws drawn (the
-// chunk, its ring, its burst and pool, the vine and its coils: entities/throws.ts), which no first wave brings.
-// `--canary` draws a material of a kind nothing else is before the hero, which must come out as compiled, and puts a
-// light in the scene that the count must find.
+// `lab compiles`: whether the boot's warm-up asked the engine for every pipeline a fight draws (tools/lab). The game
+// hands the engine everything it will draw at boot (`game/warmup.ts`, `AHEAD.prepare`), whose pipelines are compiled
+// aside and waited for under the loading screens (`engine/pipelinesAside.ts`); one first asked for mid-fight leaves
+// what it draws out of the frame till it's ready, and keeps the GPU's process busy compiling it (from play: "first
+// RMB cast in fight lags 2-3sec"). In each biome the hero stands in the view asked for, and a prop of every kind the
+// biome has (stone, wood, glowcap, embers) is broken in turn, its rubble, debris and smoke drawn as they fly and
+// settle. Every pipeline asked for meanwhile is a problem, named as the engine describes it (its shaders' entries,
+// its targets, depth and samples). (#243's phone compiled a rubble program mid-fight under three: the empty pools were
+// hidden after the first of the boot's warm-ups, so the lobby's warm-up in each biome drew none of them.) The first
+// biome's wave is fought again by a hero built afresh, as a class switch builds him. In each biome a Cinder Brute and
+// a Barkhide Hulk throw at him from afar, every piece of their throws drawn (the chunk, its ring, its burst and pool,
+// the vine and its coils: entities/throws.ts), which no first wave brings. `--canary` draws a box of a blending, side
+// and depth writing nothing else draws together, before the hero, which must come out as asking for a pipeline.
+// (Under three this counted three's programs, and the point lights each pass lit with, a program compiled for each
+// count: the engine lights by a pool of uniforms, its pipelines alike whatever the lights.)
 import { askForHeroes } from './uiHeroes';
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
@@ -21,15 +21,13 @@ import type { ViewMode } from '../../../src/core/renderer';
 import type { WeaponStyle } from '../../../src/types';
 import type { Prop } from '../../../src/world/destructible';
 import { G } from '../../../src/state';
-import { armsCamera } from '../../../src/core/renderer';
-import { lateCompiles, programsCompiledInGame } from '../../../src/core/shaders';
+import { PIPELINES_ASKED } from '../../../src/engine/pipelinesAside';
 import { breakProp, hurtProp } from '../../../src/world/destructible';
 import type { Enemy } from '../../../src/entities/enemy';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { holdFor, pressing, type BoundSkill } from './cast';
 import { standIn } from './light';
 import { setOffWave } from './spawnWaves';
-import { lookOf, placeOf } from './draws';
 
 export interface CompilesOptions {
   biomes: BiomeId[];
@@ -62,89 +60,12 @@ const THROWN_PIECES = ['lava chunk', 'vine', 'vine coils'];
 const WAVE_SEED = 1;
 const WAVE_MOST = 40;
 
-/** A pass's point lights, counted as three counts them for its programs. */
-interface PassLights {
-  pass: string;
-  count: number;
-}
-
-/**
- * The point lights a pass drawn through `camera` lights its materials with, as three counts them: each in a part of
- * the scene that's shown, on a layer the camera sees (whatever the layers of what holds it).
- */
-function pointLightsSeen(camera: THREE.Camera): number {
-  let count = 0;
-  const visit = (object: THREE.Object3D) => {
-    if (!object.visible) return;
-    if ((object as THREE.PointLight).isPointLight && object.layers.test(camera.layers)) count++;
-    for (const child of object.children) visit(child);
-  };
-  visit(G.scene);
-  return count;
-}
-
-/** The point lights each pass sees now: the scene's, and through the eyes the arms', where their own camera draws
- *  them. */
-function passLights(): PassLights[] {
-  const passes = [{ pass: 'the scene', count: pointLightsSeen(G.camera) }];
-  const arms = armsCamera();
-  if (arms !== G.camera) passes.push({ pass: 'the arms', count: pointLightsSeen(arms) });
-  return passes;
-}
-
-/** The passes' lights as a line says them. */
-function lightsText(passes: PassLights[]): string {
-  return passes.map(({ pass, count }) => `${pass} ${count}`).join(', ');
-}
-
-/** A problem for each pass of `passes` lit by another count of point lights than the boot's `booted`. */
-function lightProblems(where: string, passes: PassLights[], booted: number): string[] {
-  return passes.filter(({ count }) => count !== booted).map(({ pass, count }) => `${where}: ${pass}' pass saw `
-    + `${count} point lights, the boot ${booted}: every material it draws compiles again for that count`);
-}
-
-/** Each draw's pass, as the lines say it. */
-function passOf(scene: THREE.Object3D | null): string {
-  if (scene === null) return 'the shadow map';
-  return scene === G.scene ? 'the scene' : 'a pass after it';
-}
-
-/**
- * Watches the renderer's draws from now on for the first draw of each program not compiled before (the game's
- * report can't say what drew a shadow's program: three keeps its shadow materials to itself); returns what stops it,
- * which gives the draws found: what drew each, with its own material, and in which pass.
- */
-function watchFirstDraws(): () => string[] {
-  const gl = G.renderer;
-  const own = gl.renderBufferDirect.bind(gl);
-  const known = new Set<unknown>(gl.info.programs ?? []);
-  const firsts: string[] = [];
-  gl.renderBufferDirect = (camera, scene, geometry, material, object, group) => {
-    own(camera, scene, geometry, material, object, group);
-    const program = (gl.properties.get(material) as { currentProgram?: unknown }).currentProgram;
-    if (!program || known.has(program)) return;
-    known.add(program);
-    const drawn = (object as THREE.Mesh).material;
-    const its = Array.isArray(drawn) ? drawn[0] : drawn;
-    const ownLook = its && its !== material ? `, its own ${lookOf(its)}` : '';
-    firsts.push(`first drawn by ${object.type} in ${placeOf(object)} (${lookOf(material)}${ownLook}) in `
-      + `${passOf(scene)}`);
-  };
-  return () => {
-    gl.renderBufferDirect = own;
-    return firsts;
-  };
-}
-
-/** The programs compiled from now on: how many, each as the game's report says it, and the draws that first used
- *  them. */
+/** The engine's scene pipelines first asked for from now on: how many, and each as the engine describes it. */
 function compilesFromNow(): () => { count: number; lines: string[] } {
-  const compiled = programsCompiledInGame();
-  const described = lateCompiles.length;
-  const stopWatching = watchFirstDraws();
+  const from = PIPELINES_ASKED.length;
   return () => {
-    const firsts = stopWatching();
-    return { count: programsCompiledInGame() - compiled, lines: [...lateCompiles.slice(described), ...firsts] };
+    const asked = PIPELINES_ASKED.slice(from);
+    return { count: asked.length, lines: asked.map((pipeline) => `a ${pipeline.kind} pipeline: ${pipeline.what}`) };
   };
 }
 
@@ -176,9 +97,9 @@ async function breakEachKind(lab: Lab, biome: BiomeId, { view, gear, weapon }: F
   const { count, lines } = since();
   G.arena.restoreProps();
   const kinds = props.map((prop) => prop.kind).join(', ');
-  const text = [`${biome}, the ${view} view: a prop of each kind broken (${kinds}), ${count} programs compiled`,
+  const text = [`${biome}, the ${view} view: a prop of each kind broken (${kinds}), ${count} pipelines first asked for`,
     ...lines.map((line) => `  ${line}`)];
-  const problems = count > 0 ? [`${biome}: ${count} programs compiled as its props broke`] : [];
+  const problems = count > 0 ? [`${biome}: ${count} pipelines first asked for as its props broke`] : [];
   if (!props.length) problems.push(`${biome}: no prop to break`);
   return { text: text.join('\n'), problems };
 }
@@ -204,8 +125,6 @@ interface Fight {
   gear?: WeaponStyle;
   weapon?: string;
   fresh: boolean;
-  /** the point lights the boot's passes saw */
-  booted: number;
 }
 
 /**
@@ -215,7 +134,7 @@ interface Fight {
  * as a fight kills them, which no other check lets happen.
  */
 async function fightFirstWave(lab: Lab, biome: BiomeId, fight: Fight): Promise<Report> {
-  const { view, gear, weapon, fresh, booted } = fight;
+  const { view, gear, weapon, fresh } = fight;
   if (G.arena.biome !== biome) G.arena.setBiome(biome);
   G.arena.restoreProps();
   const since = compilesFromNow();
@@ -250,16 +169,14 @@ async function fightFirstWave(lab: Lab, biome: BiomeId, fight: Fight): Promise<R
     }
   }
   const { count, lines } = since();
-  const passes = passLights();
   const killed = [...spawned].filter((foe) => !foe.alive).length;
   const end = G.run?.phase === 'cleared' ? 'cleared' : `not cleared, ${WAVE_MOST} s up`;
   const by = fresh ? ' by a hero built afresh (a class switch\'s)' : '';
   const text = [`${biome}, the ${view} view: the first wave fought${by} for ${(frames * frameTime).toFixed(1)} s `
-    + `(${end}), ${spawned.size} foes came, ${killed} killed, ${count} programs compiled; point lights: `
-    + `${lightsText(passes)}`, ...lines.map((line) => `  ${line}`)];
+    + `(${end}), ${spawned.size} foes came, ${killed} killed, ${count} pipelines first asked for`,
+  ...lines.map((line) => `  ${line}`)];
   const where = `${biome}${by}`;
-  const problems = count > 0 ? [`${where}: ${count} programs compiled as its first wave was fought`] : [];
-  problems.push(...lightProblems(where, passes, booted));
+  const problems = count > 0 ? [`${where}: ${count} pipelines first asked for as its first wave was fought`] : [];
   if (!killed) problems.push(`${biome}: the first wave's foes were never killed`);
   return { text: text.join('\n'), problems };
 }
@@ -290,30 +207,22 @@ async function throwsDrawn(lab: Lab, biome: BiomeId, { view, gear, weapon }: Fig
   const { count, lines } = since();
   const missing = THROWN_PIECES.filter((piece) => !drawn.has(piece));
   const text = [`${biome}, the ${view} view: a Brute and a Hulk threw at the hero for ${frames} frames (drew `
-    + `${[...drawn].join(', ') || 'nothing of their throws'}), ${count} programs compiled`,
+    + `${[...drawn].join(', ') || 'nothing of their throws'}), ${count} pipelines first asked for`,
   `  ${acted.join('; ')}`, ...lines.map((line) => `  ${line}`)];
-  const problems = count > 0 ? [`${biome}: ${count} programs compiled as the foes threw`] : [];
+  const problems = count > 0 ? [`${biome}: ${count} pipelines first asked for as the foes threw`] : [];
   if (missing.length) problems.push(`${biome}: the throws never drew ${missing.join(', ')}`);
   return { text: text.join('\n'), problems };
 }
 
-/** The lights' canary: a point light put in the scene (dark) and taken out again before a frame is drawn, a problem
- *  unless the count finds the scene's pass lit by one more than the boot's. */
-function lightsCanary(booted: number): Report {
-  const light = new THREE.PointLight(0xffffff, 0);
-  G.scene.add(light);
-  const passes = passLights();
-  G.scene.remove(light);
-  light.dispose();
-  const caught = lightProblems('the canary', passes, booted).length > 0;
-  const text = `the canary: a point light put in the scene, ${lightsText(passes)} (${caught ? 'caught' : 'missed'})`;
-  return { text, problems: caught ? [] : ['the canary\'s point light went uncounted'] };
-}
-
-/** The canary: a box of a material nothing else draws (sheen and iridescence) before the hero, a problem unless its
- *  program comes out as compiled. */
+/** The canary: a box before the hero drawn added to what's behind it, its back faces alone, writing its depth (a
+ *  blending, side and depth no other material has together), a problem unless it asks the engine for a pipeline. */
 async function canaryRound(lab: Lab): Promise<Report> {
-  const material = new THREE.MeshPhysicalMaterial({ sheen: 1, iridescence: 1, color: 0xff00ff });
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xff00ff,
+    blending: THREE.AdditiveBlending,
+    side: THREE.BackSide,
+    depthWrite: true,
+  });
   const box = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), material);
   const way = new THREE.Vector3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing));
   box.position.copy(G.player.pos).addScaledVector(way, 2).setY(0.5);
@@ -326,9 +235,11 @@ async function canaryRound(lab: Lab): Promise<Report> {
     box.geometry.dispose();
     material.dispose();
   }
-  const { count } = since();
-  const text = `the canary: a material of its own drawn, ${count} programs compiled`;
-  return { text, problems: count > 0 ? [] : ['the canary\'s material of its own came out as compiling nothing'] };
+  const { count, lines } = since();
+  const text = [`the canary: a box of a blending of its own drawn, ${count} pipelines first asked for`,
+    ...lines.map((line) => `  ${line}`)];
+  const problems = count > 0 ? [] : ['the canary\'s box of a blending of its own asked for no pipeline'];
+  return { text: text.join('\n'), problems };
 }
 
 /** Frames until `done`, drawn as the game draws them; an error saying `what` never came if it took longer than
@@ -360,7 +271,7 @@ async function switchClass(lab: Lab, id: string): Promise<Report> {
   if (await askForHeroes(lab)) {
     const screen = document.getElementById('heroes')!;
     await stepUntil(lab, () => !screen.classList.contains('hidden'), 'the hero selection screen');
-    // (its heroes warm by then: anything compiled from here is the screen's own, late)
+    // (its heroes warm by then: any pipeline asked for from here is the screen's own, late)
     const since = compilesFromNow();
     for (const name of screen.querySelectorAll<HTMLElement>('.hs-tabs button')) {
       await lab.clickOn(name);
@@ -383,23 +294,21 @@ async function switchClass(lab: Lab, id: string): Promise<Report> {
   const how = hall ? 'on the hero selection screen, every hero shown' : 'in the lobby';
   const text = [`switched from the ${from} to the ${id} ${how} (${waited.toFixed(1)} s)`];
   if (hall) {
-    text.push(`  the hero selection screen: ${hall.count} programs compiled`);
+    text.push(`  the hero selection screen: ${hall.count} pipelines first asked for`);
     text.push(...hall.lines.map((line) => `    ${line}`));
   }
-  const problems = hall?.count ? [`the hero selection screen compiled ${hall.count} programs`] : [];
+  const problems = hall?.count ? [`the hero selection screen asked for ${hall.count} pipelines`] : [];
   return { text: text.join('\n'), problems };
 }
 
 export async function compiles(lab: Lab, options: CompilesOptions): Promise<Report> {
   const drawing = lab.drawing;
-  // (drawn: a program compiles as it's first drawn)
+  // (drawn: a pipeline is asked for as a thing is first drawn)
   lab.drawing = true;
   const reports: Report[] = [];
   if (options.switchTo) reports.push(await switchClass(lab, options.switchTo));
-  // (the lights the boot's warm-ups were drawn with, its programs compiled for: the lobby's, as the page booted)
-  const booted = pointLightsSeen(G.camera);
   const { view, gear, weapon } = options;
-  const round = { view, gear, weapon, fresh: false, booted };
+  const round = { view, gear, weapon, fresh: false };
   try {
     for (const biome of options.biomes) {
       reports.push(await breakEachKind(lab, biome, round));
@@ -409,7 +318,6 @@ export async function compiles(lab: Lab, options: CompilesOptions): Promise<Repo
     reports.push(await fightFirstWave(lab, options.biomes[0], { ...round, fresh: true }));
     if (options.canary) {
       reports.push(await canaryRound(lab));
-      reports.push(lightsCanary(booted));
     }
   } finally {
     lab.drawing = drawing;

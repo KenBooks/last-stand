@@ -1,22 +1,24 @@
-// `lab passes`: what each of the frame's renders takes of the GPU on WebGPU, by three's own timestamps (the renderer
-// is made with `trackTimestamp`): every render call of a frame (the scene's pass, the shadow maps, each pass of the
-// post chain, the canvas's) named by what it draws and the size of what it draws into, its time the mean over the
-// frames. Its canary is a render of its own, the scene drawn once more into a target of the frame's size and samples,
-// which must be found, once a frame, and read at least `CANARY_LEAST`: a render
-// missed, named as another or read 0 fails it. (Not against the scene's pass: on Very low that call writes 1.5
-// timestamps a frame, drawn once a frame by its calls, and the scene drawn alone after the frame read 5.7 ms against
-// its 20 there, the canary's own warm caches.)
-import * as THREE from 'three';
+// `lab passes`: what each of the frame's passes takes of the GPU, as the engine times them within one frame
+// (src/perf/gpuParts.ts, Bulwark's gpu/parts.rs): every pass stamped at its start and its end, and the scene drawn as
+// a pass for each run of its draws of one kind by one shader, so the rows add up to the frame broken down; beside it
+// the frame as it is, by the engine's GPU clock (`timedRenders`). `--features` times each of the lit shading's parts
+// (the lights, the sun's shadow, the fog, the maps...) in the whole frame, each taken out and put back in turns
+// (`costInTurns`: the engine's own switches, `frameParts` in src/perf/sceneParts.ts, no pipeline made anew).
+// Its canary takes the bloom out and reads the frame broken down again: the bloom's passes must fall to under
+// `CANARY_MOST` of what they read, and the frame's passes found again with it. (Under three this read three's
+// timestamps, every render call named by what it drew; the engine replaced three's drawing, and they read nothing.)
 import type { Lab, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { QualityLevel } from '../../../src/data/quality';
 import type { ViewMode } from '../../../src/core/renderer';
+import { render } from '../../../src/core/renderer';
 import * as quality from '../../../src/core/quality';
 import { G } from '../../../src/state';
-import { webgpuSceneTarget } from '../../../src/core/webgpu';
+import { RUST } from '../../../src/engine';
+import { gpuParts, gpuPartsLines, type GpuParts } from '../../../src/perf/gpuParts';
+import { frameParts } from '../../../src/perf/sceneParts';
+import { costInTurns, medianOf, sure, timedRenders, TURNS } from './gpuTurns';
 import { standAt } from './draws';
-import { featureCost, sceneFeatures } from './sceneFeatures';
-import * as perfHud from '../../../src/ui/perfHud';
 
 export interface PassesCommand {
   biome: BiomeId;
@@ -24,7 +26,7 @@ export interface PassesCommand {
   at?: [number, number];
   level?: QualityLevel;
   frames?: number;
-  /** each feature of the lit shading timed in the scene's pass too (`sceneFeatures`) */
+  /** each part of the lit shading timed in the whole frame too, taken out in turns */
   features?: boolean;
   /** the game paused as its pause menu pauses it (`G.paused`: no update, the same scene drawn): a phone's GPU took
    *  11.5 ms a frame paused and 24 in the lobby, the same view and level (traces N5TH-2XC9, R5FJ-9TNN) */
@@ -36,86 +38,61 @@ export interface PassesCommand {
   canary: boolean;
 }
 
-/** the frames timed when the command doesn't say */
+/** the frames the frame as it is is timed over when the command doesn't say */
 const FRAMES = 30;
-/** the least the canary's render may read (ms): the scene at a phone's pixels read 5.7 ms here, at 1080p 0.6 */
-const CANARY_LEAST = 0.1;
-/** the canary's render, named as the list names it */
-const CANARY_NAME = 'canary: the scene again';
+/** the most of what the bloom's passes read that they may read with the bloom taken out (the engine keeps a fifth
+ *  of them: 0.17 ms of 0.78 at 2880 by 1800 at 2) */
+const CANARY_MOST = 0.5;
+/** how the bloom's passes are named among the parts */
+const BLOOM = /bloom/i;
+/** the frame's parts that are the lit shading's own, by their names (`frameParts`) */
+const SHADING = /^the (lit shading|point lights|sun's shadow|lamps' shadows|normal, roughness|fog)/;
 
-/** three's timestamp pool for renders, as far as this reads it */
-interface TimestampPool {
-  timestamps: Map<string, number>;
-  resolveQueriesAsync(): Promise<number | undefined>;
+/** The browser's next frame, by its own clock (the lab's page clock stands still within a frame). */
+function browserFrame(): Promise<void> {
+  return window.__labClock.realFrame();
 }
 
-/** The renderer as this reads it: its render calls counted in the frame, and its timestamp pools. */
-interface Timed {
-  info: { frame: number; render: { frameCalls: number } };
-  backend: { timestampQueryPool: { render: TimestampPool | null; compute: TimestampPool | null } };
-  render(scene: THREE.Object3D, camera: THREE.Camera): void;
-  getRenderTarget(): THREE.RenderTarget | null;
-  setRenderTarget(target: THREE.RenderTarget | null): void;
-  getDrawingBufferSize(target: THREE.Vector2): THREE.Vector2;
+/** What the bloom's passes read in a breakdown (ms). */
+function bloomOf(found: GpuParts): number {
+  return found.parts.filter((part) => BLOOM.test(part.name)).reduce((all, part) => all + part.ms, 0);
 }
 
-/** A render's name: what it draws (a full-screen pass by its material's name, else the scene's) and into what. */
-function renderName(renderer: Timed, scene: THREE.Object3D, camera: THREE.Camera): string {
-  const quad = scene as unknown as { isQuadMesh?: boolean; material?: THREE.Material };
-  const target = renderer.getRenderTarget();
-  const size = target ? `${target.width}x${target.height}` : 'the canvas';
-  if (quad.isQuadMesh) return `a pass: ${quad.material?.name || quad.material?.type || 'unnamed'}, into ${size}`;
-  // (the sun's shadow: three sets its map as the target inside the call, so the target here is the frame's; on Very
-  // low, drawn every other frame, it read as the scene's pass drawn 1.5 times a frame)
-  if ((camera as THREE.OrthographicCamera).isOrthographicCamera) return 'the sun\'s shadow map';
-  const what = (scene as THREE.Scene).isScene ? 'the scene' : scene.type;
-  return `${what}${scene.name ? ` (${scene.name})` : ''}, into ${size}`;
-}
-
-/** A render call's key as three's timestamp ids hold it: its order in its frame and the frame. */
-const callKey = (call: number, frame: number): string => `${call}:${frame}`;
-
-/** Each render call named by its key (`callKey`), and its scene (what `render` was given; nested passes too). */
-function namingRenders(renderer: Timed): { names: Map<string, string>; undo: () => void } {
-  const names = new Map<string, string>();
-  const render = renderer.render;
-  renderer.render = function (scene, camera) {
-    const key = callKey(renderer.info.render.frameCalls + 1, renderer.info.frame);
-    names.set(key, renderName(renderer, scene, camera));
-    return render.call(this, scene, camera);
-  };
-  return { names, undo: () => void (renderer.render = render) };
-}
-
-/** A timestamp id's key (`r:<call>:<context>:f<frame>`, `callKey`), or none for a compute's. */
-function keyOf(uid: string): string | null {
-  const match = /^r:(\d+):\d+:f(\d+)$/.exec(uid);
-  return match ? callKey(Number(match[1]), Number(match[2])) : null;
-}
-
-/** Each feature of the scene's shading as a line: the scene's pass with it and without, and its share. */
-async function featureLines(renderer: Timed, size: THREE.Vector2): Promise<string[]> {
-  const samples = webgpuSceneTarget().samples;
-  const target = new THREE.RenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples });
-  const lines = ['  the scene drawn alone, each feature taken off in turns (medians):'];
+/** The canary: the frame broken down again with the bloom taken out; its line, and a problem unless the bloom's
+ *  passes fell to under `CANARY_MOST` of what they read with it. */
+async function canaryLine(found: GpuParts): Promise<Report> {
+  const withIt = bloomOf(found);
+  const kept = RUST.tune.bloom;
+  RUST.tune.bloom = 0;
+  let without: GpuParts | undefined;
   try {
-    for (const feature of sceneFeatures()) {
-      const cost = await featureCost(renderer, target, feature);
-      const takes = cost.on - cost.off;
-      const share = cost.on > 0 ? Math.round((100 * takes) / cost.on) : 0;
-      const sides = `${cost.on.toFixed(2)} with it, ${cost.off.toFixed(2)} without`;
-      lines.push(`    ${cost.name}: ${takes.toFixed(2)} ms, ${share}% (${sides})`);
-    }
+    without = await gpuParts(render, browserFrame);
   } finally {
-    target.dispose();
+    RUST.tune.bloom = kept;
+  }
+  if (!without) return { text: '  the canary: not timed', problems: ['canary: the frame without bloom not timed'] };
+  const left = bloomOf(without);
+  const read = `${withIt.toFixed(2)} ms with it, ${left.toFixed(2)} without`;
+  const caught = withIt > 0 && left <= CANARY_MOST * withIt;
+  const text = `  the canary: the bloom taken out, its passes ${read}`;
+  return { text, problems: caught ? [] : [`canary: the bloom taken out, its passes read ${read}`] };
+}
+
+/** Each part of the lit shading timed in the whole frame, taken out and put back in turns, as lines. */
+async function featureLines(): Promise<string[]> {
+  const lines = ['  the lit shading\'s parts, each taken out of the whole frame in turns (what it takes, ± how far '
+    + 'it may be off):'];
+  for (const part of frameParts().filter((one) => SHADING.test(one.name))) {
+    try {
+      const cost = await costInTurns(part.change, render, TURNS);
+      if (!cost) continue;
+      const said = sure(cost) ? '' : ', not told apart from nothing';
+      lines.push(`    ${part.name}: ${cost.takes.toFixed(2)} ± ${cost.error.toFixed(2)} ms${said}`);
+    } finally {
+      part.restore?.();
+    }
   }
   return lines;
-}
-
-/** The perf overlay's reads of WebGPU's timestamps held (`holdWebGpuTimes`), where the game has the hold: a commit
- *  from before it runs this module in an A/B too, its overlay reading on (a named import would stop it loading). */
-function holdTimes(held: boolean): void {
-  (perfHud as { holdWebGpuTimes?: (held: boolean) => void }).holdWebGpuTimes?.(held);
 }
 
 /** ` at h:00` for a village held at an hour, or nothing */
@@ -129,83 +106,29 @@ export async function gpuPasses(lab: Lab, command: PassesCommand): Promise<Repor
   G.paused = command.paused === true;
   // (pictured as the browser shows it: an A/B's sides compared pixel by pixel, a cost cut keeping the look)
   const pictured = await lab.screen('the frame timed');
-  const renderer = G.renderer as unknown as Timed;
-  const pools = renderer.backend.timestampQueryPool;
   const drawing = lab.drawing;
   lab.drawing = true;
-  const { names, undo } = namingRenders(renderer);
-  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
-  // (as the scene's pass draws it: its samples, which WebGPU chose once as the game started, 4 from the lab's High;
-  // without them the scene drawn again read 5.6 ms against its pass's 25 at a phone's pixels)
-  const samples = webgpuSceneTarget().samples;
-  const canaryTarget = new THREE.RenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples });
-  const sums = new Map<string, { ms: number; frames: number }>();
-  let computeMs = 0;
-  const featured: string[] = [];
-  /** the scene's renders the frames made, counted by their calls (not their times) */
-  let sceneCalls = 0;
-  const frames = command.frames ?? FRAMES;
-  holdTimes(true);
+  const lines = [`${command.village ? `the village${hourOf(command)}` : G.arena.biome} ${command.view}, `
+    + `${quality.qualityLevel()}, ${innerWidth * devicePixelRatio}x${innerHeight * devicePixelRatio} drawn`
+    + (command.paused ? ', paused' : '')];
+  const problems: string[] = [];
   try {
-    // (the queries of the frames before are let go of first, and a read of the overlay's under way waited for)
-    await pools.render?.resolveQueriesAsync();
-    await pools.compute?.resolveQueriesAsync();
-    for (let frame = 0; frame < frames; frame++) {
-      const namedBefore = [...names.values()].length;
-      await lab.step(1);
-      sceneCalls += [...names.values()].slice(namedBefore).filter((name) => name.startsWith('the scene,')).length;
+    const whole = medianOf(await timedRenders(render, command.frames ?? FRAMES));
+    const found = await gpuParts(render, browserFrame);
+    if (!found || !(whole > 0)) {
+      problems.push('nothing was timed: the engine\'s GPU clock gave no times');
+    } else {
+      lines.push(...gpuPartsLines(found, whole).map((line) => `  ${line}`));
       if (command.canary) {
-        const target = renderer.getRenderTarget();
-        renderer.setRenderTarget(canaryTarget);
-        renderer.render(G.scene, G.camera);
-        names.set(callKey(renderer.info.render.frameCalls, renderer.info.frame), CANARY_NAME);
-        renderer.setRenderTarget(target);
-      }
-      // (three makes its pools as the first timed render or compute comes)
-      await pools.render?.resolveQueriesAsync();
-      computeMs += (await pools.compute?.resolveQueriesAsync()) ?? 0;
-      for (const [uid, ms] of pools.render?.timestamps ?? []) {
-        const key = keyOf(uid);
-        const name = (key !== null && names.get(key)) || 'a render not named (not through `render`)';
-        const sum = sums.get(name) ?? { ms: 0, frames: 0 };
-        sum.ms += ms;
-        sum.frames += 1;
-        sums.set(name, sum);
+        const canary = await canaryLine(found);
+        lines.push(canary.text);
+        problems.push(...canary.problems);
       }
     }
-    if (command.features) featured.push(...await featureLines(renderer, size));
+    if (command.features) lines.push(...await featureLines());
   } finally {
-    holdTimes(false);
-    undo();
-    canaryTarget.dispose();
     lab.drawing = drawing;
     G.paused = false;
-  }
-  const rows = [...sums].map(([name, sum]) => ({ name, ms: sum.ms / frames, calls: sum.frames / frames }));
-  rows.sort((a, b) => b.ms - a.ms);
-  const all = rows.reduce((total, row) => total + (row.name === CANARY_NAME ? 0 : row.ms), 0);
-  const lines = [
-    `${command.village ? `the village${hourOf(command)}` : G.arena.biome} ${command.view}, ${quality.qualityLevel()}, ${size.x}x${size.y} drawn`
-      + (command.paused ? ', paused' : ''),
-    `  the frame's renders: ${all.toFixed(2)} ms of the GPU, over ${frames} frames; `
-      + `compute ${(computeMs / frames).toFixed(2)} ms`,
-    `  the scene's pass drawn ${sceneCalls} times in ${frames} frames, by its render calls`,
-    ...rows.map((row) => {
-      const share = row.name === CANARY_NAME ? '' : `, ${Math.round((100 * row.ms) / all)}%`;
-      const calls = row.calls > 1.01 ? `, ${row.calls.toFixed(1)} a frame` : '';
-      return `  ${row.name}: ${row.ms.toFixed(2)} ms${share}${calls}`;
-    }),
-  ];
-  lines.push(...featured);
-  const problems: string[] = [];
-  if (!(all > 0)) problems.push('nothing was timed: the frame\'s renders read 0 ms');
-  if (command.canary) {
-    const canary = rows.find((row) => row.name === CANARY_NAME);
-    if (!canary) problems.push('canary: the scene drawn again was never timed');
-    else if (canary.ms < CANARY_LEAST || Math.abs(canary.calls - 1) > 0.01) {
-      const read = `${canary.ms.toFixed(2)} ms, ${canary.calls.toFixed(1)} times a frame`;
-      problems.push(`canary: the scene drawn again read ${read}`);
-    }
   }
   return { text: lines.join('\n'), problems, moments: [pictured] };
 }

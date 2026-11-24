@@ -2,7 +2,7 @@
 import type { Lab, Report } from '../lab';
 import type { ProgramsOptions } from '../programs';
 
-/** `lab programs`: the programs the boot compiled, by step, by kind and what sets them apart, those never drawn. */
+/** `lab programs`: the engine's scene pipelines, by kind and what sets them apart, those never drawn. */
 export async function programs(lab: Lab, command: ProgramsOptions): Promise<Report> {
   const { programs: programsOf } = await import('../programs');
   return programsOf(lab, command);

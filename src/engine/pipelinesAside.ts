@@ -44,7 +44,19 @@ export const PIPELINES = {
   /** a harness's: pipelines asked for from now on stay unready until `releaseHeld` (`lab rustcheck`: a frame
    *  drawn with pipelines still compiling, as a busy GPU's process leaves one) */
   hold: false,
+  /** a warm-up behind the lobby is on (`behindTheLobby` in core/shaders.ts): what it asks for is the boot's, made
+   *  ahead of the thing it's for, so not counted as first asked for in play */
+  behind: false,
 };
+
+/** Each pipeline first asked for in play (`PIPELINES.late`), as a report says it: what it is, the scene's described
+ *  by its shaders' entries, its targets, depth and samples (core/shaders.ts' `lateCompiles`, the performance report's
+ *  "Shaders compiled after load"). */
+export const LATE_PIPELINES: string[] = [];
+
+/** Whether a pipeline asked for now is first asked for in play: the loading screens done with, no warm-up behind
+ *  the lobby on. */
+const inPlay = (): boolean => PIPELINES.waitLeft === Infinity && !PIPELINES.behind;
 
 /** the pipelines compiled and held back (`PIPELINES.hold`): each made ready by its call */
 const held: (() => void)[] = [];
@@ -60,6 +72,16 @@ const LATE_NOTED = 40;
 
 /** the engine's device, for asking how long the GPU's process takes to answer */
 let asked: Device | null = null;
+
+/** The engine's device (none before it boots): `lab programs` compiles its pipelines again on it. */
+export const engineDevice = (): object | null => asked;
+
+/** What the engine asked of the adapter for its device: the limits past WebGPU's own and the features beyond its
+ *  core (`lab programs --limits` holds them to what every device must give). */
+export const DEVICE_ASKED = {
+  limits: {} as Record<string, number>,
+  features: [] as string[],
+};
 
 /** How long the GPU's process takes to answer the engine's device now (ms): past a frame or two, it's busy with
  *  something that holds every canvas's frames with it. -1 with no device. */
@@ -122,8 +144,10 @@ function kindOf(descriptor: Descriptor): string {
   return descriptor.depthStencil?.depthCompare === 'equal' ? 'after the depth' : 'whole';
 }
 
-/** A scene pipeline stood in for: its kind, when it was asked for (the page's ms), and whether a pass has set it. */
-export interface PipelineAsked { kind: string; at: number; drawn: boolean }
+/** A scene pipeline stood in for: its kind, when it was asked for (the page's ms), whether a pass has set it, what
+ *  it is (its shaders' entries, targets, depth, samples: `lab compiles` names one first asked for in play), and how
+ *  it was asked for (`lab programs --cost` compiles it again alone). */
+export interface PipelineAsked { kind: string; at: number; drawn: boolean; what: string; descriptor: object }
 /** Every scene pipeline stood in for, as it was asked for: what the boot asked for that nothing draws, read by
  *  `lab pipelines`. */
 export const PIPELINES_ASKED: PipelineAsked[] = [];
@@ -165,7 +189,8 @@ class StandIn {
   /** what it is, for a report of what the lobby was shown without */
   readonly what: string;
   constructor(device: Device, descriptor: Descriptor) {
-    this.asked = { kind: kindOf(descriptor), at: performance.now(), drawn: false };
+    this.asked = { kind: kindOf(descriptor), at: performance.now(), drawn: false, what: described(descriptor),
+      descriptor };
     this.what = `${this.asked.kind} ${descriptor.vertex?.module?.label ?? ''}`.trim();
     compiling.add(this);
     caught?.push(this);
@@ -174,10 +199,13 @@ class StandIn {
     PIPELINES.compiling++;
     // (one first asked for once the loading screens are done with: it compiles as the player plays, the GPU's
     // process busy with it; said among the boot's notes with what it is, the first `LATE_NOTED` of them)
-    if (PIPELINES.waitLeft === Infinity && PIPELINES.late < LATE_NOTED) {
-      PIPELINES.notes.push([Math.round(performance.now()), `(a pipeline first asked for in play: ${described(descriptor)})`]);
+    if (inPlay() && PIPELINES.late < LATE_NOTED) {
+      PIPELINES.notes.push([Math.round(performance.now()), `(a pipeline first asked for in play: ${this.asked.what})`]);
     }
-    if (PIPELINES.waitLeft === Infinity) PIPELINES.late++;
+    if (inPlay()) {
+      PIPELINES.late++;
+      LATE_PIPELINES.push(`a ${this.asked.kind} pipeline: ${this.asked.what}`);
+    }
     device.createRenderPipelineAsync(descriptor).then((real) => {
       const ready = (): void => {
         this.real = real;
@@ -255,9 +283,10 @@ export function asideOn(device: object): void {
   // as a scene pipeline first asked for then is)
   const compute = made.createComputePipeline;
   made.createComputePipeline = (descriptor: Descriptor): object => {
-    if (PIPELINES.waitLeft === Infinity) {
+    if (inPlay()) {
       PIPELINES.notes.push([Math.round(performance.now()), `(a compute pipeline made in play: ${descriptor.label ?? 'unnamed'})`]);
       PIPELINES.late++;
+      LATE_PIPELINES.push(`a compute pipeline: ${descriptor.label ?? 'unnamed'}`);
     }
     return compute.call(made, descriptor);
   };
@@ -274,6 +303,9 @@ export async function pipelinesAside<T>(boot: () => Promise<T>): Promise<T> {
   const request = adapter.requestDevice;
   adapter.requestDevice = async function (this: Adapter, ...given: unknown[]): Promise<Device> {
     const device = await request.apply(this, given);
+    const wanted = given[0] as { requiredLimits?: Record<string, number>; requiredFeatures?: string[] } | undefined;
+    DEVICE_ASKED.limits = { ...(wanted?.requiredLimits ?? {}) };
+    DEVICE_ASKED.features = [...(wanted?.requiredFeatures ?? [])];
     watchDevice(device, this.info);
     asideOn(device);
     return device;

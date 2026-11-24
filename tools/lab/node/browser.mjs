@@ -4,6 +4,7 @@
 import { chromium } from 'playwright-core';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { gpuUse, shaderCodes } from './gpuScripts.mjs';
 import { lowerProcess } from './priority.mjs';
 
 /** Points TEMP and TMP at `dir`/tmp: Playwright puts the browser's profile under os.tmpdir(), which reads them. */
@@ -398,4 +399,4 @@ export function freshStorage() {
   }
 }
 
-export const PAGE_SCRIPTS = [noCapture, labClock, seededRandom, freshStorage, capesHere];
+export const PAGE_SCRIPTS = [noCapture, labClock, seededRandom, freshStorage, capesHere, shaderCodes, gpuUse];

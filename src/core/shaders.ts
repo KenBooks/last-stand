@@ -3,15 +3,16 @@
 // cast or wave recompiled its shaders: a 10-30 ms hitch, worse on ANGLE / Metal.
 // The set of distinct programs is small and bounded, so we keep all of them for the
 // whole session, and compile the known ones up front (warmUp) before the first frame.
-import { AHEAD, pipelinesReady } from '../engine/pipelinesAside';
+import { AHEAD, LATE_PIPELINES, PIPELINES, pipelinesReady } from '../engine/pipelinesAside';
 import * as THREE from 'three';
 import { G } from '../state';
 
 const pinned = new WeakSet<object>();
 const known: { name: string; key: string[] }[] = [];
-let compiled = 0, loaded = false;
-/** Programs compiled after loading, described for the perf report (what differs from the nearest known one). */
-export const lateCompiles: string[] = [];
+let loaded = false;
+/** The engine's pipelines first asked for in play, each described, for the perf report: the engine draws the game,
+ *  and three's renderer, its host alone, compiles no program (`engine/pipelinesAside.ts`). */
+export const lateCompiles: string[] = LATE_PIPELINES;
 
 /** Programs that failed to link on this device, each with the driver's word on it: WebGL's, so none now. */
 export const shaderErrors: string[] = [];
@@ -22,13 +23,11 @@ export function pinPrograms(renderer: THREE.WebGLRenderer, context?: () => strin
     if (pinned.has(p)) continue;
     pinned.add(p);
     p.usedTimes++;
-    compiled++;
     const key = p.cacheKey.split(',');
     // (an unnamed material's program by its kind: three's shader for it, `depth` a shadow caster's)
     const kind = p.name || key[0];
     // (a warm-up's after loading, the heroes' made when needed, isn't late: nothing was drawn waiting for it)
-    if (loaded && behind) atLoad++;
-    else if (loaded) lateCompiles.push(`${ownerOf(renderer, p)} (${kind}) ${context?.() ?? ''} | ${describeNew(p.name, key)}`);
+    if (loaded && !behind) lateCompiles.push(`${ownerOf(renderer, p)} (${kind}) ${context?.() ?? ''} | ${describeNew(p.name, key)}`);
     known.push({ name: p.name, key });
   }
 }
@@ -65,7 +64,10 @@ export const programsMade: ProgramMade[] = [];
 
 /** whether the warm-up behind the lobby is on (game/warmup.ts warmTheRest): its programs are the boot's */
 let behind = false;
-export function behindTheLobby(on: boolean): void { behind = on; }
+export function behindTheLobby(on: boolean): void {
+  behind = on;
+  PIPELINES.behind = on;
+}
 
 /** Field-level diff against the closest known program of the same kind. */
 function describeNew(name: string, key: string[]): string {
@@ -80,11 +82,11 @@ function describeNew(name: string, key: string[]): string {
   return key.map((v, i) => (v !== best![i] ? `[${i}] ${best![i].slice(0, 30)} -> ${v.slice(0, 30)}` : '')).filter(Boolean).join('; ');
 }
 
-let atLoad = 0;
 /** Call once loading is done; later compiles are counted as in-game hitches. */
-export function markLoaded(): void { atLoad = compiled; loaded = true; }
-/** Shader programs compiled since loading finished (each one was a frame hitch). */
-export const programsCompiledInGame = (): number => compiled - atLoad;
+export function markLoaded(): void { loaded = true; }
+/** The engine's pipelines first asked for in play, once the loading screens were done with (each a thing left out
+ *  of frames while it compiles, the GPU's process busy with it). */
+export const programsCompiledInGame = (): number => PIPELINES.late;
 
 /** a step of a warm-up waited for: the next task, or behind the lobby the frame after the next (`WarmUp.step`) */
 type Step = () => Promise<void>;

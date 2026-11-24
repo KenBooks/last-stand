@@ -21,7 +21,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
 - `cloud --google`: real sign-in controls/window and lightweight callback, with local OAuth replies: no game reload, one nonce-bound finish, link, cancel and blocked-popup redirect; `--canary` supplies an invalid code.
 - `coat`: the hero's skirts and hood as he stands at idle (every point of the cloth in its own space frame by frame: a move a frame changing by over 1 cm a jerk, with the hand nearest)
 - `columns`: the crypt's broken columns roll after roll (no open edge in a mesh, no cliff across a break's face)
-- `compiles`: whether the boot's warm-up compiled what a fight draws (a prop of every kind broken, the first wave fought and a Brute's and a Hulk's throws in each biome, and again by a hero built afresh: every program compiled meanwhile, and the draw that first used it; the point lights each pass is lit by, against the boot's; `--switch` picks another class on the hero selection screen first, each hero shown in the hall of heroes, whose room and skills are warmed with the heroes)
+- `compiles`: whether the boot's warm-up asked the engine for every pipeline a fight draws (a prop of every kind broken, the first wave fought and a Brute's and a Hulk's throws in each biome, and again by a hero built afresh: every pipeline first asked for meanwhile, as the engine describes it; `--switch` picks another class on the hero selection screen first, each hero shown in the hall of heroes, whose room and skills are warmed with the heroes)
 - `coop`: two games playing together, a host's and a guest's, over a link of a high ping and jitter: what each shows of the other's heroes and foes and whether the hits counted, parties of 3 and 4, colours, looks, trade, chat, pings, the run's end and spectating (`--scenarios`; in full in `commands/coop.md`)
 - `crest`: the village's crest blown away: its first blow on the context the boot made at its start (made half way through the boot, it waited 3.7 s behind the lobby's compiles), a blow at High by the wind, one at Very low faded with no context made; the loading screen's exit's context made at High alone, and none lost by hand
 - `crowd`: a crowd of foes killed at once and what the frame costs as they fall (each frame timed by the browser's clock with the game drawn, the bodies' part apart, at each CPU slowdown, as a low-end device's, and frame rate)
@@ -76,7 +76,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
 - `overui`: the skill keys pressed in a fight with the pointer resting on the page's UI: each keyboard key a skill is on must cast it, the mouse's buttons must not (from play, #816: hovering the skill bar, the number keys did nothing)
 - `pace`: the hero walking on a 60 Hz screen whose browser times its frames on a 145 Hz screen's ticks, and moved from a 144 Hz screen to it (a shown frame's step within 6% of the steady pace, the game's time keeping the frames' clock; `--canary` steps the frames as they come, #552)
 - `parity`: the same scenes pictured as the player sees them, to compare what two commits draw (`--ab`: each biome's arena, the village at noon and midnight from its places, from above and over the shoulder; the pictures are the page's own, as WebGPU's canvas can't be read back; what differs is the A/B's verdict and the pictures side by side)
-- `passes`: each of the frame's renders on WebGPU timed by three's timestamps (the scene, its shadows, each post pass, by name and size; `--features` the environment, shadows, point lights and fog taken off the scene's pass in turns; `--paused` the game paused as its menu pauses it; `--village` stood in the lobby's village; the frame pictured for `--ab`)
+- `passes`: each of the frame's passes timed by the engine within one frame (its breakdown, the profile's "the frame by its parts": the shadows, the depth drawn first, the scene a pass for each kind of its draws by one shader, the bloom, the grade...; `--features` the lit shading's parts taken out of the whole frame in turns; `--paused` the game paused as its menu pauses it; `--village` stood in the lobby's village; the frame pictured for `--ab`)
 - `perf [skills]`: skills cast in turn with the biome's foes coming, every frame timed as the game's performance report times it (the frame, the update by stage, the render, the GPU by pass, the draws, triangles and the particles' fill), on a phone's screen, boot and CPU if asked, or as a slow device players reported (`--device`: its frame rate there, its GPU played by this one drawing its screen at more pixels); `--village` the lobby's village standing and walking, `--fly` the dev tool's free camera flown over it (round it high and low and across it, twice: where each leg's dearest frames were) (in full: [`commands/perf.md`](commands/perf.md))
 - `photo`: photo mode as a player uses it (the village, its pause menu's button, by touch, each house, both battlegrounds: opened by P, the page's UI and the world's overlays left out, the solo game still, the camera flown and turned, the look set with no program compiled, Hide hero, a photo saved at the canvas's pixels under a dated name, letterboxed, Esc putting all back; in a house the camera kept to its room and its walls cut away; never over a dialog; pictured with its panel, a shot set up, the camera low and far) (in full: [`commands/photo.md`](commands/photo.md))
 - `pipelines`: the engine's scene pipelines the boot asks for, step by step and by kind (whole, after the depth, depth first, shadow, sprites), against those the lobby's frames then draw with: what the loading screen waits for that nothing draws
@@ -85,7 +85,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
 - `practice`: casting in the lobby and the runs it starts (each skill with a cooldown cast twice at once in the village's training yard, the inventory open, put away by I and opened again, on the square, and in runs started at the crypt's portal and begun in practice, a co-op guest's: free where the inventory shows, a run's costs and cooldowns elsewhere, none out of the yard)
 - `probe <module>`: runs a measure of your own on the lab's clock and set-ups
 - `profile`: the game's own profiler, the pause menu's Profile this spot, run where the hero stands (`--biome`, `--view`, `--at`, `--level`, `--device`): each part of the frame taken out in turns by the browser's clock, as a player's device times itself (`--village` stood in the lobby's village), the programs it compiled (over 8 fails; WebGPU's pipelines, over 24), a run cancelled midway, and its result sent and read back as `lab trace` reports it; `--canary` the frame drawn twice
-- `programs`: the programs the boot compiled, from the game's dev-only ledger (how many each loading step made, behind the lobby too, by the warm-ups' compile or by a draw; each kind with the fields of its key that set its programs apart; those never drawn; those made after the reveal); `--cost`: each compiled again alone, salted so no cache answers, and timed (by kind, by what uses them, each step's by what uses them, by its point lights, the longest, a plain lit material by part, a kit material with its glow written out and without)
+- `programs`: the engine's scene pipelines and what sets them apart (by kind, by shader, by targets, depth, samples, culling; those never drawn; the performance report's count of those first asked for in play against the engine's); `--cost`: each compiled again alone, its shaders salted so no cache answers, and timed (by kind, by shader, by samples, the longest); `--limits`: what the engine's device uses of WebGPU's limits against what every device gives
 - `pwa`: a deploy as a returning player meets it (main's production build loaded until its offline worker has the page and the fonts, this tree's served in its place and reloaded under the old worker, the new one and offline: the game's fonts on every load, this tree's build on every one after the swap), and the installed app after a PR's previews were visited (opened offline, at a pruned preview build and at a closed PR's: the game every time)
 - `range`: every joint against a body's ranges frame by frame, standing, walking, attacking and turning: each angle past its range and where, the frame's time, the weapon through his body, the arms at their stops (in full in `commands/range.md`)
 - `readme`: the README's pictures, each a moment posed and pictured as the player sees it (the village, the party round its campfire, the hall of heroes, the stash, a fight in each battleground, the choice after a wave, a party of four in a fight and one of them down, a partner raising him; `--shots`, `--class`, `--after`: `docs/screenshots/AGENTS.md`)
@@ -338,29 +338,26 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   The canvas is read through a 2D canvas in the same task as the draw (`webGpuPixels` in
   `page/pixels.ts`, SDR only): with `--levels`, it caught WebGPU's Low and Very low a fifth brighter than High in the
   forest, their shadows untaken. Run it with `--boot verylow` too, where a level's pipelines are built plain.
-- `passes`: what each of the frame's renders takes of the GPU on WebGPU (`page/gpuPasses.ts`,
-  `--device` to play a slow device's GPU): three's own timestamps (the renderer is made with `trackTimestamp`), every
-  render call of each frame named by what it draws and the size it draws into (the scene, its shadow maps, each of
-  the post chain's passes, the canvas's), the mean over `--frames` (30). The perf overlay's reads of the same
-  timestamps are held meanwhile (`holdWebGpuTimes` in `ui/perfHud.ts`): three keeps one pool and a read takes every
-  query in it, and the overlay's read each frame took the measure's, the scene's pass reading 1.9, 7.7 and 87 ms on
-  three runs. `--features` times the lit shading's features in the scene's pass drawn alone (`page/sceneFeatures.ts`:
-  against a plain colour, the environment, the shadows taken, the point lights, the fog), each taken off and put back
-  in turns within the page, each side's renders' median (a light's `castShadow` taken off let go of its map on
-  WebGPU, and put back drew with it destroyed: the shadows are taken off as received). It pictures the frame it
-  timed, as the browser shows it, so `--ab` compares the look of a
-  cost cut. `--canary` draws the scene once more into a target of its own (the frame's size and samples), which must
-  be found once a frame and read some time. The scene's row may hold more than one timestamp a frame (1.5 on Very
-  low, its pass drawn once a frame by its calls, which a line counts): read it as the frame's scene work.
-  At a phone's pixels (`--device phone --level verylow`) the forest's point lights took 13.8 ms of the scene's 18.2
-  before they passed over the lights out of reach, 5.0 after (the pictures the same); bloom's bright pass and first
-  blur drew at the scene's 7646x3528 before taking the quality's share. `--paused` pauses the game as its pause menu
-  does (no update, the same scene drawn): a phone's GPU took 11.5 ms a frame paused and 24 in the lobby, the same view
-  and level (traces N5TH-2XC9, R5FJ-9TNN); here the crypt's scene pass read 5.25 ms paused and 6.24 updating, at the
-  phone's pixels. `--village` stands the hero in the lobby's village, as `draws --village` does (`--at` there, the
-  square by default): a phone's slow report was taken there (FJJ1-Z9XM), and `--biome` stands him in a fight's arena.
-  `--hour h` holds the village's hour (0 by night, its lamps lit): left to the page's own, the sun moved between an
-  A/B's two sides and its shadows differed by 5% of the pixels.
+- `passes`: what each of the frame's passes takes of the GPU (`page/gpuPasses.ts`, `--device` to play a slow
+  device's GPU), as the engine times them within one frame (`src/perf/gpuParts.ts`, Bulwark's `gpu/parts.rs`, the
+  profile's "the frame by its parts"): every pass stamped at its start and its end, the scene a pass for each run of
+  its draws of one kind by one shader (the page's own shaders named: `crypt-damp`, `forest-moss`, the kit...), the
+  rows adding up to the frame broken down, beside the frame as it is by the engine's GPU clock over `--frames` (30).
+  Read it with the GPU loaded (`--screen 2880x1800@2`): an idle desktop GPU's frame under a millisecond reads several
+  times its time broken down. `--features` times each of the lit shading's parts in the whole frame (the point lights
+  and the lamps, the sun's shadow, the lamps' shadows, the maps read, the fog, each part of the lit shader), taken out
+  and put back in turns by the engine's own switches (`frameParts` in `src/perf/sceneParts.ts`, `costInTurns`), each
+  with how far it may be off. `--canary` takes the bloom out and breaks the frame down again: the bloom's passes must
+  fall to half their time or less (the engine keeps a fifth of them with it off: 0.17 ms of 0.78 at 2880 by 1800 at
+  2). It pictures the frame it timed, as the browser shows it, so `--ab` compares the look of a cost cut. `--paused`
+  pauses the game as its pause menu does (no update, the same scene drawn): a phone's GPU took 11.5 ms a frame paused
+  and 24 in the lobby, the same view and level (traces N5TH-2XC9, R5FJ-9TNN). `--village` stands the hero in the
+  lobby's village, as `draws --village` does (`--at` there, the square by default): a phone's slow report was taken
+  there (FJJ1-Z9XM), and `--biome` stands him in a fight's arena. `--hour h` holds the village's hour (0 by night,
+  its lamps lit): left to the page's own, the sun moved between an A/B's two sides and its shadows differed by 5% of
+  the pixels. (Under three it read three's timestamps, every render call named by what it drew, and `--features`
+  took three's environment, shadows, point lights and fog off its scene pass: the engine replaced three's drawing,
+  and both read nothing.)
 - `profile`: the game's profiler (`src/perf/profiler.ts`, the pause menu's Performance tab: Profile this spot) run
   in the lab (`page/profile.ts`), the hero stood at `--at x,z` in `--biome` (forest), or in the lobby's village
   with `--village` (`standAt` in `page/draws.ts`), in `--view` (top) at `--level`
@@ -1036,76 +1033,55 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   costs, and Auto quality's walk down on a slow device: in full in [`commands/traces.md`](commands/traces.md).
 - `perf <skills>`: skills cast in turn, every frame timed as the performance report times it, or played as a slow
   device: in full in [`commands/perf.md`](commands/perf.md).
-- `programs`: the programs the boot compiled (`page/programs.ts`), read from the game's ledger of them
-  `--limits` holds each program to the least a phone's GPU must give (`page/programLimits.ts`): its uniform vectors
-  by the stage that reads them, its attributes, its samplers, against WebGL 2's minimums (224 fragment and 256 vertex
-  uniform vectors, 16 attributes, 16 samplers). A desktop gives four times a phone's, so a program too big for a
-  phone compiles, links and draws here and draws nothing there: the heroes' palette materials read 272 fragment
-  vectors, an S25 Edge's driver refused them at its 256 and the hero was his hair and his shadow (#470, reverted;
-  trace X6EZ-FS5X has the driver's word). Main's largest lit programs are at 184. Run it for any change to a
-  material or a shader; `--canary` judges a program one vector over.
-  (`watchPrograms` in `src/core/shaders.ts`, dev builds alone: the boot's programs are made before any command can
-  watch). How many each loading step made, and how many of those a draw made rather than the warm-ups' `compile()`
-  (a draw's program is linked as it's drawn, the page held up meanwhile); each kind (the material's type and its
-  shader), with the fields of its key that set its programs apart (`page/programKeys.ts`: three r187's key read by
-  field, the names held to three's own code by `test/programKeys.test.mjs`; `custom` is the material's own key,
-  three's default left out), a kind of one with what it was made for; what uses them (the scene's top-level object
-  of each object compiled or drawn with one, every foe's kind as `foes`: a program the foes alone use is one a lobby
-  shown before them could compile later); the programs no draw ever used (compiled for
-  nothing) and those a draw made, each with its step and what it was made for; those made after the reveal (the
-  lab's set-up). #275's boot made 32 by a draw, each a first visit's wait inside it: the post chain's and the
-  environment maps' (now compiled with the biome), the shadows' (`compileShadows`) and the outline's
-  (`compileOutline`). Now none. It found 177 programs at boot, 92 of them lit (each for
-  15 point lights), 17 of those never drawn: the crowd bodies' own materials, on a layer no pass draws (now left out
-  of the warm-ups' compile; the kit's variants made uniforms, 146 were left). The lobby shows before the fight's
-  programs are warm (`src/game/warm.ts`): the lab's boot asks for them at once and waits for them, listed as made
-  `behind the lobby` (40 of the 146). `--cost` compiles each program again from the GLSL three gave it, alone, salted
-  so no cache can answer (`page/programCost.ts`), and times it from its source to its link: the CPU a first visit's
-  ANGLE spends on it; summed by kind, by what uses them, each step's by what uses them (what that step's warm-up
-  waits for its links on) and by the point lights they're lit by, the longest listed with their fragment shader's
-  size, and a plain lit material's compile as the scene lights it and with its point lights, environment map,
-  shadows and fog each taken away, and the longest kit material's (one with the item glow) as made, with the glow's
-  noises written out as they were before their loops, and without the glow, all compiled in turns in one page. Its
-  canary is the cache: the longest compiled again with its salt must come back
-  in under a quarter of its time, and with a new salt in over half. It found the lit programs 36 of the 40 s (0.56
-  s each, 16 point lights written out), 23 s once lit in a loop; and the spells' 91 programs 14.4 s, the hero's 6 s,
-  the effects' samples 3.9 s, the lobby's biome 3.5 s (now compiled as the arena is built). A minute or more.
-  `--canary` warms a box of a kind nothing else is (it must be listed compiled and drawn) and one on a layer no
-  camera sees (it must be listed never drawn). The performance report's count of programs compiled after load (each
-  a hitch, as it says) must be the ledger's made after the reveal: a new build's lobby, its fight not yet warm,
-  counted every program the boot made (83, 106 in the owner's), the load marked only once the fight's were warm; run
-  it `--cold` to boot as that lobby shows, `--first --class mage` as a first visit's (its hall of heroes opened under the loading screen). Its canary draws a box of a new kind in the lobby and marks the load again
-  after it, as that did: the report then misses the box's program, which must be found.
-- `compiles`: whether the boot's warm-up compiled what a fight draws (`page/compiles.ts`). In each biome (`--biomes`,
-  both) the hero stands in the view (`--view`, top) and a prop of every kind the biome has is worn down (its gauge
-  over it, chips knocked off) and broken in turn, its rubble, debris and smoke drawn as they fly and settle; then the
-  run's first wave is set off and fought as the game plays it, the hero (kept whole) casting each skill on his bar
-  in turn at the nearest foe, until it's cleared or 40 s are up, its foes killed as a fight kills them (no other
-  check lets a foe die of a fight); then a Cinder Brute and a Barkhide Hulk throw at him from 12 m off towards the
-  arena's middle for 420 frames (out the other way they stood beyond the wall, rose inside it 6 m off and only
-  slammed), each piece of their throws drawn (the chunk, its ring, burst and pool, the vine and its coils: a piece
-  never drawn is a problem, read from the scene by its name); then the first biome's wave is fought again by a hero
-  built afresh, as the lobby's class switch builds him. Each round counts from before its set-up, whose frames are
-  the game's (the view entered, the hero rebuilt: counted from after it, the rebuilt hero's arms compiled unseen).
-  Every program compiled meanwhile is a problem, said as the game's perf report says it and with the draw that first used it, its
-  object, its material and its pass (the game can't name a shadow's: three keeps its shadow materials). Run it as a
-  phone boots, `--boot low@518400`: a Low boot's warm-ups draw other shadows (small parts cast none there). Each
-  fight's line counts the point lights each pass is lit by, as three counts them (shown, and on a layer its camera
-  sees): the scene's, and through the eyes the arms', drawn by a camera of their own (the warrior's); a pass lit by
-  another count than the boot's is a problem, as its programs were compiled for that count and all it draws
-  compiles again. `--gear` and `--weapon` hold the hero's weapons
-  (`--class warrior --view first --gear twoHanded --weapon Greataxe`: #268's report). It found #243's mid-fight
-  compile, the forest's wood rubble's shadow (`steadyShadowPrograms` in `src/core/shaders.ts`), and #268's: the
-  hero built afresh brought his own light in after the arms' pass had put the scene's lights on its layer, which it
-  did once, and through the eyes 11 programs of his arms and the shadows compiled at the run's start (15 lights to
-  14). `--switch ranger` first picks the ranger on the hero selection screen, as a player does (Change hero
-  clicked, each hero in the hall of heroes shown 150 frames, his showcase and all, and every program compiled
-  meanwhile a problem; then the ranger's name and the choice), and waits for him (the lab's boot waits for every
-  warm-up, so it says 0.0 s); the boot's class (`--class`) is another. A class's skills
-  are warmed with the heroes, not the lobby, so only a switch tells whether they were: with the ranger's left out of
-  `heroParts` (`src/game/warmup.ts`), `--class mage --switch ranger` found 9 programs compiled in his first wave.
-  `--canary` draws a material nothing else does before the hero, which must come out as compiled, and puts a point
-  light in the scene, which the count must find.
+- `programs`: the engine's scene pipelines and what sets them apart (`page/programs.ts`), read from the engine's
+  census of them (`PIPELINES_ASKED` in `src/engine/pipelinesAside.ts`, each kept with the descriptor it was asked
+  for by): how many of each kind (whole, after the depth, depth first, shadow, sprites), and by each field that sets
+  them apart (the shader and its entries, the targets, the depth and whether it's written, the samples, the culling,
+  the topology); those never drawn (`lab pipelines` says them step by step); and the performance report's count of
+  those first asked for in play (`programsCompiledInGame`, `lateCompiles` in `src/core/shaders.ts`: the engine's
+  `PIPELINES.late`, a warm-up behind the lobby left out) against the engine's. The lab's boot asks for 80, 44 of
+  them never drawn in the lobby. `--cost` compiles each again on the engine's device, one after another, its shaders'
+  code salted (`page/programCost.ts`: the code is kept by a page script of the lab's, `shaderCodes` in
+  `node/gpuScripts.mjs`, as the game keeps none), and times it from its shaders made to its pipeline ready: by kind,
+  by shader, by samples, the longest. It found the 80 at 21.5 s of the GPU's process's time on this PC, the lit
+  shader with hooks' 41 at 13 s; the game compiles them several at once, aside. Its canary is the cache: the
+  costliest compiled again with the same salt must come back in under half its time (519 ms, then 1). `--limits`
+  holds what the engine's device used of each of WebGPU's limits to what every device gives (`page/programLimits.ts`:
+  the spec's defaults; what was used recorded as it's made by `gpuUse` in `node/gpuScripts.mjs`, the textures', the
+  buffers', the bind groups' and their layouts', each pipeline layout's by stage, the vertex buffers'). The engine
+  asks its adapter for all its own limits (Bulwark's `device_on`), so a desktop makes and draws what a phone's
+  device, given the defaults, refuses: #470's palettes, under three, hid the hero on an S25 by a limit of that kind.
+  It names a limit used within a tenth of its default (the lit shading's fragment stage: 15 sampled textures of 16)
+  and the features asked beyond WebGPU's core (`timestamp-query`). Its canary makes a texture one texel past the
+  defaults, which must be found. `--canary` hands the engine a box of a blending, side and depth nothing else has
+  together, never shown (it must be listed asked for and never drawn), then shows one of another such blending (it
+  must be listed drawn). (Under three this read three's WebGL programs from a ledger of the game's, compiled their
+  GLSL again for `--cost`, and held their uniform vectors to WebGL 2's minimums for `--limits`.)
+- `compiles`: whether the boot's warm-up asked the engine for every pipeline a fight draws (`page/compiles.ts`). In
+  each biome (`--biomes`, both) the hero stands in the view (`--view`, top) and a prop of every kind the biome has is
+  worn down (its gauge over it, chips knocked off) and broken in turn, its rubble, debris and smoke drawn as they fly
+  and settle; then the run's first wave is set off and fought as the game plays it, the hero (kept whole) casting
+  each skill on his bar in turn at the nearest foe, until it's cleared or 40 s are up, its foes killed as a fight
+  kills them (no other check lets a foe die of a fight); then a Cinder Brute and a Barkhide Hulk throw at him from
+  12 m off towards the arena's middle for 420 frames (out the other way they stood beyond the wall, rose inside it
+  6 m off and only slammed), each piece of their throws drawn (the chunk, its ring, burst and pool, the vine and its
+  coils: a piece never drawn is a problem, read from the scene by its name); then the first biome's wave is fought
+  again by a hero built afresh, as the lobby's class switch builds him. Each round counts from before its set-up,
+  whose frames are the game's (the view entered, the hero rebuilt). Every pipeline asked for meanwhile
+  (`PIPELINES_ASKED` in `src/engine/pipelinesAside.ts`) is a problem, named as the engine describes it (its shaders'
+  entries, its targets, its depth, its samples, its culling): one first asked for in a fight leaves what it draws
+  out of the frames till it's compiled, the GPU's process busy with it ("first RMB cast in fight lags 2-3sec"). Run
+  it as a phone boots, `--boot low@518400`: Low and Very low draw with the plain levels' own lit pipelines.
+  `--gear` and `--weapon` hold the hero's weapons (`--class warrior --view first --gear twoHanded --weapon
+  Greataxe`: #268's report). `--switch ranger` first picks the ranger on the hero selection screen, as a player does
+  (Change hero clicked, each hero in the hall of heroes shown 150 frames, his showcase and all, and every pipeline
+  asked for meanwhile a problem; then the ranger's name and the choice), and waits for him; the boot's class
+  (`--class`) is another. A class's skills are warmed with the heroes, not the lobby, so only a switch tells whether
+  they were. `--canary` draws a box of a blending, side and depth writing nothing else draws together (added, its
+  back faces, its depth written) before the hero, which must come out as asking for a pipeline. (Under three it
+  counted three's programs and the point lights each pass lit with, a program compiled for each count: it found
+  #243's mid-fight rubble shadow and #268's arms' pass lit by another count. The engine lights by a pool of
+  uniforms, its pipelines alike whatever the lights.)
 - `maps`: the game's procedural maps (`page/maps.ts`; `--maps forestFloor,steel`, every one `PRELOAD` lists in
   `src/core/pbr.ts` by default), each made on the page as a loading worker makes it, `--runs` times (its time the
   fastest, by the browser's own clock), with a digest of its pixels and of a face's grid. A map made faster must
