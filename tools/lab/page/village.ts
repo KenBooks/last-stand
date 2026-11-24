@@ -280,6 +280,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     wallFurnitureCut: async () => (await import('./villageWallFurniture')).wallFurnitureCut(options.canary),
     dummiesSquare: async () => (await import('./villageDummiesSquare')).dummiesSquare(lab, options.canary),
     dashKeptInYard: async () => (await import('./villageYardDash')).dashKeptInYard(lab, options.canary),
+    lensZoomOutsideYard: async () => (await import('./villageLens')).lensZoomOutsideYard(lab, options.canary),
     grassNotThroughProps: () => grassNotThroughProps(lab, options.canary),
     minimapOut: () => minimapOut(lab, (spot) => stand(lab, spot), yardToWorld(0, 0), options.canary),
     hoursCompileNothing: () => hoursCompileNothing(lab, options.canary),

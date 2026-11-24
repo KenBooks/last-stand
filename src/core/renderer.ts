@@ -683,7 +683,26 @@ export const zoomHeldTo = (): { least: number; most: number } | null => (zoomHel
 export const cameraTargetZoom = (): number => rig.targetZoom;
 /** 
 otches = mouse-wheel steps (positive = zoom out). */
+/**
+ * The close views' lens zoom (#811, from the owner: "implement zoom on RMB in village when not in training grounds"):
+ * the lens narrowed to `LENS.zoom` of its view while it's asked for, eased in and out at `LENS.rate`. Asked by the
+ * village outside its yard, where the right mouse button casts nothing: held down by it (`setLens`), or through the
+ * eyes by the wheel forward or a pinch outwards, back or inwards letting it go (`zoomBy`: there they did nothing).
+ */
+const LENS = { zoom: 0.55, rate: 10 };
+let lensAllowed = false, lensByMouse = false, lensByStep = false, lens = 1;
+/** The lens zoom allowed here (`allowed`) and asked by the mouse (`mouse`); let go wherever it isn't allowed. */
+export function setLens(allowed: boolean, mouse: boolean): void {
+  lensAllowed = allowed;
+  lensByMouse = allowed && mouse;
+  if (!allowed) lensByStep = false;
+}
+/** How far the lens is narrowed now (1: not at all; a harness reads it). */
+export const lensNow = (): number => lens;
+
 export function zoomBy(notches: number): void {
+  // (through the eyes where the lens may zoom, the wheel forward or a pinch outwards zooms it in, back or inwards out)
+  if (rig.view === 'first' && lensAllowed && notches !== 0) { lensByStep = notches < 0; return; }
   // over the shoulder the wheel pulls the camera in or out; through the eyes it does nothing
   if (rig.view === 'third') { rig.targetBoom = clamp(rig.targetBoom * CAMERA.zoomStep ** notches, CAMERA.third.minBoom, CAMERA.third.maxBoom); return; }
   if (rig.view !== 'top') return;
@@ -1116,6 +1135,9 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
     builtOpening(), fenceOpened(), propsHideHim());
   sortBlendedFrom(cam.position, cam.getWorldDirection(_sortToward));
   rig.kick = damp(rig.kick, rig.kickTo, rig.kickTo > rig.kick ? 14 : 6, dt); rig.kickTo = 0;
+  // (the lens zoom: narrowed while asked for in the close views, eased back elsewhere)
+  lens = damp(lens, rig.view !== 'top' && (lensByMouse || lensByStep) ? LENS.zoom : 1, LENS.rate, dt);
+  if (rig.view !== 'top') fov *= lens;
   if (rig.view !== 'top') fov += rig.kick * e;
   if (cam.fov !== fov || cam.near !== near) { cam.fov = fov; cam.near = near; cam.updateProjectionMatrix(); }
   if (rig.shake > 0.001) {

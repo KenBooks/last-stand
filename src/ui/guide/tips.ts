@@ -184,6 +184,7 @@ export const TIPS_PAGES: Tip[] = [
       'Move with WASD; aim with the mouse. Left and right click and keys 1 to 4 are your skills; Q is the draught.',
       'V changes the view: top-down, over the shoulder, through the eyes. The wheel zooms; hold the middle button and drag to turn the camera.',
       'In the village: E uses what you are near, I opens the inventory, M the map. G opens this guide anywhere; Esc pauses.',
+      'Outside the training yard your skills rest: there, over the shoulder or through the eyes, hold the right button to look closer.',
       'On touch: the left half of the screen is a stick; drag a skill button to aim it, let go to cast; a tap casts at the nearest foe.',
       'The pause menu\'s Controls tab shows every key as it is bound now.',
     ]),
