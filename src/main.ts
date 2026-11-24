@@ -77,6 +77,7 @@ import { initLoadoutEditor } from './ui/loadoutEditor';
 import { initTouch, updateTouch } from './ui/touch';
 import { initAutoFullScreen, keyboardLockState } from './ui/autoFullScreen';
 import { initPwa } from './ui/pwa';
+import { everyTickEvenHidden } from './core/backgroundTick';
 import { initItemIcons } from './ui/itemIcons';
 import { initTraceConsent, layOutAskAhead } from './perf/consent';
 import { startHeartbeat } from './stats/heartbeat';
@@ -1292,8 +1293,9 @@ function update(dt: number): void {
 
 /**
  * A co-op host's game runs the fight for everyone, so it can't stop when its tab goes to the
- * background (the browser stops drawing it): a timer steps it meanwhile. Browsers slow such
- * timers down to about once a second, so each tick catches up in short steps.
+ * background (the browser stops drawing it): a tick steps it meanwhile, a worker's (`core/backgroundTick.ts`),
+ * which the browser doesn't slow as it slows the page's own timers (to once a minute after five minutes hidden, when
+ * the 1.5 s a tick caught up left the fight all but frozen for every guest, #845). Each tick catches up in short steps.
  */
 let lastStep = 0;
 function backgroundStep(): void {
@@ -1309,7 +1311,7 @@ function backgroundStep(): void {
     left -= dt;
   }
 }
-setInterval(backgroundStep, 100);
+everyTickEvenHidden(backgroundStep);
 
 /** The music now: in the village, the day's or the dusk's by its hour; through a run the biome's battle track in each
  *  wave's fight, its lobby track everywhere else (a run's countdowns and the choice after a wave, its summary), both
