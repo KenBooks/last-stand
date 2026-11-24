@@ -1,9 +1,11 @@
 // `lab village --only ambienceHeard` (#745, "Add Day and Night Ambient Sound Effects (Birds, Crickets, Rustling
 // Leaves, Fire Crackling)"): the levels the village's ambience asks of its layers (`ambienceNow` in
 // `core/ambience.ts`, as `main.ts` asks them each frame) read at noon and at midnight on the square, and at noon beside
-// the campfire: the wind always, the birds by day alone, the crickets by night alone, and the fire louder beside it
-// than on the square. What they sound like is `lab sound ambienceDay,ambienceNight,ambienceFire`. `canary` holds noon
-// for the midnight read too (the hour never reaching the ambience): its crickets must be missed.
+// the campfire and the fountain: the leaves always, the birds by day alone, the crickets by night alone, the fire
+// louder beside it than on the square, and the fountain's water beside it than by the campfire (no wind: from review,
+// "Wind will be messing with people"). What they sound like is `lab sound ambienceDay,ambienceNight,ambienceFire,
+// ambienceFountain`. `canary` holds noon for the midnight read too (the hour never reaching the ambience): its
+// crickets must be missed.
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
@@ -18,6 +20,8 @@ const SETTLE = 30;
 /** where he stands on the square, and beside the campfire (m off its middle, along x) */
 const SQUARE: [number, number] = [0, 4.5];
 const BY_FIRE = 2;
+/** where he stands by the fountain (it stands at the square's middle, its basin 2.2 m across) */
+const BY_FOUNTAIN: [number, number] = [0, 3];
 /** a layer under this is silent, over it heard */
 const HEARD = 0.001;
 
@@ -35,9 +39,10 @@ async function readAt(lab: Lab, [x, z]: [number, number], hour: number): Promise
 
 /** A stand's levels said in a line. */
 function said(where: string, levels: Levels): string {
-  const layers = `wind ${levels.wind.toFixed(3)}, leaves ${levels.leaves.toFixed(3)}, birds ${levels.birds.toFixed(3)}`;
+  const layers = `leaves ${levels.leaves.toFixed(3)}, birds ${levels.birds.toFixed(3)}`;
   const fire = `fire ${levels.fire.toFixed(3)} (pan ${levels.firePan.toFixed(2)})`;
-  const more = `crickets ${levels.crickets.toFixed(3)}, ${fire}`;
+  const water = `water ${levels.water.toFixed(3)} (pan ${levels.waterPan.toFixed(2)})`;
+  const more = `crickets ${levels.crickets.toFixed(3)}, ${fire}, ${water}`;
   return `ambience ${where}: ${layers}, ${more}`;
 }
 
@@ -48,19 +53,24 @@ export async function ambienceHeard(lab: Lab, canary: boolean): Promise<LightsCh
     const noon = await readAt(lab, SQUARE, 12);
     const night = await readAt(lab, SQUARE, canary ? 12 : 0);
     const fire = await readAt(lab, [CAMPFIRE[0] + BY_FIRE, CAMPFIRE[1]], 12);
+    const fountain = await readAt(lab, BY_FOUNTAIN, 12);
     const lines = [
       said('at noon on the square', noon),
       said('at midnight on the square', night),
       said('at noon by the campfire', fire),
+      said('at noon by the fountain', fountain),
     ];
     const problems: string[] = [];
-    if (noon.wind < HEARD || night.wind < HEARD) problems.push('ambience: no wind');
+    if (noon.leaves < HEARD || night.leaves < HEARD) problems.push('ambience: no leaves rustling');
     if (noon.birds < HEARD) problems.push('ambience: no birds at noon');
     if (night.birds >= HEARD) problems.push('ambience: birds at midnight');
     if (night.crickets < HEARD) problems.push('ambience: no crickets at midnight');
     if (noon.crickets >= HEARD) problems.push('ambience: crickets at noon');
     if (fire.fire <= noon.fire * 2 || fire.fire < HEARD) {
       problems.push('ambience: the campfire no louder beside it than on the square');
+    }
+    if (fountain.water <= fire.water * 2 || fountain.water < HEARD) {
+      problems.push('ambience: the fountain no louder beside it than by the campfire');
     }
     const missedCrickets = problems.some((problem) => problem.includes('crickets at midnight'));
     if (canary) return { lines, problems: [], caught: missedCrickets, moments: [] };

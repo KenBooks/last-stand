@@ -1338,6 +1338,8 @@ function musicWanted(): MusicWanted {
 
 /** where the campfire is from the camera, a frame's scratch */
 const fireSeen = new THREE.Vector3();
+/** where the fountain is from the camera, a frame's scratch (it stands at the square's middle) */
+const waterSeen = new THREE.Vector3();
 
 /** The village's ambience now (#745, `core/ambience.ts`): heard in the village's lobby while the page is shown, by its
  *  hour, muffled in a house's room or the hall of heroes, the campfire by its distance from the hero and its way from
@@ -1346,12 +1348,15 @@ function ambienceWanted(): AmbienceWanted {
   const on = revealed && !document.hidden && G.mode === 'menu' && G.arena.place === 'village';
   const p = G.player.pos;
   fireSeen.set(CAMPFIRE[0], p.y, CAMPFIRE[1]).applyMatrix4(G.camera.matrixWorldInverse);
+  waterSeen.set(0, p.y, 0).applyMatrix4(G.camera.matrixWorldInverse);
   return {
     on,
     hour: hourNow(),
     indoors: !!G.arena.room || G.arena.hallShown,
     fireAt: Math.hypot(CAMPFIRE[0] - p.x, CAMPFIRE[1] - p.z),
     fireWay: Math.atan2(fireSeen.x, -fireSeen.z),
+    waterAt: Math.hypot(p.x, p.z),
+    waterWay: Math.atan2(waterSeen.x, -waterSeen.z),
   };
 }
 

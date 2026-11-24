@@ -1,9 +1,11 @@
 // The village's ambience (#745, "Add Day and Night Ambient Sound Effects (Birds, Crickets, Rustling Leaves, Fire
-// Crackling)"): wind in the leaves always, birds by day, crickets by night, and the campfire crackling louder as the
-// hero nears it, panned to where it is from the camera. Made of noise as the spells are (docs/agents/audio.md: no notes
-// over the music): a bird's chirp is a narrow band of noise swept up or down, a cricket's trill a narrower one pulsed.
-// One graph made at the first frame it's wanted and kept, each layer's level eased to what the frame asks
-// (`updateAmbience`); played through the effects' level, so the effects slider sets it.
+// Crackling)"): leaves rustling always, birds by day, crickets by night, the fountain's water flowing and the campfire
+// crackling louder as the hero nears each, panned to where it is from the camera (no wind, from review: "Wind will be
+// messing with people and not let them enjoy the game", water by the fountain in its place). Made of noise as the
+// spells are (docs/agents/audio.md: no notes over the music): a bird's chirp is a narrow band of noise swept up or
+// down, a cricket's trill a narrower one pulsed. One graph made at the first frame it's wanted and kept, each layer's
+// level eased to what the frame asks (`updateAmbience`); played through the effects' level, so the effects slider
+// sets it.
 import { audioContext, voice } from './audio';
 
 /** What the ambience is asked for this frame (`main.ts`'s `ambienceWanted`). */
@@ -17,16 +19,19 @@ export interface AmbienceWanted {
   /** the campfire's distance from the hero (m), and the way to it from where the camera looks (rad, 0 ahead) */
   fireAt: number;
   fireWay: number;
+  /** the fountain's, likewise */
+  waterAt: number;
+  waterWay: number;
 }
 
 /** the layers looped and eased (the birds' channel among them) */
-const LAYERS = ['wind', 'leaves', 'birds', 'crickets', 'fire'] as const;
+const LAYERS = ['leaves', 'birds', 'crickets', 'fire', 'water'] as const;
 
 /** Each layer's level at full (a share of the effects' master): soft under the music and the spells (`lab sound`'s
  *  `ambienceDay`, `ambienceNight`, `ambienceFire`: their loudest half second -35 to -38 dB, a swing's -26, a
  *  shot's -32; a narrow band carries a small share of the noise, so the birds and crickets need the most to stand
  *  out). */
-const LEVEL = { wind: 0.11, leaves: 0.02, birds: 0.9, crickets: 0.45, fire: 0.3 };
+const LEVEL = { leaves: 0.02, birds: 0.9, crickets: 0.45, fire: 0.3, water: 0.17 };
 /** how fast a layer's level eases to the asked (s, a time constant) */
 const EASE = 0.8;
 /** the hours the birds sing and the crickets trill, each easing in and out over `DUSK` hours either side */
@@ -35,6 +40,9 @@ const DUSK = 1.5;
 /** the campfire heard from this far (m), and at full within `FIRE_NEAR` */
 const FIRE_FAR = 14;
 const FIRE_NEAR = 2.5;
+/** the fountain heard from this far (m, from its middle), and at full within `WATER_NEAR` (its basin 2.2 m across) */
+const WATER_FAR = 16;
+const WATER_NEAR = 3;
 /** indoors, the outside's share */
 const INDOORS = 0.2;
 /** a bird's phrase every this many seconds or so (the least, and the spread over it), and its chirps (the most) */
@@ -42,23 +50,24 @@ const PHRASE_EVERY = 1.6;
 const PHRASE_SPREAD = 4.5;
 const PHRASE_MOST = 5;
 
-/** The ambience's graph: each layer's own level, and the fire's pan. */
+/** The ambience's graph: each layer's own level, and the fire's and the water's pans. */
 interface Graph {
-  wind: GainNode;
   leaves: GainNode;
   birds: GainNode;
   crickets: GainNode;
   fire: GainNode;
   firePan: StereoPannerNode;
+  water: GainNode;
+  waterPan: StereoPannerNode;
 }
 
 let graph: Graph | null = null;
 /** the audio clock the next bird's phrase is due by */
 let nextPhrase = 0;
 /** each layer's level asked last (a harness reads it: `lab village --only ambienceHeard`) */
-const asked = { wind: 0, leaves: 0, birds: 0, crickets: 0, fire: 0, firePan: 0 };
+const asked = { leaves: 0, birds: 0, crickets: 0, fire: 0, firePan: 0, water: 0, waterPan: 0 };
 
-/** The levels the ambience asks its layers for now (0 to their full level), and the fire's pan. */
+/** The levels the ambience asks its layers for now (0 to their full level), and the fire's and water's pans. */
 export const ambienceNow = (): Readonly<typeof asked> => asked;
 
 /** A share rising from 0 to 1 over `span` from `a`, and falling back over `span` to `b`. */
@@ -71,7 +80,7 @@ function within(x: number, a: number, b: number, span: number): number {
 /** How much of the day it is at `hour`: 1 by day, 0 by night, easing between at dawn and dusk. */
 export const dayShare = (hour: number): number => within(hour, DAY.from, DAY.to, DUSK);
 
-/** The graph made in the effects' context: wind, leaves, crickets and the fire looped, the birds' channel. */
+/** The graph made in the effects' context: leaves, crickets, the fire and the water looped, the birds' channel. */
 function makeGraph(): Graph {
   const v = voice(0, 0.12);
   const c = v.c;
@@ -81,19 +90,7 @@ function makeGraph(): Graph {
     g.connect(to);
     return g;
   };
-  // the wind: a wide band of noise round 700 Hz, its gusts two slow swells of its level
-  const wind = channel();
-  const gust = c.createGain();
-  gust.gain.value = 0.55;
-  v.lfo(0.07, 0.3, gust.gain);
-  v.lfo(0.19, 0.15, gust.gain);
-  const windBand = c.createBiquadFilter();
-  windBand.type = 'bandpass';
-  windBand.frequency.value = 700;
-  windBand.Q.value = 0.45;
-  v.loop(windBand);
-  windBand.connect(gust).connect(wind);
-  // the leaves: the crackle slowed and kept high, a rustle that swells with the gusts
+  // the leaves: the crackle slowed and kept high, a rustle that swells and fades slowly
   const leaves = channel();
   const rustle = c.createGain();
   rustle.gain.value = 0.5;
@@ -142,10 +139,40 @@ function makeGraph(): Graph {
   v.lfo(1.7, 0.08, flicker.gain);
   v.loop(roarBand);
   roarBand.connect(flicker).connect(fire);
+  // the water: the fountain's flow a band of noise whose middle wanders quickly (three fast swings of it, so it babbles
+  // and never settles to a tone), drops falling in it as slowed crackle, and its splash on the basin a soft low band
+  const waterPan = c.createStereoPanner();
+  waterPan.connect(v.out);
+  const water = channel(waterPan);
+  const flowBand = c.createBiquadFilter();
+  flowBand.type = 'bandpass';
+  flowBand.frequency.value = 1100;
+  flowBand.Q.value = 1.4;
+  v.lfo(2.3, 260, flowBand.frequency);
+  v.lfo(3.7, 180, flowBand.frequency);
+  v.lfo(5.9, 120, flowBand.frequency);
+  v.loop(flowBand);
+  flowBand.connect(water);
+  const dropBand = c.createBiquadFilter();
+  dropBand.type = 'bandpass';
+  dropBand.frequency.value = 2400;
+  dropBand.Q.value = 2.5;
+  const drops = c.createGain();
+  drops.gain.value = 1.6;
+  v.crackle(dropBand, 0.22);
+  dropBand.connect(drops).connect(water);
+  const splashBand = c.createBiquadFilter();
+  splashBand.type = 'bandpass';
+  splashBand.frequency.value = 420;
+  splashBand.Q.value = 0.9;
+  const splash = c.createGain();
+  splash.gain.value = 0.45;
+  v.loop(splashBand);
+  splashBand.connect(splash).connect(water);
   // the birds: a channel each phrase's chirps are played into
   const birds = channel();
   v.start();
-  return { wind, leaves, birds, crickets, fire, firePan };
+  return { leaves, birds, crickets, fire, firePan, water, waterPan };
 }
 
 /** One bird's phrase of 2 to `PHRASE_MOST` chirps from `at` (s, the audio clock), at a place of its own: each a
@@ -197,19 +224,25 @@ function noiseSource(c: BaseAudioContext): AudioBuffer {
   return buffer;
 }
 
-/** The levels `wanted` asks of each layer (0 to its full level), and the fire's pan. */
+/** How near a sound's place is: 1 within `near` m, 0 past `far`, easing as the square of the share between. */
+function nearness(at: number, near: number, far: number): number {
+  const share = Math.min(1, Math.max(0, (far - at) / (far - near)));
+  return share * share;
+}
+
+/** The levels `wanted` asks of each layer (0 to its full level), and the fire's and the water's pans. */
 export function levelsFor(wanted: AmbienceWanted): typeof asked {
-  if (!wanted.on) return { wind: 0, leaves: 0, birds: 0, crickets: 0, fire: 0, firePan: 0 };
+  if (!wanted.on) return { leaves: 0, birds: 0, crickets: 0, fire: 0, firePan: 0, water: 0, waterPan: 0 };
   const day = dayShare(wanted.hour);
   const out = wanted.indoors ? INDOORS : 1;
-  const near = Math.min(1, Math.max(0, (FIRE_FAR - wanted.fireAt) / (FIRE_FAR - FIRE_NEAR)));
   return {
-    wind: LEVEL.wind * out * (0.7 + 0.3 * day),
     leaves: LEVEL.leaves * out * (0.6 + 0.4 * day),
     birds: LEVEL.birds * out * day,
     crickets: LEVEL.crickets * out * (1 - day),
-    fire: wanted.indoors ? 0 : LEVEL.fire * near * near,
+    fire: wanted.indoors ? 0 : LEVEL.fire * nearness(wanted.fireAt, FIRE_NEAR, FIRE_FAR),
     firePan: Math.sin(wanted.fireWay),
+    water: wanted.indoors ? 0 : LEVEL.water * nearness(wanted.waterAt, WATER_NEAR, WATER_FAR),
+    waterPan: Math.sin(wanted.waterWay),
   };
 }
 
@@ -225,6 +258,7 @@ export function updateAmbience(wanted: AmbienceWanted): void {
     graph[layer].gain.setTargetAtTime(levels[layer], now, EASE);
   }
   graph.firePan.pan.setTargetAtTime(levels.firePan, now, 0.1);
+  graph.waterPan.pan.setTargetAtTime(levels.waterPan, now, 0.1);
   if (levels.birds > 0.001 && now >= nextPhrase) {
     if (nextPhrase > 0) phrase(graph, now + 0.05);
     nextPhrase = now + PHRASE_EVERY + Math.random() * PHRASE_SPREAD;
@@ -236,14 +270,15 @@ export function updateAmbience(wanted: AmbienceWanted): void {
 export function playAmbience(wanted: AmbienceWanted, seconds: number): () => void {
   const g = makeGraph();
   const levels = levelsFor(wanted);
-  const now = g.wind.context.currentTime;
+  const now = g.leaves.context.currentTime;
   for (const layer of LAYERS) g[layer].gain.setValueAtTime(levels[layer], now);
   g.firePan.pan.setValueAtTime(levels.firePan, now);
+  g.waterPan.pan.setValueAtTime(levels.waterPan, now);
   if (levels.birds > 0.001) {
     for (let at = now + 0.3; at < now + seconds; at += PHRASE_EVERY + Math.random() * PHRASE_SPREAD) phrase(g, at);
   }
   return () => {
-    const end = g.wind.context.currentTime;
+    const end = g.leaves.context.currentTime;
     for (const layer of LAYERS) g[layer].gain.setTargetAtTime(0, end, 0.1);
   };
 }

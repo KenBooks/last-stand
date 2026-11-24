@@ -382,13 +382,16 @@ const DENIED: Record<string, Scene> = {
 const AMBIENCE_HEARD = 10;
 const FIRE_FAR = 30;
 const FIRE_CLOSE = 2;
+/** the fountain's distance far off and close by (m, from its middle) */
+const WATER_FAR = 30;
+const WATER_CLOSE = 3;
 
 /** The village's ambience (#745, `core/ambience.ts`) heard for `AMBIENCE_HEARD` s at `hour`, the campfire `fireAt` m
  *  off. */
-const ambienceScene = (what: string, hour: number, fireAt: number): Scene => ({
+const ambienceScene = (what: string, hour: number, fireAt: number, waterAt = WATER_FAR): Scene => ({
   what,
   cues: [
-    { at: 0, sound: ['ambience'], args: [hour, fireAt, AMBIENCE_HEARD], keep: 'ambience' },
+    { at: 0, sound: ['ambience'], args: [hour, fireAt, AMBIENCE_HEARD, waterAt], keep: 'ambience' },
     { at: AMBIENCE_HEARD, stop: 'ambience' },
   ],
   held: [1, AMBIENCE_HEARD],
@@ -396,9 +399,10 @@ const ambienceScene = (what: string, hour: number, fireAt: number): Scene => ({
 
 /** The village's ambience by day, by night and beside the campfire. */
 const AMBIENCE: Record<string, Scene> = {
-  ambienceDay: ambienceScene('the village by day: wind in the leaves, birds, the campfire far off', 12, FIRE_FAR),
-  ambienceNight: ambienceScene('the village by night: wind in the leaves, crickets, the campfire far off', 0, FIRE_FAR),
+  ambienceDay: ambienceScene('the village by day: leaves, birds, fire and fountain far off', 12, FIRE_FAR),
+  ambienceNight: ambienceScene('the village by night: leaves, crickets, fire and fountain far off', 0, FIRE_FAR),
   ambienceFire: ambienceScene('the village by day beside the campfire, straight ahead', 12, FIRE_CLOSE),
+  ambienceFountain: ambienceScene('the village by day at the fountain, straight ahead', 12, FIRE_FAR, WATER_CLOSE),
 };
 
 const SCENES: Record<string, Scene> = {

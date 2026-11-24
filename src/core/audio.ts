@@ -1938,10 +1938,11 @@ function whenRunning(play: () => void, late: number): void {
 /** Wrap a sound so it silently does nothing until audio is unlocked. */
 export const guard = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R | undefined => (ctx ? fn(...a) : undefined);
 export const sfx = {
-  /** the village's ambience at `hour`, the campfire `fireAt` m off and straight ahead, birds scheduled over `seconds`
-   *  (`core/ambience.ts`; the game plays it by `updateAmbience`, this is the lab's way in): returns its stop() */
-  ambience: guard((hour: number, fireAt: number, seconds: number) =>
-    playAmbience({ on: true, hour, indoors: false, fireAt, fireWay: 0 }, seconds)),
+  /** the village's ambience at `hour`, the campfire `fireAt` m off and the fountain `waterAt`, both straight ahead,
+   *  birds scheduled over `seconds` (`core/ambience.ts`; the game plays it by `updateAmbience`, this is the lab's way
+   *  in): returns its stop() */
+  ambience: guard((hour: number, fireAt: number, seconds: number, waterAt: number = Infinity) =>
+    playAmbience({ on: true, hour, indoors: false, fireAt, fireWay: 0, waterAt, waterWay: 0 }, seconds)),
   /** a bow drawn over `dur` s and held (`heavy`: 1 a sheaf or a lancewood shaft): returns its stop() */
   bowDraw: guard((dur: number, heavy: number) => bowDraw(dur, heavy)),
   /** a bow come to full draw: the glint on the arrowhead */
