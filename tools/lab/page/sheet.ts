@@ -10,7 +10,7 @@ import { bowOf, describeBow } from './ranger';
 import { bindKnown, holdFor, holdingAll, pressing, skillNamed } from './cast';
 import type { SkillDef } from '../../../src/types';
 import { groundHeight } from '../../../src/world/ground';
-import { describeParts, type Look } from './looks';
+import { describeParts, meshesOf, readyLook, type Look } from './looks';
 import { viewMode } from '../../../src/core/renderer';
 import { describeFramed, framed, type Framed } from './inFrame';
 import { describeDrink } from './drink';
@@ -209,6 +209,8 @@ export async function sheet(lab: Lab, options: SheetOptions): Promise<Sheet> {
     setup = await lab.setup(fixture);
     await state(lab, async (label, own = []) => {
       lab.model.root.updateMatrixWorld(true);
+      // (a look's pipelines made first: its picture is drawn and read in one task, `readyLook`)
+      if (options.look) await readyLook(options.look, meshesOf(lab.model.root));
       const tiles = lab.capture(options.views, { focus: options.focus, look: options.look });
       const seen = viewMode() === 'first' ? (await framed(lab)) ?? undefined : undefined;
       const parts = tiles.filter((tile) => tile.parts).map((tile) => `${tile.view}: ${describeParts(tile.parts!)}`);
