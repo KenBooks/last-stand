@@ -9,7 +9,8 @@ import { rustSwitching } from './engine';
 import { pipelinesAtOnceFromNow } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
 import { CAMERA, COOP } from './data/balance';
-import { START_SPOTS, YARD_DUMMIES, YARD_DUMMY_FACING, biomeOfHour, inHall, type VillageObject } from './data/village';
+import { CAMPFIRE, START_SPOTS, YARD_DUMMIES, YARD_DUMMY_FACING, biomeOfHour, inHall, type VillageObject } from './data/village';
+import { updateAmbience, type AmbienceWanted } from './core/ambience';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, escapeSpentOnLock, releaseInput } from './core/input';
 import { initAudio, sfx } from './core/audio';
 import { InputDelivery } from './core/inputDelivery';
@@ -1335,6 +1336,25 @@ function musicWanted(): MusicWanted {
   return { track: music.lobby, fade: FADES.lobby, ready };
 }
 
+/** where the campfire is from the camera, a frame's scratch */
+const fireSeen = new THREE.Vector3();
+
+/** The village's ambience now (#745, `core/ambience.ts`): heard in the village's lobby while the page is shown, by its
+ *  hour, muffled in a house's room or the hall of heroes, the campfire by its distance from the hero and its way from
+ *  where the camera looks. */
+function ambienceWanted(): AmbienceWanted {
+  const on = revealed && !document.hidden && G.mode === 'menu' && G.arena.place === 'village';
+  const p = G.player.pos;
+  fireSeen.set(CAMPFIRE[0], p.y, CAMPFIRE[1]).applyMatrix4(G.camera.matrixWorldInverse);
+  return {
+    on,
+    hour: hourNow(),
+    indoors: !!G.arena.room || G.arena.hallShown,
+    fireAt: Math.hypot(CAMPFIRE[0] - p.x, CAMPFIRE[1] - p.z),
+    fireWay: Math.atan2(fireSeen.x, -fireSeen.z),
+  };
+}
+
 const inputDelivery = new InputDelivery();
 
 function recordInputDelivery(force = false): void {
@@ -1363,6 +1383,7 @@ function frame(timestamp: number): void {
   framePart('input and view');
   joinWhenShown();
   updateMusic(dt, musicWanted());
+  updateAmbience(ambienceWanted());
   framePart('music');
   const t0 = perfClock.now();
   // (the developer mode's time: frozen, slowed, a step)

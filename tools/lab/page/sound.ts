@@ -378,6 +378,29 @@ const DENIED: Record<string, Scene> = {
   },
 };
 
+/** how long an ambience scene is heard (s), and the campfire's distance from the hero far off and close by (m) */
+const AMBIENCE_HEARD = 10;
+const FIRE_FAR = 30;
+const FIRE_CLOSE = 2;
+
+/** The village's ambience (#745, `core/ambience.ts`) heard for `AMBIENCE_HEARD` s at `hour`, the campfire `fireAt` m
+ *  off. */
+const ambienceScene = (what: string, hour: number, fireAt: number): Scene => ({
+  what,
+  cues: [
+    { at: 0, sound: ['ambience'], args: [hour, fireAt, AMBIENCE_HEARD], keep: 'ambience' },
+    { at: AMBIENCE_HEARD, stop: 'ambience' },
+  ],
+  held: [1, AMBIENCE_HEARD],
+});
+
+/** The village's ambience by day, by night and beside the campfire. */
+const AMBIENCE: Record<string, Scene> = {
+  ambienceDay: ambienceScene('the village by day: wind in the leaves, birds, the campfire far off', 12, FIRE_FAR),
+  ambienceNight: ambienceScene('the village by night: wind in the leaves, crickets, the campfire far off', 0, FIRE_FAR),
+  ambienceFire: ambienceScene('the village by day beside the campfire, straight ahead', 12, FIRE_CLOSE),
+};
+
 const SCENES: Record<string, Scene> = {
   bolt: {
     what: 'Splintering Bolt held: four casts, each bursting on a foe and its two splits on two others',
@@ -433,6 +456,7 @@ const SCENES: Record<string, Scene> = {
   ...WARRIOR,
   ...RANGER,
   ...DENIED,
+  ...AMBIENCE,
   lanceEarly: {
     what: 'Void Lance let go as its portal is drawn, before the beam',
     cues: [
