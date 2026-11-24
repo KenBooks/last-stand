@@ -156,6 +156,13 @@ body.profiling :is(#dev-panel, #dev-tab, #dev-fly) { display: none !important; }
   .da-cloud { color: $highlight; &:empty { display: none; } }
   .da-acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
 }
+// (what the owner draws for the agent, agentDraw.ts: over the page and under the badge; it takes the pointer only while
+// drawing is on)
+#dev-agent-draw {
+  position: fixed; inset: 0; width: 100vw; height: 100dvh; z-index: 60; pointer-events: none; touch-action: none;
+  &.hidden { display: none; }
+  &.on { pointer-events: auto; cursor: crosshair; }
+}
 #dev-agent-badge {
   position: fixed; top: 6px; left: 50%; translate: -50% 0; z-index: 61; zoom: var(--ui, 1);
   display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px; white-space: nowrap;
@@ -168,4 +175,6 @@ body.profiling :is(#dev-panel, #dev-tab, #dev-fly) { display: none !important; }
   font: inherit; color: $ink; background: $well; border: 1px solid rgba($frame, .55); border-radius: 3px;
   padding: 3px 10px; min-height: touch(28px); cursor: $cursor-hand;
   &:is(:hover, .alt-hover) { border-color: $highlight; }
+  &.hidden { display: none; }
+  &.on { color: $panel; background: $highlight; border-color: $highlight; }
 }

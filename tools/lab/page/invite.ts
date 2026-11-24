@@ -47,7 +47,7 @@ export function inviteState(): InviteState {
   };
 }
 
-/** One of the invitation's buttons clicked by the mouse (`invite`, `cancel`, `unmake`, `accept`, `refuse`, `kick`): the panel
+/** One of the invitation's buttons clicked by the mouse (`invite`, `cancel`, `unmake`, `accept`, `refuse`, `kick`, the badge's `draw` and `clear`): the panel
  *  opened first for its own. */
 export async function invitePress(lab: Lab, { what }: { what: string }): Promise<void> {
   const inPanel = what === 'invite' || what === 'cancel' || what === 'unmake';

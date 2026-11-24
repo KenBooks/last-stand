@@ -7,7 +7,7 @@ import { Player } from '../entities/player';
 import { updateFloaters } from '../ui/floaters';
 import { applyFreeCam, freeCamOn, freeCamToHero, setFreeCam } from './freeCam';
 import { initPanel, refreshPanel, toggleFly, togglePanel } from './panel';
-import { agentFrame, initAgent } from './agent';
+import { agentDraws, agentFrame, initAgent } from './agent';
 import type { BiomeId } from '../data/biomes';
 import { offerStartsUpTo } from '../ui/menus';
 
@@ -112,6 +112,6 @@ export function initDev(hooks: DevHooks): DevApi {
       // Labels must project through the flown camera even while simulation is frozen.
       if (freeCamOn()) updateFloaters(0);
     },
-    wantsCursor: () => freeCamOn(),
+    wantsCursor: () => freeCamOn() || agentDraws(),
   };
 }

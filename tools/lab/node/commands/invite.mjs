@@ -12,7 +12,7 @@ export default {
     + 'player\'s view, and a camera placed, drawn beside his frame, which must not change) answered and checked '
     + 'against the page\'s own state, '
     + 'a thing made in the scene (`join make`) and seen drawn in a picture of its spot, made again in its place, '
-    + 'sent again as its file is saved, and unmade, kicked by the badge, the used code refused, and an agent sent '
+    + 'sent again as its file is saved, and unmade, a stroke the owner draws on the screen read by `look` and seen in a picture, cleared, kicked by the badge, the used code refused, and an agent sent '
     + 'away as a co-op room opens, where none is offered; pictures in `out/invite` (`--canary` draws the player\'s '
     + 'frame from the agent\'s camera, builds the made thing hidden and starts the relay leaving a used code good, '
     + 'each of which it must catch, and passing an '
