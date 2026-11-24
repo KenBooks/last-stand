@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import * as renderer from '../../../src/core/renderer';
-import { frameCells } from './screenCells';
+import { frameCells, type FrameCells } from './screenCells';
 import type { ChangeSpan } from './flashes';
 
 /** A thing of the scene that can be taken out of a frame: its name, and taking it out (the result puts it back). */
@@ -29,11 +29,14 @@ const LISTED_FROM = 0.005;
 /** the sources listed for a change, at most */
 const LISTED_MOST = 4;
 
-/** A name for a thing of the scene without one: what it is and what it's drawn with. */
+/** A name for a thing of the scene without one: what it is, its shape's kind and what it's drawn with (by its
+ *  material alone, Glacial Nova's ground flash and rings were one thing, "unnamed Mesh (MeshBasicMaterial) (4)"). */
 function described(object: THREE.Object3D): string {
   const material = (object as THREE.Mesh).material;
   const drawnWith = Array.isArray(material) ? material[0]?.type : material?.type;
-  return `unnamed ${object.type}${drawnWith ? ` (${drawnWith})` : ''}`;
+  const shape = (object as THREE.Mesh).geometry?.type;
+  const kinds = [shape, drawnWith].filter(Boolean).join(', ');
+  return `unnamed ${object.type}${kinds ? ` (${kinds})` : ''}`;
 }
 
 /** Whether `object` or anything under it is a light. */
@@ -99,8 +102,8 @@ export function sceneSources(): Source[] {
   return [...things, ...lights];
 }
 
-/** The light of `cell` in the frame drawn now, as the game draws it. */
-function cellLightNow(lab: Lab, cell: number): number {
+/** The frame drawn now, as the game draws it, read back. */
+export function frameNow(lab: Lab): FrameCells {
   const drawing = lab.drawing;
   lab.drawing = true;
   try {
@@ -108,7 +111,12 @@ function cellLightNow(lab: Lab, cell: number): number {
   } finally {
     lab.drawing = drawing;
   }
-  return frameCells().cellLights[cell];
+  return frameCells();
+}
+
+/** The light of `cell` in the frame drawn now, as the game draws it. */
+function cellLightNow(lab: Lab, cell: number): number {
+  return frameNow(lab).cellLights[cell];
 }
 
 /** What each thing in the scene lights of `cell` now: the cell's light with everything, less its light without the

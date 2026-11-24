@@ -21,7 +21,8 @@ The rest of the commands are in [`COMMANDS.md`](../COMMANDS.md).
   counted change's two frames (the one it came from, the cell's darkest or brightest since the change before, and
   the one it reached) the frame is drawn again with each thing taken out in turn, and the light the cell loses
   without it is that thing's. A thing is whatever the scene holds under one name (an effect's mesh, a pool of
-  particles, a crowd, a biome's prop: name a mesh an effect adds, or it reads `unnamed Mesh (its material)`), and
+  particles, a crowd, a biome's prop: name a mesh an effect adds, or it reads `unnamed Mesh (its shape, its
+  material)`, and by its material alone Glacial Nova's ground flash, rings and frost were one thing), and
   each lit light alone, put out by its intensity (a light hidden changes the lights every material is compiled
   for; a group holding one is opened into its parts). Each change is a line: how much of it each thing lit, the
   most first, and `the rest`, what none accounts for (the grade's adaptation, the exposure, one thing covering
@@ -32,7 +33,17 @@ The rest of the commands are in [`COMMANDS.md`](../COMMANDS.md).
   it within a frame, 4 flashes a second, three fixes to the effect changing nothing; pictures of the two frames of
   a change showed the whole lance swung, the hero's aim wheeling to a foe beside him under the crosshair, `lab
   nearaim`); and scenarios run one after another on a page may differ from the same one run alone (the crypt's
-  third person counted 4 flashes after `top` and 1 alone, three times in three, by the same aim). It also lists the frame's mean
+  third person counted 4 flashes after `top` and 1 alone, three times in three, by the same aim). A frame past the
+  light budget is taken apart so too (`page/budgetSources.ts`): the cast is played again to the frame worst on each
+  measure it failed, and the measure is read there (at that sixteenth, for the brightest) with each thing taken out
+  in turn, then with everything the cast brought into the scene taken out together (what wasn't there before the
+  press), and before the press. A line lists the five things whose taking out lowered it most, each its reading
+  without it and the drop: `its brightest sixteenth 163; without ground flash 129 (-35); shockwave (2) 146 (-18);
+  frost decal 150 (-14); ...; without the cast's 11 things together 31 (-133); before the press 31`. Light adds up
+  and the grade compresses it, so the drops don't add up to the whole: a thing's own drop is what it holds up alone,
+  and two together may take more than both alone (by hand, Glacial Nova's ground flash took it to 140, both rings to
+  153, the two together to 118). It says where the replay's reading was 5% off the cast's (Starfall's crystals land
+  at random). It also lists the frame's mean
   every tenth of a second through the cast, and the blinks, listed and not judged (`page/blinks.ts`: a patch of a
   64 by 36 grid brightening by 20 or more over the frame before and back within 3 frames, an effect's own crackle
   among them; a broken prop's rubble piece drawn full size at the world's middle for a frame, beside a hero on the
@@ -47,7 +58,10 @@ The rest of the commands are in [`COMMANDS.md`](../COMMANDS.md).
   are problems too. The
   props a cast broke stand again before the next. `--times` (0.4,1.5,3 by default) are the moments pictured, the
   screen as the player sees it with the HUD, into `out/cast/<skill>`; `--canary` strobes the exposure in the first
-  biome and view (5 a second), which the flashes must catch. `--gear` holds the weapons a style's way, and without
+  biome and view (5 a second), which the flashes must catch, and what lit them must leave to the rest; then plays
+  that scenario again with a white ball before the camera, at the middle of a sixteenth (`lab canary: glare`),
+  which the budget's breakdown must name first of what lit the brightest sixteenth (in the strobe's run its light
+  was given the strobe's change, so each has a run of its own). `--gear` holds the weapons a style's way, and without
   it each skill is held the way its data says it needs (`gearFor`: its school's staff, empty hands for the fists',
   a shield, a two-hander for Thunder Crescent, two blades for Twin Fangs; else as rolled); a skill the hero knows
   but hasn't on a key is bound to its own first. Several skills go by commas (`cast pounce,wrath --class

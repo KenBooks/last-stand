@@ -91,7 +91,8 @@ export default {
     },
     canary: {
       kind: 'switch',
-      help: 'plant the fault the checks must catch, in the first biome and view: a strobe of the exposure',
+      help: 'plant the faults the checks must catch, in the first biome and view: a strobe of the exposure, then '
+        + 'a white ball before the camera in a run of its own',
     },
     frenzy: {
       kind: 'number',
@@ -116,10 +117,13 @@ export default {
   async each(side, options) {
     // (a biome and view at a time, each on its own: its pictures sent back with it)
     const reports = [];
-    for (const scenario of castScenarios(options)) {
-      const canary = Boolean(options.canary) && reports.length === 0;
+    const scenarios = castScenarios(options);
+    for (const scenario of scenarios) {
+      const canary = options.canary && reports.length === 0 ? 'strobe' : null;
       reports.push(await side.command('cast', { ...scenario, canary }));
     }
+    // (the white ball in a run of its own: under the strobe its light was given the strobe's change)
+    if (options.canary) reports.push(await side.command('cast', { ...scenarios[0], canary: 'glare' }));
     return {
       text: reports.map((report) => report.text).join('\n'),
       problems: reports.flatMap((report) => report.problems),

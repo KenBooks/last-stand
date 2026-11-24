@@ -54,6 +54,7 @@ function tracked(obj: THREE.Object3D, mats: THREE.Material[]): () => void {
 export function shockwave(pos: Pos, { color = 0xffffff, intensity = 3, from = 0.3, to = 4, life = 0.45, y = floor(pos) + 0.08, thickness = 1 } = {}) {
   const mat = additive(color, intensity);
   const m = new THREE.Mesh(GEO.ring, mat);
+  m.name = 'shockwave';
   m.position.set(pos.x, y, pos.z);
   m.scale.set(from, thickness, from);
   const dispose = tracked(m, [mat]);
@@ -74,6 +75,7 @@ export function groundFlash(pos: Pos, { color = 0xffffff, intensity = 2, radius 
   const mat = additive(color, intensity);
   mat.map = TEX.soft;
   const m = new THREE.Mesh(GEO.plane, mat);
+  m.name = 'ground flash';
   m.position.set(pos.x, floor(pos) + 0.06, pos.z);
   m.scale.setScalar(radius);
   const dispose = tracked(m, [mat]);
@@ -86,6 +88,7 @@ export function decal(pos: Pos, { type = 'scorch' as 'scorch' | 'frost', size = 
   const mat = new THREE.MeshBasicMaterial({ map: TEX[type], transparent: true, depthWrite: false, opacity, polygonOffset: true, polygonOffsetFactor: -2 });
   if (type === 'frost') { mat.blending = THREE.AdditiveBlending; mat.color.setScalar(0.8); }
   const m = new THREE.Mesh(GEO.plane, mat);
+  m.name = `${type} decal`;
   m.position.set(pos.x, floor(pos) + 0.03 + Math.random() * 0.01, pos.z);
   m.rotation.y = Math.random() * Math.PI * 2;
   m.scale.setScalar(size);
@@ -263,6 +266,7 @@ function crackTexture(): THREE.CanvasTexture {
 export function glyphMarker(pos: Pos, { radius = 1.2, color = 0xffffff, intensity = 1.2, life = 0.5 } = {}) {
   const mat = nearGlow(new THREE.MeshBasicMaterial({ map: TEX.rune, color: new THREE.Color(color).multiplyScalar(intensity), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 }));
   const m = new THREE.Mesh(GEO.plane, mat);
+  m.name = 'glyph marker';
   m.position.set(pos.x, floor(pos) + 0.05, pos.z);
   const dispose = tracked(m, [mat]);
   let t = 0, dead = false;
@@ -307,6 +311,7 @@ export function crackDecal(pos: Pos, { size = 3, color = 0xffffff, intensity = 2
   const mat = nearGlow(new THREE.MeshBasicMaterial({ map: TEX.cracks, color: new THREE.Color(color).multiplyScalar(intensity), transparent: true,
     blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
   const m = new THREE.Mesh(GEO.plane, mat);
+  m.name = 'crack decal';
   m.position.set(pos.x, floor(pos) + 0.04, pos.z);
   m.rotation.y = Math.random() * Math.PI * 2;
   m.scale.setScalar(size);
