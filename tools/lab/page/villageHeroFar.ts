@@ -27,7 +27,7 @@ function heroTriangles(): number {
   let triangles = 0;
   G.player.model.root.traverse((object) => {
     const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh || !mesh.visible || mesh.userData.shadowTwin) return;
+    if (!mesh.isMesh || !mesh.visible) return;
     const geometry = mesh.geometry;
     triangles += (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;
   });

@@ -101,7 +101,7 @@ const COARSE_HANDS_UNDER = 0.2;
 import { framesUncapped, runFrames } from './core/frameLoop';
 import { pacedStep } from './core/framePace';
 import { updateLowLife } from './core/lowLife';
-import { markLoaded, pinPrograms, programsCompiledInGame } from './core/shaders';
+import { markLoaded, programsCompiledInGame } from './core/shaders';
 import { BIOMES, BIOME_IDS } from './data/biomes';
 import { CLASS_IDS } from './data/classes/index';
 import { loadingStep, loadingDone, loadingFailed, loadingLeft, lobbyLaidOut, prepareExit, seeThroughLoading, stillLoading } from './ui/loading';
@@ -412,7 +412,6 @@ async function boot() {
   // it draws with is still compiling, so the lobby is never shown with its ground left out: `sceneReady`)
   await sceneReady(render);
   readyMinimap();
-  pinPrograms(renderer);
   // (from here a program not made by a warm-up is a hitch: marked once the fight's were warm, a new build's lobby, its
   // fight cold till Start, had the perf report count every program late, `lab programs --cold`)
   markLoaded();
@@ -1046,7 +1045,6 @@ function profileChanged() {
   sendLook();
 }
 
-const compileContext = () => `(${G.mode}${G.run ? ` wave ${G.run.wave}` : ''}, t=${G.time.toFixed(1)}s, ${G.enemies.length} foes)`;
 
 // --- views ------------------------------------------------------------------------
 /** the view, cycled with V in a run and in the lobby alike (on touch, the camera button beside the pause) */
@@ -1397,7 +1395,6 @@ function frame(timestamp: number): void {
   framePart('render');
   bugReportAfterRender();
   perfSplit(t1 - t0, perfClock.now() - t1);
-  pinPrograms(G.renderer, compileContext);
   endInputFrame();
   framePartsEnd();
   perfEndFrame();

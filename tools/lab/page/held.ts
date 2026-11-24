@@ -15,7 +15,7 @@ import { G } from '../../../src/state';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { readinessOf } from '../../../src/combat/skills/readiness';
 import { outline, outlinedLook } from '../../../src/ui/overlay/outline';
-import { lateCompiles, pinPrograms } from '../../../src/core/shaders';
+import { lateCompiles } from '../../../src/core/shaders';
 import { drawFrame, type Canvas } from './light';
 import { foesAt } from './death';
 import { acrossTheStep, starfallStrikes, type HeldSkill, type Shown } from './heldArea';
@@ -213,8 +213,6 @@ function outlineChecks(
   const round = outlinedLook()?.root;
   const pixels = outlinePixels(lab, dummy);
   if (planted && look) outline(look.root, look.color, look.strength);
-  // (the game notes a program compiled in its next frame: noted now, so the canary's are told apart)
-  if (planted) pinPrograms(G.renderer);
   const canaryCompiled = planted ? lateCompiles.splice(compiledBefore).length : 0;
   if (canaryCompiled) lines.push(`  (the canary's outline round the hero compiled ${canaryCompiled}: not counted)`);
   const faults: string[] = [];

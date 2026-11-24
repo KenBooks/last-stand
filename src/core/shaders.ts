@@ -1,14 +1,9 @@
-// Shader program lifetime. three.js deletes a compiled program as soon as the last
-// material using it is disposed. Spell and enemy materials are short-lived, so every
-// cast or wave recompiled its shaders: a 10-30 ms hitch, worse on ANGLE / Metal.
-// The set of distinct programs is small and bounded, so we keep all of them for the
-// whole session, and compile the known ones up front (warmUp) before the first frame.
+// The warm-ups and the count of what was compiled late. The engine draws the game and compiles its pipelines
+// aside (`engine/pipelinesAside.ts`): a warm-up hands it what a part would draw and waits for them, before the
+// first frame that shows it. (three's own programs were pinned and listed here while three drew the scene.)
 import { AHEAD, LATE_PIPELINES, PIPELINES, pipelinesReady } from '../engine/pipelinesAside';
 import * as THREE from 'three';
-import { G } from '../state';
 
-const pinned = new WeakSet<object>();
-const known: { name: string; key: string[] }[] = [];
 let loaded = false;
 /** The engine's pipelines first asked for in play, each described, for the perf report: the engine draws the game,
  *  and three's renderer, its host alone, compiles no program (`engine/pipelinesAside.ts`). */
@@ -17,69 +12,11 @@ export const lateCompiles: string[] = LATE_PIPELINES;
 /** Programs that failed to link on this device, each with the driver's word on it: WebGL's, so none now. */
 export const shaderErrors: string[] = [];
 
-/** Take one extra reference on every program not seen yet, so it is never released. */
-export function pinPrograms(renderer: THREE.WebGLRenderer, context?: () => string): void {
-  for (const p of renderer.info.programs ?? []) {
-    if (pinned.has(p)) continue;
-    pinned.add(p);
-    p.usedTimes++;
-    const key = p.cacheKey.split(',');
-    // (an unnamed material's program by its kind: three's shader for it, `depth` a shadow caster's)
-    const kind = p.name || key[0];
-    // (a warm-up's after loading, the heroes' made when needed, isn't late: nothing was drawn waiting for it)
-    if (loaded && !behind) lateCompiles.push(`${ownerOf(renderer, p)} (${kind}) ${context?.() ?? ''} | ${describeNew(p.name, key)}`);
-    known.push({ name: p.name, key });
-  }
-}
-
-/** Which scene object renders with program `p` (for the report): material type and object path. */
-function ownerOf(renderer: THREE.WebGLRenderer, p: THREE.WebGLProgram): string {
-  // (a shadow pass's material is three's own, on no object: the ledger, in dev builds, saw what it was drawing)
-  const drawn = programsMade.find((entry) => entry.program === p);
-  let found = drawn && drawn.owner !== '?' ? `drawing ${drawn.owner}` : 'unknown owner (shadow / post pass?)';
-  G.scene.traverse((o) => {
-    const mats = (o as THREE.Mesh).material;
-    for (const m of Array.isArray(mats) ? mats : mats ? [mats] : []) {
-      if ((renderer.properties.get(m) as { currentProgram?: unknown }).currentProgram !== p) continue;
-      const path: string[] = [];
-      for (let a: THREE.Object3D | null = o; a && a !== G.scene; a = a.parent) path.unshift(a.name || a.type);
-      found = `${m.type}${m.name ? ` "${m.name}"` : ''} on ${path.join(' > ')}`;
-    }
-  });
-  return found;
-}
-
-/** A program as three made it, for the lab (`lab programs`): the loading step showing as it was made, whether
- *  `compile()` made it (the warm-ups' compile) or a draw, the material's type and what it was made for (its
- *  material and object, as `ownerOf` says it; three names a program after its material's name alone), the draws
- *  that used it since, and what uses it: the scene's top-level object (by name, else type) of each object compiled
- *  or drawn with it, so a program the foes alone use is told from one the lobby shares. Its shaders' GLSL as three
- *  gave it, which three's own program drops once linked (what `lab programs --cost` compiles again). */
-export interface ProgramMade {
-  program: THREE.WebGLProgram; step: string; byCompile: boolean; type: string; owner: string; draws: number;
-  users: Set<string>; vertex: string; fragment: string;
-}
-/** Every program three's WebGL renderer made, for the lab: none now (nothing records them). */
-export const programsMade: ProgramMade[] = [];
-
 /** whether the warm-up behind the lobby is on (game/warmup.ts warmTheRest): its programs are the boot's */
 let behind = false;
 export function behindTheLobby(on: boolean): void {
   behind = on;
   PIPELINES.behind = on;
-}
-
-/** Field-level diff against the closest known program of the same kind. */
-function describeNew(name: string, key: string[]): string {
-  let best: string[] | null = null, bestD = Infinity;
-  for (const k of known) {
-    if (k.name !== name || k.key.length !== key.length) continue;
-    let d = 0;
-    for (let i = 0; i < key.length; i++) if (key[i] !== k.key[i]) d++;
-    if (d < bestD) { bestD = d; best = k.key; }
-  }
-  if (!best) return `no similar program; key starts ${key.slice(0, 3).join(',').slice(0, 80)}`;
-  return key.map((v, i) => (v !== best![i] ? `[${i}] ${best![i].slice(0, 30)} -> ${v.slice(0, 30)}` : '')).filter(Boolean).join('; ');
 }
 
 /** Call once loading is done; later compiles are counted as in-game hitches. */

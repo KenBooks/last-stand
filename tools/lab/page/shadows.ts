@@ -8,14 +8,13 @@
 // (`castsUnseen`, the engine's bridge): taken away, it changes the frame. From #270 to #893 it cast nothing there,
 // his arms' shadow floating alone over the ground. `--canary` takes his shadow away, and through the eyes leaves his
 // hidden body uncast, as it was: each must be seen. `--cost` times the frame on the engine's GPU
-// clock in turns, each way and with him casting nothing. It compared his pieces cast as one (castAsOne.ts) against
-// each alone, in three's shadow pass, which the engine never runs: under it the two drew the same, no piece was cast
-// as one, and its timing read three's shadow map, never drawn.
+// clock in turns, each way and with him casting nothing. It compared his pieces cast as one (`castAsOne.ts`, taken
+// out with three's drawing of the scene) against each alone, in three's shadow pass, which the engine never ran.
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import type { ViewMode } from '../../../src/core/renderer';
 import type { WeaponStyle } from '../../../src/loot/loadout';
-import { castingAsOne } from '../../../src/entities/models/castAsOne';
+import { holdShadowsWhole } from '../../../src/entities/models/shadowDetail';
 import { RUST } from '../../../src/engine';
 import { G } from '../../../src/state';
 import { drawFrame, type Canvas } from './light';
@@ -72,7 +71,7 @@ const COARSE_SHARE_EYES = 0.05;
 /** Every triangle cast, or fewer as the game casts them (`models/shadowDetail.ts`; a commit from before it takes the
  *  property as nothing, an A/B's other side loading this module too). */
 function holdWhole(whole: boolean): void {
-  (castingAsOne as { whole?: boolean }).whole = whole;
+  holdShadowsWhole(whole);
 }
 
 /** The frame drawn with every triangle cast or fewer; and how many of his pieces cast from fewer. */

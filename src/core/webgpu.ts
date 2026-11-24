@@ -31,7 +31,7 @@ export function holdSceneTarget(target: THREE.RenderTarget): void {
 /** the renderer, for what's sent to the GPU outside a draw (`uploadTexture`) */
 let uploader: WebGPURenderer | null = null;
 /** `texture` sent to the GPU now, as it stands. A material three doesn't refresh sends none of its textures, so what
- *  still meshes read that changes each frame is sent by what changes it (`models/drawAsOne.ts`). */
+ *  still meshes read that changes each frame is sent by what changes it (a crowd's rows, `models/crowd.ts`). */
 export function uploadTexture(texture: THREE.Texture): void {
   uploader?.initTexture(texture);
 }
@@ -457,43 +457,7 @@ type Monitored = {
   looksSeen?: Float32Array;
   /** whether its looks changed since its last draw: why it was refreshed in full (`fullBecause`) */
   looksChanged?: boolean;
-  /** what a stand-in's base held as this render object last drew it (`baseChanged`) */
-  baseSeen?: Float32Array;
 };
-
-/** The materials standing in for another (`models/drawAsOne.ts`), by what they stand in for: nothing about their object
- *  or geometry ever changes, so a draw of one looks at its base's values alone (`baseChanged`). */
-export const standInBases = new WeakMap<THREE.Material, THREE.Material>();
-
-/** a stand-in's base's values, those a game changes as it runs */
-type BaseValues = THREE.MeshPhysicalMaterial & { kitLooks?: KitLooks };
-
-/** how many numbers a stand-in's base is watched by (`baseChanged`) */
-const BASE_VALUES = LOOKS_COUNT + 15;
-
-/** Whether `base`'s values differ from what `seen` holds, `seen` set to them: three's observer compares each of the
- *  85 properties of a material at every draw, a stand-in's through its accessors (1.5 ms of the frame's JS, profiled,
- *  for a hero's 31 draws). A map swapped, a colour set, a glow's pulse or anything said by its `version` shows here. */
-function baseChanged(base: BaseValues, seen: Float32Array): boolean {
-  const looks = base.kitLooks;
-  let changed = looks ? looksChanged(looks, seen) : false;
-  let at = LOOKS_COUNT;
-  changed = seeAt(seen, at++, base.version) || changed;
-  changed = seeAt(seen, at++, base.color?.r ?? 0) || changed;
-  changed = seeAt(seen, at++, base.color?.g ?? 0) || changed;
-  changed = seeAt(seen, at++, base.color?.b ?? 0) || changed;
-  changed = seeAt(seen, at++, base.emissive?.r ?? 0) || changed;
-  changed = seeAt(seen, at++, base.emissive?.g ?? 0) || changed;
-  changed = seeAt(seen, at++, base.emissive?.b ?? 0) || changed;
-  changed = seeAt(seen, at++, base.emissiveIntensity ?? 0) || changed;
-  changed = seeAt(seen, at++, base.opacity) || changed;
-  changed = seeAt(seen, at++, base.roughness ?? 0) || changed;
-  changed = seeAt(seen, at++, base.metalness ?? 0) || changed;
-  changed = seeAt(seen, at++, base.envMapIntensity ?? 0) || changed;
-  changed = seeAt(seen, at++, base.map?.id ?? 0) || changed;
-  changed = seeAt(seen, at++, base.normalMap?.id ?? 0) || changed;
-  return seeAt(seen, at, base.roughnessMap?.id ?? 0) || changed;
-}
 
 /** Whether `value` differs from `seen[i]`, `seen[i]` set to it (as the array holds it: a float32 never equals the
  *  double it rounded). */
@@ -542,15 +506,6 @@ function stillWhereStill(renderer: WebGPURenderer): void {
   const needsRefresh = nodes.needsRefresh.bind(nodes);
   nodes.needsRefresh = (built) => {
     if (refreshedInFull.has((built as unknown as { object: THREE.Object3D }).object)) return 2;
-    const base = standInBases.get(built.material);
-    if (base !== undefined && built.baseSeen) {
-      // (a stand-in's uniforms of the render, the camera's and the lights', each render)
-      return baseChanged(base as BaseValues, built.baseSeen) ? 2 : 1;
-    }
-    if (base !== undefined) {
-      built.baseSeen = new Float32Array(BASE_VALUES).fill(NaN);
-      baseChanged(base as BaseValues, built.baseSeen);
-    }
     // (and the shadow maps' depth materials: what makes a caster's shadow change moves it, which is a refresh)
     const shadow = (built.material as { isShadowPassMaterial?: boolean }).isShadowPassMaterial === true;
     const still = shadow || stillNodes.has(built.material);

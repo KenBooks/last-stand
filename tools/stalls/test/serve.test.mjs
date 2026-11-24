@@ -5,11 +5,11 @@ import { splitEntry } from '../serve.mjs';
 
 test('splits a query off this tree and a commit', () => {
   assert.deepEqual(splitEntry('this'), { tree: 'this', query: '' });
-  assert.deepEqual(splitEntry('this?castAsOne=0'), { tree: 'this', query: '?castAsOne=0' });
+  assert.deepEqual(splitEntry('this?farDetail=0'), { tree: 'this', query: '?farDetail=0' });
   assert.deepEqual(splitEntry('ref:main?a=1&b=2'), { tree: 'ref:main', query: '?a=1&b=2' });
 });
 
 test('leaves any other URL whole, its query its own', () => {
-  const url = 'https://victorzakharov.github.io/last-stand/?castAsOne=0';
+  const url = 'https://victorzakharov.github.io/last-stand/?farDetail=0';
   assert.deepEqual(splitEntry(url), { tree: url, query: '' });
 });

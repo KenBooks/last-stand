@@ -29,7 +29,6 @@ import { BEHIND, buildLater, finishInSlices, finishNow } from './behind';
 import { perfClock } from '../core/perfClock';
 import { makeHeadAhead, preloadHeads } from '../entities/models/head';
 import { heroDetail } from '../entities/models/armor';
-import { drawnAsOneSamples } from '../entities/models/drawAsOne';
 import { Enemy } from '../entities/enemy';
 import { heroLights } from '../entities/player';
 import { crowdSlots, joinCrowd, leaveCrowd } from '../entities/models/crowd';
@@ -116,8 +115,6 @@ function* heroAllWornSteps(model: string, at?: THREE.Vector3): Generator<void, M
   m.root.traverse((o) => { o.visible = true; });
   m.root.name = `warm-up: ${model}, all worn`;   // names show up in the perf report
   if (at) m.root.position.copy(at);
-  // (and on WebGPU his parts as a hero draws them, merged: each material drawn from the joints)
-  drawnAsOneSamples(m);
   return m;
 }
 

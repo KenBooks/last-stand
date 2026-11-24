@@ -52,7 +52,7 @@ function exportOf(repo, outDir, ref) {
 
 /**
  * A URL as the command line names it, split into the tree it names and the query asked of its page:
- * `this?castAsOne=0` is this tree's page with `?castAsOne=0` (a switch of the game's measured in turns with the
+ * `this?farDetail=0` is this tree's page with `?farDetail=0` (a switch of the game's measured in turns with the
  * page as it is, one build served for both). Any other URL is its own tree.
  */
 export function splitEntry(entry) {

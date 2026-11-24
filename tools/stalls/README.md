@@ -33,7 +33,7 @@ npm run stalls -- --scenario hall --seconds 12 --listed 60 --js --return  # into
 npm run stalls -- --scenario boot --url this,https://last-stand.cc/ --rounds 3  # the boot
 npm run stalls -- --scenario boot --cpu-slowdown 4 --js   # on a phone's CPU, its JS by function
 npm run stalls -- --scenario boot --url this,ref:HEAD~2 --rounds 3  # this tree beside a commit of its own
-npm run stalls -- --url "this,this?castAsOne=0" --rounds 4 --js  # a switch of the game's, in turns, one build
+npm run stalls -- --url "this,this?farDetail=0" --rounds 4 --js  # a switch of the game's, in turns, one build
 npm run stalls -- --scenario boot --film --perf --window 799x384 --scale 3.75 --auto low@518400  # a phone's exit
 npm run stalls -- --scenario boot --film --blink-exit 2   # the film's canary: two blinks to find
 npm run stalls -- --scenario boot --film-boot --touch --window 799x384 --scale 3.75 --gpu-memory 64  # a phone's tiles

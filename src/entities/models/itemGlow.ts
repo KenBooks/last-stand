@@ -41,8 +41,7 @@ export function drawnIn(mesh: THREE.Mesh, materials: THREE.Material[]): boolean 
 export class ItemGlows {
   private readonly auras = new Map<GlowSlot, THREE.Color[]>();
 
-  /** `kitMats`: the kit's materials, which the copies join (disposed with them; on WebGPU a merged hero's parts are
-   *  told apart by them, `drawAsOne.ts`) */
+  /** `kitMats`: the kit's materials, which the copies join (disposed with them) */
   constructor(private readonly kitMats: THREE.Material[]) {}
 
   /**

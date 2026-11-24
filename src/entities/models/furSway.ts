@@ -40,7 +40,7 @@ export class FurSway {
     m.customProgramCacheKey = () => key() + '-fur';
     sameLooks(m, base);
     (m as unknown as OwnLooks).webgpuLooks = (node) => this.swayNodes(node);
-    // (each mesh's lag its own: models/drawAsOne.ts would merge it still)
+    // (each mesh's lag its own: a merge of the hero's parts would take it still)
     mesh.userData.drawsAlone = true;
     mesh.material = m;
     mesh.userData.furLag = this.lag;   // (read by probes)
