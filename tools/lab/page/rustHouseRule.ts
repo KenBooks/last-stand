@@ -13,11 +13,12 @@ import { standAt } from './draws';
 import { faceCamera } from '../../../src/core/renderer';
 import { seeValue, type SeeThrough } from '../../../src/core/seeThrough';
 import { DOOR_WHOLE, seenShareAt, seesIntoRoom } from '../../../src/core/sight';
-import { HALL, TERRACE, inHall } from '../../../src/data/village';
+import { COTTAGES, HALL, TERRACE, inHall } from '../../../src/data/village';
 import { RUST } from '../../../src/engine';
 import { ROOMS } from '../../../src/engine/ahead';
 import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
+import { COTTAGE } from '../../../src/world/villagePlan';
 
 /** A place the rule is held from: where he stands (x, z), the camera's turn (degrees) and its zoom. */
 export interface RuleView {
@@ -53,6 +54,9 @@ export const RULE_VIEWS: readonly RuleView[] = [
   { name: 'beside a cottage', at: [-12.6, 13.2], turned: 0, zoom: 0.5 },
   { name: 'beside a cottage, camera over it', at: [-12.6, 13.2], turned: 180, zoom: 0.5 },
   { name: 'between two cottages', at: [-15.0, 10.8], turned: 90, zoom: 0.5 },
+  // (from play, in the owner's own game (lab join), stood behind the House of Records at its wall: its roof opened
+  // over its own floor too, "should not thin inside the house... when player is outside, we only thin outside parts")
+  { name: 'behind a cottage, at its wall, as played', at: [-14.17, -0.59], turned: 171, zoom: 0.53 },
 ];
 
 /** the kinds of see-through a house is built of (`kinds` in core/seeThrough.ts) */
@@ -117,6 +121,8 @@ export interface RuleRead {
   roof?: { blocks: number; coverLeft: number; blocksOver: number };
   /** before the hall's door: its front wall pictured alone, read the same way */
   doorWall?: { blocks: number; coverLeft: number; blocksOver: number };
+  /** the blocks over ground within a cottage's walls, he outside it, and how far the cover is opened there */
+  within: { blocks: number; opened: number };
   /** seeing into the hall from outside it: its walls opened on ground past the room he sees through it */
   strips?: StripRead;
 }
@@ -293,11 +299,32 @@ function beforeDoor(view: RuleView): boolean {
   return !inHall(view.at[0], view.at[1]) && view.at[1] > HALL.door && away < DOOR_WHOLE.within;
 }
 
+/** how far in from a cottage's walls its floor is read as within them (m): past a block's own width on the ground */
+const WITHIN_INSET = 0.5;
+/** the most of a house's cover opened, on average, over ground within its walls, he outside it */
+const WITHIN_OPEN = 0.08;
+
+/** Whether a place on the ground lies within a cottage's walls, `WITHIN_INSET` in from them. */
+function inCottage(place: THREE.Vector2): boolean {
+  return COTTAGES.some((cottage) => {
+    const dx = place.x - cottage.x;
+    const dz = place.y - cottage.z;
+    const cos = Math.cos(cottage.facing);
+    const sin = Math.sin(cottage.facing);
+    const alongW = dx * cos - dz * sin;
+    const alongD = dx * sin + dz * cos;
+    const halfW = (COTTAGE.w / 2) * cottage.size - WITHIN_INSET;
+    const halfD = (COTTAGE.d / 2) * cottage.size - WITHIN_INSET;
+    return Math.abs(alongW) < halfW && Math.abs(alongD) < halfD;
+  });
+}
+
 /** A view's blocks read: of those a house covers, the cover left over ground he sees and gone over ground he doesn't. */
 function readBlocks(view: RuleView, played: Float32Array, whole: Float32Array, bare: Float32Array, columns: number): RuleRead {
   const rows = played.length / 3 / columns;
   const seen = { blocks: 0, left: 0, over: 0 };
   const unseen = { blocks: 0, opened: 0, over: 0, stands: 0 };
+  const within = { blocks: 0, opened: 0 };
   const covered: number[] = [];
   const opened: number[] = [];
   const places = new Map<number, THREE.Vector2>();
@@ -312,6 +339,13 @@ function readBlocks(view: RuleView, played: Float32Array, whole: Float32Array, b
     const x = ((block % columns) + 0.5) / columns * 2 - 1;
     const y = 1 - (Math.floor(block / columns) + 0.5) / rows * 2;
     const place = groundThrough(x, y);
+    // (a cottage is never walked into here: whatever he sees of its floor, past a wall's soft end or through a gap,
+    // nothing of the house opens over it)
+    if (place && inCottage(place)) {
+      within.blocks++;
+      within.opened += 1 - left;
+      continue;
+    }
     const sees = place && seenClearly(place);
     if (sees === null || sees === undefined) continue;
     places.set(block, place!.clone());
@@ -348,6 +382,7 @@ function readBlocks(view: RuleView, played: Float32Array, whole: Float32Array, b
     },
     inside,
     stands: unseen.stands / Math.max(1, unseen.blocks),
+    within: { blocks: within.blocks, opened: within.opened / Math.max(1, within.blocks) },
   };
 }
 
@@ -456,7 +491,8 @@ export function judged(read: RuleRead): Checked {
   const line = `${read.view}: over ground he sees ${percent(seen.coverLeft)} of the cover left `
     + `(${percent(seen.blocksOver)} of ${seen.blocks} blocks still covered); over ground he doesn't `
     + `${percent(unseen.opened)} opened (${percent(unseen.blocksOver)} of ${unseen.blocks} blocks open${stood})${atDoor}`
-    + (read.strips ? `; its walls opened on ground past the room: ${read.strips.pixels} pixels` : '');
+    + (read.strips ? `; its walls opened on ground past the room: ${read.strips.pixels} pixels` : '')
+    + (read.within.blocks ? `; over a cottage's own floor ${percent(read.within.opened)} opened (${read.within.blocks} blocks)` : '');
   const wrong: string[] = [];
   if (seen.blocks >= BLOCKS_LEAST && (seen.coverLeft > RUST.tune.houseLeft * COVER_FIRM + SEEN_COVER.overLeft || seen.blocksOver > SEEN_COVER.blocksOver)) {
     wrong.push(`ground he sees is still covered${read.coveredAt}`);
@@ -474,6 +510,9 @@ export function judged(read: RuleRead): Checked {
     wrong.push('he stands before its door and its front wall is not opened whole');
   }
   if (enough && read.inside && read.stands < INSIDE.stands) wrong.push('he is inside and its walls do not stand');
+  if (read.within.blocks >= BLOCKS_LEAST && read.within.opened > WITHIN_OPEN) {
+    wrong.push('he is outside a cottage and it is opened over its own floor');
+  }
   if (read.strips && read.strips.pixels > STRIP_MOST) {
     wrong.push(`its walls are opened on ground past the room he sees through it, ${read.strips.pixels} pixels${read.strips.at}`);
   }
