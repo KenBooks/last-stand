@@ -51,7 +51,7 @@ export const scholarPlant = { noSeatBlend: false, cowlLoose: false };
  *  kept close); how long after he sits it's let go of (s); and the fastest a joint of him turns on his feet (rad/s:
  *  where one hold handed on to another, a hand turned 12 to 37 degrees in a frame). Set straight to it, each new beat
  *  of his rounds began with a jump: from play, "lagged, not smooth continuation" */
-const FOLLOW = { up: 14, settle: 0.8, most: THREE.MathUtils.degToRad(450) };
+const FOLLOW = { up: 14, settle: 0.8, most: THREE.MathUtils.degToRad(450), speeds: THREE.MathUtils.degToRad(15000) };
 /** how far forward he bends on his feet (rad: his spine, his chest): bent 15 degrees, he slouched, from play */
 const STOOP = { spine: 0.05, chest: 0.03 };
 /** how low a hand's aim is (m over his feet) before he bends to it, and how much lower he's bent all the way */
@@ -299,9 +299,13 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   const M = { habit, habitD, lining, rope, shoe, tabard, trim, brass, linen };
   yield* dressBody(j, add, M);
   yield;
-  // (the habit as it sits, shown while he's sat, and as it hangs, while he's up: a robe to the floor round his legs)
+  // (the habit as it sits, and as it hangs while he's up, a robe to the floor round his legs: one cloth, each seated
+  // piece drawn morphed into its standing one as he rises (`dressAs`). Swapped whole at sit 0.5, his clothes changed in
+  // a frame as he got up and sat down, from play: "it snaps ... there are two separate ones instead")
   const seatedSet = parts.filter((m) => ['scholar skirt', 'scholar trim hem', 'scholar tabard lap'].includes(m.name));
   const standingSet = dressRobe(j, add, M);
+  /** what's drawn blended between them, as each is made alike */
+  const morphed = seatedSet.map((m, i) => morphInto(m, standingSet[i]));
   const robeFollow = followLegs(j, standingSet);
   const cowlFollow = followNeck(j, parts.find((m) => m.name === 'scholar cowl')!);
 
@@ -397,23 +401,23 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   const chestLocal = (v: THREE.Vector3) => j.chest.worldToLocal(j.root.localToWorld(v));
 
   const act: ScholarAct = { sit: 1, walk: 0, look: null, handL: null, handR: null, reachL: 0, reachR: 0, grip: 0 };
-  /** which set of his habit shows: the sat one's or the standing one's (each its sleeves too, once dressed), set every
-   *  frame: the room's warm-up shows both for its draw, and a set kept as it was left the standing robe round him sat */
-  const showSat = (sat: boolean) => {
-    for (const m of seatedSet) m.visible = sat;
-    for (const m of standingSet) m.visible = !sat;
+  /** his habit (its sleeves too, once dressed) as it sits at `sit` 1 and hangs at 0, between them the one morphed
+   *  into the other: what's drawn is the seated pieces, the standing ones their shapes alone (followed by his legs) */
+  const dressAs = (sit: number) => {
+    const up = 1 - smooth(clamp(sit, 0, 1));
+    for (const m of morphed) m(up);
   };
 
   function update(dt: number, heroAt: THREE.Vector3 | null, talking: boolean, said = 0): void {
     if (act.sit < 1) {
       standing(dt, heroAt, talking, said);
       follow(dt, scholarPlant.noSeatBlend ? 0 : FOLLOW.up, 0, scholarPlant.noSeatBlend ? Infinity : FOLLOW.most);
-      if (act.sit < 0.5) robeFollow();
+      robeFollow();
       cowlFollow();
       satFor = 0;
       return;
     }
-    showSat(true);
+    dressAs(1);
     legs();
     j.body.position.set(0, HIPS - P.hipY, 0);
     for (const o of [j.hips, j.spine, j.chest, j.body]) o.rotation.set(0, 0, 0);
@@ -436,16 +440,31 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   /** the pose this frame set, reached a share of the way from the last frame's (`rate` 1/s), and `then` of the rest
    *  (1: at once; let go of over a while, as stopped at once his hand caught up 24 degrees in a frame): no jump where
    *  one beat of his rounds hands on to the next */
+  /** each followed joint's turning (rad/s, about an axis in its parent's frame), and what reads it */
+  const spins = new Map<THREE.Object3D, THREE.Vector3>(), turnBy = new THREE.Quaternion(), wantSpin = new THREE.Vector3(), axis = new THREE.Vector3();
   function follow(dt: number, rate: number, then = 0, most = Infinity): void {
     // (`rate` 0: at once, as a harness's planted jump has it)
     const k = following && dt > 0 && rate > 0 ? 1 - Math.exp(-rate * dt) * (1 - then) : 1;
-    const step = following && dt > 0 && rate > 0 ? most * dt : Infinity;
+    const held = following && dt > 0 && rate > 0 && most < Infinity;
     for (const o of followed) {
-      let q = was.get(o);
+      let q = was.get(o), spin = spins.get(o);
       if (!q) was.set(o, q = o.quaternion.clone());
-      // (a share of the way there, and no faster than a joint of a man turns)
+      if (!spin) spins.set(o, spin = new THREE.Vector3());
+      // (a share of the way there)
       followTo.copy(q).slerp(o.quaternion, k);
-      if (q.angleTo(followTo) > step) q.rotateTowards(followTo, step); else q.copy(followTo);
+      if (!held) { q.copy(followTo); spin.set(0, 0, 0); o.quaternion.copy(q); continue; }
+      // (no faster than a joint of a man turns, and its turning changed no faster than he can change it: at its
+      // fastest, his hand turned one way and the next frame the other, as he laid a book on a stack)
+      turnBy.copy(q).invert().multiply(followTo);
+      if (turnBy.w < 0) turnBy.set(-turnBy.x, -turnBy.y, -turnBy.z, -turnBy.w);
+      const angle = 2 * Math.acos(Math.min(1, turnBy.w)), sin = Math.sqrt(Math.max(0, 1 - turnBy.w * turnBy.w));
+      wantSpin.set(turnBy.x, turnBy.y, turnBy.z).multiplyScalar(sin > 1e-6 ? angle / sin / dt : 0);
+      if (wantSpin.length() > most) wantSpin.setLength(most);
+      const change = wantSpin.sub(spin), most2 = FOLLOW.speeds * dt;
+      if (change.length() > most2) change.setLength(most2);
+      spin.add(change);
+      const by = spin.length() * dt;
+      if (by > 1e-9) q.multiply(turnBy.setFromAxisAngle(axis.copy(spin).divideScalar(spin.length()), by));
       o.quaternion.copy(q);
     }
     j.body.position.copy(bodyWas.lerp(j.body.position, k));
@@ -495,7 +514,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     nodding += dt;
     glanceAt(dt, heroAt, talking);
     const sit = clamp(act.sit, 0, 1);
-    showSat(sit > 0.5);
+    dressAs(sit);
     resetPose(j);
     // --- the legs, from sat to straight; the body rising over them, leant forward as a man gets up ---
     for (const [thigh, knee, ankle, sd] of [[j.thighL, j.kneeL, j.ankleL, 1], [j.thighR, j.kneeR, j.ankleR, -1]] as const) {
@@ -817,7 +836,8 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   let dressed = parts.length;
   dressBells(j, add, M, { L: downFrom(j.shoulderL), R: downFrom(j.shoulderR) }, { L: downFrom(j.elbowL), R: downFrom(j.elbowR) });
   // (the sleeves as they lie on the table, shown while he's sat; his undershirt's sleeves, free of the pose, always)
-  for (const m of parts.slice(dressed)) if (m.name !== 'scholar undersleeve') seatedSet.push(m);
+  const satSleeves = parts.slice(dressed).filter((m) => m.name !== 'scholar undersleeve');
+  seatedSet.push(...satSleeves);
   // (and as they hang from his arms at his sides, shown while he's up: named apart, as `lab scholar` reads his sat
   // sleeves against his table)
   act.sit = 0;
@@ -834,8 +854,11 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     m.name += ' standing';
     standingSet.push(m);
   }
+  // (each sat sleeve's piece morphed into its hanging one: made by the same rings, in the same order)
+  const upSleeves = standingSet.slice(-satSleeves.length);
+  morphed.push(...satSleeves.map((m, i) => morphInto(m, upSleeves[i])));
   act.sit = 1;
-  showSat(true);
+  dressAs(1);
   yield;
   loop = 7;
   update(0, null, false);
@@ -1237,7 +1260,6 @@ function followLegs(j: Joints, meshes: THREE.Mesh[]): () => void {
     }
     for (const set of sets) {
       const { m, p, base } = set;
-      if (!m.visible) continue;
       const arr = p.array as Float32Array;
       let pushed = false;
       for (let i = 0, v = 0; i < arr.length; i += 3, v++) {
@@ -1271,7 +1293,7 @@ function followLegs(j: Joints, meshes: THREE.Mesh[]): () => void {
 /** His robe as it hangs while he's up, on his hips: round them and flaring to the floor, folds falling down it; a gold
  *  cord on its hem, and his tabard down its front from the belt to his knees. Returns its meshes (shown while he's up). */
 function dressRobe(j: Joints, add: Add, M: BodyMats): THREE.Mesh[] {
-  const N = 40, K = 26, drop = j.P.hipY - 0.012, rows: THREE.Vector3[][] = [];
+  const N = 40, K = 30, drop = j.P.hipY - 0.012, rows: THREE.Vector3[][] = [];
   /** the robe at `s` down it (0 its top at the hips, 1 its hem) and `th` round it, `lift` off it */
   const at = (s: number, th: number, lift = 0) => {
     const y = lerp(0.04, -drop, s), fl = smooth(s);
@@ -1282,17 +1304,17 @@ function dressRobe(j: Joints, add: Add, M: BodyMats): THREE.Mesh[] {
   };
   for (let k = 0; k <= K; k++) {
     const row: THREE.Vector3[] = [];
-    for (let i = 0; i <= N; i++) row.push(at(k / K, -Math.PI + (i / N) * Math.PI * 2));
+    for (let i = 0; i <= N; i++) row.push(at(k / K, ROBE_FROM_SKIRT(i / N)));
     rows.push(row);
   }
   const robe = add(rowsSurface(rows, 1.2), M.habitD, j.hips, 'robe');
   const hem = add(cord(rows[K].slice(0, N), 0.006, true, 120), M.trim, j.hips, 'robe hem', false);
   // (the tabard down its front, from under the belt to the knees, a hair off it)
   const front: THREE.Vector3[][] = [];
-  for (let k = 0; k <= 14; k++) {
-    const sd = lerp(0.02, 0.55, k / 14), half = lerp(0.1, 0.12, k / 14), row: THREE.Vector3[] = [];
+  for (let k = 0; k <= 16; k++) {
+    const sd = lerp(0.02, 0.55, k / 16), half = lerp(0.1, 0.12, k / 16), row: THREE.Vector3[] = [];
     for (let i = 0; i <= 8; i++) {
-      const x = lerp(-half, half, i / 8), a = lerp(0.2, 0.31, smooth(sd));
+      const x = lerp(half, -half, i / 8), a = lerp(0.2, 0.31, smooth(sd));
       row.push(at(sd, Math.asin(clamp(x / (a + 0.01), -1, 1)), 0.009));
     }
     front.push(row);
@@ -1301,6 +1323,44 @@ function dressRobe(j: Joints, add: Add, M: BodyMats): THREE.Mesh[] {
   const set = [robe, hem, tabard];
   for (const m of set) m.visible = false;
   return set;
+}
+
+/** where round the robe (its `th`, 0 its front, +pi/2 his left) a point of the skirt `u` of the way round it lies (its
+ *  `th` = 2pi u, 0 at his left, pi/2 over his lap): the robe made on the skirt's rows and columns, his left to his left
+ *  and his lap to his front, so the one morphs into the other point for point */
+const ROBE_FROM_SKIRT = (u: number) => Math.PI / 2 - u * Math.PI * 2;
+
+/** `seated` drawn blended into `standing`'s shape (made with the same points in the same order), `standing` never
+ *  drawn: its points and normals are the blend's other end, as his legs push them a frame (`followLegs`). Returns
+ *  what blends it, `up` of the way (0 as it sits, 1 as it hangs), its points and normals set again only where `up` or
+ *  the standing shape changed. Blended on the CPU, as the renderer's morphs aren't: they're packed once, as first
+ *  drawn, and his legs' push never reached them (and a mesh drawn before its morph kept being drawn without it). */
+function morphInto(seated: THREE.Mesh, standing: THREE.Mesh): (up: number) => void {
+  const from = seated.geometry, to = standing.geometry;
+  if (from.attributes.position.count !== to.attributes.position.count || from.index?.count !== to.index?.count) {
+    throw new Error(`scholar: ${seated.name} and ${standing.name} aren't made alike, so neither blends into the other`);
+  }
+  const pos = from.attributes.position as THREE.BufferAttribute, nor = from.attributes.normal as THREE.BufferAttribute;
+  const toPos = to.attributes.position as THREE.BufferAttribute, toNor = to.attributes.normal as THREE.BufferAttribute;
+  const sat = Float32Array.from(pos.array as ArrayLike<number>), satN = Float32Array.from(nor.array as ArrayLike<number>);
+  // (its bounds those of the one shape: drawn as the other, it was culled where it showed)
+  seated.frustumCulled = false;
+  standing.visible = false;
+  let was = 0, version = toPos.version;
+  return (up) => {
+    if (up === was && (up === 0 || toPos.version === version)) return;
+    was = up;
+    version = toPos.version;
+    const p = pos.array as Float32Array, n = nor.array as Float32Array, tp = toPos.array as Float32Array, tn = toNor.array as Float32Array;
+    for (let i = 0; i < p.length; i++) p[i] = sat[i] + (tp[i] - sat[i]) * up;
+    for (let i = 0; i < n.length; i += 3) {
+      const x = satN[i] + (tn[i] - satN[i]) * up, y = satN[i + 1] + (tn[i + 1] - satN[i + 1]) * up, z = satN[i + 2] + (tn[i + 2] - satN[i + 2]) * up;
+      const l = Math.hypot(x, y, z) || 1;
+      n[i] = x / l; n[i + 1] = y / l; n[i + 2] = z / l;
+    }
+    pos.needsUpdate = true;
+    nor.needsUpdate = true;
+  };
 }
 
 let tabardTex: THREE.CanvasTexture | null = null;

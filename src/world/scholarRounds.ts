@@ -40,13 +40,16 @@ export interface RoundsRoom {
   globe: THREE.Object3D;
   /** the open book made the book he took, opened (its size: thick, tall, deep; its colour) */
   openAs(size: THREE.Vector3, colour: THREE.Color): void;
+  /** where the room's ladder's foot stands: its footprint is among the obstacles (a harness's canary sends him there) */
+  ladder: THREE.Vector3;
 }
 
 /** a book of the shelves' out of its place: its covers' mesh and instance, its pages' mesh and instance, and its place */
 export interface ShelfBookOut { mesh: THREE.InstancedMesh; index: number; pages: THREE.InstancedMesh; page: number; matrix: THREE.Matrix4 }
 
-/** a harness's planted fault (`lab scholar --canary`): the book in his hands another than the one off the shelf */
-export const roundsPlant = { otherBook: false };
+/** a harness's planted faults (`lab scholar --canary`): the book in his hands another than the one off the shelf, his
+ *  spot under the ladder, the end of his rise cut as he sets off; and for a picture, the book by the ladder he may take (`byLadder`) */
+export const roundsPlant = { otherBook: false, underLadder: false, cut: false, byLadder: false };
 
 /** what he does when he gets up from his table */
 export type Task = 'browse' | 'keep' | 'restock' | 'dust' | 'tidy' | 'globe';
@@ -90,6 +93,16 @@ const AIM_BLEND = 0.35;
 const AIM_JUMP = { at: 0.03, turn: 0.25 };
 /** how he turns: how fast at most (rad/s), and the least a turn takes (s): each turn eased in and out */
 const TURN = { rate: 1.9, least: 0.35 };
+/** one motion each way: how far through his rise he sets off on his way, the rest of it as he takes his first steps and
+ *  turns to it, and how far through his sitting down he's turned his back to his chair (from play: "it snaps ... there
+ *  are two separate ones instead": risen whole, he stood still and only then turned; turned whole, he only then sat) */
+const RISE = { setOff: 0.7, turned: 0.45 };
+/** how quickly his turning walking eases to the turn he wants (1/s): turned at once at each corner of his way, and
+ *  moved straight along it, his body and his heading jumped there a frame */
+const STEER = 9;
+/** how far short of a corner of his way he takes the next leg (m: he walks round it), and how far from its end he
+ *  slows from his pace, to how much of it (walked to the end at a third of it, he stopped dead) */
+const CORNER = 0.2, SLOWS = { from: 0.6, least: 0.08 };
 /** his dusting (a case's spines wiped a row at a time: each row's height (m over the floor, within his reach: a row
  *  over his head left his cloth in the air), from where to where along it (m, his right +: his right hand wipes it, and
  *  across to his left it fell short), the strokes a row and how long each takes (s), and how much closer to the case
@@ -109,9 +122,9 @@ const IN_THE_WAY = 0.55;
 const WAIT_MOST = 2;
 const BERTH = 0.55;
 const NEAR_ENOUGH = 0.7;
-/** the most books his table's stack holds, the fewest it keeps, and where he stands to reach it (his table's frame:
- *  beyond its end on his right, by the stack) */
-const STACK = { most: 8, fewest: 1, stand: new THREE.Vector3(1.02, 0, 0.72) };
+/** the most books his table's stack holds, the fewest it keeps, and where he may stand to reach it (his table's frame:
+ *  beyond its end on his right, by the stack, or round its corner) */
+const STACK = { most: 8, fewest: 1, stands: [new THREE.Vector3(1.02, 0, 0.72), new THREE.Vector3(0.95, 0, 1.08), new THREE.Vector3(1.08, 0, 0.42), new THREE.Vector3(0.6, 0, 1.15)] };
 
 /** A book on a shelf he can take: its spine's mesh and instance, where it stands, how it's turned, its size, the way
  *  its spine faces (out of the case) and where he stands for it. */
@@ -230,14 +243,17 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   }
 
   // --- the books he can take: standing on a shelf at a hand's height, with room before their case ---
-  const slots: Slot[] = [];
+  const slots: Slot[] = [], everySlot: Slot[] = [];
+  /** the ladder's foot (the room's frame, on the floor) */
+  const foot = new THREE.Vector2(room.ladder.x, room.ladder.z);
   room.shelves.forEach(({ matrices }, shelf) => matrices.forEach((m, index) => {
     const at = new THREE.Vector3(), turn = new THREE.Quaternion(), size = new THREE.Vector3();
     m.decompose(at, turn, size);
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(turn), out = new THREE.Vector3(0, 0, 1).applyQuaternion(turn).setY(0).normalize();
     if (up.y < 0.95 || at.y < SHELF.low || at.y > SHELF.high) return;
     const stand = new THREE.Vector2(at.x + out.x * (SHELF.stand + size.z / 2), at.z + out.z * (SHELF.stand + size.z / 2));
-    if (isFree(stand.x, stand.y)) slots.push({ shelf, index, at, turn, size, out, stand });
+    everySlot.push({ shelf, index, at, turn, size, out, stand });
+    if (isFree(stand.x, stand.y)) slots.push(everySlot[everySlot.length - 1]);
   }));
   /** the slots whose books are off their shelves now: in his hands, or kept on a stack (their gaps) */
   const gaps: Slot[] = [];
@@ -318,6 +334,8 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   let dt = 0, doing = 'reading at his table';
   const wait = function* (seconds: number): Generator<void, void, void> { for (let t = 0; t < seconds; t += dt) yield; };
   /** `fn` over `seconds`, given how far through it is (0 to 1), a frame at a time */
+  /** what goes on alongside his beats a frame at a time, till it says it's done (the end of his rise as he sets off) */
+  let alongside: (() => boolean) | null = null;
   const over = function* (seconds: number, fn: (k: number) => void): Generator<void, void, void> {
     for (let t = 0; t < seconds; t += dt) { fn(clamp(t / seconds, 0, 1)); yield; }
     fn(1);
@@ -344,23 +362,24 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   }
   let heroAt: THREE.Vector3 | null = null;
   function* walkTo(to: THREE.Vector2): Generator<void, void, void> {
-    let path = route(me.p, to), speed = 0, waited = 0;
+    let path = route(me.p, to), speed = 0, waited = 0, spin = 0, onWay = 1;
     for (let q = 0; q < path.length; q++) {
-      const target = path[q];
+      const target = path[q], last = q === path.length - 1;
       for (;;) {
         const d = target.clone().sub(me.p), dist = d.length();
-        if (dist < 0.05) break;
+        if (dist < (last ? 0.05 : CORNER)) break;
         // (the hero stood on the end of his way: as near as he can come does)
         const hero2 = heroAt ? new THREE.Vector2(heroAt.x, heroAt.z) : null;
         if (hero2 && hero2.distanceTo(to) < BERTH && me.p.distanceTo(to) < NEAR_ENOUGH + BERTH) { act.walk = 0; return; }
         const yaw = Math.atan2(d.x, d.y), off = angleTo(me.yaw, yaw);
         // (looking where he goes, ahead along his way: from play, "looking sideways when walking forwards")
-        look(new THREE.Vector3(me.p.x + (d.x / dist) * LOOK_AHEAD.far, LOOK_AHEAD.high, me.p.y + (d.y / dist) * LOOK_AHEAD.far));
-        me.yaw += Math.sign(off) * Math.min(Math.abs(off), (1 + 2 * Math.abs(off)) * dt);
+        // (the way he's walking: his way's was off it as he steered round to it)
+        look(new THREE.Vector3(me.p.x + Math.sin(me.yaw) * LOOK_AHEAD.far, LOOK_AHEAD.high, me.p.y + Math.cos(me.yaw) * LOOK_AHEAD.far));
+        spin = lerp(spin, Math.sign(off) * Math.min(Math.abs(off) / Math.max(dt, 1e-3), 1 + 2 * Math.abs(off)), clamp(dt * STEER, 0, 1));
+        me.yaw += spin * dt;
         // (slowed as the way turns, near still for a sharp turn, and to the end of the way: stopped dead for each turn
         // and set off again, he moved as a machine does)
-        const last = target === path[path.length - 1];
-        let want = WALK.speed * clamp(1.15 - Math.abs(off) / 1.1, 0, 1) * (last ? clamp(dist / 0.5, 0.3, 1) : 1);
+        let want = WALK.speed * clamp(1.15 - Math.abs(off) / 1.1, 0, 1) * (last ? clamp(dist / SLOWS.from, SLOWS.least, 1) : 1);
         // (the hero in his way: he waits for him a moment, then goes round him; waiting on, he stood there for good while
         // a hero stood in his way)
         if (hero2) {
@@ -378,8 +397,12 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
           } else waited = 0;
         }
         speed = lerp(speed, want, clamp(dt * 4, 0, 1));
-        const step = Math.min(dist, speed * dt);
-        me.p.addScaledVector(d.normalize(), step * Math.max(0, Math.cos(off)));
+        // (along the way he faces, slowed as he faces off his way's: near its end, eased to straight at it, as he'd never
+        // come to it turning round it)
+        const step = Math.min(dist, speed * dt), ahead = new THREE.Vector2(Math.sin(me.yaw), Math.cos(me.yaw));
+        onWay = lerp(onWay, Math.max(0, Math.cos(off)), clamp(dt * STEER, 0, 1));
+        const home = last ? smooth(clamp((0.25 - dist) / 0.2, 0, 1)) : 0;
+        me.p.addScaledVector(ahead.lerp(d.normalize(), home).normalize(), step * onWay);
         act.walk = Math.max(speed, Math.abs(off) > 0.5 ? 0.12 : 0);
         // (what he carries with him: left where he picked it up, a book stayed in the air across the room)
         carry?.();
@@ -391,24 +414,40 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
 
   function* getUp(): Generator<void, void, void> {
     doing = 'getting up from his table';
-    const from = new THREE.Vector2(seat.x, seat.z), to = new THREE.Vector2(exit.x, exit.z);
+    const from = new THREE.Vector2(seat.x, seat.z), way = new THREE.Vector2(exit.x, exit.z).sub(from);
     // (out from between his chair and his table as he rises, as a man gets up from one: risen in his place first, he
     // stood in his chair)
-    yield* over(BEAT.rise, (k) => {
-      act.sit = 1 - smooth(k);
-      me.p.copy(from).lerp(to, smooth(clamp(k * 1.2 - 0.1, 0, 1)));
+    const out = (k: number) => smooth(clamp(k * 1.2 - 0.1, 0, 1));
+    yield* over(BEAT.rise * RISE.setOff, (k) => {
+      act.sit = 1 - smooth(k * RISE.setOff);
+      me.p.copy(from).addScaledVector(way, out(k * RISE.setOff));
     });
-    act.sit = 0;
+    // (the rest of it as he sets off: added to where his steps take him)
+    let k = RISE.setOff, was = out(k);
+    // (the canary: the rest of it cut, there in a frame)
+    if (roundsPlant.cut) { act.sit = 0; me.p.addScaledVector(way, 1 - was); return; }
+    alongside = () => {
+      k = Math.min(1, k + dt / BEAT.rise);
+      act.sit = 1 - smooth(k);
+      me.p.addScaledVector(way, out(k) - was);
+      was = out(k);
+      return k < 1;
+    };
   }
   function* sitDown(): Generator<void, void, void> {
     doing = 'going back to his table';
     yield* walkTo(new THREE.Vector2(exit.x, exit.z));
-    yield* turnTo(deskYaw);
-    const from = me.p.clone(), to = new THREE.Vector2(seat.x, seat.z);
+    // (turned to his table as he starts down: his back to his chair, a step or two round with it)
+    const from = me.p.clone(), to = new THREE.Vector2(seat.x, seat.z), yaw = me.yaw, by = angleTo(yaw, deskYaw);
+    look(new THREE.Vector3(me.p.x + Math.sin(deskYaw) * LOOK_AHEAD.far, LOOK_AHEAD.high, me.p.y + Math.cos(deskYaw) * LOOK_AHEAD.far));
     yield* over(BEAT.rise, (k) => {
+      const turning = clamp(k / RISE.turned, 0, 1);
+      me.yaw = yaw + by * smooth(turning);
+      act.walk = Math.abs(by) > 0.05 ? 0.12 * Math.sin(Math.PI * turning) : 0;
       act.sit = smooth(k);
       me.p.copy(from).lerp(to, smooth(clamp(k * 1.2 - 0.1, 0, 1)));
     });
+    act.walk = 0;
     act.sit = 1;
     me.p.copy(to);
     me.yaw = deskYaw;
@@ -666,8 +705,14 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   };
   const stack = room.stack;
   /** where he stands to reach the stack, and its top */
+  /** the first of his spots by the stack that's clear (the ladder's footprint leans by his table), else the nearest
+   *  clear place to the first */
   const stackStand = () => {
-    const at = STACK.stand.clone().applyMatrix4(desk.matrix);
+    for (const stand of STACK.stands) {
+      const at = stand.clone().applyMatrix4(desk.matrix);
+      if (isFree(at.x, at.z)) return new THREE.Vector2(at.x, at.z);
+    }
+    const at = STACK.stands[0].clone().applyMatrix4(desk.matrix);
     return nearestFree(new THREE.Vector2(at.x, at.z));
   };
   const stackTop = () => {
@@ -816,10 +861,19 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
 
   /** A browse: to a case, his eye along it, a book taken, looked over and read, put back (or kept). */
   function* browse(kept: boolean): Generator<void, void, void> {
-    const slot = slots.filter((sl) => !gaps.includes(sl))[(rng() * slots.length) | 0] ?? slots[0];
+    // (the canary: the book where the ladder leans, its spot under the ladder)
+    // (and for a picture, the book nearest it he may take: `byLadder`)
+    const nearest = (of: Slot[]) => of.reduce((a, b) => (b.stand.distanceTo(foot) < a.stand.distanceTo(foot) ? b : a));
+    const slot = roundsPlant.underLadder ? nearest(everySlot) : roundsPlant.byLadder ? nearest(slots) : slots.filter((sl) => !gaps.includes(sl))[(rng() * slots.length) | 0] ?? slots[0];
     if (!slot) return;
     doing = 'walking to a case';
     yield* walkTo(slot.stand);
+    // (the canary: on, straight in between its rails, as the grid he walks would never take him)
+    if (roundsPlant.underLadder) {
+      const from = me.p.clone(), into = foot.clone().addScaledVector(new THREE.Vector2(slot.out.x, slot.out.z), -0.3);
+      yield* over(1, (k) => { me.p.copy(from).lerp(into, smooth(k)); act.walk = 0.3; });
+      act.walk = 0;
+    }
     yield* turnTo(Math.atan2(-slot.out.x, -slot.out.z));
     yield* scan(slot, lerp(BEAT.scan[0], BEAT.scan[1], rng()));
     yield* take(slot);
@@ -1048,7 +1102,10 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
           me.yaw += Math.sign(off) * Math.min(Math.abs(off), 2 * dt);
           act.walk = Math.abs(off) > 0.05 ? 0.1 : 0;
         }
-      } else rounds.next();
+      } else {
+        if (alongside && !alongside()) alongside = null;
+        rounds.next();
+      }
       blendAims();
       place();
       room.held.visible = shown.held;

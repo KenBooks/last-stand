@@ -21,6 +21,8 @@ import type { Rounds } from '../../../src/world/scholarRounds';
 import { jointsOf, offHero } from './scholar';
 import { scholarPlant } from '../../../src/entities/models/scholar';
 import { roundsPlant } from '../../../src/world/scholarRounds';
+import { CASE_R, type LadderPart } from '../../../src/world/houses/library';
+import type { Obstacle } from '../../../src/types';
 
 /** the most frames a round may take (a minute and a half at 60 a second), how far a book may be from his nearer hand
  *  (m), how near what stands in the room his middle may come (m past its circle), how far off the hero his face must
@@ -39,6 +41,14 @@ const CLOTH_MOST = 0.08;
  *  before that's read (m/s), and how far a shoe may come out through his robe above its hem (m: "they go through his
  *  clothing when walking") */
 const JOINT_MOST = 8;
+/** how near where he was put a hero put by him must stay (m): pushed further, he was put in a wall or a case */
+const HERO_STAYS = 0.1;
+/** how fast his hips' speed (m/s a second) and a joint's turning (deg/s a second) may change, a frame to the next, the
+ *  frame of whatever length: a cut where one beat hands on to the next (a pose or a place jumped) changes them as no
+ *  body moving does (from play: "it snaps, its not smooth (sitting down and standing up)") */
+const HIPS_SPEEDS_MOST = 20, JOINT_SPEEDS_MOST = 25000;
+/** the frames' lengths (s) of a pass of uneven frames, in turn: a fast screen's, a slow one's, the game's, a hitch's */
+const UNEVEN = [0.008, 0.033, 0.016, 0.05] as const;
 const HEAD_OFF_MOST = 15;
 const WALKING = 0.45;
 /** how far his body may face off the way he goes (deg) for his walk to be read as straight */
@@ -74,6 +84,77 @@ export function cowlClearance(s: Scholar): { intoNeck: number; gap: number; into
     intoHead = Math.max(intoHead, HEAD.r - v.distanceTo(middle));
   }
   return { intoNeck, gap, intoHead };
+}
+
+/** how far into the ladder's rails and rungs he may go (m: his body as rounds about his middle, his palms and the books in
+ *  his hands as points; from play, "should not go through the ladder when standing/walking"), and his body's rounds:
+ *  where (m over his feet, or a joint's) and how wide */
+const LADDER_INTO_MOST = 0.005;
+const BODY_ROUNDS: { joint?: string; up: number; r: number }[] = [
+  { up: 0.3, r: 0.27 }, { up: 0.75, r: 0.22 }, { joint: 'scholar chest', up: 0.12, r: 0.16 }, { joint: 'scholar head', up: 0.09, r: 0.1 },
+];
+
+/** how far his palms and the corners of the book in his hands may go into the room's other furniture (m past a circle
+ *  of it, below its top: its tables, chairs, hearth and stands; not the cases he reaches into for their books, nor the
+ *  globe he turns by hand) */
+const FURNITURE_INTO_MOST = 0.01;
+
+/** How far his palms and the book in his hands go into what stands in the room but its cases (m past its circle, below
+ *  its top). */
+export function intoFurniture(s: Scholar, obstacles: readonly Obstacle[]): number {
+  s.root.updateMatrixWorld(true);
+  const points = [...hands(s)];
+  for (const name of ['library held book', 'library open held book']) {
+    const book = G.scene.getObjectByName(name);
+    if (!book?.visible) continue;
+    const box = new THREE.Box3().setFromObject(book);
+    for (let k = 0; k < 8; k++) points.push(new THREE.Vector3(k & 1 ? box.max.x : box.min.x, k & 2 ? box.max.y : box.min.y, k & 4 ? box.max.z : box.min.z));
+  }
+  let into = 0;
+  const globe = G.scene.getObjectByName('library globe')!.getWorldPosition(new THREE.Vector3());
+  for (const o of obstacles) {
+    if (o.r === CASE_R || Math.hypot(o.x - globe.x, o.z - globe.z) < 0.1) continue;
+    for (const p of points) if (p.y < o.h - 0.01) into = Math.max(into, o.r - Math.hypot(p.x - o.x, p.z - o.z));
+  }
+  return into;
+}
+
+/** what keeps the ladder's parts (the library's room, found once) */
+let ladderRoom: THREE.Object3D | undefined;
+/** How far into the room's ladder he goes now (m): his body's rounds, his palms and the corners of the book in his hands
+ *  against each rail and rung (each a box, in its own frame). */
+export function intoLadder(s: Scholar): number {
+  // (kept by the room as it's built: its merge takes the ladder's meshes away)
+  if (!ladderRoom?.parent) { ladderRoom = undefined; G.scene.traverse((o) => { if (o.userData.ladderParts) ladderRoom = o; }); }
+  const room = ladderRoom;
+  if (!room) throw new Error("the library keeps no ladder's parts");
+  s.root.updateMatrixWorld(true);
+  room.updateMatrixWorld(true);
+  const parts = (room.userData.ladderParts as LadderPart[]).map((p) => ({ inverse: room.matrixWorld.clone().multiply(p.matrix).invert(), box: p.box }));
+  const points: { at: THREE.Vector3; r: number }[] = [];
+  const feet = s.root.getWorldPosition(new THREE.Vector3());
+  for (const b of BODY_ROUNDS) {
+    const at = b.joint ? s.root.getObjectByName(b.joint)!.localToWorld(new THREE.Vector3(0, b.up, 0)) : feet.clone().add(new THREE.Vector3(0, b.up, 0));
+    points.push({ at, r: b.r });
+  }
+  for (const palm of hands(s)) points.push({ at: palm, r: 0 });
+  for (const name of ['library held book', 'library open held book']) {
+    const book = G.scene.getObjectByName(name);
+    if (!book?.visible) continue;
+    const box = new THREE.Box3().setFromObject(book), c = new THREE.Vector3();
+    for (let k = 0; k < 8; k++) points.push({ at: c.set(k & 1 ? box.max.x : box.min.x, k & 2 ? box.max.y : box.min.y, k & 4 ? box.max.z : box.min.z).clone(), r: 0 });
+  }
+  let into = 0;
+  const local = new THREE.Vector3(), near = new THREE.Vector3();
+  for (const p of points) {
+    for (const part of parts) {
+      local.copy(p.at).applyMatrix4(part.inverse);
+      part.box.clampPoint(local, near);
+      const inside = part.box.containsPoint(local) ? 0.001 : 0;
+      into = Math.max(into, p.r - local.distanceTo(near) + inside);
+    }
+  }
+  return into;
 }
 
 /** The book in his hands against the shelf's he took: why it isn't the very book (its model, its spine, its colour, its
@@ -187,6 +268,8 @@ interface Followed {
   frames: number; beats: string[]; farthest: number; farAt: string; tightest: number; tightAt: string; gapsAtEnd: number; satAtEnd: number;
   turned: number; turnedAt: string; headOff: number; shoeOut: number; shoeAt: string;
   cowlInto: number; cowlGap: number; cowlAt: string; bookFrames: number; notBook: string; backInPlace: boolean;
+  ladderInto: number; ladderAt: string; furnitureInto: number; furnitureAt: string;
+  hipsSpeeds: number; hipsAt: string; jointSpeeds: number; jointAt: string;
 }
 
 /** A part of him by name, or by its parents' where it has none. */
@@ -204,11 +287,12 @@ function headOffWay(s: Scholar, way: THREE.Vector3): number {
 }
 
 /** How far out through his robe a point of a shoe is, the furthest (m, 0 for none): a point above the robe's hem, out
- *  past its surface at its height and side. The robe's points are its rows round him (`dressRobe`: 27 rows of 41, its
- *  top first), as his legs have pushed them out this frame. */
+ *  past its surface at its height and side, while he's on his feet (his habit drawn wholly as the robe). The robe's
+ *  points are its rows round him (`dressRobe`: 31 rows of 41, its top first, each from his left round over his front,
+ *  `ROBE_FROM_SKIRT`), as his legs have pushed them out this frame: the shape the habit's drawn morphed into. */
 export function shoeThroughRobe(s: Scholar, where?: { at: THREE.Vector3; row: number }): number {
   const robe = s.root.getObjectByName('scholar robe') as THREE.Mesh | undefined;
-  if (!robe?.visible) return 0;
+  if (!robe || s.act.sit > 0) return 0;
   const pos = robe.geometry.attributes.position, N = 41, K = Math.round(pos.count / N);
   if (K * N !== pos.count) return 0;
   const hem = pos.getY((K - 1) * N);
@@ -230,7 +314,8 @@ export function shoeThroughRobe(s: Scholar, where?: { at: THREE.Vector3; row: nu
       let k = 0;
       while (k < K - 2 && pos.getY((k + 1) * N) > p.y) k++;
       const y0 = pos.getY(k * N), y1 = pos.getY((k + 1) * N), ty = THREE.MathUtils.clamp((y0 - p.y) / (y0 - y1 || 1), 0, 1);
-      const th = Math.atan2(p.x, p.z - 0.01), at = ((th + Math.PI) / (Math.PI * 2)) * (N - 1), i = Math.min(N - 2, Math.floor(at)), ti = at - i;
+      const u = (Math.PI / 2 - Math.atan2(p.x, p.z - 0.01)) / (Math.PI * 2), at = (u - Math.floor(u)) * (N - 1);
+      const i = Math.min(N - 2, Math.floor(at)), ti = at - i;
       const r = THREE.MathUtils.lerp(THREE.MathUtils.lerp(radius(k, i), radius(k, i + 1), ti), THREE.MathUtils.lerp(radius(k + 1, i), radius(k + 1, i + 1), ti), ty);
       const out = Math.hypot(p.x, p.z - 0.01) - r;
       if (out > worst) { worst = out; if (where) { where.at.copy(p); where.row = k; } }
@@ -241,21 +326,57 @@ export function shoeThroughRobe(s: Scholar, where?: { at: THREE.Vector3; row: nu
 
 /** A round followed until he's back reading at his table: what he did, how far a book he held strayed from his hands,
  *  how near he came to what stands in the room. `each` runs every frame (a hero stood close, a talk). */
-async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boolean, each?: (f: number) => Promise<void> | void): Promise<Followed> {
+export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boolean, each?: (f: number) => Promise<void> | void,
+  dts?: readonly number[]): Promise<Followed> {
   const beats: string[] = [];
   let farthest = 0, farAt = '', tightest = Infinity, tightAt = '', frames = 0;
   let turned = 0, turnedAt = '', headOff = 0, shoeOut = 0, shoeAt = '';
-  let cowlInto = 0, cowlGap = 0, cowlAt = '', bookFrames = 0, notBook = '', lastOut = rounds.out;
+  let cowlInto = 0, cowlGap = 0, cowlAt = '', bookFrames = 0, notBook = '', lastOut = rounds.out, ladderInto = 0, ladderAt = '', furnitureInto = 0, furnitureAt = '';
   const held = G.scene.getObjectByName('library held book') as THREE.Mesh;
   const obstacles = G.arena.obstacles.filter((o) => o !== rounds.body);
   const joints = jointsOf(s), before = joints.map((o) => o.quaternion.clone());
   const at = s.root.getWorldPosition(new THREE.Vector3()), was = at.clone(), way = new THREE.Vector3();
+  // (his hips' speed and each joint's turning speed, frame to frame; the frames of `dts`' lengths, where given)
+  let hipsSpeeds = 0, hipsAt = '', jointSpeeds = 0, jointAt = '', dt = 1 / 60, dtWas = dt, fresh = 0;
+  const hipsJoint = s.root.getObjectByName('scholar hips')!, hips = hipsJoint.getWorldPosition(new THREE.Vector3()), hipsWas = hips.clone();
+  const speed = new THREE.Vector3(), speedWas = new THREE.Vector3(), turn = new THREE.Quaternion();
+  const spins = joints.map(() => new THREE.Vector3()), spinsWas = joints.map(() => new THREE.Vector3());
+  const update = rounds.update;
+  // (put back after: a command's page is its own, and a failure ends it)
+  if (dts) rounds.update = (_dt, ...rest) => update.call(rounds, dt, ...rest);
   for (; frames < ROUND_FRAMES; frames++) {
+    const before0 = hipsJoint.getWorldPosition(new THREE.Vector3());
     await each?.(frames);
+    // (a picture's frames stepped in `each` break the run of frames: the speeds are read again from here)
+    if (hipsJoint.getWorldPosition(new THREE.Vector3()).distanceToSquared(before0) > 0) fresh = 0;
+    dtWas = dt;
+    dt = dts ? dts[frames % dts.length] : 1 / 60;
     // (read from here: what `each` stepped (a picture's frames) isn't this frame's turn)
     joints.forEach((o, i) => before[i].copy(o.quaternion));
     s.root.getWorldPosition(was);
+    hipsJoint.getWorldPosition(hipsWas);
     await lab.step(1);
+    // (his hips' velocity and each joint's spin this frame, against last frame's: how fast each changed)
+    s.root.updateMatrixWorld(true);
+    hipsJoint.getWorldPosition(hips);
+    speedWas.copy(speed);
+    speed.subVectors(hips, hipsWas).divideScalar(dt);
+    const mid = (dt + dtWas) / 2;
+    joints.forEach((o, i) => {
+      spinsWas[i].copy(spins[i]);
+      turn.copy(before[i]).invert().multiply(o.quaternion);
+      if (turn.w < 0) turn.set(-turn.x, -turn.y, -turn.z, -turn.w);
+      const angle = 2 * Math.acos(Math.min(1, turn.w)), sin = Math.sqrt(Math.max(0, 1 - turn.w * turn.w));
+      spins[i].set(turn.x, turn.y, turn.z).multiplyScalar(sin > 1e-6 ? angle / sin / dt : 0);
+    });
+    if (++fresh >= 2) {
+      const h = speed.distanceTo(speedWas) / mid;
+      if (h > hipsSpeeds) { hipsSpeeds = h; hipsAt = `${rounds.doing} (sit ${s.act.sit.toFixed(2)}, walk ${s.act.walk.toFixed(2)})`; }
+      joints.forEach((o, i) => {
+        const a = THREE.MathUtils.radToDeg(spins[i].distanceTo(spinsWas[i]) / mid);
+        if (a > jointSpeeds) { jointSpeeds = a; jointAt = `${partName(o)}, ${rounds.doing} (sit ${s.act.sit.toFixed(2)})`; }
+      });
+    }
     if (beats[beats.length - 1] !== rounds.doing) beats.push(rounds.doing);
     // (each joint's turn in the frame: getting up, sitting down, and where one beat hands on to the next)
     joints.forEach((o, i) => {
@@ -284,7 +405,22 @@ async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boolean, eac
       const why = notTheShelfBook(rounds, held);
       if (why && !notBook) notBook = `${why}, ${rounds.doing}`;
     }
+    // (the canary: a stand set where the shelf's book he takes stood, his hands on it as he takes it)
+    if (canary && rounds.out && !lastOut) {
+      const stood = new THREE.Vector3().applyMatrix4(rounds.out.matrix).applyMatrix4(rounds.out.mesh.matrixWorld);
+      obstacles.push({ x: stood.x, z: stood.z, r: 0.12, h: stood.y + 0.3 });
+    }
     if (rounds.out) lastOut = rounds.out;
+    // (his body, his hands and the book he holds against the ladder, while he's up)
+    if (s.act.sit < 1) {
+      const into = intoLadder(s);
+      if (into > ladderInto) { ladderInto = into; ladderAt = rounds.doing; }
+    }
+    // (his hands and that book against the rest, while he's up and clear of his own table and chair)
+    if (s.act.sit <= 0) {
+      const furniture = intoFurniture(s, obstacles);
+      if (furniture > furnitureInto) { furnitureInto = furniture; furnitureAt = rounds.doing; }
+    }
     if (frames > 30 && rounds.doing === 'reading at his table' && s.act.sit >= 1) break;
     // (the book he carries, but while he reads it open: the closed one waits hidden meanwhile)
     const carried = rounds.carried;
@@ -304,6 +440,7 @@ async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boolean, eac
       }
     }
   }
+  rounds.update = update;
   // (put back: the shelf's own book stood in its place again, as it stood; or, kept on his table, its gap left)
   let backInPlace = true;
   if (lastOut && !rounds.out) {
@@ -313,7 +450,8 @@ async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boolean, eac
     backInPlace = m.elements.every((e, i) => Math.abs(e - lastOut!.matrix.elements[i]) < 1e-5) || hiddenAt(m);
   }
   return { frames, beats, farthest, farAt, tightest, tightAt, gapsAtEnd: rounds.gaps, satAtEnd: s.act.sit, turned, turnedAt, headOff, shoeOut, shoeAt,
-    cowlInto, cowlGap, cowlAt, bookFrames, notBook, backInPlace };
+    cowlInto, cowlGap, cowlAt, bookFrames, notBook, backInPlace, ladderInto, ladderAt, furnitureInto, furnitureAt,
+    hipsSpeeds, hipsAt, jointSpeeds, jointAt };
 }
 
 /** What's wrong with a round. */
@@ -329,7 +467,10 @@ function problemsOf(name: string, r: Followed): string[] {
   if (r.cowlInto > COWL_INTO_MOST) problems.push(`rounds (${name}): his cowl ${(r.cowlInto * 100).toFixed(1)} cm into his neck or head, ${r.cowlAt} (at most ${COWL_INTO_MOST * 100})`);
   if (r.cowlGap > COWL_GAP_MOST) problems.push(`rounds (${name}): his cowl's top ${(r.cowlGap * 100).toFixed(1)} cm off his neck, ${r.cowlAt} (at most ${COWL_GAP_MOST * 100}: his neck and back seen down inside it)`);
   if (r.notBook) problems.push(`rounds (${name}): the book in his hands isn't the shelf's: ${r.notBook}`);
+  problems.push(...jumpsOf(name, r));
   if (!r.backInPlace) problems.push(`rounds (${name}): the shelf's book not back in its place as it stood`);
+  if (r.ladderInto > LADDER_INTO_MOST) problems.push(`rounds (${name}): he goes ${(r.ladderInto * 100).toFixed(1)} cm into the ladder, ${r.ladderAt} (at most ${LADDER_INTO_MOST * 100})`);
+  if (r.furnitureInto > FURNITURE_INTO_MOST) problems.push(`rounds (${name}): his hands or book ${(r.furnitureInto * 100).toFixed(1)} cm into the room's furniture, ${r.furnitureAt} (at most ${FURNITURE_INTO_MOST * 100})`);
   if (r.shoeOut > SHOE_OUT_MOST) problems.push(`rounds (${name}): a shoe ${(r.shoeOut * 100).toFixed(1)} cm out through his robe above its hem, ${r.shoeAt} (at most ${SHOE_OUT_MOST * 100})`);
   return problems;
 }
@@ -338,7 +479,19 @@ const lineOf = (name: string, r: Followed) => `his rounds, ${name}: ${r.beats.jo
   + `${r.farthest.toFixed(2)} m from his nearer hand; his middle at least ${r.tightest.toFixed(2)} m clear of what stands in the room; `
   + `a joint at most ${r.turned.toFixed(1)}° in a frame (${r.turnedAt}); his head at most ${r.headOff.toFixed(0)}° off his way walking; `
   + `a shoe at most ${(r.shoeOut * 100).toFixed(1)} cm out through his robe; his cowl at most ${(r.cowlInto * 100).toFixed(1)} cm into his neck `
-  + `or head and its top ${(r.cowlGap * 100).toFixed(1)} cm off his neck; the shelf's own book in his hands ${r.bookFrames} frames${r.notBook ? ` (not: ${r.notBook})` : ''}`;
+  + `or head and its top ${(r.cowlGap * 100).toFixed(1)} cm off his neck; the shelf's own book in his hands ${r.bookFrames} frames${r.notBook ? ` (not: ${r.notBook})` : ''}; `
+  + `at most ${(r.ladderInto * 100).toFixed(1)} cm into the ladder, his hands and book ${(r.furnitureInto * 100).toFixed(1)} cm into the other furniture; `
+  + continuity(r);
+/** how fast his hips' speed and a joint's turning changed, at most */
+const continuity = (r: Followed) => `his hips' speed changing at most ${r.hipsSpeeds.toFixed(1)} m/s a second (${r.hipsAt}), a joint's `
+  + `turning ${Math.round(r.jointSpeeds)}°/s a second (${r.jointAt})`;
+/** What's wrong with how smoothly he moved in a round. */
+function jumpsOf(name: string, r: Followed): string[] {
+  const problems: string[] = [];
+  if (r.hipsSpeeds > HIPS_SPEEDS_MOST) problems.push(`rounds (${name}): his hips' speed changed ${r.hipsSpeeds.toFixed(1)} m/s in a second, ${r.hipsAt} (at most ${HIPS_SPEEDS_MOST}: a cut)`);
+  if (r.jointSpeeds > JOINT_SPEEDS_MOST) problems.push(`rounds (${name}): a joint's turning changed ${Math.round(r.jointSpeeds)}°/s in a second, ${r.jointAt} (at most ${JOINT_SPEEDS_MOST}: a cut)`);
+  return problems;
+}
 
 /**
  * His rounds checked: a browse, with a hero stood close as he looks for a book (he glances up and goes on), then talked
@@ -362,7 +515,11 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
     scholarPlant.noSeatBlend = true;
     scholarPlant.cowlLoose = true;
     roundsPlant.otherBook = true;
+    roundsPlant.underLadder = true;
+    roundsPlant.cut = true;
     const planted = await follow(lab, s, rounds, true);
+    roundsPlant.underLadder = false;
+    roundsPlant.cut = false;
     scholarPlant.noSeatBlend = false;
     scholarPlant.cowlLoose = false;
     roundsPlant.otherBook = false;
@@ -378,6 +535,15 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
     lines.push(`canary: another book in his hands than the shelf's ${other ? `caught (${planted.notBook})` : 'went unseen'}`);
     if (!loose) problems.push('rounds: the canary\'s loose cowl went unseen');
     if (!other) problems.push('rounds: the canary\'s other book went unseen');
+    const ladder = planted.ladderInto > LADDER_INTO_MOST;
+    lines.push(`canary: his spot under the ladder ${ladder ? 'caught' : 'went unseen'} (${(planted.ladderInto * 100).toFixed(1)} cm into it, ${planted.ladderAt})`);
+    if (!ladder) problems.push('rounds: the canary\'s spot under the ladder went unseen');
+    const stand = planted.furnitureInto > FURNITURE_INTO_MOST;
+    lines.push(`canary: a stand where the shelf's book stood, his hands on it ${stand ? 'caught' : 'went unseen'} (${(planted.furnitureInto * 100).toFixed(1)} cm into it, ${planted.furnitureAt})`);
+    if (!stand) problems.push('rounds: the canary\'s stand by the shelf went unseen');
+    const cut = planted.hipsSpeeds > HIPS_SPEEDS_MOST || planted.jointSpeeds > JOINT_SPEEDS_MOST;
+    lines.push(`canary: the end of his rise cut as he sets off ${cut ? 'caught' : 'went unseen'} (${continuity(planted)})`);
+    if (!cut) problems.push('rounds: the canary\'s cut at the end of his rise went unseen');
     return { lines, problems, moments };
   }
   // (followed undrawn, a frame at a time: drawn, its 7000 frames took over three minutes; each picture draws its own)
@@ -420,9 +586,16 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
       scanFrames++;
       const me = s.root.getWorldPosition(new THREE.Vector3());
       // (before him and off to his side, where he can turn his head to: behind him, his neck can't)
+      // (and where he stays: put into a case or behind a wall at a corner, the hero was pushed out to his shoulder,
+      // where he can't turn to)
       if (scanFrames === 1) {
         const q = s.root.getWorldQuaternion(new THREE.Quaternion());
-        hero.place(me.clone().add(new THREE.Vector3(0, 0, 1.1).applyAxisAngle(new THREE.Vector3(0, 1, 0), 1.1).applyQuaternion(q)), 0);
+        for (const turn of [1.1, -1.1, 0.8, -0.8]) {
+          const spot = me.clone().add(new THREE.Vector3(0, 0, 1.1).applyAxisAngle(new THREE.Vector3(0, 1, 0), turn).applyQuaternion(q));
+          hero.place(spot, 0);
+          await lab.step(1);
+          if (hero.pos.distanceTo(spot) < HERO_STAYS) break;
+        }
       }
       glance = Math.min(glance, offHero(s));
       if (scanFrames === 75) {
@@ -547,6 +720,12 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
   lines.push(lineOf('globe', globe), `the globe turned ${turned.toFixed(1)} rad in all`);
   problems.push(...problemsOf('globe', globe));
   if (turned < GLOBE_TURNS) problems.push(`rounds: the globe he set turning turned ${turned.toFixed(2)} rad (at least ${GLOBE_TURNS})`);
+  // (and a browse on frames of uneven lengths, as a screen of another rate or a hitch gives them: no beat may hand on
+  // to the next with a cut there either)
+  rounds.begin('browse');
+  const uneven = await follow(lab, s, rounds, false, undefined, UNEVEN);
+  lines.push(`a browse on frames of ${UNEVEN.map((d) => d * 1000).join(', ')} ms in turn: ${continuity(uneven)}`);
+  problems.push(...jumpsOf('browse, uneven frames', uneven));
   const compiled = G.renderer.info.programs!.length - programs;
   lines.push(`programs the game's renderer compiled over his rounds (pictured as he walks, takes and reads a book): ${compiled}`);
   if (compiled) problems.push(`rounds: the game's renderer compiled ${compiled} programs over his rounds (none may be)`);

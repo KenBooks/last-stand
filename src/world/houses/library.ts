@@ -209,7 +209,7 @@ function bookcase(g: THREE.Object3D, M: Mats, shelving: Shelving, frame: THREE.O
   frame.updateMatrix();
   for (let t = -w / 2 + 0.25; t <= w / 2 - 0.25 + 1e-6; t += 0.45) {
     const at = new THREE.Vector3(x + t, 0, 0.2).applyMatrix4(frame.matrix);
-    obstacles.push({ x: at.x, z: at.z, r: 0.28, h: high });
+    obstacles.push({ x: at.x, z: at.z, r: CASE_R, h: high });
   }
   box(frame, w + 0.06, 0.12, D + 0.04, x, 0, D / 2, M.timber);
   for (const sx of [-1, 1]) box(frame, 0.06, high, D, x + sx * (w / 2 - 0.03), 0, D / 2, M.panel);
@@ -227,9 +227,15 @@ function bookcase(g: THREE.Object3D, M: Mats, shelving: Shelving, frame: THREE.O
 }
 
 /** A rolling ladder leaning on a case (the case's frame), its foot `out` from the wall: two rails and rungs, a rail
- *  along the case's top it hangs from. */
-function ladder(frame: THREE.Object3D, M: Mats, x: number, high: number, out: number): void {
+ *  along the case's top it hangs from. Its footprint on the floor, from the case out to its foot and as wide as its rails
+ *  with a hand either side, among the room's obstacles: the hero and Brother Hollis walk round it, and he takes no book
+ *  from where it leans (from play: "should not go through the ladder when standing/walking": he stood reading in it).
+ *  Returns where its foot stands (the room's frame). Its rails' and rungs' boxes are kept on the case's frame's parent
+ *  (`userData.ladderParts`: each a box in its own frame, and that frame in the parent's), as the room's merge takes the
+ *  meshes away: a harness checks Brother Hollis against them. */
+function ladder(frame: THREE.Object3D, M: Mats, x: number, high: number, out: number, obstacles: Obstacle[]): THREE.Vector3 {
   const l = new THREE.Group();
+  l.name = 'library ladder';
   l.position.set(x, 0, out);
   const lean = Math.atan2(out - 0.42, high);
   l.rotation.x = -lean;
@@ -240,7 +246,28 @@ function ladder(frame: THREE.Object3D, M: Mats, x: number, high: number, out: nu
   const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 3.2, 8).rotateZ(Math.PI / 2), M.brass);
   rail.position.set(x, high - 0.15, 0.46);
   frame.add(rail);
+  frame.updateMatrix();
+  l.updateMatrix();
+  const parts: LadderPart[] = [];
+  for (const m of l.children as THREE.Mesh[]) {
+    m.updateMatrix();
+    m.geometry.computeBoundingBox();
+    parts.push({ matrix: frame.matrix.clone().multiply(l.matrix).multiply(m.matrix), box: m.geometry.boundingBox!.clone() });
+  }
+  frame.parent!.userData.ladderParts = parts;
+  for (let z = 0.5; z <= out + 0.01; z += (out - 0.5) / 3) {
+    const at = new THREE.Vector3(x, 0, z).applyMatrix4(frame.matrix);
+    obstacles.push({ x: at.x, z: at.z, r: LADDER_R, h: high });
+  }
+  return new THREE.Vector3(x, 0, out).applyMatrix4(frame.matrix);
 }
+/** how wide each of the ladder's footprint's circles is (m: its rails are 0.44 apart) */
+const LADDER_R = 0.3;
+/** a rail or rung of the ladder: its box in its own frame, and that frame in the room's */
+export interface LadderPart { matrix: THREE.Matrix4; box: THREE.Box3 }
+/** how wide each circle along a case's front is (m; a harness tells the cases' from the room's other furniture by it:
+ *  his hands reach into a case for its books) */
+export const CASE_R = 0.28;
 
 /** A globe on a turned wooden stand at (x, z): its sphere a map of seas and lands drawn on a canvas, a brass
  *  meridian round it, tilted. */
@@ -594,7 +621,7 @@ export function build(group: THREE.Group): Room {
   bookcase(g, M, shelves.west, west, -1.4, 2.2, caseHigh, rng, b.obstacles);
   bookcase(g, M, shelves.west, west, 1.05, 2.2, caseHigh, rng, b.obstacles);
   bookcase(g, M, shelves.west, west, 3.2, 1.0, caseHigh, rng, b.obstacles);
-  ladder(west, M, -0.9, caseHigh, 1.15);
+  const ladderFoot = ladder(west, M, -0.9, caseHigh, 1.15, b.obstacles);
   scrollRack(west, M, -3.1, rng);
   lantern(west, M, -(hz - 0.45), 2.4, 0, 0, 1, { ...LANTERN, intensity: 8, reach: 8 });
   // --- the east wall: the hearth between two cases, an armchair before it, a lantern by the front ---
@@ -734,7 +761,7 @@ export function build(group: THREE.Group): Room {
       if (scholar) return;
       scholar = yield* seat.seat();
       const talk = HOUSE_OBJECTS.find((o) => o.id === 'scholar')!;
-      rounds = scholarRounds(scholar, { g, desk: seat.desk, sat: seat.sat, half: [hx, hz], obstacles: b.obstacles, shelves: shelfMeshes, stack: seat.stack, held, openHeld, talk, cloth, puff, globe: theGlobe, openAs });
+      rounds = scholarRounds(scholar, { g, desk: seat.desk, sat: seat.sat, half: [hx, hz], obstacles: b.obstacles, shelves: shelfMeshes, stack: seat.stack, held, openHeld, talk, cloth, puff, globe: theGlobe, openAs, ladder: ladderFoot });
       // (posed once now: its first frame drawn, a warm-up's, is as he reads)
       scholar.update(0, null, false);
     },
