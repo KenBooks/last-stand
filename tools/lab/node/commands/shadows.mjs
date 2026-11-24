@@ -18,7 +18,7 @@ export default {
       default: 'top,third,first',
       help: 'the views: top, third, first',
     },
-    canary: { kind: 'switch', help: 'his shadow taken away in the first case: it must be seen' },
+    canary: { kind: 'switch', help: 'his shadow taken away in the first case, his hidden body uncast through the eyes: each must be seen' },
     cost: {
       kind: 'switch',
       help: 'time the frame on the engine\'s GPU clock instead: every triangle cast against fewer, and his '

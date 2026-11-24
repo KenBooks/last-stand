@@ -99,8 +99,11 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
 - `shadows.ts`: the hero's shadow from fewer triangles (the engine's `casterGeometry`, held whole by
   `castingAsOne.whole`) against every triangle, the pieces counted by the engine's `casters`, and his shadow taken away
   in every case: it compared his pieces cast as one (`castAsOne.ts`) in three's shadow pass, which the engine never
-  runs. Through the eyes his shadow isn't drawn at all under the engine (his body on the layer no camera draws, which
-  the engine's walk passes by; his pieces cast as one cast it before): it fails there till the game draws it.
+  runs. Through the eyes he looks down at the ground away from the sun (`lookAtHisShadow`): level, his shadow falls
+  below the view, and a check there read nothing whatever was cast (#869 failed every case through the eyes on it).
+  His hidden body must cast there too (`castsUnseen`, #893: from #270 it cast nothing by design, his arms' shadow
+  alone); its canary leaves it uncast. Close up, fewer triangles differ in up to 3.5% of his shadow's pixels, held
+  to a share of it there (`COARSE_SHARE_EYES`).
 - `studio.ts`, `looks.ts`: the studio draws by the engine (`drawRust` with a scene and a camera of its own), its
   tile read off the engine's canvas in the task that drew it; three's `readPixels` it used before has no drawing
   buffer under the engine, and `hood`, `hands`, `weapons`, `turnaround`, `neck`, `herolooks` and `maps --pictures`

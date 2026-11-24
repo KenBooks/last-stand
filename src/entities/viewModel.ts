@@ -230,7 +230,8 @@ export function viewArms(m: Model, on: boolean, cam: THREE.Camera, gliding = on)
   const nearHead = near && m.joints!.neck.getWorldPosition(_neckWorld).distanceTo(cam.position) < NEAR_NECK;
   const hideBody = on || nearHead;
   if (hideBody !== bodyHidden.has(m)) {
-    for (const o of bodyOf(m)) o.layers.set(hideBody ? HIDDEN_LAYER : WORLD_LAYER);
+    // (unseen, it still casts his shadow: `castsUnseen`, the engine's bridge)
+    for (const o of bodyOf(m)) { o.layers.set(hideBody ? HIDDEN_LAYER : WORLD_LAYER); o.userData.castsUnseen = hideBody; }
     if (hideBody) bodyHidden.add(m); else bodyHidden.delete(m);
   }
   if (on !== shown.has(m)) {
