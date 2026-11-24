@@ -4,28 +4,39 @@ import { labError } from '../errors.mjs';
 import { fixtureFrom, picturePairs, asText, problemsIn, textWithPictureFiles } from '../commandKit.mjs';
 import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
 
-/** The casts `cast` measures (page/cast.ts `CastOptions`, its canary aside): the skill in each biome and view. */
+/** The skills `cast` is given: one, or several by commas (`starfall,voidLance`). */
+export const skillsOf = (options) => options._[0].split(',').filter((skill) => skill.length > 0);
+
+/** The casts `cast` measures (page/cast.ts `CastOptions`, its canary aside): each skill in each biome and view. */
 function castScenarios(options) {
   const scenarios = [];
-  for (const biome of options.biomes) {
-    for (const view of options.views) {
-      scenarios.push({
-        skill: options._[0],
-        biome,
-        view,
-        facing: options.facing ?? 0,
-        at: options.at,
-        foes: options.foes ?? 4,
-        times: options.times.map(Number),
-        pictures: options.pictures !== false,
-        what: options.what?.map(Number),
-        gear: options.gear,
-        weapon: options.weapon,
-        tune: fixtureFrom(options).tune,
-      });
+  for (const skill of skillsOf(options)) {
+    for (const biome of options.biomes) {
+      for (const view of options.views) {
+        scenarios.push(castScenario(options, skill, biome, view));
+      }
     }
   }
   return scenarios;
+}
+
+/** One cast's scenario: `skill` in `biome` and `view`, the rest as the options say. */
+function castScenario(options, skill, biome, view) {
+  return {
+    skill,
+    biome,
+    view,
+    facing: options.facing ?? 0,
+    at: options.at,
+    foes: options.foes ?? 4,
+    times: options.times.map(Number),
+    pictures: options.pictures !== false,
+    what: options.what?.map(Number),
+    gear: options.gear,
+    weapon: options.weapon,
+    tune: fixtureFrom(options).tune,
+    frenzy: options.frenzy,
+  };
 }
 
 /** `lab cast`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
@@ -40,9 +51,10 @@ export default {
     + 'channel, a drawn shot drawn to full) over an aim ahead, and every frame until the effect is over drawn and '
     + 'read back: its light against the budget (the frame\'s mean raised 50 at most, a sixteenth of it 150, 5% '
     + 'of it bright, as stored), the flashes in a second (WCAG\'s: three are a hazard) and the shaders compiled '
-    + 'after loading; the skill named by its key, its behaviour or its name: tools/lab/out/cast/<skill> '
+    + 'after loading; the skill named by its key, its behaviour or its name, several by commas, each held the way '
+    + 'it needs (its school\'s staff, empty hands, a shield...) unless --gear says: tools/lab/out/cast/<skill> '
     + '(--class mage)',
-  argument: 'skill',
+  argument: 'skill[,skill...]',
   options: {
     biomes: {
       kind: 'list',
@@ -81,6 +93,11 @@ export default {
       kind: 'switch',
       help: 'plant the fault the checks must catch, in the first biome and view: a strobe of the exposure',
     },
+    frenzy: {
+      kind: 'number',
+      usage: 'stacks',
+      help: 'his Frenzy\'s stacks as the key is pressed (Wrath spends them, and casts nothing with none)',
+    },
     gear: SETUP_OPTIONS.gear,
     weapon: SETUP_OPTIONS.weapon,
     tune: SETUP_OPTIONS.tune,
@@ -110,7 +127,7 @@ export default {
     };
   },
   finish(results, options, session) {
-    return textWithPictureFiles(results, session.outFor(join('cast', options._[0])));
+    return textWithPictureFiles(results, session.outFor(join('cast', skillsOf(options).join('-'))));
   },
   textOf: asText,
   problemsOf: problemsIn,

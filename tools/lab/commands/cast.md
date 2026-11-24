@@ -47,5 +47,18 @@ The rest of the commands are in [`COMMANDS.md`](../COMMANDS.md).
   are problems too. The
   props a cast broke stand again before the next. `--times` (0.4,1.5,3 by default) are the moments pictured, the
   screen as the player sees it with the HUD, into `out/cast/<skill>`; `--canary` strobes the exposure in the first
-  biome and view (5 a second), which the flashes must catch. `--gear` holds the weapons a style's way (Thunder
-  Crescent takes a two-hander), and a skill the hero knows but hasn't on a key is bound to its own first.
+  biome and view (5 a second), which the flashes must catch. `--gear` holds the weapons a style's way, and without
+  it each skill is held the way its data says it needs (`gearFor`: its school's staff, empty hands for the fists',
+  a shield, a two-hander for Thunder Crescent, two blades for Twin Fangs; else as rolled); a skill the hero knows
+  but hasn't on a key is bound to its own first. Several skills go by commas (`cast pounce,wrath --class
+  warrior`), each in every biome and view: every class's skills in three commands.
+- **A skill that needs something to cast at** (`InstantSkill.canCast`) is pressed once the game itself would cast
+  it at its own aim (`input.ground`: the crosshair's in the close views, not the lab's aim ahead), the aim and the
+  close views' crosshair kept meanwhile and through the press on the nearest foe at least 3 m off (`FOE_LEAST`).
+  With a fixed aim 8 m ahead, Pounce's foes walked up to him and stood at 1 m, 7 m short of it, and it never
+  leapt; ready by the lab's aim, it was pressed over the shoulder with the crosshair on no foe; at a foe at arm's
+  length the crosshair passed beside its body. Failing, it says where every foe was. `--frenzy n` gives the
+  warrior that many stacks as he presses (Wrath spends them and casts nothing with none).
+- **Hedgeward isn't measured by it yet:** from above it rises, but in the close views nothing is cast, with foes or
+  without (`--foes 0`), and with foes coming it waits in vain (they stand where it would rise). Its look is
+  measured by `lab hedgeward`.
