@@ -3293,7 +3293,10 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
           twoHold.pole = SW2_POLE; twoHold.k = 1; twoHold.flatK = 1;
         } else {
           R.x += -0.1; R.z += -1.35; R.y += -0.3; j.elbowR.rotation.x += 0.7;
-          j.shoulderL.rotation.x += 0.2; j.shoulderL.rotation.z += 0.9;
+          // (through the eyes a shield is held in at his side, under the frame as he turns: flung out, it swept
+          // across the view's foot once a turn, a flash 3 times a second in the forest, `lab cast tempest --views first`)
+          const tucked = fp && shield.visible;
+          if (!tucked) { j.shoulderL.rotation.x += 0.2; j.shoulderL.rotation.z += 0.9; }
           // (the other arm flung out, its elbow soft, never past straight: added to an empty hand's stance, it bent
           // back 20 degrees, 10 past an elbow's range)
           j.elbowL.rotation.x = Math.min(j.elbowL.rotation.x + 0.5, -0.1);
