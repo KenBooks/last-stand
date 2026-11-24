@@ -4,7 +4,8 @@
 // in the tub, never left in the air. From play: "Hand glitching when wiping table", "When he leans in to grab the cup,
 // he goes through the table", a mug left floating beside his hand.
 import * as THREE from 'three';
-import type { Keeper } from '../../../src/entities/models/keeper';
+import { BODY_GROWN, type Keeper } from '../../../src/entities/models/keeper';
+import { bodyShape, capsuleDepth, type Solid as BodySolid } from '../../../src/entities/models/anatomy';
 import type { TavernKeeper } from '../../../src/world/tavernKeeper';
 import { BACK, BAR, TABLES, TUB } from '../../../src/data/tavern';
 import { MUG } from '../../../src/entities/models/flask';
@@ -153,7 +154,7 @@ export class BodyClear {
     for (const part of PARTS) {
       room.worldToLocal(keeper.joints[part.joint].getWorldPosition(this.at));
       for (const solid of SOLIDS) {
-        const where = () => `his ${part.joint} into ${solid.name} at ${xyz(this.at)}, ${doing}`;
+        const where = () => `his ${part.joint} into ${solid.name} at ${xyz(this.at)}, his root at ${xyz(room.worldToLocal(keeper.root.getWorldPosition(new THREE.Vector3())))} facing ${keeper.root.rotation.y.toFixed(2)}, ${doing}`;
         this.into.see(depthInto(this.at, part.r, solid), where);
       }
     }
@@ -191,8 +192,17 @@ export class MugsHeld {
       const inTub = Math.hypot(at.x - tubX, at.z - TUB.z) < TUB.r + 0.03 && at.y < BACK.top + 0.2;
       if (held || onTop || inTub) continue;
       this.inAir++;
-      this.first ||= `mug ${m.id} (${m.place.at}) at ${xyz(at)}, ${doing}`;
+      this.first ||= `mug ${m.id} (${m.place.at}) at ${xyz(at)}, root y ${keeper.root.position.y.toFixed(2)}, body y ${keeper.joints.body.position.y.toFixed(2)} rot ${keeper.joints.body.rotation.x.toFixed(2)}, hips y ${keeper.joints.hips.position.y.toFixed(2)}, chest at ${xyz(room.worldToLocal(keeper.joints.chest.getWorldPosition(new THREE.Vector3())))}, his hands at ${xyz(room.worldToLocal(this.hands[0].clone()))} and ${xyz(room.worldToLocal(this.hands[1].clone()))}, the mug's parent ${this.parentOf(tv, m.id)}, ${doing}`;
     }
+  }
+
+  private parentOf(tv: TavernKeeper, id: number): string {
+    const parent = tv.mugMesh(id).parent;
+    if (!parent) return '?';
+    const w = parent.getWorldPosition(new THREE.Vector3()), sc = parent.getWorldScale(new THREE.Vector3());
+    const vis = parent.children.find((c) => c.userData.drawnHand) ?? parent.children[0];
+    const vw = vis?.getWorldPosition(new THREE.Vector3()), vs = vis?.getWorldScale(new THREE.Vector3());
+    return `${parent.name} at ${xyz(w)} scale ${xyz(sc)}, its ${vis?.name || 'first child'} at ${vw ? xyz(vw) : '-'} scale ${vs ? xyz(vs) : '-'} (${parent.children.map((c) => c.name || c.type).join('/')})`;
   }
 
   problems(): string[] {
@@ -202,6 +212,81 @@ export class MugsHeld {
   said(): string {
     return `mugs in the air: ${this.inAir ? `${this.inAir} mug-frames (first: ${this.first})` : 'none'}`;
   }
+}
+
+/** how far a forearm, a hand or a tool he holds may go into his body (m: a sleeve's brush, never through) */
+export const LIMB_INTO_MOST = 0.02;
+/** his tools as they're built (world/tavernKeeper.ts): along their +y from their grip, from where to where (m), and how
+ *  thick round */
+const TOOLS: readonly { name: string; from: number; to: number; r: number }[] = [
+  { name: 'broom', from: -0.2, to: 1.36, r: 0.018 }, { name: 'poker', from: 0, to: 0.78, r: 0.008 },
+];
+
+/** His arms and the tools he holds against his own body, every frame: each forearm and hand against his trunk, neck
+ *  and head, each tool against his trunk and thighs (the heroes' solids, anatomy.ts, grown by his clothes as his body
+ *  keeps them, keeper.ts `BODY_GROWN`). From play: "in many many animations his arm goes through his body", the poker
+ *  "goes through his body again", the broom's stick through his legs. */
+export class LimbsClear {
+  readonly into = new Worst();
+  readonly tool = new Worst();
+  private solids: BodySolid[] | null = null;
+  private readonly a = new THREE.Vector3();
+  private readonly b = new THREE.Vector3();
+  private readonly c = new THREE.Vector3();
+
+  read(keeper: Keeper, room: THREE.Object3D, doing: string): void {
+    const j = keeper.joints;
+    if (!this.solids) {
+      this.solids = bodyShape(j).solids;
+      for (const solid of this.solids) {
+        const grown = solid.name === 'chest' ? BODY_GROWN.chest : solid.name === 'belly' ? BODY_GROWN.belly : null;
+        if (grown) solid.r.add(new THREE.Vector3(...grown));
+      }
+    }
+    j.root.updateMatrixWorld(true);
+    const trunk = this.solids.filter((solid) => ['chest', 'belly', 'neck', 'head'].includes(solid.name));
+    for (const side of ['L', 'R'] as const) {
+      j[`elbow${side}`].getWorldPosition(this.a);
+      j[`hand${side}`].getWorldPosition(this.b);
+      this.c.subVectors(this.b, this.a).setLength(0.1).add(this.b);
+      for (const solid of trunk) {
+        const fore = capsuleDepth(this.a, this.b, j.P.foreR, solid), hand = capsuleDepth(this.b, this.c, 0.035, solid);
+        this.into.see(Math.max(fore, hand), () => {
+          const inHim = (at: THREE.Vector3) => xyz(j.root.worldToLocal(at.clone()));
+          return `his ${fore > hand ? 'forearm' : 'hand'} ${side} into his ${solid.name} (in his own frame, x to his left: `
+            + `his elbow at ${inHim(this.a)}, his hand at ${inHim(this.b)}; his root at `
+            + `${xyz(room.worldToLocal(j.root.getWorldPosition(new THREE.Vector3())))} facing ${j.root.rotation.y.toFixed(2)}), ${doing}`;
+        });
+      }
+    }
+    for (const tool of TOOLS) {
+      const thing = room.getObjectByName(tool.name);
+      if (!thing || !isHeldBy(thing, j.root)) continue;
+      thing.localToWorld(this.a.set(0, tool.from, 0));
+      thing.localToWorld(this.b.set(0, tool.to, 0));
+      for (const solid of this.solids.filter((s) => s.name !== 'neck')) {
+        this.tool.see(capsuleDepth(this.a, this.b, tool.r, solid), () => `the ${tool.name} into his ${solid.name} (its grip at ${xyz(room.worldToLocal(this.a.clone()))}, its far end at ${xyz(room.worldToLocal(this.b.clone()))}, his root at ${xyz(room.worldToLocal(keeper.root.getWorldPosition(new THREE.Vector3())))} facing ${keeper.root.rotation.y.toFixed(2)}), ${doing}`);
+      }
+    }
+  }
+
+  problems(): string[] {
+    const out: string[] = [];
+    if (this.into.value > LIMB_INTO_MOST) out.push(`his arm went ${cm(this.into.value)} into his body (${this.into.at})`);
+    if (this.tool.value > LIMB_INTO_MOST) out.push(`a tool went ${cm(this.tool.value)} into his body (${this.tool.at})`);
+    return out;
+  }
+
+  said(): string {
+    return `his arms against his body: the deepest ${cm(this.into.value)}${this.into.at ? ` (${this.into.at})` : ''}; `
+      + `his tools: the deepest ${cm(this.tool.value)}${this.tool.at ? ` (${this.tool.at})` : ''}`;
+  }
+}
+
+/** whether `thing` hangs under `root` (in his hand) */
+function isHeldBy(thing: THREE.Object3D, root: THREE.Object3D): boolean {
+  for (let o: THREE.Object3D | null = thing.parent; o; o = o.parent) if (o === root) return true;
+  return false;
 }
 
 const cm = (m: number) => `${(m * 100).toFixed(1)} cm`;

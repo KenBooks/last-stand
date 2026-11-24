@@ -5,6 +5,7 @@
 // inside that camera's view and not through it (its nearest point past the near plane); and once drunk, the mug set
 // down on the bar. Each beat pictured as the player sees it.
 import * as THREE from 'three';
+import { waitingMug } from './takeAle';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { armsCamera, faceCamera, viewMode } from '../../../src/core/renderer';
@@ -23,6 +24,8 @@ export interface EyesCase {
   frames: (most: number, done?: () => boolean) => Promise<number>;
   drinkShare: () => number;
   serve: () => void;
+  /** the mug waiting for him taken up by E and drunk by E; whether his drink began */
+  take: () => Promise<boolean>;
   tv: TavernKeeper;
   keeper: VillageObject;
 }
@@ -95,8 +98,9 @@ export async function throughTheEyes(lab: Lab, c: EyesCase, lines: string[], pro
       const seen = seenBy(c.tv.mugMesh(mug.id), G.camera as THREE.PerspectiveCamera, MUG.rimR);
       if (!slid || (fine(seen) && !fine(slid)) || seen.clear > slid.clear) slid = seen;
     }
-    return c.drinkShare() >= 0;
+    return c.drinkShare() >= 0 || waitingMug(c.tv) >= 0;
   });
+  if (served >= 0 && c.drinkShare() < 0) await c.take();
   lines.push(`through the eyes: the slide's mug ${slid ? said(slid) : 'never seen sliding'}`);
   const slidSeen = slid as Seen | null;
   if (!slidSeen?.shown || !slidSeen.inView) problems.push('through the eyes, the mug slid across was out of view');

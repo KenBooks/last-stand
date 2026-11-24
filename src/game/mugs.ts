@@ -17,7 +17,8 @@ export type MugPlace =
   | { at: 'tub' };
 
 /** A mug: where it is, how full of ale (0 empty to 1), whether it's dirty, and the hero a full one on the bar waits for. */
-export interface Mug { id: number; place: MugPlace; full: number; dirty: boolean; for?: string }
+/** `held`: in a hero's hand undrunk, his drink held at the lift until he drinks it or puts it down (game/drinkChoice.ts) */
+export interface Mug { id: number; place: MugPlace; full: number; dirty: boolean; for?: string; held?: boolean }
 
 /** The counts the ledger keeps: clean on the back counter, out in use (his hand, the bar full, a hero's hand), dirty
  *  (on the bar or a table, or in the tub), and their sum, which is always `MUG_COUNT`. */
@@ -49,9 +50,10 @@ export class MugLedger {
   }
 
   /** a mug moved to `place`, its ale and dirt as given (what isn't given kept) */
-  move(id: number, place: MugPlace, o: { full?: number; dirty?: boolean; for?: string } = {}): Mug {
+  move(id: number, place: MugPlace, o: { full?: number; dirty?: boolean; for?: string; held?: boolean } = {}): Mug {
     const m = this.mugs[id];
     m.place = place;
+    if (o.held !== undefined) m.held = o.held;
     if (o.full !== undefined) m.full = o.full;
     if (o.dirty !== undefined) m.dirty = o.dirty;
     m.for = o.for;

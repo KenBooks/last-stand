@@ -11,6 +11,7 @@
 // legs through his skirts (`sitCloth.ts`), with a film of the way down and up (`sitFilm.ts`). The canary raises his
 // body off the seat as he sits, pushes what he holds out of his hand, turns it in his hand as he gets up, and reads
 // a cloth point at his knee.
+import { BAR_STOOL_X, BAR_STOOLS } from '../../../src/data/tavern';
 import type { SitState } from '../../../src/types';
 import * as THREE from 'three';
 import { G } from '../../../src/state';
@@ -229,6 +230,11 @@ export const CASES: SeatCase[] = [
     name: 'stool', place: 'village', room: 'tavern', pick: stoolOf, hangs: false,
     views: SEAT_VIEWS, asks: [{ what: 'step', held: false }],
   },
+  // (the bar's own, higher, perched on: "the hero can sit on the bar stools", Kenneth's round 3)
+  {
+    name: 'barstool', place: 'village', room: 'tavern', pick: (seats) => seats.find(isBarStool), hangs: false,
+    views: SEAT_VIEWS, asks: [{ what: 'step', held: false }],
+  },
   {
     name: 'tavernbench', place: 'village', room: 'tavern', pick: (seats) => seats.findLast((s) => lengthOf(s) > 1),
     hangs: false, views: SEAT_VIEWS, asks: [{ what: 'step', held: false }],
@@ -241,7 +247,12 @@ export const CASES: SeatCase[] = [
 
 /** A room's first stool. */
 function stoolOf(seats: readonly Seat[]): Seat | undefined {
-  return seats.find((s) => lengthOf(s) < 1e-3 && !s.ground && !s.faces);
+  return seats.find((s) => lengthOf(s) < 1e-3 && !s.ground && !s.faces && !isBarStool(s));
+}
+
+/** Whether `seat` is one of the tavern's bar stools (their middles a line along the bar). */
+function isBarStool(seat: Seat): boolean {
+  return lengthOf(seat) < 1e-3 && Math.abs(seat.ax - BAR_STOOL_X) < 0.01 && BAR_STOOLS.some((z) => Math.abs(seat.az - z) < 0.01);
 }
 
 /** The forest's stone seat with the lowest top. */

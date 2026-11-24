@@ -1,0 +1,17 @@
+// The ale's two buttons (ui/screens/drink/drink.ts): Drink and Put down at the screen's foot while a hero holds a mug
+// of the tavern's, in the village objects' prompt's look (gold display letters, the key in a frame before each). Fixed
+// sizes, so nothing round them moves as they show; a finger's height on touch, its keys left out there.
+@use 'theme' as *;
+
+#drink-choice { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + #{ui(120px)}); z-index: 40;
+  display: flex; gap: ui(10px); transform: translateX(-50%); }
+#drink-choice.hidden { display: none; }
+.dc-btn { display: flex; align-items: center; justify-content: center; gap: ui(8px); width: ui(150px); height: ui(40px);
+  padding: 0 ui(12px); font: 700 ui(16px) var(--font-display); letter-spacing: .5px; color: #ffe7b0;
+  background: rgba(18, 12, 8, .82); border: 1px solid rgba($frame, .7); border-radius: 3px; cursor: $cursor-hand;
+  box-shadow: 0 0 10px rgba(0, 0, 0, .7); }
+.dc-btn:hover, .dc-btn:focus-visible { border-color: var(--accent); background: rgba(40, 28, 16, .9); }
+.dc-btn .k { min-width: ui(20px); padding: 0 ui(4px); font-size: ui(12px); text-align: center; border: 1px solid var(--frame);
+  border-radius: 2px; color: var(--accent); }
+body.touch .dc-btn { height: max(44px, #{ui(40px)}); }
+body.touch .dc-btn .k { display: none; }

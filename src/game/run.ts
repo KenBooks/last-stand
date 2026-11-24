@@ -37,6 +37,7 @@ import { duelFall, enterDuel, leaveDuel, newDuel, updateDuel, type DuelSetup, ty
 import { rand, randInt, shuffle, weighted } from '../util';
 import type { EnemyId } from '../data/enemies';
 import type { Enemy } from '../entities/enemy';
+import { aleRunBegins, aleRunEnds } from './aleBoost';
 import type { Player } from '../entities/player';
 import type { EnemyDef, Item } from '../types';
 import type { Portal } from '../world/props';
@@ -173,6 +174,8 @@ export function startRun(wave = 1, training = false, duel: DuelSetup | null = nu
     G.arena.setCalm(0);
     return;
   }
+  // (the tavern's ale drunk before it fortifies the local hero for this run, not a training round's)
+  if (!training) aleRunBegins();
   for (const p of G.players) {
     if (p.local) p.recomputeStats(G.profile.equipped);
     p.reset();
@@ -597,6 +600,7 @@ export function endRun(): void {
 /** The local player's run ends: the records, the bank (or the loss) and the summary. */
 function finishLocal(kind: 'banked' | 'dead', note?: string): void {
   const r = G.run!;
+  aleRunEnds();
   const rec = G.profile.records;
   ui.hideDecision();
   let extra: { lost?: Item[]; replaced?: Item[] } = {};

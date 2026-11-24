@@ -5,6 +5,7 @@ import { G } from '../../../src/state';
 import { villageObject } from '../../../src/game/village';
 import { partnersInTavern, selfId } from '../../../src/net/session';
 import { MUG_COUNT } from '../../../src/data/tavern';
+import { choosingAle, pickAle, takeMug, waitingMug } from './takeAle';
 import type { Lab } from './lab';
 
 /** This game's hero stood at the bar's front, `side` m along it from the keeper's stand, facing it. */
@@ -20,6 +21,18 @@ export function coopTavernAsk(): void {
   G.arena.rooms?.tavern?.serveAle?.(G.player);
 }
 
+/** This game's hero takes up mug `id` (the nearest waiting one by default) by E, the pointer on it, as a player does
+ *  (`takeAle.ts`): this page's frames alone run meanwhile. */
+export async function coopTavernTake(lab: Lab, { id = -1 }: { id?: number } = {}): Promise<void> {
+  const tv = G.arena.rooms?.tavern?.tavern?.();
+  if (tv) await takeMug(lab, tv, id >= 0 ? id : waitingMug(tv));
+}
+
+/** This game's hero drinks the mug in his hand by E, its choice answered. */
+export async function coopTavernDrink(lab: Lab): Promise<void> {
+  await pickAle(lab, 'drink');
+}
+
 /** The canary: the host's game keeps the mugs to itself, telling its guests nothing more. */
 export function coopTavernMute(): void {
   G.arena.rooms?.tavern?.tavern?.().mute();
@@ -29,6 +42,8 @@ export function coopTavernMute(): void {
  *  he drinks from, and whether a partner here is drinking. */
 export interface TavernSeen {
   places: string; clean: number; sum: number; count: number; drinking: number; myMug: number; partnerDrinking: boolean;
+  /** the full mug waiting on a top within this game's hero's reach (-1: none), and whether his choice is shown */
+  waiting: number; choosing: boolean;
   /** what the keeper is doing on this game (job: step) */
   doing: string;
 }
@@ -36,7 +51,7 @@ export interface TavernSeen {
 export function coopTavernSeen(): TavernSeen {
   const tv = G.arena.rooms?.tavern?.tavern?.();
   const c = G.player.casting, drinking = c?.skill.def.ale ? c.t / c.dur : -1;
-  if (!tv) return { places: 'none', clean: 0, sum: 0, count: MUG_COUNT, drinking, myMug: -1, partnerDrinking: false, doing: '' };
+  if (!tv) return { places: 'none', clean: 0, sum: 0, count: MUG_COUNT, drinking, myMug: -1, partnerDrinking: false, waiting: -1, choosing: false, doing: '' };
   const me = selfId();
   // (where a mug is, said alike on both games: a hero's hand by whether it's this game's or not, the bar's place to a cm)
   const place = (m: (typeof tv.mugs.mugs)[number]) => {
@@ -50,6 +65,7 @@ export function coopTavernSeen(): TavernSeen {
   const partners = G.players.filter((p) => !p.local);
   return {
     places: tv.mugs.mugs.map(place).join(' '), clean: counts.clean, sum: counts.total, count: MUG_COUNT, drinking,
+    waiting: waitingMug(tv), choosing: choosingAle(),
     doing: `${tv.doing().job}: ${tv.doing().step} at ${tv.keeper()?.root.position.x.toFixed(2)},${tv.keeper()?.root.position.z.toFixed(2)} facing ${tv.keeper()?.root.rotation.y.toFixed(2)}`, myMug: mine?.id ?? -1, partnerDrinking: partners.some((p) => !!p.casting?.skill.def.ale) || partnersInTavern().some((p) => !!p.player.casting?.skill.def.ale),
   };
 }

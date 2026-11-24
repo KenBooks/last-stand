@@ -22,6 +22,8 @@ import { frenzyCap } from '../combat/frenzy';
 import type { Player } from '../entities/player';
 import type { Enemy } from '../entities/enemy';
 import type { Item, SkillDef, SkillKey } from '../types';
+import { aleBoost } from '../game/aleBoost';
+import { ALE_BOOST } from '../data/tavern';
 
 /** querySelector that asserts the element exists (HUD markup is static). */
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
@@ -373,7 +375,11 @@ export function updateHud(): void {
   // buffs
   const buffs = h('#buffs');
   const wardHtml = p.ward ? `<div class="buff" style="color:#c9b8ff">◈<span class="bt">${Math.ceil(p.ward.t)}</span></div>` : '';
-  if (lastBuffs !== wardHtml) { buffs.innerHTML = wardHtml; lastBuffs = wardHtml; }
+  // (the tavern's ale: its share of life and the waves it still lasts, written out, so a finger needs no hover)
+  const aleHtml = aleBoost.waves > 0
+    ? `<div class="buff ale" style="color:#f0c060">🍺<span class="bt">+${Math.round(ALE_BOOST.life * 100)}% · ${aleBoost.waves}</span></div>` : '';
+  const buffHtml = wardHtml + aleHtml;
+  if (lastBuffs !== buffHtml) { buffs.innerHTML = buffHtml; lastBuffs = buffHtml; }
 
   if (!r) return;
   // objectives

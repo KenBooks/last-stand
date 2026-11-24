@@ -3,8 +3,9 @@
 One command of the lab in full, moved here from [`COMMANDS.md`](../COMMANDS.md) (which lists every command, and the
 options every command takes) for its size.
 
-`tavern`: the tavern's keeper, his mugs and his ale (`page/tavern.ts`, `page/keeperWatch.ts`, `page/tavernEyes.ts`;
-`src/world/tavern.ts`, `src/game/mugs.ts`, `src/entities/models/keeper.ts`, `src/entities/models/walker.ts`,
+`tavern`: the tavern's keeper, his mugs and his ale (`page/tavern.ts`, `page/keeperWatch.ts`, `page/keeperGait.ts`,
+`page/keeperShirt.ts`, `page/keeperBoost.ts`, `page/takeAle.ts`, `page/tavernEyes.ts`; `src/world/tavernKeeper.ts`,
+`src/game/mugs.ts`, `src/game/aleBoost.ts`, `src/entities/models/keeper.ts`,
 `src/entities/models/flask.ts`, `src/combat/skills/ale.ts`), any `--class`.
 
 **His day.** Into the Ember & Oak by its door, the hero by the door while the keeper's tasks are set and run to their
@@ -14,7 +15,9 @@ bar: he must come to the tap.
 
 **The ale.** E: the talk card must open within the window, its first reply a free beer. Picked (1): the card closes
 and he takes a clean mug off the back counter (it must be empty as he takes it), fills it and slides it across; within
-his serving's time and a second the hero must be drinking. The drink must last its 5 s (whatever his casting speed),
+his serving's time the mug must wait on the bar, 2 s on still not drunk; taken up by E with the pointer on it
+(`takeAle.ts`, stepped through the watch), the choice must show and hold the drink at 16%; put down (F), the mug must be
+back on the bar full and clean; taken up again and drunk (E), the drink goes on from there. The drink must last its 5 s (whatever his casting speed),
 with W held over its first 40 frames he must move under 2 cm, the mug must be in his hand in the flask's place from 12%
 to 92% of it, the rim's nearest point within 1.5 cm of his lower lip (the head's `mouth` point, 6 mm under it) at each
 swallow's middle, the mug tipped no more than 70 degrees from upright in the world from 20% to 75% of it and further
@@ -62,3 +65,12 @@ before him, the set-down, and the first person's. The sheet comes in pages (`she
 
 `--canary` makes the ale a cast he may walk through, which must be caught. In co-op, `coop --scenarios tavern`
 (`commands/coop.md`).
+
+**Round 3's additions.** Sat on the bar stool nearest the tap (as `lab sit` lets him sit idle), ale asked from it, its
+mug taken up and drunk: he must stay sat from the ask to the drink's end. The ale's boost read after the drinks
+(`keeperBoost.ts`): waiting, x1 in the village, x1.05 as a run begins and through 4 waves, x1 after the 5th, x1.05 again
+after a fresh ale once that run is over. His shirt's stripes across its seams (the chest's over the belly's, the
+collar's over the chest's) read every 20 frames all day by rays either side (`keeperShirt.ts`): at most a tenth of a
+repeat apart. His walk (`keeperGait.ts`) and his arms and tools against his body (`keeperWatch.ts`'s `LimbsClear`).
+`--canary` adds the belly's piece of his shirt shifted a third round and a second ale stacked on the first; each of
+its seven plants must be caught.

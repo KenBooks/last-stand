@@ -79,7 +79,7 @@
 #buffs { position: absolute; left: calc(50% - 470px); bottom: 76px; display: flex; gap: 4px; }
 .buff { width: 30px; height: 30px; border: 1px solid var(--frame); display: flex; align-items: center; justify-content: center; font-size: 18px; background: #111;
   position: relative; box-shadow: 0 0 8px rgba(0,0,0,.8); }
-.buff .bt { position: absolute; bottom: -14px; font-size: 11px; color: #fff; text-shadow: 0 0 3px #000; }
+.buff .bt { position: absolute; bottom: -14px; font-size: 11px; color: #fff; text-shadow: 0 0 3px #000; white-space: nowrap; }
 
 #target { position: absolute; top: 88px; left: 50%; transform: translateX(-50%); text-align: center; min-width: 260px; }
 .t-name { font-family: var(--font-display); font-size: 19px; font-weight: 700; color: #f5d27a; text-shadow: 0 2px 4px #000, 0 0 10px #000; }

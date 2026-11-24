@@ -11,6 +11,13 @@ import type { SkillDef } from '../types';
 /** the keeper's name, and what he is (the talk card's, the guide's and the village object's) */
 export const KEEPER = { name: 'Bertram Tunwell', title: 'Keeper of the Ember & Oak' } as const;
 
+/** His face on his talk card, drawn from his model looking at the camera (Kenneth's round 3; made by the village
+ *  folk's portraits of #702, `ui/guide/folkPortraits.ts` there, once merged): his head held level and square to the
+ *  camera, his eyes on it (rad, his neck's and head's turns over his rest), and the camera's framing (m over his feet
+ *  it looks at, how far before his face it stands, its field of view in degrees). Its place on the card is the emblem's
+ *  box, a fixed 76 px (`.tk-emblem`, ui/screens/talk/_talk.scss), so nothing moves as the face comes in. */
+export const KEEPER_PORTRAIT = { neck: { pitch: 0, yaw: 0 }, head: { pitch: -0.04, yaw: 0 }, frame: { at: 1.66, far: 0.62, fov: 26 } } as const;
+
 /** a place on the room's floor: where he stands for a task, and which way he faces (rad: 0 to +z, a quarter to +x) */
 export interface Spot { x: number; z: number; facing: number }
 const WEST = -Math.PI / 2, EAST = Math.PI / 2, NORTH = Math.PI;
@@ -24,9 +31,10 @@ export const BAR = { x: 4.1, top: 1.07, half: 0.35, from: -3.1, to: 1.0 } as con
 export const BACK = { front: 5.0, wall: 5.4, top: 0.9, from: -1.95, to: 0.75 } as const;
 
 /** how many mugs the tavern has, every one of them somewhere at all times (game/mugs.ts) */
-export const MUG_COUNT = 6;
-/** where each clean mug stands on the back counter (z), in a row, mouth up */
-export const SHELF_SLOTS: readonly number[] = [-1.78, -1.66, -1.54, -1.42, -1.3, -1.18];
+// (ten, from Kenneth's round 3: "10 cups")
+export const MUG_COUNT = 10;
+/** where each clean mug stands on the back counter (z), in a row, mouth up: a mug's width and a finger apart */
+export const SHELF_SLOTS: readonly number[] = Array.from({ length: MUG_COUNT }, (_, i) => -1.86 + i * 0.1);
 /** the wash tub on the back counter: its middle (z) and its radius (m), and how high its water stands over the counter */
 export const TUB = { z: 0.3, r: 0.17, water: 0.1 } as const;
 
@@ -35,11 +43,13 @@ export const TUB = { z: 0.3, r: 0.17, water: 0.1 } as const;
  *  the poker's corners */
 export const PLACES = {
   tap: { x: KEEPER_SPOT.x, z: KEEPER_SPOT.z, facing: WEST },
-  mugs: { x: 4.78, z: -1.48, facing: EAST },
+  mugs: { x: 4.73, z: -1.41, facing: EAST },
   tub: { x: 4.78, z: TUB.z, facing: EAST },
   bottles: { x: 4.8, z: -0.6, facing: EAST },
   cask: { x: 4.8, z: -0.36, facing: WEST },
-  hearth: { x: 0.6, z: -2.75, facing: NORTH },
+  // (a long arm's and a poker's length back from the fire: at 2.75 his boots were nearly in it, "he is too close to
+  // that fire, distance him a bit")
+  hearth: { x: 0.6, z: -2.45, facing: NORTH },
   smallTable: { x: 0.82, z: -0.68, facing: Math.atan2(-0.52, 0.48) },
   longTable: { x: -3.8, z: 2.95, facing: NORTH },
   broom: { x: 4.85, z: 1.2, facing: EAST },
@@ -55,15 +65,24 @@ export const TABLES = {
 } as const;
 /** the floor he sweeps in front of the bar: the way his broom goes (m), out and back */
 export const SWEEP: readonly [number, number][] = [[2.7, 1.6], [2.7, -1.4], [2.1, -2.3], [1.5, -1.0], [1.6, 1.6]];
-/** the way out from behind the bar into the room and back: past the bar's end, and the ways about the room */
-export const BAR_END: readonly [number, number][] = [[4.8, 1.25], [4.25, 1.75]];
-export const ROOM_WAYS: Record<string, readonly [number, number]> = {
-  aisle: [2.7, 1.7], back: [2.7, -2.4], hearth: [1.35, -2.75], table: [1.45, -1.1], door: [-1.4, 2.95],
-};
+/** the stools before the bar (their middles' z, all `BAR_STOOL_X` along the room): world/houses/tavern.ts builds them,
+ *  his ways keep off them (world/tavernNav.ts) */
+export const BAR_STOOL_X = BAR.x - 0.75;
+export const BAR_STOOLS: readonly number[] = [-2.2, -1.2, -0.2, 0.7];
+/** how high the bar stools' tops stand, and their rung round the legs (m) */
+export const BAR_STOOL_HIGH = 0.66, BAR_STOOL_RUNG = 0.25;
 
 /** how fast he walks (m/s) and turns (rad/s: about 170° a second, as a person turns on the spot), and how quickly he
  *  comes up to his pace and down from it (m/s²: over a walker's first step or two, not at full pace in a frame) */
-export const WALK = { speed: 1.05, turn: 3, accel: 2.2 } as const;
+// (turned on the spot no faster than his feet step round under him: at 3 rad/s they fell behind and crossed)
+export const WALK = { speed: 1.05, turn: 2.2, accel: 2.2 } as const;
+/** how fast he turns on the spot (rad/s: as fast as his feet step round under him, a few steps to a half turn) */
+// (1.5 led his feet: the heroes' gait steps round under a turning body, and faster his pelvis turned past his planted
+// feet and they read crossed, "when he turns, his feet end up crossing each other")
+export const TURN_ON_SPOT = 1.0;
+/** how far ahead along his way he looks to steer (m), how far from its end he turns to the place's facing as he comes
+ *  in (m), and how far off his way's heading it must set off for him to turn on the spot before he walks (rad) */
+export const STEER = { look: 0.42, arrive: 0.35, turnFirst: 1.1 } as const;
 
 /** how near the bar's front a hero comes (m, from the stand before the tap) before he leaves what he's doing and comes
  *  to serve, and how long he lingers there after the hero has gone (s) */
@@ -74,7 +93,8 @@ export const SET_DOWN_WITHIN = 1.4;
 
 /** each of his tasks' time at its place (s), the walk to it aside */
 export const TASK = {
-  take: 0.7, pour: 1.5, slide: 0.9, collect: 0.8, drawIn: 1.4, wash: 4.4, dry: 1.8, shelve: 0.7,
+  // (the empty one taken quicker, "faster and natural", Kenneth's round 3: drawn in 1.4 s and lifted in 0.8 before)
+  take: 0.7, pour: 1.5, slide: 0.9, collect: 0.55, drawIn: 0.9, wash: 4.4, dry: 1.8, shelve: 0.7,
   wipeBar: 9, wipeTable: 6, sweep: 1.4, stoke: 5, cask: 4, bottles: 6, fetch: 0.8,
 } as const;
 /** a wash's parts (shares of it): the mug lowered into the water by the first, scrubbed inside until the second,
@@ -87,9 +107,12 @@ export const SERVED_WITHIN = 1.8;
 
 /**
  * The ale: drunk over `castTime` (s), standing still (`still`: nothing cast over it, no step taken), its gulps and its
- * last sigh played by the skill (`fireAt` early, so the gulps can be timed from it). Free, and grants nothing but a
- * moment's look: foam on his lips, a contented "Ahh" (the coordinator's default: a cosmetic touch, no buff).
+ * last sigh played by the skill (`fireAt` early, so the gulps can be timed from it). Free; drunk to the end it
+ * fortifies him for his next run (`ALE_BOOST`, game/aleBoost.ts), with foam on his lips and a contented "Ahh".
  */
+/** what the ale gives, drunk to the end (game/aleBoost.ts): his life's most this share more in his next run, for
+ *  its first `waves` waves at most; one at a time, never stacked (from Kenneth's round 3) */
+export const ALE_BOOST = { life: 0.05, waves: 5 } as const;
 export const ALE: SkillDef = {
   key: 'q', impl: 'ale', name: 'Ale', desc: 'A mug of the Ember & Oak\'s ale, on the house.', tags: ['consumable'],
   cost: 0, cooldown: 0, castTime: 5, fireAt: 0.01, still: true, ale: true,

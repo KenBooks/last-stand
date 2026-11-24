@@ -1,15 +1,18 @@
 // `lab coop --scenarios tavern`: the tavern's keeper and his mugs as two games share them (src/world/tavern.ts,
 // src/game/mugs.ts): the host's game runs the keeper and rules the mugs, a guest's asks of it and takes its word.
 // Both heroes go into the tavern and stand at the bar. The guest asks for ale: the host's keeper must serve it, the
-// guest drink it, and the host see him drink. Then both ask at once: each must drink a mug of his own, never the same
-// one. Every look both games' mugs must add up to their count, and once settled (the guest's drink done, and at the
+// mug wait on the bar until the guest takes it up by E and drinks it, and the host see him drink. Then both ask at once:
+// each must take up and drink a mug of his own, never the same one. Then a mug served to the guest is pressed for by
+// both, the host beside him: one alone has it, on both games (the host rules who took it first; any hero may take up
+// any mug, from Kenneth's round 3: "make it possible for another player to drink it too"). Every look both games' mugs must add up to their count, and once settled (the guest's drink done, and at the
 // end) agree mug for mug (between, the guest hears the host a ping late); in the end every mug must be back on the
 // back counter on both. `--canary`: the host stops telling its guest of the mugs, so the guest's
 // mug never reaches it, which must be found.
 
 /** frames run between looks, and the most a serving, both servings and the clearing are given (two servings one after
- *  the other, about 10 s each, and the second drunk: 30 s was cut fine) */
-const STEP = 30, SERVED_IN = 900, BOTH_IN = 2700, CLEARED_IN = 3000;
+ *  the other, about 10 s each, and the second drunk: 30 s was cut fine; each mug taken up and drunk in turn, the last
+ *  of 50 s of clearing still in his hand) */
+const STEP = 30, SERVED_IN = 900, BOTH_IN = 2700, CLEARED_IN = 4200;
 
 /**
  * Plays it on `pair` (its room open already). Returns the problems found, its lines added to `lines`.
@@ -43,10 +46,22 @@ export async function drinkTogether(pair, callPage, lines, { canary = false, pic
   if (canary) await callPage(host, 'coopTavernMute');
   await pair.run(STEP * 2);
 
-  // --- the guest asks: the host's keeper serves him, and the host sees him drink ---
+  /** the mug waiting by `page`'s hero taken up by E and drunk by E, once it waits and once its choice shows: the mug
+   *  he took (-1: none) */
+  const takeAndDrink = async (page, which) => {
+    const his = (h, g) => (which === 'host' ? h : g);
+    if (await until((h, g) => his(h, g).waiting >= 0, SERVED_IN) < 0) return -1;
+    await callPage(page, 'coopTavernTake');
+    if (await until((h, g) => his(h, g).choosing, 120) < 0) return -1;
+    const [h, g] = await seen();
+    await callPage(page, 'coopTavernDrink');
+    return his(h, g).myMug;
+  };
+  // --- the guest asks: the host's keeper serves him, the mug waits, he takes it up and drinks, the host sees it ---
   await callPage(guest, 'coopTavernAsk');
   let hostSaw = false;
-  const served = await until((h, g) => { hostSaw ||= h.partnerDrinking; return g.drinking >= 0 && hostSaw; }, SERVED_IN);
+  const took = await takeAndDrink(guest, 'guest');
+  const served = took >= 0 ? await until((h, g) => { hostSaw ||= h.partnerDrinking; return g.drinking >= 0 && hostSaw; }, SERVED_IN) : -1;
   lines.push(`the guest asked: ${served < 0 ? 'never served' : `drinking ${(served / 60).toFixed(1)} s after, seen drinking on the host's game`}`);
   const found = [];
   if (served < 0) found.push('the guest asked for ale, and never drank (or the host never saw him drink)');
@@ -59,6 +74,9 @@ export async function drinkTogether(pair, callPage, lines, { canary = false, pic
     await callPage(host, 'coopTavernAsk');
     await callPage(guest, 'coopTavernAsk');
     const mugs = { host: new Set(), guest: new Set() };
+    const hostTook = await takeAndDrink(host, 'host'), guestTook = await takeAndDrink(guest, 'guest');
+    if (hostTook >= 0) mugs.host.add(hostTook);
+    if (guestTook >= 0) mugs.guest.add(guestTook);
     const both = await until((h, g) => {
       if (h.myMug >= 0) mugs.host.add(h.myMug);
       if (g.myMug >= 0) mugs.guest.add(g.myMug);
@@ -74,9 +92,28 @@ export async function drinkTogether(pair, callPage, lines, { canary = false, pic
     if (shared.length) found.push(`both heroes drank mug ${shared.join(', ')}`);
     // --- cleared: every mug back on the back counter on both games ---
     const cleared = await until((h, g) => h.clean === h.count && g.clean === g.count, CLEARED_IN);
+    if (cleared < 0) {
+      const [h, g] = await seen();
+      lines.push(`  then: host's mugs ${h.places}, keeper ${h.doing}; guest's ${g.places}`);
+    }
     lines.push(`cleared: ${cleared < 0 ? 'not every mug back' : `every mug back on the shelf on both in ${(cleared / 60).toFixed(1)} s`}`);
     if (cleared < 0) found.push('not every mug came back to the shelf on both games');
     await agree('at the end');
+    // --- one mug, two takers: the host stood by the guest, both press E on the guest's mug; one alone has it ---
+    await callPage(host, 'coopTavernStand', { side: 0.5 });
+    await callPage(guest, 'coopTavernAsk');
+    if (await until((h, g) => g.waiting >= 0 && h.waiting === g.waiting, SERVED_IN) >= 0) {
+      const [, g] = await seen();
+      await callPage(guest, 'coopTavernTake', { id: g.waiting });
+      await callPage(host, 'coopTavernTake', { id: g.waiting });
+      await pair.run(STEP * 2);
+      const [h2, g2] = await seen();
+      const holders = [h2.myMug === g.waiting ? 'host' : '', g2.myMug === g.waiting ? 'guest' : ''].filter(Boolean);
+      lines.push(`one mug, two takers: mug ${g.waiting} taken by ${holders.join(' and ') || 'no one'}`);
+      if (holders.length !== 1) found.push(`both heroes pressed for mug ${g.waiting}: ${holders.length ? 'both had it' : 'no one had it'}`);
+      for (const [page, sawIt] of [[host, h2], [guest, g2]]) if (sawIt.choosing) await callPage(page, 'coopTavernDrink');
+      await until((h, g) => h.drinking < 0 && g.drinking < 0, 600);
+    } else found.push('the mug for the race never waited within both heroes\' reach');
   }
   lines.push(`the ledgers: ${disagreed ? `disagreed (${disagreed})` : 'agreed once settled'}, ${badSum ? `didn't add up (${badSum})` : 'added up at every look'}`);
   if (disagreed) found.push(`the two games' mugs disagreed: ${disagreed}`);

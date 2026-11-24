@@ -31,6 +31,7 @@ import { LAMP_SOFT } from '../core/lamps';
 import { showStanding, standHeroes } from './hall';
 import { dropNameAt } from './groundItems';
 import { leaveSeatsTo, useWhileSatBy } from '../entities/sitting';
+import { keyTaken } from './keyTakers';
 import type { Seat } from '../world/seats';
 import { isWarm } from './warm';
 import { flash, release, type LightSlot } from '../fx/lights';
@@ -226,6 +227,8 @@ export function fireLeftToItsObject(seat: Seat): boolean {
  *  together from its logs): not a door, held to use, which would take him in sat. */
 export function usedWhileSat(): boolean {
   if (!hooks.active()) return false;
+  // (the tavern's mug taken up from a bar stool, and his ale chosen there: he stays sat)
+  if (keyTaken()) return true;
   const o = nearest();
   return !!o && !usedByHolding(o);
 }
@@ -390,7 +393,8 @@ export function updateVillage(dt = 0): void {
   }
   if (!p.walkTo) going = null;
   // (none named or used while E is the sit's: sat on the campfire's logs, it offered Play together over him)
-  near = p.sitting.takesKey ? null : nearest();
+  // (nor while E is another's, the tavern's mug the pointer is on: `keyTaken`)
+  near = p.sitting.takesKey || keyTaken() ? null : nearest();
   // (what it opened put away by its own button: E opens it again where he stands, as he hadn't walked off it, "when I
   // press got it, I cannot press E again until I move away")
   if (opened && !hooks.shows(opened)) opened = null;

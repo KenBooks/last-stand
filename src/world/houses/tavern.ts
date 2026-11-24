@@ -11,6 +11,7 @@ import {
 } from '../rooms';
 import { lengthSeat } from '../seats';
 import { keeperTalk, tavernKeeper } from '../tavernKeeper';
+import { BAR_STOOL_HIGH, BAR_STOOL_RUNG, BAR_STOOL_X, BAR_STOOLS } from '../../data/tavern';
 
 /** Two axes crossed behind a round shield on a wall (its frame, facing +z), centred at (x, y). */
 function crossedAxes(g: THREE.Object3D, M: Mats, x: number, y: number): void {
@@ -116,9 +117,17 @@ export function build(group: THREE.Group): Room {
   obstacles.push({ x: barX, z: barTo - 0.2, r: 0.42, h: 1.07 });
   // (the keeper's place clear: his cask stands at his left, his mug slides across before him)
   for (const [z, metal] of [[-1.9, false], [-1.4, true], [0.25, false], [0.6, false]] as const) tankard(g, M, barX - 0.1, 1.07, z, metal);
-  // (no seats: at 0.72 m his feet reached the floor only with his legs near straight, as a man stood, from review; a
-  // bar stool's sit wants a rung for his feet)
-  for (const z of [-2.2, -1.2, -0.2, 0.7]) stool(g, T, barX - 0.75, z, 0.72);
+  // (seats now, perched on at the bar, a ring of a rung round their legs: at 0.72 m his feet reached the floor only with
+  // his legs near straight, as a man stood, from review; lower, his knees bend as a man's on a high stool, "the hero can
+  // sit on the bar stools", Kenneth's round 3)
+  for (const z of BAR_STOOLS) {
+    const barStool = stool(g, T, BAR_STOOL_X, z, BAR_STOOL_HIGH);
+    const rung = new THREE.Mesh(new THREE.TorusGeometry(0.118, 0.011, 6, 20).rotateX(Math.PI / 2), T.timber);
+    rung.position.set(BAR_STOOL_X, BAR_STOOL_RUNG, z);
+    rung.castShadow = true;
+    barStool.group.add(rung);
+    b.seats.push(stoolSeatOf(barStool, BAR_STOOL_X, z));
+  }
   const east = onWall(g, id, 'east');
   const bottles: THREE.Matrix4[] = [], tints: THREE.Color[] = [];
   const glassTints = [0x2a5a2a, 0x6a2a14, 0x1a3a5a, 0x8a6a2a, 0x3a1a3a];

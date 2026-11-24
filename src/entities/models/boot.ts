@@ -24,8 +24,9 @@ const DEEP = 1.15;
 /** the shaft's radius at y (the knee's frame) */
 const shaftR = (y: number) => { for (let i = 1; i < SHAFT.length; i++) if (y <= SHAFT[i][1]) { const [r0, y0] = SHAFT[i - 1], [r1, y1] = SHAFT[i]; return lerp(r0, r1, clamp((y - y0) / (y1 - y0), 0, 1)); } return SHAFT[SHAFT.length - 1][0]; };
 
-/** the boot's foot: a sphere's surface laid over the last, its poles at the heel and the toe, flat underneath */
-function foot(): THREE.BufferGeometry {
+/** the boot's foot: a sphere's surface laid over the last, its poles at the heel and the toe, flat underneath (the
+ *  tavern's keeper's too, models/keeper.ts) */
+export function foot(): THREE.BufferGeometry {
   const g = new THREE.SphereGeometry(1, lod(28, 12), lod(24, 10)), p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i), t = (1 - y) / 2, rho = Math.sqrt(Math.max(0, 1 - y * y));
@@ -40,7 +41,7 @@ function foot(): THREE.BufferGeometry {
 }
 
 /** the sole's outline round the foot, `out` past the upper (the welt), from `t0` to `t1` of the way along it */
-function sole(out: number, t0: number, t1: number, depth: number): THREE.BufferGeometry {
+export function sole(out: number, t0: number, t1: number, depth: number): THREE.BufferGeometry {
   const s = new THREE.Shape(), N = 14, at = (k: number) => lerp(t0, t1, k / N);
   const w = (t: number) => curve(HALF_W, t) + out, z = (t: number) => lerp(HEEL - out * 0.6, TOE + out * 0.6, t);
   // (round at the heel and the toe: the ends' points drawn in)

@@ -1,5 +1,6 @@
 // The player character: input -> movement/skills, resources, damage, animation.
 import { countCast } from '../game/chronicle';
+import { aleLifeShare } from '../game/aleBoost';
 import * as THREE from 'three';
 import { gaitRate, legLength, LookAt, type LegIK } from './models/ik';
 import { stepVelocity } from './movement';
@@ -534,6 +535,8 @@ export class Player {
     const prevLifePct = this.stats ? this.life / this.stats.maxLife : 1;
     this.equipped = equipped;
     this.stats = computeStats(this.cls.base, this.gearless ? {} : equipped);
+    // (the tavern's ale, drunk before the run: his own hero's life's most a share more, game/aleBoost.ts)
+    if (this.local) this.stats.maxLife *= aleLifeShare();
     this.gear = gearOf(this.cls, equipped);
     this.fitToGear();
     this.model.setGear?.(this.gear);
@@ -1489,7 +1492,8 @@ export class Player {
    *  he is. Through the eyes too: the camera rides his head down onto the seat (#720's review: "Why does he exit 1st
    *  person view when sitting? He should not"). */
   private freeToSit(): boolean {
-    return this.sits && this.glances && this.local && this.alive && !this.idle && !this.casting
+    // (the tavern's ale drunk sat, as at its bar stools: "drink while seated", Kenneth's round 3)
+    return this.sits && this.glances && this.local && this.alive && !this.idle && (!this.casting || !!this.casting.skill.def.ale)
       && !this.channel && !this.dash && !this.aiming && this.aimHold <= 0 && !this.staggered && !this.rooted
       && this.hitT <= 0 && !foeNear(this.pos.x, this.pos.z);
   }

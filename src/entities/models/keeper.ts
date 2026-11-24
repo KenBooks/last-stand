@@ -20,12 +20,16 @@ import { createKit } from '../../core/materials';
 import { cloth as clothMaps, oiled as oiledMaps, leather as leatherMaps, wool as woolMaps, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, reachArm, resetPose, type Joints } from './rig';
 import { footShape } from './ik';
-import { Walker, type Gait } from './walker';
+import { walkCycle } from './rig';
+import { gaitRate, legLength, LegIK } from './ik';
 import { stripRig } from './shapes';
 import { buildNeck, handSkin, headSteps, type Head, type HeadSpec } from './head';
 import { built } from './steps';
 import { buildHand, bare, hold, poseHand, seatHeld, type Hand } from './hands';
 import { cord, oval, rowsSurface, sleeve } from './merchant';
+import { foot as bootFoot, sole as bootSole } from './boot';
+import { LegCloth } from './legCloth';
+import { bodyShape, capsuleDepth, type Solid } from './anatomy';
 import { clamp, damp, lerp, mulberry, smooth } from '../../util';
 
 /** his head: his own face (face.ts `VARIANTS.keeper`), a short crop and a full beard; made by the head workers and
@@ -64,6 +68,8 @@ const REACH_EASY = 0.46, LEAN_PER = 1.8, LEAN_MOST = 0.6, KNEES_PER = 0.5;
 const WRIST_EASE = 10;
 /** the most a hand turns on its wrist in a 60th of a second (rad: 7 degrees) */
 const WRIST_TURN_MOST = 0.12;
+/** for how long after a thing is taken up (s) its hand turns at a grasp's pace, and the most it turns a 60th then (rad) */
+const GRASP_QUICK = 0.2, WRIST_GRASP_MOST = 0.35;
 /** how fast a hand changing its hold eases from the last hold's wrist to the new one's (1/s), and how far ahead of his
  *  shoulder a reach starts to lift his elbow (m) and the most it lifts it (the pole's rise) */
 const KIND_EASE = 8, ELBOW_UP_FROM = 0.3, ELBOW_UP_MOST = 0.9;
@@ -73,20 +79,39 @@ const ARM_STEP_MOST = 0.02;
 const SEAT_EASE = 0.2;
 /** the most its move a frame changes from the last frame's (m: a hand speeds up and slows, never snaps) */
 const ARM_SPEED_CHANGE_MOST = 0.008;
-/** his walk (`walker.ts`, Odo's heel to toe): a sturdy man of fifty's, his feet a little wide, his steps unhurried
- *  (about 110 a minute at his pace) and low; his pace and turn are the brain's (`WALK`) */
-const GAIT: Gait = { stance: 0.11, speed: 1, accel: 2, turn: 3, step: 0.55, lift: 0.05, lead: 0.2 };
-/** the heel's lift as his toes push off and his toes' as his heel lands (rad) */
-const ROLL_PUSH = 0.4, ROLL_STRIKE = 0.26;
-/** how far his hips come down as he strides (m at full pace: a stride's feet are further from them than his legs
- *  reach standing tall), how far his arms swing for each m his feet are apart (rad), and his hips' sway's tilt */
-const STRIDE_DROP = 0.045, ARM_SWING = 0.85, SWAY_TILT = 1.6;
-/** the most his feet's turn from his facing turns his hips (rad, half of it) */
-const HIP_TURN_MOST = 0.8;
-/** how fast his hips follow his feet's turn (1/s) */
-const HIP_EASE = 8;
-/** where his rag hangs tucked in his apron's pocket while his right hand holds something else (the hips' frame) */
-const TUCKED = new THREE.Vector3(0.09, -0.24, 0.24);
+/** the most an elbow moves in his chest's frame in a 60th of a second (m), and bends (rad) */
+const ELBOW_MOVE_MOST = 0.03, ELBOW_BEND_MOST = 0.2;
+/** how fast an arm's elbow pole eases to a new one (1/s) */
+const POLE_EASE = 6;
+/** the speed his walk's cycle is at its fullest (m/s): he walks at about that pace (data/tavern.ts `WALK`) */
+const WALK_FULL = 1.1;
+/** how far each foot stands from his middle at rest (m: half his hips' width) */
+const STANCE_HALF = 0.11;
+/** how fast his hips come down for a crouch or a reach and back up (m/s) */
+const HIPS_RATE = 0.3;
+/** where his rag hangs tucked in his apron's tie at his right hip while his right hand needs no rag (the hips' frame,
+ *  x to his left): in the pocket at his front's left, his right forearm crossed his belly to reach it, `lab tavern` */
+export const RAG_TUCKED = new THREE.Vector3(-0.19, -0.05, 0.12);
+const TUCKED = RAG_TUCKED;
+/** his body's solids grown by what he wears over them (m: the shirt and the apron's bib on his chest, his belly and
+ *  the apron over it), how far off them his arms keep, and the elbow's turns about the shoulder-to-wrist line tried
+ *  for an arm clear of him (rad, nearest first) */
+/** where the shirt's chest piece ends below the chest joint (its lowest row, `chestRows`) */
+const CHEST_HEM = -0.1;
+export const BODY_GROWN = { chest: [0.005, 0, 0.03], belly: [0.03, 0, 0.06] } as const;
+/** whether his arms keep out of his body (`lab tavern --canary` turns it off, which its check must catch) */
+export const KEEPER_ARMS = { offBody: true };
+/** (a switch for `lab tavern --canary`: his walk with no lift and his hips not lowered, legs straight, which its knee
+ *  check must catch) */
+export const KEEPER_GAIT = { flat: false, cross: false };
+const ARM_OFF_BODY = 0.012;
+const ELBOW_TRIES = [0, 0.15, -0.15, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4];
+/** the most an elbow turns about its line in a 60th of a second (rad: an elbow swung a whole try round in a frame
+ *  read as a flick, 16 degrees, `lab tavern`) */
+const ELBOW_TURN_MOST = 0.12;
+/** how far his apron's skirt keeps from the middle of his thighs and his shins (m: his trousers' thickness and the
+ *  leather's) */
+const APRON_OFF = { thigh: 0.115, shin: 0.085 };
 
 /** Where one of his hands goes for the frame. */
 export interface HandGoal {
@@ -105,6 +130,10 @@ export interface HandGoal {
   cup?: boolean;
   /** what it holds turned about its axis (rad: a mug turned in the hand as it's washed) */
   spin?: number;
+  /** carried: `at` (and `dir`) given in his chest's own frame (x to his left, y up, z ahead, from the chest joint), so
+   *  his walk's lean, twist and bob take the hand along, as a hero's weapon is held, and the hand isn't eased after it.
+   *  Sent to a place on the floor's frame, a carried mug chased his walking body: a hand 6 cm a frame, `lab tavern` */
+  carried?: boolean;
 }
 
 /** His body for the frame, the brain's (world/tavern.ts): his root's place and turn are set by it beforehand. */
@@ -115,6 +144,11 @@ export interface KeeperPose {
   bend: number; crouch: number;
   /** what he looks at (world), or ahead */
   look: THREE.Vector3 | null;
+  /** the velocity the brain is taking him to (m/s, his room's x and z: 0 standing), told to his legs before they
+   *  move as a hero's are told it by the controls (`LegIK.intend`): his first stride planned as he sets off and his
+   *  last as he stops. Untold, his legs met his walk a frame late and a planted foot was left behind as he set off,
+   *  12 cm, `lab tavern` */
+  goal?: { x: number; z: number };
   left: HandGoal | null; right: HandGoal | null;
 }
 
@@ -129,6 +163,8 @@ export interface Keeper {
   /** his rag: in his right hand, or tucked in his apron's pocket (`tuckRag`) while that hand holds something else */
   readonly rag: THREE.Object3D;
   tuckRag(tucked: boolean): void;
+  /** whether the rag is in his apron's pocket */
+  readonly ragTucked: boolean;
   /** he was put somewhere at once (stood behind the bar as he's seated): his feet set under him again there */
   placed(): void;
   /** how many times he's been put somewhere at once (the lab: his feet set afresh then aren't sliding) */
@@ -143,6 +179,8 @@ export interface Keeper {
   hands(out: [THREE.Vector3, THREE.Vector3]): void;
   /** his meshes (the lab reads them) */
   readonly parts: THREE.Mesh[];
+  /** the heroes' leg IK that walks him (the lab reads its feet as `lab feet` reads a hero's) */
+  readonly legs: LegIK;
 }
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -167,7 +205,7 @@ type Add = (g: THREE.BufferGeometry, m: THREE.Material, on: THREE.Object3D, name
 interface Mats {
   shirt: THREE.Material; apron: THREE.Material; strap: THREE.Material; thread: THREE.Material; scarf: THREE.Material;
   towel: THREE.Material; arm: THREE.Material; brass: THREE.Material; bone: THREE.Material; trousers: THREE.Material;
-  boot: THREE.Material;
+  boot: THREE.Material; sole: THREE.Material;
 }
 
 /**
@@ -188,7 +226,8 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
   };
   // (his palette is a tavern's: cream and bottle green, oiled brown leather, a red scarf; Hollis wears brown and
   // oxblood, Odo saffron and teal)
-  const shirtMap = stripes('#ece0c4', '#2c5236', [[0, 10], [17, 3]], 9);
+  // (laid once a repeat a unit of u: each part's UVs are set by his body, `STRIPES`)
+  const shirtMap = stripes('#ece0c4', '#2c5236', [[0, 10], [17, 3]], 1);
   const shirt = kit.rim({ color: 0xffffff, roughness: 1, ...tex(clothMaps(), 0.9), map: shirtMap, side: THREE.DoubleSide }, 0xfff0d0, 0.3);
   const apron = kit.std({ color: 0x74503a, roughness: 0.78, ...tex(oiledMaps(), 0.45), side: THREE.DoubleSide });
   const strap = kit.std({ color: 0x3a2414, roughness: 0.5, ...tex(leatherMaps(), 0.7) });
@@ -199,10 +238,15 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
   const brass = kit.std({ color: 0xc89a48, metalness: 0.9, roughness: 0.35 });
   const bone = kit.std({ color: 0xe6dcc6, roughness: 0.5 });
   const trousers = kit.std({ color: 0x343c4a, roughness: 1, ...tex(woolMaps(), 1) });
-  const boot = kit.std({ color: 0x2a1a10, roughness: 0.6, ...tex(leatherMaps(), 1) });
+  // (its leather's grain three times finer: a tile across the whole foot read as a coarse hide)
+  const bootMaps = pbrMaterialMaps(leatherMaps(), 3, 0.6);
+  const boot = kit.std({ color: 0x2a1a10, roughness: 0.6, map: bootMaps.map, normalMap: bootMaps.normalMap, roughnessMap: bootMaps.roughnessMap, normalScale: bootMaps.normalScale });
+  const soleMat = kit.std({ color: 0x17100a, roughness: 0.8 });
 
   // --- the rig: a man of an ordinary build, a little thick at the waist; his legs planted by the leg IK as he walks ---
-  const j: Joints = buildHumanoid({ skin: shirt }, { chestW: 0.21, chestD: 0.14, waistW: 0.17 });
+  // (his neck 2.5 cm shorter than the rig's: "slightly too long neck, just does not look right from some angles,
+  // especially when he looks down")
+  const j: Joints = buildHumanoid({ skin: shirt }, { chestW: 0.21, chestD: 0.14, waistW: 0.17, neckL: 0.075 });
   stripRig(j.root);
   for (const [name, o] of Object.entries(j)) if (o instanceof THREE.Object3D && !o.name) o.name = `keeper ${name}`;
   const P = j.P;
@@ -231,13 +275,29 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
     return m;
   };
   yield;
-  dressBody(j, add, { shirt, apron, strap, thread, scarf, towel, arm, brass, bone, trousers, boot });
+  const apronSkirt = dressBody(j, add, { shirt, apron, strap, thread, scarf, towel, arm, brass, bone, trousers, boot, sole: soleMat });
+  // (the apron's skirt pushed out by his thighs and shins as he walks and bends: legCloth.ts)
+  const apronCloth = new LegCloth(apronSkirt.skirt, apronSkirt.cols, j.hips, [
+    { from: j.thighL, to: j.kneeL, r: APRON_OFF.thigh }, { from: j.kneeL, to: j.ankleL, r: APRON_OFF.shin },
+    { from: j.thighR, to: j.kneeR, r: APRON_OFF.thigh }, { from: j.kneeR, to: j.ankleR, r: APRON_OFF.shin },
+  ]);
+  for (const piece of apronSkirt.sewn) apronCloth.carry(piece);
+  // (the chest's whole turn reached where the chest's piece of the shirt ends over the belly's, its lowest row)
+  const bellyTwist = new ShirtTwist(apronSkirt.belly, j.chest, j.chest.position.y + CHEST_HEM);
+  // (his body as the heroes' solids (anatomy.ts), grown by his clothes: what his arms keep out of)
+  const body = bodyShape(j);
+  for (const solid of body.solids) {
+    const grown = solid.name === 'chest' ? BODY_GROWN.chest : solid.name === 'belly' ? BODY_GROWN.belly : null;
+    if (grown) solid.r.add(new THREE.Vector3(...grown));
+  }
+  const trunk = body.solids.filter((solid) => ['chest', 'belly', 'neck', 'head'].includes(solid.name));
   yield;
   const rag = add(ragGeometry(), towel, j.handR, 'rag', false);
   // (his feet as his boots have them: the sole under the ankle, the toe ahead and the heel behind)
   j.root.updateMatrixWorld(true);
   const sole = footShape(j.ankleL, j.root);
-  const walker = new Walker({ x: 0, z: 0, yaw: 0 }, GAIT, { toe: sole.toe, heel: sole.heel, ankle: sole.sole, push: ROLL_PUSH, strike: ROLL_STRIKE });
+  const legs = new LegIK(j);
+  const legLong = legLength({ joints: j, root: j.root });
   const legsOf = [
     { thigh: j.thighL, knee: j.kneeL, ankle: j.ankleL, s: 1 },
     { thigh: j.thighR, knee: j.kneeR, ankle: j.ankleR, s: -1 },
@@ -245,12 +305,15 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
   let ragTucked = false;
 
   // --- his pose, a frame at a time ---
-  let gaze = 0, bend = 0, crouch = 0, placings = 0, replant = true, hipTurn = 0;
+  let gaze = 0, bend = 0, crouch = 0, placings = 0, replant = true, phase = 0, walkSpeed = 0, hipsDrop = 0;
+  const movedFrom = new THREE.Vector3(), intendV = new THREE.Vector3(), intendQ = new THREE.Quaternion();
   const footAt = new THREE.Vector3(), legPole = new THREE.Vector3(), roomQ = new THREE.Quaternion();
   const footQ = new THREE.Quaternion(), kneeQ = new THREE.Quaternion(), X_AXIS = V(1, 0, 0);
   /** each hand's goal eased towards where it's sent (a step's goal changes at once: the hand doesn't), and how far
    *  the arm is its goal's rather than his walk's swing */
   const eased = [new THREE.Vector3(), new THREE.Vector3()], easedSet = [false, false], weight = [0, 0], blendOf = [0, 0];
+  /** each hand's last goal, its place in his chest's frame, followed on as the arm blends back to its swing */
+  const letGo: (HandGoal | null)[] = [null, null], letGoAt = [new THREE.Vector3(), new THREE.Vector3()];
   const easeV = [new THREE.Vector3(), new THREE.Vector3()];
   /** each arm as last solved to its goal: what it eases back to the swing from once the goal's gone */
   const solved = [0, 1].map(() => ({ qs: new THREE.Quaternion(), qe: new THREE.Quaternion() }));
@@ -263,14 +326,15 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
   const kindOff = [new THREE.Vector3(), new THREE.Vector3()], solvedWrist = new THREE.Vector3(), armPole = new THREE.Vector3();
   const ragDir = new THREE.Vector3();
   /** each arm as last shown, and its hand's place in his body's frame (`capArmStep`) */
-  const armWas = [0, 1].map(() => ({ qs: new THREE.Quaternion(), qe: new THREE.Quaternion(), hand: new THREE.Vector3(), v: new THREE.Vector3(), seen: false }));
+  const armWas = [0, 1].map(() => ({ qs: new THREE.Quaternion(), qe: new THREE.Quaternion(), hand: new THREE.Vector3(), v: new THREE.Vector3(), elbow: new THREE.Vector3(), bend: 0, seen: false }));
+  const armElbow = new THREE.Vector3();
   const armHand = new THREE.Vector3(), armMove = new THREE.Vector3(), armChange = new THREE.Vector3(), armAllowed = new THREE.Vector3();
   const armToQs = new THREE.Quaternion(), armToQe = new THREE.Quaternion();
   /** a thing just taken up, where it stood, and how far into its easing into the fist (0 to 1) */
   let seating: { thing: THREE.Object3D; from: THREE.Vector3; t: number } | null = null;
   const seatAt = new THREE.Vector3();
   /** each hand's turn as last shown (`easeWrist`) */
-  const wristWas = [new THREE.Quaternion(), new THREE.Quaternion()], wristSet = [false, false];
+  const wristWas = [new THREE.Quaternion(), new THREE.Quaternion()], wristSet = [false, false], wristQuick = [0, 0];
   const wristWant = new THREE.Quaternion(), wristBy = new THREE.Quaternion();
   const swing = { qs: new THREE.Quaternion(), qe: new THREE.Quaternion() };
   const lookYaw = { v: 0 }, lookPitch = { v: 0 };
@@ -283,6 +347,66 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
   const handOf = (left: boolean): Hand => (left ? handL : handR);
   /** one arm to its goal: a fist seated round what it holds (solved twice, so the grip lands where it's sent), a fist
    *  round a handle, or an open hand, flat */
+  /** each arm's last turn of its elbow about the line from its shoulder to its wrist (rad: `keepOffBody`) */
+  const elbowTurn = [0, 0];
+  /** each hand's held thing and the way it's stood (world), as the arm last seated it */
+  const heldWay: ({ thing: THREE.Object3D; dir: THREE.Vector3; spin: number } | null)[] = [null, null];
+  const heldDir = [new THREE.Vector3(), new THREE.Vector3()];
+  /** each arm's elbow pole, eased (`POLE_EASE`), and the frame's time it's eased by */
+  const poleEased = [new THREE.Vector3(), new THREE.Vector3()], poleSet = [false, false];
+  let frameDt = 0;
+  const freeWrist = new THREE.Vector3(), freePole = new THREE.Vector3();
+  const carryAt = new THREE.Vector3(), carryDir = new THREE.Vector3(), carryQ = new THREE.Quaternion();
+  const goalLocal = new THREE.Vector3(), handWorld = new THREE.Vector3();
+  const axisL = new THREE.Vector3(), poleTry = new THREE.Vector3(), elbowW = new THREE.Vector3(), wristW = new THREE.Vector3();
+  const shoulderW = new THREE.Vector3(), tipW = new THREE.Vector3(), poleBest = new THREE.Vector3();
+  /** How far the arm as solved now goes into his trunk or head (m, 0 clear): the forearm and hand into any of them, the
+   *  upper arm into his head. */
+  const armInBody = (left: boolean): number => {
+    const [shoulder, elbow, hand] = left ? [j.shoulderL, j.elbowL, j.handL] : [j.shoulderR, j.elbowR, j.handR];
+    shoulder.updateMatrixWorld(true);
+    shoulder.getWorldPosition(shoulderW);
+    elbow.getWorldPosition(elbowW);
+    hand.getWorldPosition(wristW);
+    tipW.subVectors(wristW, elbowW).setLength(0.1).add(wristW);
+    let worst = 0;
+    for (const solid of trunk) {
+      worst = Math.max(worst, capsuleDepth(elbowW, wristW, P.foreR + ARM_OFF_BODY, solid), capsuleDepth(wristW, tipW, 0.04 + ARM_OFF_BODY, solid));
+      if (solid.name === 'head') worst = Math.max(worst, capsuleDepth(shoulderW, elbowW, P.upperR, solid));
+    }
+    return worst;
+  };
+  /** An arm's elbow turned about the line from its shoulder to `wrist` (chest frame: `pole` changed in place) to where
+   *  the arm keeps out of his body, the turn nearest last frame's that does; and where none does, `wrist` (world)
+   *  pushed out of his chest and belly. A goal at his side or across him took his forearm through his chest and apron
+   *  (from play: "in many many animations his arm goes through his body"). */
+  const keepOffBody = (left: boolean, wrist: THREE.Vector3, pole: THREE.Vector3): void => {
+    const i = left ? 0 : 1, [shoulder, elbow] = left ? [j.shoulderL, j.elbowL] : [j.shoulderR, j.elbowR];
+    pushOutOf(wrist, P.foreR + ARM_OFF_BODY);
+    const target = chestLocal(wrist);
+    axisL.subVectors(target, shoulder.position).normalize();
+    let best = Infinity, bestTurn = elbowTurn[i];
+    for (const offset of ELBOW_TRIES) {
+      const angle = elbowTurn[i] + offset;
+      poleTry.copy(pole).applyAxisAngle(axisL, angle);
+      reachArm(shoulder, elbow, P.upperL, P.foreL, target, poleTry, 1, 0.08);
+      const depth = armInBody(left), cost = depth + Math.abs(offset) * 0.002;
+      if (cost < best) { best = cost; bestTurn = angle; poleBest.copy(poleTry); }
+      if (depth <= 0) break;
+    }
+    // (eased towards the clear turn, never swung round in a frame; and back to his natural elbow when clear of himself)
+    const wanted = Math.abs(bestTurn) > 0.02 && best <= 0.003 ? bestTurn * 0.97 : bestTurn;
+    elbowTurn[i] += clamp(wanted - elbowTurn[i], -ELBOW_TURN_MOST, ELBOW_TURN_MOST);
+    pole.applyAxisAngle(axisL, elbowTurn[i]);
+    void poleBest;
+  };
+  /** `point` (world) moved out of his chest and belly, grown by `r` round it */
+  const pushOutOf = (point: THREE.Vector3, r: number): void => {
+    for (const solid of trunk) {
+      if (solid.name !== 'chest' && solid.name !== 'belly') continue;
+      outOfSolid(point, solid, r);
+    }
+  };
   const reach = (left: boolean, g: HandGoal) => {
     const [shoulder, elbow] = left ? [j.shoulderL, j.elbowL] : [j.shoulderR, j.elbowR];
     const h = handOf(left), i = left ? 0 : 1;
@@ -290,7 +414,16 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
     // onto the bar's top reaching across it, `lab tavern`)
     shoulder.getWorldPosition(tmp);
     const far = clamp((Math.hypot(g.at.x - tmp.x, g.at.z - tmp.z) - ELBOW_UP_FROM) / 0.3, 0, 1);
-    const pole = armPole.set(left ? 1 : -1, 0.05 + far * ELBOW_UP_MOST, -0.5).normalize();
+    // (carrying, his elbow hangs down by his side, as a man's carrying a mug: sent out and back as for a reach over a
+    // counter, it stood 39 cm out from his middle and met the bar walking behind it, `lab tavern`)
+    // (carried, the elbow hangs down by his side, a little out: out 0.35, his elbow caught the back counter walking
+    // the aisle behind the bar, `lab tavern`)
+    const wantPole = g.carried ? armPole.set(left ? 0.2 : -0.2, -1, -0.3).normalize() : armPole.set(left ? 1 : -1, 0.05 + far * ELBOW_UP_MOST, -0.5).normalize();
+    // (eased from one to the other: switched at once between a carry and a reach, the elbow flipped and the hand
+    // jumped 10 cm in a frame)
+    if (poleSet[i]) poleEased[i].lerp(wantPole, 1 - Math.exp(-POLE_EASE * frameDt)).normalize(); else poleEased[i].copy(wantPole);
+    poleSet[i] = true;
+    const pole = armPole.copy(poleEased[i]);
     if (g.on) {
       j.root.updateMatrixWorld(true);
       g = { ...g, at: g.on.thing.localToWorld(new THREE.Vector3(0, g.on.along, 0)), dir: new THREE.Vector3(0, 1, 0).applyQuaternion(g.on.thing.getWorldQuaternion(turn)), grip: true };
@@ -302,8 +435,10 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
     // (each pass moves the wrist by how far the grip landed off, the hand's turn changing with the arm's: with two the
     // right fist was left 1 to 9 cm off what it held, with four it lands on it)
     const passes = g.held || g.grip ? 4 : 1;
+    if (KEEPER_ARMS.offBody) keepOffBody(left, wrist, pole);
     const seat = () => {
       if (g.held) {
+        heldWay[i] = { thing: g.held, dir: heldDir[i].copy(dir), spin: g.spin ?? 0 };
         hold(h, dir, g.r ?? 0.02);
         seatHeld(h, g.held, g.r ?? 0.02);
         // (the thing stood along its axis in the world, whatever the hand's turn)
@@ -339,45 +474,14 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
     wristSeen[i] = true;
   };
 
-  /** Each leg reached to its foot as the walker has it, the foot laid at its heading and pitch (Odo's). */
-  function placeLegs(hipYaw: number): void {
-    const room = j.root.parent;
-    if (!room) return;
-    room.getWorldQuaternion(roomQ);
-    for (const [i, leg] of legsOf.entries()) {
-      const f = walker.feet[i];
-      footAt.set(f.x, sole.sole + f.lift, f.z);
-      room.localToWorld(footAt);
-      leg.thigh.parent!.worldToLocal(footAt);
-      const heading = f.yaw - j.root.rotation.y - hipYaw;
-      legPole.set(Math.sin(heading) + leg.s * 0.08, 0, Math.cos(heading));
-      reachArm(leg.thigh, leg.knee, P.thighL, P.shinL, footAt, legPole, -1);
-      leg.knee.updateWorldMatrix(true, false);
-      leg.knee.getWorldQuaternion(kneeQ);
-      footQ.copy(roomQ).multiply(spinQ.setFromAxisAngle(up, f.yaw)).multiply(turn.setFromAxisAngle(X_AXIS, f.pitch));
-      leg.ankle.quaternion.copy(kneeQ.invert().multiply(footQ));
-    }
-  }
 
-  /** His arms swung against his legs, each with the other side's foot, by how far apart his feet are along his way
-   *  (an arm with a goal is the goal's, blended over this). */
-  function swingArms(): void {
-    const c = Math.cos(j.root.rotation.y), s = Math.sin(j.root.rotation.y);
-    const along = (f: { x: number; z: number }) => (f.x - j.root.position.x) * s + (f.z - j.root.position.z) * c;
-    const apart = along(walker.feet[1]) - along(walker.feet[0]);
-    // (+x swings an arm back: his left comes forward with his right foot)
-    j.shoulderL.rotation.x -= apart * ARM_SWING;
-    j.shoulderR.rotation.x += apart * ARM_SWING;
-    j.elbowL.rotation.x -= 0.22 + Math.max(0, apart) * 0.35;
-    j.elbowR.rotation.x -= 0.22 + Math.max(0, -apart) * 0.35;
-  }
 
   /** How far he must lean in and bend his knees for his hands to reach their goals from his shoulders as they stand. */
   const reachAsked = (p: KeeperPose): { lean: number; knees: number } => {
     let far = 0, low = 0;
     j.root.updateMatrixWorld(true);
     for (const [goal, shoulder] of [[p.left, j.shoulderL], [p.right, j.shoulderR]] as const) {
-      if (!goal || goal.on) continue;
+      if (!goal || goal.on || goal.carried) continue;
       shoulder.getWorldPosition(tmp);
       far = Math.max(far, tmp.distanceTo(goal.at) - REACH_EASY);
       j.root.worldToLocal(at.copy(goal.at));
@@ -388,18 +492,34 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
 
   function pose(dt: number, p: KeeperPose): void {
     resetPose(j);
+    frameDt = dt;
     if (seating) {
       seating.t += dt / SEAT_EASE;
       if (seating.t >= 1) seating = null;
     }
-    // --- his feet stepped heel to toe under where the brain has him (walker.ts); set down afresh where he's been put
-    // at once (this frame, not the frame he was moved: `placings` counts it here) ---
-    const at = j.root.position, yaw = j.root.rotation.y;
+    // --- his legs: the heroes' own walk (rig.ts `walkCycle` and ik.ts `LegIK`, as a hero's and every walking foe's),
+    // its cycle moved on by how fast the brain walks him; his feet set afresh where he's been put at once (this frame,
+    // not the frame he was moved: `placings` counts it here). From play: "reuse player characters for walking
+    // animations, just use that one": his own heel-to-toe walker (walker.ts, Odo's) read as a robot's walk ---
     if (replant) {
-      walker.place({ x: at.x, z: at.z, yaw });
+      legs.reset();
+      // (settled there at once in one long step, its weight full and his feet planted under him: the gait eases its
+      // weight in over a third of a second from a restart, a hero's from his first frame in the game, and his first
+      // steps as the tavern opened were the walk cycle's feet blended into the IK's, 27 cm a frame, `lab tavern`)
+      j.root.updateMatrixWorld(true);
+      legs.update(1, phase, -1);
       replant = false;
       placings++;
-    } else walker.follow(at.x, at.z, yaw, dt);
+      movedFrom.copy(j.root.position);
+    }
+    // (by how far his root moved this frame, as a foe's cycle is: eased into a task's place, a few cm a frame, the
+    // brain called him still, his cycle stood, his planted feet were left behind and the leg IK dropped his pelvis
+    // through the floor to reach them, `lab tavern`)
+    const moved = dt > 0 ? Math.hypot(j.root.position.x - movedFrom.x, j.root.position.z - movedFrom.z) / dt : 0;
+    movedFrom.copy(j.root.position);
+    walkSpeed = damp(walkSpeed, Math.max(moved, p.speed), 12, dt);
+    const speed = walkSpeed;
+    phase += dt * speed * gaitRate(Math.max(speed, 0.05), legLong) * legs.cadence;
     // (his lean and his crouch eased, never snapped: a step's end drops both at once)
     bend = damp(bend, p.bend, 5, dt);
     crouch = damp(crouch, p.crouch, 4, dt);
@@ -407,27 +527,39 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
     const asked = reachAsked(p);
     lean = damp(lean, asked.lean, 4, dt);
     knees = damp(knees, asked.knees, 4, dt);
-    // --- his hips over his feet: down a little as he strides, rising over the standing foot and shifted over it, turned
-    // halfway to where his feet point; his chest turned back against them ---
-    const [fl, fr] = walker.feet;
-    // (each foot's turn from his facing capped alone, the two averaged, and the hips eased onto it: a foot left half
-    // round behind him as he turned faster than it stepped flips from one side to the other, and taken as it was, it
-    // swung his chest 0.4 rad and a hand before him 40 cm in a frame, `lab tavern`)
-    const offL = clamp(Math.atan2(Math.sin(fl.yaw - yaw), Math.cos(fl.yaw - yaw)), -HIP_TURN_MOST, HIP_TURN_MOST);
-    const offR = clamp(Math.atan2(Math.sin(fr.yaw - yaw), Math.cos(fr.yaw - yaw)), -HIP_TURN_MOST, HIP_TURN_MOST);
-    hipTurn = damp(hipTurn, (offL + offR) / 4, HIP_EASE, dt);
-    const hipYaw = hipTurn;
-    const striding = Math.min(1, walker.speed / GAIT.speed) * STRIDE_DROP;
-    // (on the body joint, which the pose puts back each frame: added to the hips' own place, it built up frame on frame)
-    j.body.position.x = walker.sway;
-    j.hips.position.y = hipY + walker.bob - striding - (crouch + knees) * 0.32;
-    j.hips.rotation.y += hipYaw;
-    j.hips.rotation.z += walker.sway * SWAY_TILT;
-    j.spine.rotation.y -= hipYaw * 1.4;
-    j.spine.rotation.z -= walker.sway * SWAY_TILT;
+    // (from their rest height each frame: the pose doesn't put the hips back, and lowered from where they were they
+    // sank 14 m in a serve, `lab tavern`)
+    j.hips.position.y = hipY;
+    walkCycle(j, phase, Math.min(1, speed / WALK_FULL), { stride: 0.5, knee: 1, arm: 0.25, bob: 0.05 });
+    // (lowered or raised no faster than his planted legs follow: stood up 11 cm at once as he walked off from the tub,
+    // a planted foot fell short of its spot and slipped 10 cm, `lab tavern`)
+    const dropWanted = (crouch + knees) * 0.32;
+    hipsDrop += clamp(dropWanted - hipsDrop, -HIPS_RATE * dt, HIPS_RATE * dt);
+    j.hips.position.y -= hipsDrop;
     j.root.updateMatrixWorld(true);
-    placeLegs(hipYaw);
-    swingArms();
+    // (the canary's: standing, his left foot planted where his right stands)
+    // (standing, his feet given their places a hip's width either side of his middle, in his root's own frame as the
+    // gait reads a stance, which it steps them to: turned on the spot, they were left 7.5 cm apart, `lab tavern`; the
+    // canary's: his left foot's place across past his right's)
+    const standing = walkSpeed < 0.2 && Math.hypot(p.goal?.x ?? 0, p.goal?.z ?? 0) < 0.2;
+    if (KEEPER_GAIT.cross) {
+      legs.stance(0, -STANCE_HALF - 0.14, 0.05, 0);
+      legs.stance(1, -STANCE_HALF, 0, 0);
+    } else if (standing) {
+      legs.stance(0, STANCE_HALF, 0, 0);
+      legs.stance(1, -STANCE_HALF, 0, 0);
+    } else for (const i of [0, 1]) if (legs.feet[i].stand) legs.stance(i, null);
+    if (p.goal) {
+      const room = j.root.parent;
+      intendV.set(p.goal.x, 0, p.goal.z);
+      if (room) intendV.applyQuaternion(room.getWorldQuaternion(intendQ));
+      legs.intend(intendV, true);
+    }
+    legs.update(dt, phase, -1);
+    // (the canary's straight legs: his knees locked after the gait has placed them)
+    if (KEEPER_GAIT.flat && walkSpeed > 0.3) { j.kneeL.quaternion.identity(); j.kneeR.quaternion.identity(); }
+    j.root.updateMatrixWorld(true);
+    apronCloth.lay();
     // --- the body: leaning over his work, the head on what he looks at ---
     j.spine.rotation.x += 0.03 + (bend + lean) * 0.42 + (crouch + knees) * 0.2;
     j.chest.rotation.x += (bend + lean) * 0.18;
@@ -448,12 +580,23 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
     j.neck.rotation.set(-lookPitch.v * 0.18 * gaze, lookYaw.v * 0.15 * gaze, 0);
     j.head.rotation.set(-lookPitch.v * 0.4 * gaze, lookYaw.v * 0.6 * gaze, 0);
     for (const e of head.eyes) e.rotation.set(0.05 - Math.min(0, lookPitch.v) * 0.25 * gaze, 0, 0);
+    // (his shirt's belly turned with his chest's twist from his waist up, so its stripes meet the chest's: shirt twist)
+    bellyTwist.lay();
     j.root.updateMatrixWorld(true);
     // --- the arms: each to its goal, eased there, or swinging with his walk; between the two blended ---
     for (const left of [true, false]) {
-      const i = left ? 0 : 1, goal = left ? p.left : p.right;
+      const i = left ? 0 : 1;
+      let goal = left ? p.left : p.right;
       blendOf[i] = clamp(blendOf[i] + (goal ? dt : -dt) / ARM_BLEND, 0, 1);
       weight[i] = smooth(blendOf[i]);
+      // (a goal let go: the hand still eases on to where it went, in his chest's frame, as the arm blends back to its
+      // swing; posed from where the arm last was instead, a hand on its way stopped dead and its speed snapped, 6 to 7
+      // cm a frame, `lab tavern`)
+      if (goal) {
+        letGo[i] = { at: j.chest.worldToLocal(letGoAt[i].copy(goal.carried ? j.chest.localToWorld(carryAt.copy(goal.at)) : goal.at)), r: goal.r, dir: undefined, grip: goal.grip, cup: goal.cup };
+      } else if (weight[i] > 0.001 && letGo[i]) {
+        goal = { ...letGo[i]!, at: j.chest.localToWorld(handWorld.copy(letGo[i]!.at)) };
+      } else letGo[i] = null;
       const [shoulder, elbow] = left ? [j.shoulderL, j.elbowL] : [j.shoulderR, j.elbowR];
       if (!goal) {
         wristSeen[i] = false;
@@ -463,18 +606,39 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
           shoulder.quaternion.slerp(solved[i].qs, weight[i]);
           elbow.quaternion.slerp(solved[i].qe, weight[i]);
         } else easedSet[i] = false;
+        // (an arm easing back from a goal, or swinging, kept out of him too: eased from a reach before him to his side,
+        // it swung through his chest, `lab tavern`)
+        if (KEEPER_ARMS.offBody && weight[i] > 0.001 && armInBody(left) > 0.004) {
+          (left ? j.handL : j.handR).getWorldPosition(freeWrist);
+          freePole.set(left ? 1 : -1, 0.05, -0.5).normalize();
+          keepOffBody(left, freeWrist, freePole);
+          reachArm(shoulder, elbow, P.upperL, P.foreL, chestLocal(freeWrist), freePole, 1, 0.08);
+          j.root.updateMatrixWorld(true);
+        }
         continue;
       }
-      // (the hand sets off from where it is, and follows its goal on a spring)
+      // (carried, its place on his chest made the world's now, his body's moves taking it along)
+      if (goal.carried) {
+        j.root.updateMatrixWorld(true);
+        const chestQ = j.chest.getWorldQuaternion(carryQ);
+        goal = { ...goal, at: j.chest.localToWorld(carryAt.copy(goal.at)), ...(goal.dir ? { dir: carryDir.copy(goal.dir).applyQuaternion(chestQ) } : {}) };
+      }
+      // (the hand sets off from where it is, and follows its goal on a spring in his chest's own frame: his walk, lean
+      // and turn carry it along, and a goal changed between his chest's frame and the room's is eased to, never jumped
+      // to. Eased in the room's, a hand chased its goal 6 cm a frame as he walked, `lab tavern`)
+      j.root.updateMatrixWorld(true);
       if (!easedSet[i]) {
-        handOf(left).vis.localToWorld(eased[i].set(0, -0.085, 0.03));
+        j.chest.worldToLocal(handOf(left).vis.localToWorld(eased[i].set(0, -0.085, 0.03)));
         easeV[i].set(0, 0, 0);
         easedSet[i] = true;
       }
-      follow(eased[i], goal.at, easeV[i], dt);
+      follow(eased[i], j.chest.worldToLocal(goalLocal.copy(goal.at)), easeV[i], dt);
+      const handAt = j.chest.localToWorld(handWorld.copy(eased[i]));
+      // (a goal inside him is met where his body lets the hand come: on him, not through him)
+      if (KEEPER_ARMS.offBody) pushOutOf(handAt, 0.05);
       kindOff[i].multiplyScalar(Math.exp(-KIND_EASE * dt));
       swing.qs.copy(shoulder.quaternion); swing.qe.copy(elbow.quaternion);
-      reach(left, { ...goal, at: eased[i] });
+      reach(left, { ...goal, at: handAt });
       solved[i].qs.copy(shoulder.quaternion);
       solved[i].qe.copy(elbow.quaternion);
       if (weight[i] < 0.999) { shoulder.quaternion.slerpQuaternions(swing.qs, shoulder.quaternion.clone(), weight[i]); elbow.quaternion.slerpQuaternions(swing.qe, elbow.quaternion.clone(), weight[i]); }
@@ -494,6 +658,16 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
     // (each hand's turn eased from the last frame's, what it holds turned with it: a grip changed for another, the
     // poker's for the rag's, turned the wrist over in a frame)
     for (const [i, h] of [handL, handR].entries()) easeWrist(h, i, dt);
+    // (what each hand holds stood along its way again, after the arm's and the wrist's limits turned the hand back part
+    // of the way: turned with it, a broom just taken up pointed back through his legs and a sweeping broom up past his
+    // shoulder, `lab tavern`)
+    for (const [i, held] of heldWay.entries()) {
+      const goal = i === 0 ? p.left : p.right;
+      if (!held || !goal?.held || held.thing.parent === null) { heldWay[i] = null; continue; }
+      j.root.updateMatrixWorld(true);
+      held.thing.parent.getWorldQuaternion(turn).invert();
+      held.thing.quaternion.copy(turn.multiply(along.setFromUnitVectors(up, held.dir)).multiply(spinQ.setFromAxisAngle(up, held.spin)));
+    }
     // (a thing just taken up eased from where it stood into the fist closing round it, last, after all that moves the
     // hand: seated at once, it jumped the fist's 13 cm off its handle in a frame, `lab tavern`)
     if (seating && seating.t < 1 && seating.thing.parent) {
@@ -503,6 +677,9 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
       seating.thing.parent.worldToLocal(seatAt);
       seating.thing.position.copy(seatAt);
     }
+    // (everything he holds placed where his hands are now: the leg IK's working leaves world matrices of its own, and
+    // read after it his hands stood 13 m under the floor with the mug in them, `lab tavern`)
+    j.root.updateMatrixWorld(true);
   }
 
   /** One arm's move this frame held to `ARM_STEP_MOST` of its hand's travel in his chest's frame (his torso's own moves
@@ -522,26 +699,34 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
       if (change.length() > changeMost) change.setLength(changeMost);
       const allowed = armAllowed.copy(was.v).add(change);
       if (allowed.length() > ARM_STEP_MOST * frames) allowed.setLength(ARM_STEP_MOST * frames);
-      const moved = wanted.length(), most = allowed.length();
-      if (moved > most + 1e-4) {
-        // (the share of the way from the last pose to this one that moves the hand `most`, found by halving: a hand
-        // swings on an arc, so a share of the turn isn't that share of the way, and a guess overshot it)
-        const toQs = armToQs.copy(shoulder.quaternion), toQe = armToQe.copy(elbow.quaternion);
-        let lo = 0, hi = most / moved;
-        const at = (t: number) => {
-          shoulder.quaternion.slerpQuaternions(was.qs, toQs, t);
-          elbow.quaternion.slerpQuaternions(was.qe, toQe, t);
-          j.root.updateMatrixWorld(true);
-          return j.chest.worldToLocal(hand.getWorldPosition(armHand)).distanceTo(was.hand);
-        };
-        if (at(hi) <= most) lo = hi, hi = 1;
-        for (let k = 0; k < 6; k++) {
+      const most = Math.max(allowed.length(), 1e-4);
+      // (and its elbow no further a frame, nor bent more: an elbow swung round the line from the shoulder to a wrist
+      // that stays read as a flick, 17 degrees in a frame, `lab tavern`)
+      const elbowMost = ELBOW_MOVE_MOST * frames, bendMost = ELBOW_BEND_MOST * frames;
+      const toQs = armToQs.copy(shoulder.quaternion), toQe = armToQe.copy(elbow.quaternion);
+      /** how far over its most a frame the arm is at `t` of the way from the last pose to this one (1 at its most) */
+      const over = (t: number) => {
+        shoulder.quaternion.slerpQuaternions(was.qs, toQs, t);
+        elbow.quaternion.slerpQuaternions(was.qe, toQe, t);
+        j.root.updateMatrixWorld(true);
+        const handMoved = j.chest.worldToLocal(hand.getWorldPosition(armHand)).distanceTo(was.hand);
+        const elbowMoved = j.chest.worldToLocal(elbow.getWorldPosition(armElbow)).distanceTo(was.elbow);
+        const bent = Math.abs(bendOf(elbow.quaternion) - was.bend);
+        return Math.max(handMoved / most, elbowMoved / elbowMost, bent / bendMost);
+      };
+      if (over(1) > 1 + 1e-3) {
+        // (the share of the way that keeps it within them, found by halving: an arm swings on arcs, so a share of the
+        // turn isn't that share of the way, and a guess overshot it)
+        let lo = 0, hi = 1;
+        for (let k = 0; k < 7; k++) {
           const mid = (lo + hi) / 2;
-          if (at(mid) <= most) lo = mid; else hi = mid;
+          if (over(mid) <= 1) lo = mid; else hi = mid;
         }
-        at(lo);
+        over(lo);
       }
     }
+    j.chest.worldToLocal(elbow.getWorldPosition(was.elbow));
+    was.bend = bendOf(elbow.quaternion);
     was.qs.copy(shoulder.quaternion);
     was.qe.copy(elbow.quaternion);
     if (was.seen) was.v.subVectors(armHand, was.hand); else was.v.set(0, 0, 0);
@@ -559,7 +744,9 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
     }
     // (and never more than `WRIST_TURN_MOST` a frame: a grip's turn going round fast as the elbow straightens)
     const apart = wristWas[i].angleTo(want), share = 1 - Math.exp(-WRIST_EASE * dt);
-    wristWas[i].slerp(want, apart > 1e-6 ? Math.min(share, (WRIST_TURN_MOST * Math.min(1, dt * 60)) / apart) : 1);
+    const turnMost = wristQuick[i] > 0 ? WRIST_GRASP_MOST : WRIST_TURN_MOST;
+    wristQuick[i] = Math.max(0, wristQuick[i] - dt);
+    wristWas[i].slerp(want, apart > 1e-6 ? Math.min(wristQuick[i] > 0 ? 1 : share, (turnMost * Math.min(1, dt * 60)) / apart) : 1);
     h.vis.quaternion.copy(wristWas[i]);
     const by = wristBy.copy(wristWas[i]).multiply(want.invert());
     for (const thing of h.vis.parent!.children) {
@@ -576,6 +763,9 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
     pose,
     carry(side, thing) {
       (side === 'left' ? j.handL : j.handR).attach(thing);
+      // (the hand closing on it quickly, a grasp's turn: eased at an open hand's pace, the thing was turned back with it,
+      // and a broom just taken up pointed back through his legs, `lab tavern`)
+      wristQuick[side === 'left' ? 0 : 1] = GRASP_QUICK;
       seating = { thing, from: thing.getWorldPosition(new THREE.Vector3()), t: 0 };
     },
     drop(thing, to) { to.attach(thing); },
@@ -589,19 +779,24 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
         rag.quaternion.identity();
       } else j.handR.add(rag);
     },
+    get ragTucked() { return ragTucked; },
     placed() { replant = true; easedSet[0] = easedSet[1] = false; weight[0] = weight[1] = blendOf[0] = blendOf[1] = 0; wristSet[0] = wristSet[1] = false; armWas[0].seen = armWas[1].seen = false; },
     get placings() { return placings; },
     hands(out) {
-      for (const [i, h] of [handL, handR].entries()) h.vis.localToWorld(out[i].set(0, -0.085, 0.03));
+      for (const [i, h] of [handL, handR].entries()) {
+        h.vis.updateWorldMatrix(true, false);
+        h.vis.localToWorld(out[i].set(0, -0.085, 0.03));
+      }
     },
     feet(out) {
       j.ankleL.getWorldPosition(out[0]);
       j.ankleR.getWorldPosition(out[1]);
-      return [!walker.feet[0].step, !walker.feet[1].step];
+      return [legs.feet[0].state === 'plant', legs.feet[1].state === 'plant'];
     },
     ankles: [j.ankleL, j.ankleR],
     joints: j,
     parts,
+    legs,
   };
 }
 
@@ -623,11 +818,33 @@ function ragGeometry(): THREE.BufferGeometry {
   return rowsSurface(rows, 4);
 }
 
+/** A bare forearm on its elbow (hanging along -y to the wrist at `fore`): fuller below the elbow where its muscles
+ *  are, narrowing to the wrist, and flatter than round, wider across than deep, more so at the wrist; a little uneven.
+ *  A round lathe tapered straight to the wrist read as "a featureless cone". */
+function forearmGeometry(fore: number, seed: number): THREE.BufferGeometry {
+  const ph = mulberry(seed)() * 6;
+  const g = new THREE.LatheGeometry([
+    [0.026, fore - 0.012], [0.029, fore + 0.02], [0.032, fore * 0.78], [0.04, fore * 0.55], [0.049, fore * 0.3], [0.053, -0.04],
+    [0.052, 0.02], [0.05, 0.06],
+  ].map(([r, y]) => new THREE.Vector2(r, y)), 24);
+  const pos = g.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), a = Math.atan2(x, z), t = clamp((y - fore) / -fore, 0, 1);
+    // (the muscles' belly a third down from the elbow, on its outer side; the wrist flat)
+    const belly = 1 + 0.08 * Math.exp(-(((t - 0.72) / 0.16) ** 2)) * Math.max(0, Math.sin(a)) + 0.012 * Math.sin(3 * a + ph);
+    pos.setXYZ(i, x * belly * lerp(1.12, 1.02, t), y, z * belly * lerp(0.74, 0.95, t));
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
 /** His clothes on the rig: the striped shirt, its placket buttoned, soft folds at the waist, its collar under a red
  *  neckerchief knotted at the throat; the long oiled-leather apron, a bib on his chest on straps over his shoulders
  *  and a skirt from his waist to below his knees, stitched round its edges, a pocket on its front; a striped linen
  *  towel over his left shoulder; sleeves rolled in a thick cuff above the elbow, bare forearms; trousers and boots. */
-function dressBody(j: Joints, add: Add, M: Mats): void {
+function dressBody(j: Joints, add: Add, M: Mats): { skirt: THREE.Mesh; cols: number; sewn: THREE.Mesh[]; belly: THREE.Mesh } {
+  let skirt: THREE.Mesh | undefined, belly: THREE.Mesh | undefined;
+  const sewn: THREE.Mesh[] = [];
   const N = 40;
   const ring = (y: number, w: number, d: number, fold: number, belly: number, seed: number) => {
     const row: THREE.Vector3[] = [];
@@ -646,13 +863,22 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
     [0.14, 0.222, 0.142, 0.006, 0], [0.185, 0.225, 0.13, 0.004, 0], [0.215, 0.208, 0.115, 0.002, 0],
     [0.238, 0.16, 0.096, 0, 0], [0.255, 0.105, 0.08, 0, 0], [0.285, 0.062, 0.064, 0, 0],
   ];
-  add(rowsSurface(chestRows.map(([y, w, d, f, b]) => ring(y, w, d, f, b, 1.1)), 1.2), M.shirt, j.chest, 'shirt chest');
   // (gathered where it's tucked in at the waist: deeper folds low)
   const waistRows: Row[] = [
     [-0.12, 0.2, 0.17, 0.022, 0.03], [-0.06, 0.2, 0.172, 0.018, 0.05], [0.02, 0.198, 0.17, 0.014, 0.06],
     [0.1, 0.196, 0.165, 0.012, 0.05], [0.2, 0.196, 0.16, 0.01, 0.04],
   ];
-  add(rowsSurface(waistRows.map(([y, w, d, f, b]) => ring(y, w, d, f, b, 2.4)), 1.2), M.shirt, j.spine, 'shirt belly');
+  // (the chest's hem laid on the belly's own cloth where it overlaps it, its width, depth and folds the belly's there:
+  // a centimetre wider, a stripe at the same angle round him stood a few mm further out below the hem, and seen from
+  // behind or the side each stepped sideways at it, from PC Manager on Victor's review of #704)
+  const hemOnSpine = j.chest.position.y + chestRows[0][0];
+  const hemAt = waistRows.findIndex((r) => r[0] >= hemOnSpine), hemHi = waistRows[Math.max(0, hemAt)];
+  const hemLo = waistRows[Math.max(0, hemAt - 1)], hemT = hemHi === hemLo ? 0 : (hemOnSpine - hemLo[0]) / (hemHi[0] - hemLo[0]);
+  const [, hemW, hemD, hemF, hemB] = hemLo.map((v, k) => lerp(v, hemHi[k], hemT));
+  const chestRings = chestRows.map(([y, w, d, f, b], k) => (k === 0 ? ring(y, hemW, hemD, hemF, hemB, 2.4) : ring(y, w, d, f, b, 1.1)));
+  stripesRound(add(rowsSurface(chestRings, 1.2), M.shirt, j.chest, 'shirt chest'), N + 1);
+  belly = add(rowsSurface(waistRows.map(([y, w, d, f, b]) => ring(y, w, d, f, b, 2.4)), 1.2), M.shirt, j.spine, 'shirt belly');
+  stripesRound(belly, N + 1);
   const front = (rows: Row[], y: number) => {
     const at = rows.findIndex((r) => r[0] >= y), hi = rows[Math.max(0, at)], lo = rows[Math.max(0, at - 1)];
     const t = hi === lo ? 0 : (y - lo[0]) / (hi[0] - lo[0]);
@@ -671,11 +897,31 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
       for (let i = 0; i <= 2; i++) row.push(onFront(chestRows, lerp(-0.012, 0.012, i / 2), y, 0.004));
       rows.push(row);
     }
-    add(rowsSurface(rows, 3), M.shirt, j.chest, 'shirt placket');
+    stripesByAngle(add(rowsSurface(rows, 3), M.shirt, j.chest, 'shirt placket'));
     for (const y of [0.21, 0.235]) {
       add(new THREE.CylinderGeometry(0.0055, 0.0055, 0.003, 10).rotateX(Math.PI / 2), M.bone, j.chest, 'shirt button', false)
         .position.copy(onFront(chestRows, 0, y, 0.007));
     }
+  }
+  // --- the shirt's collar standing up round his neck behind the neckerchief, highest at the back: with none, his
+  // neck showed long and bare from the shirt's neckline to his hair, "slightly too long neck... especially when he
+  // looks down" ---
+  {
+    const rows: THREE.Vector3[][] = [];
+    // (outside his neck's base, about 6.6 cm round and set back under his skull: inside it, the collar showed nowhere at
+    // his back, a loose flap at his throat's side)
+    // (its foot on the shirt's shoulders, wider, so no skin shows under it)
+    for (const [y, r, back] of [[0.236, 0.096, 0], [0.265, 0.083, 0.014], [0.293, 0.077, 0.03]] as const) {
+      const row: THREE.Vector3[] = [];
+      for (let i = 0; i <= 24; i++) {
+        const a = (i / 24) * Math.PI * 2;
+        // (cut low at his throat, under the knot, standing at the back and sides)
+        const front = Math.max(0, Math.cos(a)) ** 3;
+        row.push(new THREE.Vector3(Math.sin(a) * r, y + back * (1 - front) - (y - 0.236) * front, Math.cos(a) * r * (Math.cos(a) < 0 ? 1.15 : 0.95) - 0.005));
+      }
+      rows.push(row);
+    }
+    stripesRound(add(rowsSurface(rows, 2), M.shirt, j.chest, 'shirt collar'), 25);
   }
   // --- the neckerchief: a red band round his neck, a knot at his throat, its two ends falling as flat cloth ---
   {
@@ -739,10 +985,10 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
       for (let i = 0; i <= 10; i++) row.push(at(k / 12, i));
       lap.push(row);
     }
-    add(rowsSurface(lap, 2), M.apron, j.hips, 'apron skirt');
+    skirt = add(rowsSurface(lap, 2), M.apron, j.hips, 'apron skirt');
     const hem: THREE.Vector3[] = [];
     for (let i = 0; i <= 20; i++) hem.push(at(0.025, i / 2).add(new THREE.Vector3(0, 0, 0.003)));
-    add(cord(hem, 0.0012, false, 80), M.thread, j.hips, 'apron hem stitching', false);
+    sewn.push(add(cord(hem, 0.0012, false, 80), M.thread, j.hips, 'apron hem stitching', false));
     // (a pocket: a patch of the leather over the skirt, its sides and foot stitched)
     const pocket: THREE.Vector3[][] = [];
     for (let k = 0; k <= 3; k++) {
@@ -750,9 +996,9 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
       for (let i = 3; i <= 7; i++) row.push(at(lerp(0.45, 0.66, k / 3), i).add(new THREE.Vector3(0, 0, 0.005)));
       pocket.push(row);
     }
-    add(rowsSurface(pocket, 2), M.apron, j.hips, 'apron pocket', false);
+    sewn.push(add(rowsSurface(pocket, 2), M.apron, j.hips, 'apron pocket', false));
     const seam = [at(0.66, 3.1), at(0.45, 3.1), at(0.45, 6.9), at(0.66, 6.9)].map((p) => p.add(new THREE.Vector3(0, 0, 0.008)));
-    add(cord(seam, 0.0012, false, 40), M.thread, j.hips, 'apron pocket stitching', false);
+    sewn.push(add(cord(seam, 0.0012, false, 40), M.thread, j.hips, 'apron pocket stitching', false));
     add(rowsSurface([ring(-0.005, 0.212, 0.182, 0, 0.05, 0), ring(0.03, 0.21, 0.18, 0, 0.05, 0)], 2), M.strap, j.spine, 'apron tie');
   }
   // --- the towel over his left shoulder: down his chest a hand's length, over the shoulder and down his back, its
@@ -777,21 +1023,140 @@ function dressBody(j: Joints, add: Add, M: Mats): void {
   // --- trousers from the hips to the boots ---
   add(rowsSurface([0, 1, 2, 3, 4].map((k) => ring(lerp(-0.1, 0.08, k / 4), lerp(0.215, 0.2, k / 4), 0.175, 0.012, lerp(0.02, 0.03, k / 4), 5.1)), 1.2),
     M.trousers, j.hips, 'trouser seat');
+  // (his trousers fall straight over his boots to the instep, their hem flared a little; the boots' shafts ride his
+  // shins inside them and their feet his ankles, so nothing of a boot's top shows. A cylinder on the ankle wider than
+  // the trouser leg, its top open with the leg standing inside it, read "like some logs... not attached to his leg")
+  const shin = j.P.shinL;
   for (const [thigh, knee, ankle, s] of [[j.thighL, j.kneeL, j.ankleL, 1], [j.thighR, j.kneeR, j.ankleR, -1]] as const) {
     add(sleeve([[0.08, -j.P.thighL - 0.02], [0.086, -0.3], [0.092, -0.15], [0.098, 0.02]], 0.04, 1 + s), M.trousers, thigh, 'trouser thigh');
-    add(sleeve([[0.058, -0.42], [0.06, -0.3], [0.064, -0.15], [0.07, 0], [0.078, 0.06]], 0.04, 3 + s), M.trousers, knee, 'trouser');
-    add(new THREE.CylinderGeometry(0.064, 0.058, 0.24, 14).translate(0, 0.08, 0), M.boot, ankle, 'boot');
-    add(new THREE.SphereGeometry(1, 14, 10).scale(0.056, 0.047, 0.12), M.boot, ankle, 'boot toe').position.set(0, -0.04, 0.07);
+    add(sleeve([[0.067, -shin + 0.022], [0.066, -shin + 0.05], [0.062, -0.32], [0.061, -0.24], [0.064, -0.15], [0.07, 0], [0.078, 0.06]], 0.035, 3 + s),
+      M.trousers, knee, 'trouser');
+    add(sleeve([[0.044, -shin - 0.035], [0.049, -shin - 0.01], [0.052, -shin + 0.04], [0.05, -shin + 0.1], [0.047, -shin + 0.14]], 0.01, 15 + s),
+      M.boot, knee, 'boot shaft');
+    add(bootFoot(), M.boot, ankle, 'boot foot');
+    // (its sole up to the upper's foot and inside its edge: thin and wider than it, a gap between, it read as a
+    // slab the shoe stood on)
+    add(bootSole(-0.012, 0, 1, 0.02), M.sole, ankle, 'boot sole');
+    add(bootSole(-0.014, 0, 0.3, 0.032), M.sole, ankle, 'boot heel');
   }
   // --- the sleeves: the shirt's, full, rolled above the elbow in a thick cuff of two turns; his forearms bare below ---
   for (const [shoulder, elbow, s] of [[j.shoulderL, j.elbowL, 1], [j.shoulderR, j.elbowR, -1]] as const) {
-    add(sleeve([[0.066, -0.26], [0.074, -0.2], [0.08, -0.1], [0.086, -0.03], [0.084, 0.03], [0.058, 0.075], [0.024, 0.09]], 0.08, 5 + s),
-      M.shirt, shoulder, 'sleeve');
+    // (closed at its top over the shoulder joint: open, the shirt's inside showed there as a hole, "small holes from
+    // the top of his shoulder")
+    stripesAlong(add(sleeve([[0.066, -0.26], [0.074, -0.2], [0.08, -0.1], [0.086, -0.03], [0.084, 0.03], [0.058, 0.075], [0.024, 0.09], [0.0005, 0.094]], 0.08, 5 + s),
+      M.shirt, shoulder, 'sleeve'), STRIPES.sleeve);
     // (the cuff: two turns of the shirt rolled up, the lower one fatter)
-    add(sleeve([[0.064, -0.3], [0.076, -0.292], [0.079, -0.276], [0.074, -0.264], [0.07, -0.262]], 0.03, 7 + s), M.shirt, shoulder, 'sleeve cuff');
-    add(sleeve([[0.07, -0.265], [0.078, -0.258], [0.08, -0.247], [0.075, -0.238], [0.066, -0.235]], 0.03, 9 + s), M.shirt, shoulder, 'sleeve cuff');
+    stripesAlong(add(sleeve([[0.064, -0.3], [0.076, -0.292], [0.079, -0.276], [0.074, -0.264], [0.07, -0.262]], 0.03, 7 + s), M.shirt, shoulder, 'sleeve cuff'), STRIPES.sleeve);
+    stripesAlong(add(sleeve([[0.07, -0.265], [0.078, -0.258], [0.08, -0.247], [0.075, -0.238], [0.066, -0.235]], 0.03, 9 + s), M.shirt, shoulder, 'sleeve cuff'), STRIPES.sleeve);
     const fore = -j.P.foreL;
-    add(sleeve([[0.027, fore - 0.012], [0.031, fore + 0.02], [0.04, fore * 0.55], [0.048, -0.05], [0.052, 0.02], [0.054, 0.06]], 0, 13 + s),
-      M.arm, elbow, 'forearm');
+    add(forearmGeometry(fore, 13 + s), M.arm, elbow, 'forearm');
+  }
+  return { skirt: skirt!, cols: 11, sewn, belly: belly! };
+}
+
+const _solidInv = new THREE.Matrix4(), _inSolid = new THREE.Vector3();
+/** `point` (world) moved out of `solid` grown by `r`, along the line from its middle, if it's inside */
+function outOfSolid(point: THREE.Vector3, solid: Solid, r: number): void {
+  solid.at.updateWorldMatrix(true, false);
+  _solidInv.copy(solid.at.matrixWorld).invert();
+  _inSolid.copy(point).applyMatrix4(_solidInv).sub(solid.c);
+  const rx = solid.r.x + r, ry = solid.r.y + r, rz = solid.r.z + r;
+  const k = Math.hypot(_inSolid.x / rx, _inSolid.y / ry, _inSolid.z / rz);
+  if (k >= 1 || k < 1e-6) return;
+  _inSolid.multiplyScalar(1 / k).add(solid.c).applyMatrix4(solid.at.matrixWorld);
+  point.copy(_inSolid);
+}
+
+/** His shirt as one cloth (from Victor's review: "why stripes not matching /aligned"): its stripes laid by his body,
+ *  never by each part's own UVs. Round his trunk a part's stripes are placed by the angle round him from his front, a
+ *  whole number of repeats round, so they meet across every seam between the parts (the chest's, the belly's, the
+ *  collar's, the placket's) and close on themselves at his spine; along each sleeve they run its length, as many round
+ *  it as its girth holds at the trunk's spacing (about 9 cm a repeat). Laid by each part's own UVs, the stripes broke
+ *  at every seam, met in a V down his back and ran at their own spacing on the sleeves. */
+const STRIPES = { round: 14, sleeve: 6 };
+
+/** a ring-made part (merchant.ts `rowsSurface`, rows of `n` points from his front round, closing on itself): each
+ *  point's u by its true angle round him, unwrapped along its ring (by its place in the ring, the rings being ovals of
+ *  their own widths, the same place was another angle at his sides, and the stripes stepped there) */
+function stripesRound(mesh: THREE.Mesh, n: number): void {
+  const uv = mesh.geometry.attributes.uv as THREE.BufferAttribute, pos = mesh.geometry.attributes.position;
+  for (let row = 0; row * n < uv.count; row++) {
+    let was = 0;
+    for (let i = 0; i < n; i++) {
+      const k = row * n + i;
+      let a = Math.atan2(pos.getX(k), pos.getZ(k));
+      // (round from his front: each point a little further round than the last, its last back at his front)
+      while (a < was - Math.PI) a += Math.PI * 2;
+      while (a > was + Math.PI) a -= Math.PI * 2;
+      if (i === n - 1) a = Math.PI * 2 + Math.atan2(pos.getX(k), pos.getZ(k));
+      was = a;
+      uv.setX(k, (a / (Math.PI * 2)) * STRIPES.round);
+    }
+  }
+  uv.needsUpdate = true;
+}
+
+/** a patch on his front (the placket): each point's u by its angle round him, as the rings' */
+function stripesByAngle(mesh: THREE.Mesh): void {
+  const uv = mesh.geometry.attributes.uv as THREE.BufferAttribute, pos = mesh.geometry.attributes.position;
+  for (let k = 0; k < uv.count; k++) {
+    // (from -half a turn to half: the placket is on his front, where a turn's wrap would cut it)
+    const a = Math.atan2(pos.getX(k), pos.getZ(k));
+    uv.setX(k, (a / (Math.PI * 2)) * STRIPES.round);
+  }
+  uv.needsUpdate = true;
+}
+
+/** a lathed sleeve's piece: its u round it (0 to 1) made `repeats` round, so its stripes run along it */
+function stripesAlong(mesh: THREE.Mesh, repeats: number): void {
+  const uv = mesh.geometry.attributes.uv as THREE.BufferAttribute;
+  for (let k = 0; k < uv.count; k++) uv.setX(k, uv.getX(k) * repeats);
+  uv.needsUpdate = true;
+}
+
+/** The shirt's belly (on his spine) turned with his chest's twist on it, by none of it at the belly's foot and all of
+ *  it at its top, under the chest's piece: the two pieces hang on two joints, and as his chest turned against his hips
+ *  (his walk's swing, his looking round) their stripes stepped a stripe apart at the seam between them (Victor: "why
+ *  stripes not matching /aligned"). */
+class ShirtTwist {
+  private readonly rest: Float32Array;
+  private readonly low: number;
+  private readonly high: number;
+  private readonly qWas = new THREE.Quaternion(0, 0, 0, 0);
+
+  /** `seam`: where on the spine the chest's piece ends (its whole turn reached there; at the belly's top it was 87% of it,
+   *  and the stripes stepped half a stripe at the seam) */
+  constructor(private readonly mesh: THREE.Mesh, private readonly chest: THREE.Object3D, seam: number) {
+    const pos = mesh.geometry.attributes.position as THREE.BufferAttribute;
+    this.rest = Float32Array.from(pos.array as Float32Array);
+    let low = Infinity, high = -Infinity;
+    for (let i = 1; i < this.rest.length; i += 3) { low = Math.min(low, this.rest[i]); high = Math.max(high, this.rest[i]); }
+    this.low = low;
+    this.high = Math.min(high, seam);
+  }
+
+  /** laid for the frame, the chest's turn on the spine as the pose left it, about the chest joint: its twist and its
+   *  lean both (taken by its twist alone, the chest's lean over his walk still stepped the stripes at his sides) */
+  lay(): void {
+    const q = this.chest.quaternion;
+    if (Math.abs(q.x - this.qWas.x) + Math.abs(q.y - this.qWas.y) + Math.abs(q.z - this.qWas.z) < 1e-5) return;
+    this.qWas.copy(q);
+    const pivot = this.chest.position;
+    const pos = this.mesh.geometry.attributes.position as THREE.BufferAttribute, arr = pos.array as Float32Array, rest = this.rest;
+    for (let i = 0; i < arr.length; i += 3) {
+      const share = smooth(clamp((rest[i + 1] - this.low) / (this.high - this.low), 0, 1));
+      _twistQ.identity().slerp(q, share);
+      _twistP.set(rest[i] - pivot.x, rest[i + 1] - pivot.y, rest[i + 2] - pivot.z).applyQuaternion(_twistQ).add(pivot);
+      arr[i] = _twistP.x;
+      arr[i + 1] = _twistP.y;
+      arr[i + 2] = _twistP.z;
+    }
+    pos.needsUpdate = true;
+    this.mesh.geometry.computeVertexNormals();
   }
 }
+
+const _twistQ = new THREE.Quaternion(), _twistP = new THREE.Vector3();
+
+/** a hinge joint's bend (rad), from its turn */
+const bendOf = (q: THREE.Quaternion): number => 2 * Math.acos(Math.min(1, Math.abs(q.w)));

@@ -12,29 +12,46 @@
 // none may jump or go from sight but into a hero's hand, and his planted feet must not slide. No program may compile
 // from the room's coming in to the end. `--canary`: the ale made a cast he may walk through, which must be caught.
 import * as THREE from 'three';
-import type { Lab, Pictured, Report, ViewName } from './lab';
+import type { Frame, Lab, Pictured, Report, ViewName } from './lab';
 import { G } from '../../../src/state';
 import { villageObject } from '../../../src/game/village';
 import { enterRoom } from '../../../src/game/rooms';
-import { ALE, MUG_COUNT } from '../../../src/data/tavern';
+import { ALE, ALE_BEATS, BAR, BAR_STOOL_X, BAR_STOOLS, KEEPER_SPOT, MUG_COUNT } from '../../../src/data/tavern';
+import { SIT } from '../../../src/entities/sitting';
+import { satWhole } from './sit';
 import { MUG } from '../../../src/entities/models/flask';
 import type { TavernKeeper } from '../../../src/world/tavernKeeper';
 import type { HandGoal } from '../../../src/entities/models/keeper';
 import { toVillage } from './village';
 import { stand, useByE, viewAs } from './houses';
 import { slipOf } from './feet';
-import { BodyClear, HandsSmooth, MugsHeld } from './keeperWatch';
+import { BodyClear, HandsSmooth, LimbsClear, MugsHeld } from './keeperWatch';
+import { KEEPER_ARMS, KEEPER_GAIT } from '../../../src/entities/models/keeper';
+import { KEEPER_WAYS } from '../../../src/world/tavernKeeper';
+import { GaitWatch, plannedWays } from './keeperGait';
+import { ShirtSeams, shiftBelly } from './keeperShirt';
+import { choosingAle, lastOffer, pickAle, takeMug, waitingMug } from './takeAle';
+import { boostRead } from './keeperBoost';
+import { drawsSaid, PoseTimes } from './keeperCost';
+import { aleBoost, ALE_STACKS } from '../../../src/game/aleBoost';
 import { throughTheEyes } from './tavernEyes';
+import { keeperLooks } from './keeperLooks';
 import { solePoints } from './soles';
 import { talkAnswerable } from '../../../src/ui/screens/talk/talk';
 import { footShape, type FootShape } from '../../../src/entities/models/ik';
 
-/** `--canary`: the ale made a cast he may walk through. */
+/** `--canary`: the ale made a cast he may walk through; `--looks`: him pictured from Kenneth's angles alone. */
 export interface TavernOptions {
   canary: boolean;
+  looks?: boolean;
 }
 
 /** the frames a stand or a press settles for */
+/** how long a served mug is watched waiting on the bar, how long a choice may take to show (frames), how long the
+ *  drink is watched held while it shows, and the share it's held at (world/tavernKeeper.ts's `HOLD_AT`) */
+const WAITS_FOR = 120, CHOICE_IN = 90, HELD_FOR = 60, HELD_AT = 0.16;
+/** how long he's given to walk up to a bar stool and sit (frames) */
+const SIT_IN = 900;
 const SETTLE = 12;
 /** the most frames the keeper's lines are given to show, all of them, before his replies are read */
 const TALK_READ = 10 * 60;
@@ -61,7 +78,9 @@ const FILMS: Record<string, Film> = {
   walk: { from: 20, every: 7, count: 4, views: ['left', 'front'] },
 };
 /** how far a mug may move in a frame (m: slid across the bar, about 3 m/s), and a planted foot */
-const MUG_JUMP = 0.12, FOOT_SLIDE = 0.015;
+// (a planted foot's slip a frame no worse than the heroes' own gait's: `lab feet --class ranger --scenarios level`
+// read 5.2 cm at its worst frame, and no stance slid 10 cm all told)
+const MUG_JUMP = 0.12, FOOT_SLIDE = 0.055;
 /** how far his body may move in a frame (m: his walk is 1.05 m/s, under 2 cm a frame) */
 const BODY_STEP = 0.03;
 /** an ankle this near the floor is planted (m) */
@@ -125,6 +144,8 @@ class Watch {
   private readonly feet: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
   private feetSeen = false;
   private plantedWas: [boolean, boolean] = [false, false];
+  private readonly footYawWas = [0, 0];
+  private readonly footSpotWas = [new THREE.Vector3(), new THREE.Vector3()];
   private placings = 0;
   private readonly root = new THREE.Vector3();
   private readonly rootWas = new THREE.Vector3();
@@ -142,6 +163,9 @@ class Watch {
   readonly hands = new HandsSmooth();
   readonly body = new BodyClear();
   readonly held = new MugsHeld();
+  readonly limbs = new LimbsClear();
+  readonly gait = new GaitWatch();
+  readonly shirt = new ShirtSeams();
 
   constructor(private readonly tv: TavernKeeper) {}
 
@@ -151,6 +175,7 @@ class Watch {
     this.last.length = 0;
     this.feetSeen = false;
     this.hands.forget();
+    this.gait.forget();
   }
 
   read(): void {
@@ -182,6 +207,9 @@ class Watch {
     this.hands.read(keeper, now, this.tv.body());
     this.body.read(keeper, now);
     this.held.read(this.tv, keeper, now);
+    this.limbs.read(keeper, keeper.root.parent!, now);
+    this.gait.read(this.tv, keeper, G.arena.rooms!.tavern.seats, now);
+    this.shirt.read(keeper, now);
     const planted = keeper.feet(this.feet);
     this.shapes ??= keeper.ankles.map((ankle) => footShape(ankle, keeper.root));
     for (let i = 0; i < 2; i++) {
@@ -197,11 +225,13 @@ class Watch {
         if (planted[i] && this.plantedWas[i] && now.y < PLANTED && slide > this.worstSlide) {
           this.worstSlide = slide;
           this.root.copy(keeper.root.getWorldPosition(this.at));
-          this.slideAt = `${this.tv.doing().job}: ${this.tv.doing().step}, foot ${i} at ${now.y.toFixed(2)} m, his body moved ${(this.root.distanceTo(this.rootWas) * 100).toFixed(1)} cm and turned ${(Math.abs(keeper.root.rotation.y - this.yawWas) * 180 / Math.PI).toFixed(0)}° that frame, from ${this.stepWas}`;
+          const foot = keeper.legs.feet[i];
+          this.slideAt = `${this.tv.doing().job}: ${this.tv.doing().step}, foot ${i} at ${now.y.toFixed(2)} m (${foot.state}, its spot ${foot.P.x.toFixed(2)}, ${foot.P.z.toFixed(2)}, planted ${foot.stance.toFixed(2)} s, its heading ${this.footYawWas[i].toFixed(2)} to ${foot.yaw.toFixed(2)}, its spot moved ${Math.hypot(foot.P.x - this.footSpotWas[i].x, foot.P.z - this.footSpotWas[i].z).toFixed(3)} m${foot.over ? ', out of reach' : ''}${foot.dragged ? ', dragged' : ''}), his body moved ${(this.root.distanceTo(this.rootWas) * 100).toFixed(1)} cm and turned ${(Math.abs(keeper.root.rotation.y - this.yawWas) * 180 / Math.PI).toFixed(0)}° that frame, from ${this.stepWas}`;
         }
       }
     }
     this.plantedWas = planted;
+    for (let i = 0; i < 2; i++) { this.footYawWas[i] = keeper.legs.feet[i].yaw; this.footSpotWas[i].copy(keeper.legs.feet[i].P); }
     const doing = `${this.tv.doing().job}: ${this.tv.doing().step}`;
     // (his move scaled to a 60th of a second by the frame's own time: now and then the game is stepped two frames'
     // time in one, and his walk went twice as far in it)
@@ -220,6 +250,22 @@ class Watch {
   }
 }
 
+/** `--canary`'s plants, each with what its problem must say: walking while drinking, his arms let through his body */
+const CANARIES: readonly [string, string][] = [
+  ['walking while drinking', 'while drinking'], ['his arms through his body', 'into his body'], ['his ways straight through the furniture', 'a way planned passes'],
+  ['a stop at each bend', 'stopped on his way'], ['his feet set on each other', 'his feet '], ['his walk with straight legs', 'knee'],
+  ['the belly of his shirt shifted round', 'stripes stepped'], ['a second ale stacked on the first', '(stacked)'],
+];
+/** each of the canary's plants set (`on`) or taken away */
+function plant(on: boolean): void {
+  KEEPER_ARMS.offBody = !on;
+  KEEPER_WAYS.planned = !on;
+  KEEPER_WAYS.stopToTurn = on;
+  KEEPER_GAIT.cross = on;
+  KEEPER_GAIT.flat = on;
+  ALE_STACKS.canary = on;
+}
+
 export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
@@ -230,15 +276,108 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
   await lab.until(() => G.arena.room === 'tavern', 600, 'the tavern never opened');
   const room = G.arena.rooms!.tavern, tv = room.tavern?.(), keeper = tv?.keeper();
   if (!tv || !keeper) return { text: 'no keeper', problems: ['the tavern has no keeper seated'], moments };
+  if (options.looks) {
+    const looks = await keeperLooks(lab, tv, keeper);
+    return { text: `looks: ${looks.moments.length} pictured`, problems: looks.problems, moments: looks.moments };
+  }
   const before = programs();
   const watch = new Watch(tv);
+  const poseTimes = new PoseTimes(keeper);
+  // (no boost of an ale before this one's: his life's most as his gear has it)
+  aleBoost.waiting = false;
+  aleBoost.waves = 0;
+  G.player.recomputeStats(G.player.equipped);
+  const lifeBase = G.player.stats.maxLife;
+  if (options.canary) { plant(true); shiftBelly(keeper, 0.3); }
   /** frames stepped, each read by the watch; until `done` or `most` frames, which it returns (-1: never done) */
-  const frames = async (most: number, done: () => boolean = () => false, input?: () => { keys: string[] }): Promise<number> => {
+  /** the mug waiting taken up by E and drunk by E, as a player does (`takeAle.ts`); whether his drink began */
+  const takeAndDrink = async (): Promise<boolean> => {
+    if (!(await takeMug(lab, tv, waitingMug(tv), watched))) return false;
+    if (await frames(CHOICE_IN, choosingAle) < 0) return false;
+    await pickAle(lab, 'drink', watched);
+    return (await frames(CHOICE_IN, () => drinkShare() > HELD_AT + 0.02)) >= 0;
+  };
+  /** The served mug waits on the bar, never handed over by itself; taken up by E it's held at the lift while the choice
+   *  shows; put down, it's back on the bar full and clean; taken up again and drunk (Kenneth's round 3, notes 18, 24). */
+  const mugWaitsAndIsChosen = async (): Promise<void> => {
+    await frames(WAITS_FOR);
+    const waiting = waitingMug(tv);
+    lines.push(`the mug waits: ${waiting >= 0 && drinkShare() < 0 ? `on the bar ${(WAITS_FOR / 60).toFixed(0)} s on, not drunk` : 'NOT waiting'}`);
+    if (waiting < 0 || drinkShare() >= 0) problems.push('the mug served was handed over by itself, not left waiting on the bar');
+    if (!(await takeMug(lab, tv, waiting, watched))) return;
+    const chosen = await frames(CHOICE_IN, choosingAle);
+    await frames(HELD_FOR);
+    const held = drinkShare();
+    const mugAt = tv.mugs.get(waiting).place as { x: number; z: number }, feet = room.group.worldToLocal(G.player.pos.clone());
+    if (chosen < 0) lines.push(`  (${lastOffer})`);
+    if (chosen < 0) lines.push(`  (offered ${tv.doing().offered}, mug ${waiting} at ${tv.mugs.get(waiting).place.at}, ${Math.hypot(mugAt.x - feet.x, mugAt.z - feet.z).toFixed(2)} m from his feet, casting ${G.player.casting?.skill.def.name ?? 'nothing'}, mode ${G.mode})`);
+    lines.push(`taken up by E: the choice ${chosen < 0 ? 'NEVER shown' : `shown, his drink held at ${(held * 100).toFixed(0)}%`}`);
+    if (chosen < 0) problems.push('the mug taken up by E, its choice (drink or put down) never showed');
+    if (held > HELD_AT + 0.02) problems.push(`with the choice up, his drink went on to ${(held * 100).toFixed(0)}%`);
+    await pickAle(lab, 'down', watched);
+    await frames(CHOICE_IN);
+    const back = tv.mugs.get(waiting);
+    const down = back.place.at === 'bar' && back.full > 0.5 && !back.dirty && drinkShare() < 0;
+    lines.push(`put down: ${down ? 'back on the bar, full and clean' : `NOT (${back.place.at}, full ${back.full.toFixed(2)}, ${back.dirty ? 'dirty' : 'clean'})`}`);
+    if (!down) problems.push('put down, the mug wasn\'t back on the bar full for anyone to take');
+    if (!(await takeAndDrink())) problems.push('the mug put down, taken up again and drunk, never drunk');
+  };
+  /** `count` frames of `input`, the watch reading each (a take's steps: stepped round it, its frames went unread and the
+   *  keeper's walk over them read as one frame's jump) */
+  const watched = async (count: number, input: () => Frame): Promise<void> => {
+    await frames(count, undefined, input);
+  };
+  /** Sat on the bar stool nearest the keeper's stand (as `lab sit` lets him sit idle), ale asked for from it, its mug
+   *  taken up by E and drunk there: sat down whole from the ask to the drink's end (Kenneth's round 3: "the hero can
+   *  sit on the bar stools and drink while seated"). */
+  const drinkSeated = async (): Promise<void> => {
+    const seats = G.arena.rooms!.tavern.seats;
+    const stoolAt = BAR_STOOLS.reduce((a, b) => (Math.abs(b - KEEPER_SPOT.z) < Math.abs(a - KEEPER_SPOT.z) ? b : a));
+    const seat = seats.find((s) => Math.abs(s.ax - BAR_STOOL_X) < 0.01 && Math.abs(s.az - stoolAt) < 0.01);
+    if (!seat) {
+      problems.push('the bar stools are no seats');
+      return;
+    }
+    const before = SIT.auto;
+    G.player.walkTo = null;
+    G.player.place(room.group.localToWorld(new THREE.Vector3(BAR_STOOL_X - 0.6, 0, stoolAt)), Math.PI / 2);
+    SIT.auto = true;
+    G.player.sitting.only = seat;
+    G.player.sits = true;
+    const sat = await frames(SIT_IN, () => satWhole(G.player.sitting.pose));
+    try {
+      lines.push(`sat on a bar stool: ${sat < 0 ? 'NEVER' : `in ${(sat / 60).toFixed(1)} s`}`);
+      if (sat < 0) {
+        problems.push('he never sat on the bar stool');
+        return;
+      }
+      room.serveAle?.(G.player);
+      const waited = await frames(SERVE_IN, () => waitingMug(tv) >= 0);
+      let stood = 0, most = 0;
+      const drank = waited >= 0 && await takeAndDrink();
+      await frames(ALE.castTime * 60 + 60, () => {
+        if (!satWhole(G.player.sitting.pose)) stood++;
+        most = Math.max(most, drinkShare());
+        return drinkShare() < 0;
+      });
+      lines.push(`drunk sat: ${!drank ? 'NOT taken up and drunk' : `drunk to ${(most * 100).toFixed(0)}%, ${stood ? `up for ${stood} frames` : 'sat all the while'}`}`);
+      if (!drank || most < ALE_BEATS.setDown) problems.push('sat on a bar stool, his ale was never drunk');
+      if (stood) problems.push(`sat on a bar stool, his drink got him up (${stood} frames)`);
+    } finally {
+      SIT.auto = before;
+      G.player.sits = false;
+      G.player.sitting.only = null;
+      G.player.sitting.clear();
+      await frames(30);
+    }
+  };
+  const frames = async (most: number, done: () => boolean = () => false, input?: () => Frame): Promise<number> => {
     for (let f = 0; f < most; f++) {
       if (done()) return f;
       await lab.step(1, input);
       watch.read();
       shootStep();
+      if (watch.gait.newWorst) crossedShot = shootFeet(`feet-crossed`, watch.gait.across.at);
     }
     return done() ? most : -1;
   };
@@ -277,6 +416,17 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     lab.model.root.visible = true;
     G.player.facing = facing;
   };
+  /** his legs pictured from behind and above as he is now (the worst crossing of his feet, kept to the run's end) */
+  let crossedShot: Pictured | null = null;
+  const shootFeet = (label: string, note: string): Pictured => {
+    const at = keeper.root.getWorldPosition(new THREE.Vector3()).setY(0.35), facing = G.player.facing;
+    G.player.facing = keeper.root.rotation.y;
+    lab.model.root.visible = false;
+    const shot = lab.picture(label, ['back', 'above'], [note], { at, distance: 1.5 });
+    lab.model.root.visible = true;
+    G.player.facing = facing;
+    return shot;
+  };
   const keeperAt = (y = 1.2) => keeper.root.getWorldPosition(new THREE.Vector3()).setY(y);
   /** the keeper pictured from the hero's side, the hero turned to him where he stands */
   const picture = async (label: string, note: string, distance = 2.4) => {
@@ -304,7 +454,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     tv.setTask(task);
     const took = await frames(TASK_IN, () => tv.doing().step === work);
     lines.push(`task ${task}: at its work in ${took < 0 ? 'never' : `${(took / 60).toFixed(1)} s`}`);
-    if (took < 0) { problems.push(`he never got to ${work} (doing ${tv.doing().job}: ${tv.doing().step})`); continue; }
+    if (took < 0) { problems.push(`he never got to ${work} (doing ${tv.doing().job}: ${tv.doing().step}, ${tv.doing().where})`); continue; }
     await frames(90);
     lines.push(`  ${work}: ${handsOff()}`);
     await picture(`task-${task}`, `the keeper, ${work}`, task === 'stoke' ? 3 : 2.6);
@@ -346,15 +496,18 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
       if (inHand && taken < 0) { taken = inHand.id; emptyTaken = inHand.full === 0; }
       const s = tv.doing().step;
       if (['take', 'pour', 'slide'].includes(s) && !pictured.has(s)) pictured.add(s);
-      return drinkShare() >= 0;
+      return waitingMug(tv) >= 0;
     });
-    lines.push(`served: a mug of ${clean} clean taken (${taken}, ${emptyTaken ? 'empty' : 'NOT empty'}), the hero drinking ${served < 0 ? 'never' : `${(served / 60).toFixed(2)} s`} after he asked`);
+    lines.push(`served: a mug of ${clean} clean taken (${taken}, ${emptyTaken ? 'empty' : 'NOT empty'}), waiting on the bar ${served < 0 ? 'never' : `${(served / 60).toFixed(2)} s`} after he asked`);
+    if (served >= 0) await mugWaitsAndIsChosen();
     if (taken < 0) problems.push('the beer asked for, he took no mug off the back counter');
     if (!emptyTaken) problems.push('the mug he took was full before he poured');
     if (served < 0) return { text: lines.join('\n'), problems: [...problems, `the hero never drank (doing ${tv.doing().job}: ${tv.doing().step})`], moments };
 
     // --- the drink: still whatever's pressed, the mug at his lips through each swallow ---
     const from = G.player.pos.clone();
+    // (timed from where his choice let it go on: the drink's share before it was held at the lift)
+    const startShare = Math.max(0, drinkShare()), drinkLong = ALE.castTime * (1 - startShare);
     let moved = 0, worstRim = 0, mostTilt = 0, f = 0;
     const tilts: number[] = [], gulps = [0.3, 0.46, 0.62], shots = [...PICTURED];
     while (drinkShare() >= 0 && f < 600) {
@@ -378,7 +531,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
       }
     }
     lines.push(`drink: ${(f / 60).toFixed(2)} s, moved ${(moved * 100).toFixed(1)} cm with W held, the mug tipped at most ${mostTilt.toFixed(0)}°`);
-    if (Math.abs(f / 60 - ALE.castTime) > 0.1) problems.push(`the drink took ${(f / 60).toFixed(2)} s, not ${ALE.castTime}`);
+    if (Math.abs(f / 60 - drinkLong) > 0.1) problems.push(`the drink took ${(f / 60).toFixed(2)} s from its choice, not ${drinkLong.toFixed(2)}`);
     if (moved > STILL_WITHIN) problems.push(`he moved ${(moved * 100).toFixed(1)} cm while drinking, W held`);
     if (worstRim > RIM_NEAR) problems.push(`the rim stood ${(worstRim * 100).toFixed(1)} cm from his lower lip at a swallow`);
     if (mostTilt > MOST_TILT) problems.push(`the mug tipped ${mostTilt.toFixed(0)}° from upright, past ${MOST_TILT}`);
@@ -401,24 +554,30 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     for (const s of ['collect', 'wash', 'dry', 'shelve']) if (!seen.has(s)) problems.push(`clearing it, he never did ${s}`);
 
     // --- running out: every mug left dirty, another asked for: one washed first, then served ---
-    for (const m of tv.mugs.mugs) tv.mugs.move(m.id, { at: 'bar', x: 4.0, z: -2.6 + m.id * 0.5 }, { full: 0.03, dirty: true });
+    // (spread along the bar's length, its ends kept clear, however many mugs there are)
+    const apart = (BAR.to - BAR.from - 0.6) / (MUG_COUNT - 1);
+    for (const m of tv.mugs.mugs) tv.mugs.move(m.id, { at: 'bar', x: 4.0, z: BAR.from + 0.3 + m.id * apart }, { full: 0.03, dirty: true });
     watch.forget();
     const order: string[] = [];
     room.serveAle?.(G.player);
-    const again = await frames(CLEAR_IN, () => {
+    const waited = await frames(CLEAR_IN, () => {
       const s = tv.doing().step;
       if (order[order.length - 1] !== s && ['collect', 'wash', 'dry', 'pour', 'slide'].includes(s)) order.push(s);
-      return drinkShare() >= 0;
+      return waitingMug(tv) >= 0;
     });
+    const again = waited >= 0 && await takeAndDrink() ? waited : -1;
     lines.push(`out of clean mugs: ${order.join(' > ')}; served ${again < 0 ? 'never' : `in ${(again / 60).toFixed(1)} s`}`);
     if (again < 0) problems.push('with every mug dirty, he never served');
     if (order.indexOf('wash') < 0 || order.indexOf('pour') < order.indexOf('wash')) problems.push(`with every mug dirty he didn't wash one before pouring: ${order.join(' > ')}`);
     await frames(600, () => drinkShare() < 0);
     // (his mugs all back on the shelf first: he clears what's left about)
-    // (six dirty mugs drawn in, washed, dried and shelved one after another, about 15 s each)
-    const cleared = await frames(CLEAR_IN * 5, () => tv.mugs.counts().clean === MUG_COUNT && !tv.mugs.mugs.some((m) => m.place.at === 'keeper'));
+    // (every dirty mug drawn in, washed, dried and shelved one after another, about 15 s each)
+    const cleared = await frames(CLEAR_IN * MUG_COUNT, () => tv.mugs.counts().clean === MUG_COUNT && !tv.mugs.mugs.some((m) => m.place.at === 'keeper'));
     const where = tv.mugs.mugs.map((m) => `${m.id}:${m.place.at}${m.dirty ? '*' : ''}`).join(' ');
     if (cleared < 0) problems.push(`his mugs never all came back to the shelf (${where}; he was at ${tv.doing().job}: ${tv.doing().step})`);
+
+    // --- sat on a bar stool: asked from it, the mug taken up by E and drunk, sat all the while (note 11) ---
+    await drinkSeated();
 
     // --- every mug out in heroes' hands: none served until one comes back ---
     for (const m of tv.mugs.mugs) tv.mugs.move(m.id, { at: 'hero', who: 'elsewhere' }, { full: 1, dirty: false });
@@ -441,25 +600,35 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
   for (const m of tv.mugs.mugs) if (m.place.at !== 'keeper') tv.mugs.move(m.id, { at: 'shelf', slot: m.id }, { full: 0, dirty: false });
   await stand(lab, him.stand, Math.atan2(him.at[0] - him.stand[0], him.at[1] - him.stand[1]));
   watch.forget();
-  moments.push(...await throughTheEyes(lab, { frames, drinkShare, serve: () => room.serveAle?.(G.player), tv, keeper: him }, lines, problems));
+  moments.push(...await throughTheEyes(lab, { frames, drinkShare, serve: () => room.serveAle?.(G.player), take: takeAndDrink, tv, keeper: him }, lines, problems));
   watch.forget();
 
   // --- what held every frame ---
   lines.push(`every frame: the mugs ${watch.worstSum ? `didn't add up (${watch.worstSum})` : `added up to ${MUG_COUNT}`}, the most a mug moved in a frame ${(watch.worstJump * 100).toFixed(1)} cm (${watch.jumpAt}), ${watch.unseen} mug-frames unseen, the most a planted foot slid ${(watch.worstSlide * 100).toFixed(1)} cm (${watch.slideAt}), the most his body moved in a frame ${(watch.worstStep * 100).toFixed(1)} cm (${watch.stepAt})`);
   if (watch.worstSum) problems.push(`the mugs didn't add up: ${watch.worstSum}`);
-  lines.push(watch.hands.said(), watch.body.said(), watch.held.said());
-  problems.push(...watch.hands.problems(), ...watch.body.problems(), ...watch.held.problems());
+  lines.push(watch.hands.said(), watch.body.said(), watch.held.said(), watch.limbs.said(), watch.gait.said(), watch.shirt.said());
+  problems.push(...watch.hands.problems(), ...watch.body.problems(), ...watch.held.problems(), ...watch.limbs.problems(), ...watch.gait.problems(), ...watch.shirt.problems());
+  const ways = plannedWays(tv, room.seats);
+  lines.push(...ways.lines);
+  problems.push(...ways.problems);
+  lines.push(poseTimes.said(), drawsSaid(lab, tv, keeper));
+  const boost = boostRead(lifeBase);
+  lines.push(...boost.lines);
+  problems.push(...boost.problems);
   if (watch.worstJump > MUG_JUMP) problems.push(`a mug jumped ${(watch.worstJump * 100).toFixed(0)} cm in a frame (${watch.jumpAt})`);
   if (watch.unseen) problems.push(`a mug out of a hero's hand went unseen for ${watch.unseen} frames`);
   if (tv.doing().jumped) lines.push(`his place jumped: ${tv.doing().jumped}`);
   if (watch.worstStep > BODY_STEP) problems.push(`his body jumped ${(watch.worstStep * 100).toFixed(1)} cm in a frame (${watch.stepAt})`);
   if (watch.worstSlide > FOOT_SLIDE) problems.push(`a planted foot slid ${(watch.worstSlide * 100).toFixed(1)} cm in a frame`);
+  if (crossedShot) moments.push(crossedShot);
   const compiled = programs() - before;
   lines.push(`programs compiled from the room to the end: ${compiled}`);
   if (compiled) problems.push(`${compiled} programs compiled meanwhile`);
   if (options.canary) {
-    const caught = problems.some((p) => p.includes('while drinking'));
-    return { text: lines.join('\n'), problems: caught ? [] : ['canary: walking while drinking went unseen'], moments };
+    plant(false);
+    shiftBelly(keeper, -0.3);
+    const missed = CANARIES.filter(([, said]) => !problems.some((p) => p.includes(said))).map(([plant]) => `canary: ${plant} went unseen`);
+    return { text: lines.join('\n'), problems: missed, moments };
   }
   return { text: lines.join('\n'), problems, moments };
 }
