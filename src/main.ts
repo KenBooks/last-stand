@@ -76,7 +76,7 @@ import { releaseClickedFocus } from './ui/focus';
 import { initLoadoutEditor } from './ui/loadoutEditor';
 import { initTouch, updateTouch } from './ui/touch';
 import { initAutoFullScreen, keyboardLockState } from './ui/autoFullScreen';
-import { initPwa } from './ui/pwa';
+import { initPwa, reloadForMissingChunk } from './ui/pwa';
 import { everyTickEvenHidden } from './core/backgroundTick';
 import { initItemIcons } from './ui/itemIcons';
 import { initTraceConsent, layOutAskAhead } from './perf/consent';
@@ -1403,4 +1403,8 @@ function frame(timestamp: number): void {
   perfEndFrame();
 }
 
-boot().catch((e) => { console.error(e); loadingFailed(e); });
+boot().catch((e) => {
+  console.error(e);
+  // (a chunk of an older build the host no longer has: reloaded onto the new one, once, #856)
+  if (!reloadForMissingChunk(e)) loadingFailed(e);
+});

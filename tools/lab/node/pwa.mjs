@@ -132,7 +132,8 @@ function workerCache() {
 
 /**
  * What the page shows (run in it): its entry script, the faces of each of the game's fonts loaded once its font
- * stylesheet has come (or `wait` has passed), and whether the labels' lining twin loaded.
+ * stylesheet has come (or `wait` has passed), whether the labels' lining twin loaded, and the loading screen's
+ * failure if it failed (#856: a chunk of an older build the host no longer had stopped the boot).
  */
 async function pageShown({ families, wait, twinWait, poll }) {
   const named = (face) => face.family.replace(/["']/g, '');
@@ -152,7 +153,9 @@ async function pageShown({ families, wait, twinWait, poll }) {
   const twinLoaded = () => [...document.fonts].some(lining);
   const twin = twinWait ? await until(twinLoaded, twinWait) : twinLoaded();
   const entry = document.querySelector('script[type="module"][src]')?.getAttribute('src') ?? null;
-  return { entry, fonts, twin };
+  const loading = document.getElementById('loading');
+  const failed = loading?.classList.contains('failed') ? loading.querySelector('.ld-sub')?.textContent ?? '' : null;
+  return { entry, fonts, twin, failed };
 }
 
 /** Asks the page's worker for its cache as the page starts (run in every page before its own scripts), so a load is
@@ -203,6 +206,7 @@ function judged(load, state, builds) {
   const problems = [];
   const missing = FAMILIES.filter((family) => !state.fonts[family]);
   if (missing.length) problems.push(`${load.name}: the page showed the system's fonts, no ${missing.join(' nor ')}`);
+  if (state.failed !== null) problems.push(`${load.name}: the loading failed: ${state.failed}`);
   if (load.shows === 'now' && !state.twin) {
     problems.push(`${load.name}: the labels' lining twin never loaded (their digits old-style)`);
   }
