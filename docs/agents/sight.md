@@ -70,7 +70,7 @@ over him, a roof in three layers, and a doorway into a room he sees a sector of.
 3. **The rest of the hall stands whole**: its roof and walls over floor he doesn't see.
 4. **A column is a ghost as one**, never its foot gone and its head standing ("see the step on column"), and all four of the portico's can be counted from every side: each keeps five eighths of itself (`rust.columnLeft`) and its foot whole, and only the part of one that stands over him is cut away ("how many columns do you see ? I see one").
 5. **One strength however many layers** lie over a place: three layers of roof and a beam leave what one does.
-6. **A ghost keeps its shape**: about a third of it is left (`rust.houseLeft`), so the porch still reads as a porch.
+6. **A ghost keeps its shape**: about a sixth of it is left (`rust.houseLeft`'s third, less the engine's `see_pale`, which takes a cover's ghost down whatever its colour), so the porch still reads as a porch. At the third alone, dark brick over the hall's dark floor read as the wall whole (from play at night before the hall's door, "you're kidding, right ?").
    With none left the columns held up nothing and their capitals floated.
 7. **What lies on the ground never opens**: the terrace's own walls, its parapet, a path's kerb.
 8. **Past the terrace's edge the ground is the meadow below**: an eave's line of sight ends there, not on a
