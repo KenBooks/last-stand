@@ -1127,7 +1127,7 @@ function advancedValue(text: string): number | boolean | undefined {
   return Number(text);
 }
 
-/** The advanced graphics' buttons, each setting's choice lit (Level where it's the level's). */
+/** The advanced graphics' buttons, each setting's choice lit (Auto where it's the level's). */
 function renderAdvancedOptions(): void {
   for (const key of ['bloomShare', 'grassSpread', 'floorPlants', 'simpleTrees', 'particles', 'lampShadows'] as const) {
     const chosen = advancedSetting(key);
