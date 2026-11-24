@@ -17,7 +17,9 @@ import { fightDuel } from './coopDuel.mjs';
 import { fightPartyDuel } from './coopDuelParty.mjs';
 import { runsEnds } from './coopEnds.mjs';
 import { tradeTogether } from './coopTrade.mjs';
-import { HERO_COLOURS } from '../../../src/data/heroColours.ts';
+import * as heroColours from '../../../src/data/heroColours.ts';
+
+const { HERO_COLOURS } = heroColours;
 import { OUT } from './paths.mjs';
 
 /** where `--pictures` puts each scenario's pictures of the two screens */
@@ -490,6 +492,9 @@ async function changeLooks(pair, link, lines, canary, pictures) {
 }
 
 /** Real picker changes plus conflicting requests over the same delayed link as combat. */
+/** the colour the host picks on the wheel in `changeColours` (hue, saturation, lightness: a dusky teal) */
+const WHEEL_PICK = { h: 0.48, s: 0.5, l: 0.3 };
+
 async function changeColours(pair, link, lines, canary) {
   const { problems, code } = await openTogether(pair, link, lines, false);
   const tags = PARTY_TAGS.slice(0, pair.pages.length);
@@ -499,11 +504,24 @@ async function changeColours(pair, link, lines, canary) {
     return states;
   };
   let states = await pair.run(1);
-  const available = () => HERO_COLOURS.slice(6).find(colour => !states.some(state => state.colour === colour.id)).id;
+  // (the picker's own swatches, #732: the main colours; every colour from the seventh in a tree from before them)
+  const mainColours = HERO_COLOURS.filter(colour => colour.main);
+  const pickable = mainColours.length ? mainColours : HERO_COLOURS.slice(6);
+  const available = () => pickable.find(colour => !states.some(state => state.colour === colour.id)).id;
   const hostColour = available();
   await callPage(pair.host, 'coopPickColour', { colour: hostColour });
   states = await settled();
   if (states[0].colour !== hostColour) problems.push('the host could not change colour without leaving');
+  // (a colour picked on the wheel, #732: its #rrggbb sent and worn on every game; none in a tree from before it)
+  if (heroColours.customColourId) {
+    const wheelColour = heroColours.customColourId(WHEEL_PICK.h, WHEEL_PICK.s, WHEEL_PICK.l);
+    await callPage(pair.host, 'coopPickColour', { colour: wheelColour, request: true });
+    states = await settled();
+    if (states[0].colour !== wheelColour) problems.push(`the host's wheel colour ${wheelColour} was not worn`);
+    else lines.push(`a wheel colour: the host wears ${wheelColour}, agreed on every game`);
+    await callPage(pair.host, 'coopPickColour', { colour: hostColour, request: true });
+    states = await settled();
+  }
   const guestColour = available();
   await callPage(pair.guest, 'coopPickColour', { colour: guestColour });
   states = await settled();

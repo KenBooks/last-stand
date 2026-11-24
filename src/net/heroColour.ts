@@ -2,7 +2,7 @@
 // browser whatever class or save slot (as the name tag is), worn solo and asked for in a room. In a room the host's
 // game hands each player a colour no one else there wears: the pick if it's free, else (or with none picked) one of
 // the free ones at random, so two joiners can't end up in one colour.
-import { HERO_COLOURS, heroColour, type HeroColourId } from '../data/heroColours.ts';
+import { HERO_COLOURS, MAIN_COLOURS, heroColour, type HeroColourId } from '../data/heroColours.ts';
 
 /** where the pick is kept (local storage) */
 const KEY = 'last-stand.colour.v1';
@@ -49,7 +49,9 @@ export function freeColour(
 ): HeroColourId {
   const worn = new Set(taken);
   if (wanted && !worn.has(wanted)) return wanted;
-  const free = HERO_COLOURS.filter((c) => !worn.has(c.id));
+  // (the main colours first, the picker's own swatches: the others only once those are all worn)
+  const mainFree = MAIN_COLOURS.filter((c) => !worn.has(c.id));
+  const free = mainFree.length ? mainFree : HERO_COLOURS.filter((c) => !worn.has(c.id));
   const from = free.length ? free : HERO_COLOURS;
   return from[Math.floor(random * from.length) % from.length].id;
 }
