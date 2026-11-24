@@ -75,6 +75,16 @@ over him, a roof in three layers, and a doorway into a room he sees a sector of.
 7. **What lies on the ground never opens**: the terrace's own walls, its parapet, a path's kerb.
 8. **Past the terrace's edge the ground is the meadow below**: an eave's line of sight ends there, not on a
    terrace that isn't under it.
+9. **Before the hall's door, its front wall opens whole** (`seesInAt` in `core/sight.ts`, `DOOR_WHOLE`: all of it
+   within 3.2 m of the door's inner sill, none past 5.2; the kind's `a.z` in the engine): through the door he sees
+   the hall's far wall whole, and opened over the floor he saw alone the front wall stood in a wedge with slanted
+   edges (from play, "do you [see the] slanted roof effect", "he just needs to see whole wall behind it", "look
+   at his 1st person view, you see he sees whole wall ?"). The engine draws its layers in two rounds meanwhile
+   (`covers_apart`): of the nearest layer alone, the front wall's ghost left the side walls behind it undrawn and
+   the meadow past the hall showed through. The room is drawn whole meanwhile too (`world/hallPortal.ts`). From
+   the stair the wall still opens over the wedge he sees alone. A cover's pixel at the eye's height or over it
+   opens by this rule alone: its line never comes down, and judged by floor behind it the hall's ceiling opened.
+   `lab houserule` pictures the front wall alone in the six views that stand him there (14 to 20% of it left).
 
 Held by `npm run lab -- houserule` (its four `the portico case` views, with the terrace, the stair, the hall's
 inside and the cottages) and by `lab rustcheck`, which runs the four with a canary; and in the engine's own lab,

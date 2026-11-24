@@ -11,8 +11,8 @@ import { type Checked, failed, passed } from './rustPixels';
 import { standAt } from './draws';
 import { faceCamera } from '../../../src/core/renderer';
 import { seeValue, type SeeThrough } from '../../../src/core/seeThrough';
-import { seenShareAt } from '../../../src/core/sight';
-import { inHall } from '../../../src/data/village';
+import { DOOR_WHOLE, seenShareAt } from '../../../src/core/sight';
+import { HALL, TERRACE, inHall } from '../../../src/data/village';
 import { RUST } from '../../../src/engine';
 import { ROOMS } from '../../../src/engine/ahead';
 import { G } from '../../../src/state';
@@ -56,6 +56,9 @@ const HOUSE_KINDS = ['built', 'roof', 'gable', 'hallFront', 'hallBack', 'hallBea
   'hallRoof'] as const;
 /** the roof of the one building he can stand in (the hall of heroes) */
 const INSIDE_ROOFS = ['hallRoof'] as const;
+/** the walls with the hall's door in them: opened whole while he stands before the door and sees in (from play,
+ *  "he just needs to see whole wall behind it") */
+const DOOR_WALLS = ['hallFront', 'hallBeam'] as const;
 /** a block's side (pixels of the picture): grass in the wind and the frame's grain average out of it */
 const BLOCK = 12;
 /** how far apart a block's colour must be with the houses whole and with them hidden to count as covered (the three
@@ -103,6 +106,8 @@ export interface RuleRead {
   stands: number;
   /** inside: its roof pictured alone, the blocks it covers, the cover left there and the share of them still covered */
   roof?: { blocks: number; coverLeft: number; blocksOver: number };
+  /** before the hall's door: its front wall pictured alone, read the same way */
+  doorWall?: { blocks: number; coverLeft: number; blocksOver: number };
 }
 
 /** Each block's mean colour, row by row. */
@@ -271,6 +276,12 @@ function readRoof(played: Float32Array, whole: Float32Array, bare: Float32Array)
   return { blocks: roof.blocks, coverLeft: roof.left / blocks, blocksOver: roof.over / blocks };
 }
 
+/** Whether a view stands him before the hall's door, near enough for its front wall to open whole. */
+function beforeDoor(view: RuleView): boolean {
+  const away = Math.hypot(view.at[0] - TERRACE.x, view.at[1] - HALL.inFront);
+  return !inHall(view.at[0], view.at[1]) && view.at[1] > HALL.door && away < DOOR_WHOLE.within;
+}
+
 /** A view's blocks read: of those a house covers, the cover left over ground he sees and gone over ground he doesn't. */
 function readBlocks(view: RuleView, played: Float32Array, whole: Float32Array, bare: Float32Array, columns: number): RuleRead {
   const rows = played.length / 3 / columns;
@@ -354,13 +365,19 @@ export async function readView(lab: Lab, view: RuleView): Promise<[RuleRead, Pic
     // (stood in a building its roof is gone whole, and read alone below: the rest is held against the frame
     // without it, where a wall's ghost isn't read against the roof that covered it)
     if (inHall(view.at[0], view.at[1])) show(INSIDE_ROOFS, false, true);
+    // (so is the front wall before whose door he stands: opened whole, whatever he sees past it)
+    const atDoor = beforeDoor(view);
+    if (atDoor) show(DOOR_WALLS, false, true);
+    // (and the rest is read from the frame as played without that wall: its ghost over a wall behind it read
+    // as that wall a little opened)
+    const rest = atDoor ? await shotAfter(lab, `${view.name}: as played, its front wall hidden`) : played;
     RUST.tune.housesWhole = 1;
     const whole = await shotAfter(lab, `${view.name}: nothing thinned`);
     RUST.tune.housesWhole = 0;
     showHouses(false);
     const bare = await shotAfter(lab, `${view.name}: the houses hidden`);
     const columns = Math.floor(played.pixels.width / BLOCK);
-    const colours = [played, whole, bare].map((shot) => blockColours(shot.pixels));
+    const colours = [rest, whole, bare].map((shot) => blockColours(shot.pixels));
     const read = readBlocks(view, colours[0], colours[1], colours[2], columns);
     const pictures = [marked(played, read, columns), whole.pictured, bare.pictured];
     if (read.inside) {
@@ -372,6 +389,15 @@ export async function readView(lab: Lab, view: RuleView): Promise<[RuleRead, Pic
       RUST.tune.housesWhole = 0;
       read.roof = readRoof(blockColours(roof.pixels), blockColours(roofWhole.pixels), colours[2]);
       pictures.push(roof.pictured);
+    }
+    if (atDoor) {
+      show(DOOR_WALLS, true, true);
+      const wall = await shotAfter(lab, `${view.name}: its front wall alone`);
+      RUST.tune.housesWhole = 1;
+      const wallWhole = await shotAfter(lab, `${view.name}: its front wall alone, nothing thinned`);
+      RUST.tune.housesWhole = 0;
+      read.doorWall = readRoof(blockColours(wall.pixels), blockColours(wallWhole.pixels), colours[2]);
+      pictures.push(wall.pictured);
     }
     return [read, pictures];
   } finally {
@@ -395,9 +421,14 @@ export function judged(read: RuleRead): Checked {
     ? `, ${percent(read.stands)} standing; he is inside: of its roof alone ${percent(roof.coverLeft)} left `
       + `(${percent(roof.blocksOver)} of ${roof.blocks} blocks still covered)`
     : '';
+  const wall = read.doorWall;
+  const atDoor = wall
+    ? `; he stands before its door: of its front wall alone ${percent(wall.coverLeft)} left `
+      + `(${percent(wall.blocksOver)} of ${wall.blocks} blocks still covered)`
+    : '';
   const line = `${read.view}: over ground he sees ${percent(seen.coverLeft)} of the cover left `
     + `(${percent(seen.blocksOver)} of ${seen.blocks} blocks still covered); over ground he doesn't `
-    + `${percent(unseen.opened)} opened (${percent(unseen.blocksOver)} of ${unseen.blocks} blocks open${stood})`;
+    + `${percent(unseen.opened)} opened (${percent(unseen.blocksOver)} of ${unseen.blocks} blocks open${stood})${atDoor}`;
   const wrong: string[] = [];
   if (seen.blocks >= BLOCKS_LEAST && (seen.coverLeft > RUST.tune.houseLeft + SEEN_COVER.overLeft || seen.blocksOver > SEEN_COVER.blocksOver)) {
     wrong.push(`ground he sees is still covered${read.coveredAt}`);
@@ -409,6 +440,10 @@ export function judged(read: RuleRead): Checked {
   const roofLeft = INSIDE.roofLeft;
   if (roof && (roof.blocks < BLOCKS_LEAST || roof.coverLeft > roofLeft || roof.blocksOver > INSIDE.roofBlocksOver)) {
     wrong.push('he is inside and its roof is not opened whole');
+  }
+  const wallLeft = RUST.tune.houseLeft + SEEN_COVER.overLeft;
+  if (wall && wall.blocks >= BLOCKS_LEAST && (wall.coverLeft > wallLeft || wall.blocksOver > SEEN_COVER.blocksOver)) {
+    wrong.push('he stands before its door and its front wall is not opened whole');
   }
   if (enough && read.inside && read.stands < INSIDE.stands) wrong.push('he is inside and its walls do not stand');
   return wrong.length ? failed(`${line}: ${wrong.join(', ')}`) : passed(line);

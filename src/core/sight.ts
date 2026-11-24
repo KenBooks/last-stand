@@ -434,6 +434,23 @@ export function seeFrom(x: number, z: number, wanted: boolean, rate: number, dt:
   shut.value += Math.max(-rate, Math.min(rate, (building && !inside ? 1 : 0) - shut.value));
 }
 
+/** how near a door he stands for the wall it's in to open whole (m), and how far for none of that */
+export const DOOR_WHOLE = { within: 3.2, past: 5.2 };
+
+/** How far he stands before the door whose inner sill's middle is (x, z), seeing in through it, 0 to 1: all of
+ *  it on the porch by the door, none from further off (from the hall's stair he sees a wedge of the room, and
+ *  its front wall opens over that alone). Eased by the door's own share (`uSightDoorOn`) and by his walk. The
+ *  wall with that door in it opens whole by this share (`engine/seeKinds.ts`; from play, "he just needs to
+ *  see whole wall behind it"), and its room is drawn whole meanwhile (`world/hallPortal.ts`). */
+export function seesInAt(x: number, z: number): number {
+  const cast = SIGHT.uSightDoor.value;
+  const from = SIGHT.uSightFrom.value;
+  if (Math.hypot(cast.x - x, cast.y - z) > 1.5) return 0;
+  const away = Math.hypot(from.x - x, from.y - z);
+  const near = Math.min(1, Math.max(0, (DOOR_WHOLE.past - away) / (DOOR_WHOLE.past - DOOR_WHOLE.within)));
+  return SIGHT.uSightDoorOn.value * near;
+}
+
 /** how far the game has the fog on (0 to 1): `uSightOn`, but in a whole view, which draws none */
 let fogAsked = 0;
 onWholeView((whole) => {
