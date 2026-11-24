@@ -16,7 +16,7 @@ import { blockGeometry, bookShape, printGeometry, type BookShape } from '../../e
 import { SCHOLAR_DESK } from '../../data/houses/library';
 import { chairSeat } from '../seats';
 import {
-  BODY, CANDLE, CROSS_UNDER, DISPLAY, LANTERN, ROOM_LOOK, begin, box, candle, chandelier, drum, finish, framed, hearth, inkedPage, lantern, onWall,
+  BODY, CANDLE, CROSS_UNDER, DISPLAY, LANTERN, ROOM_LOOK, againstWall, begin, box, candle, chandelier, drum, finish, framed, hearth, inkedPage, lantern, onWall,
   parchment, rug, stool, table, writing, keepApart, type Build, type Furniture, type Mats, type Room,
 } from '../rooms';
 
@@ -82,13 +82,13 @@ function bookGeometry(): THREE.BufferGeometry {
   return g;
 }
 
-/** The room's books drawn: an instanced mesh for each spine, every book its own matrix and colour. */
-function shelve(g: THREE.Object3D, shelving: Shelving): void {
+/** A wall's books drawn, into `g`: an instanced mesh for each spine, every book its own matrix and colour, each
+ *  spine's material shared by every wall's (`spineMaterial`). */
+function shelve(g: THREE.Object3D, shelving: Shelving, spineMaterial: (design: number) => THREE.Material): void {
   const geometry = bookGeometry();
   shelving.forEach(({ matrices, colours }, design) => {
     if (!matrices.length) return;
-    const map = textureFromCanvas(spineCanvas(design, 300 + design));
-    const material = new THREE.MeshStandardMaterial({ map, roughness: 0.75 });
+    const material = spineMaterial(design);
     const mesh = new THREE.InstancedMesh(geometry, material, matrices.length);
     matrices.forEach((m, i) => { mesh.setMatrixAt(i, m); mesh.setColorAt(i, colours[i]); });
     mesh.castShadow = mesh.receiveShadow = true;
@@ -492,11 +492,13 @@ export function build(group: THREE.Group): Room {
   M.glass.color.setHex(0x2a1a0a);
   M.glass.emissive.setHex(0xffb060);
   M.glass.emissiveIntensity = 0.55;
-  const shelving: Shelving = Array.from({ length: SPINES }, () => ({ matrices: [], colours: [] }));
+  // (a wall's books shelved apart from the others', so they go with their wall as the camera cuts it away)
+  const shelvingOf = (): Shelving => Array.from({ length: SPINES }, () => ({ matrices: [], colours: [] }));
+  const shelves = { back: shelvingOf(), west: shelvingOf(), east: shelvingOf() };
   const caseHigh = high - 0.35;
   // --- the back wall: cases either side of an alcove with the Codex before it, its name over it, sconces ---
   const back = onWall(g, id, 'back');
-  for (const [x, w] of [[-4.5, 1.6], [-2.55, 2.0], [2.55, 2.0], [4.5, 1.6]] as const) bookcase(g, M, shelving, back, x, w, caseHigh, rng, b.obstacles);
+  for (const [x, w] of [[-4.5, 1.6], [-2.55, 2.0], [2.55, 2.0], [4.5, 1.6]] as const) bookcase(g, M, shelves.back, back, x, w, caseHigh, rng, b.obstacles);
   nameBoard(back, M, 2.95);
   const banner = writing(M, 256, 384, 1.1, 1.6);
   banner.write((cx, w, h) => {
@@ -521,17 +523,17 @@ export function build(group: THREE.Group): Room {
   for (const sx of [-1, 1]) lantern(back, M, sx * 1.15, 2.55, 0, 0, 1, { ...LANTERN, intensity: 7, reach: 7 });
   // --- the west wall: two cases, the ladder on the first, a scroll rack by the front, a lantern ---
   const west = onWall(g, id, 'west');
-  bookcase(g, M, shelving, west, -1.4, 2.2, caseHigh, rng, b.obstacles);
-  bookcase(g, M, shelving, west, 1.05, 2.2, caseHigh, rng, b.obstacles);
-  bookcase(g, M, shelving, west, 3.2, 1.0, caseHigh, rng, b.obstacles);
+  bookcase(g, M, shelves.west, west, -1.4, 2.2, caseHigh, rng, b.obstacles);
+  bookcase(g, M, shelves.west, west, 1.05, 2.2, caseHigh, rng, b.obstacles);
+  bookcase(g, M, shelves.west, west, 3.2, 1.0, caseHigh, rng, b.obstacles);
   ladder(west, M, -0.9, caseHigh, 1.15);
   scrollRack(west, M, -3.1, rng);
   lantern(west, M, -(hz - 0.45), 2.4, 0, 0, 1, { ...LANTERN, intensity: 8, reach: 8 });
   // --- the east wall: the hearth between two cases, an armchair before it, a lantern by the front ---
   hearth(g, M, new THREE.Vector3(hx, 0, -0.6), -Math.PI / 2, high, b.updaters, b.obstacles);
   const east = onWall(g, id, 'east');
-  bookcase(g, M, shelving, east, 2.25, 1.7, caseHigh, rng, b.obstacles);
-  bookcase(g, M, shelving, east, -2.95, 1.6, caseHigh, rng, b.obstacles);
+  bookcase(g, M, shelves.east, east, 2.25, 1.7, caseHigh, rng, b.obstacles);
+  bookcase(g, M, shelves.east, east, -2.95, 1.6, caseHigh, rng, b.obstacles);
   lantern(east, M, hz - 0.45, 2.4, 0, 0, 1, { ...LANTERN, intensity: 8, reach: 8 });
   // (a framed chart of the lands between the hearth and the case by the front)
   const chart = writing(M, 320, 400, 0.8, 1.0);
@@ -574,7 +576,21 @@ export function build(group: THREE.Group): Room {
   // chains, from play "light fixture, it goes through a beam")
   chandelier(g, M, 0.1, high, 1.3, high - CROSS_UNDER);
   // (dust drifting in the warm light by the front windows)
-  shelve(g, shelving);
+  const spines = new Map<number, THREE.Material>();
+  const spineMaterial = (design: number): THREE.Material => {
+    let material = spines.get(design);
+    if (!material) {
+      material = new THREE.MeshStandardMaterial({ map: textureFromCanvas(spineCanvas(design, 300 + design)), roughness: 0.75 });
+      spines.set(design, material);
+    }
+    return material;
+  };
+  for (const side of ['back', 'west', 'east'] as const) {
+    const books = new THREE.Group();
+    againstWall(books, side);
+    g.add(books);
+    shelve(books, shelves[side], spineMaterial);
+  }
   let due = 0;
   b.updaters.push((dt) => {
     due += dt * 6;

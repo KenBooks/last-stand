@@ -479,14 +479,25 @@ export function framed(g: THREE.Object3D, M: Mats, writing: Writing, x: number, 
 }
 
 /** A wall's frame in the room: x along it from its middle, its inner face at z = 0, facing into the room. */
-export function onWall(g: THREE.Group, id: RoomId, side: 'back' | 'front' | 'west' | 'east', along = 0): THREE.Group {
+export function onWall(g: THREE.Group, id: RoomId, side: WallSide, along = 0): THREE.Group {
   const [hx, hz] = HOUSES[id].half, frame = new THREE.Group();
+  // (what's put on it goes with its wall as the camera cuts that away, `finish`'s `cutAway`)
+  againstWall(frame, side);
   if (side === 'back') { frame.position.set(along, 0, -hz); }
   if (side === 'front') { frame.position.set(-along, 0, hz); frame.rotation.y = Math.PI; }
   if (side === 'west') { frame.position.set(-hx, 0, -along); frame.rotation.y = Math.PI / 2; }
   if (side === 'east') { frame.position.set(hx, 0, along); frame.rotation.y = -Math.PI / 2; }
   g.add(frame);
   return frame;
+}
+
+/** a room's four walls, as a frame on one is named (`onWall`) */
+export type WallSide = 'back' | 'front' | 'west' | 'east';
+
+/** `object` stands against wall `side`: shown and hidden with it as the camera cuts it away (#748: from above, a
+ *  wall cut away left its bookcases standing, tall dark slabs over the room). Added to the room's group, in its space. */
+export function againstWall(object: THREE.Object3D, side: WallSide): void {
+  object.userData.againstWall = side;
 }
 
 /** A bookcase against a wall (its frame, facing +z) at x, `w` wide: its carcass, shelves, and books of every colour
@@ -705,6 +716,28 @@ export function finish(id: RoomId, b: Build, extra: Partial<Room> = {}): Room {
   b.wall.seal();
   // (kept out of the room's merge, `mergeRoom`: the walls cut away by the camera, and each seat, outlined and sat on)
   for (const side of b.sides) keepApart(side.group, true);
+  // (what stands against each wall, cut away with it: gathered into one group a wall, merged within itself, apart
+  // from the room's whole; each frame merged on its own was a draw a material a frame, 10 to 25 a room)
+  b.g.updateMatrixWorld(true);
+  const against = SIDE_NAMES.map((name) => {
+    const objects = b.g.children.filter((child) => child.userData.againstWall === name);
+    if (!objects.length) return [];
+    const holder = new THREE.Group();
+    holder.name = `against the ${name} wall`;
+    b.g.add(holder);
+    for (const object of objects) holder.attach(object);
+    keepApart(holder, true);
+    return [holder];
+  });
+  // (a lantern's light stays in the room as its wall is cut away: moved onto the room's group where it stands, its
+  // frame's meshes alone hidden with the wall; a light hidden with them would leave the room darker from above)
+  for (const objects of against) {
+    for (const object of objects) {
+      const lights: THREE.Light[] = [];
+      object.traverse((part) => { if ((part as THREE.Light).isLight) lights.push(part as THREE.Light); });
+      for (const light of lights) b.g.attach(light);
+    }
+  }
   for (const seat of b.seats) {
     for (const target of seat.outline) keepApart(target.root);
     for (const mesh of seat.meshes) keepApart(mesh);
@@ -727,8 +760,16 @@ export function finish(id: RoomId, b: Build, extra: Partial<Room> = {}): Room {
     id, group: b.g, look: ROOM_LOOK, wall: b.wall, obstacles: b.obstacles, seats: b.seats,
     relief: { half: 1, cell: 1, n: 2, heights: new Float32Array(4), dais: false },
     update(dt, t) { for (const u of b.updaters) u(dt, t); },
-    cutAway(eye) { for (const s of b.sides) s.group.visible = !s.outside(eye); },
-    showAll() { for (const s of b.sides) s.group.visible = true; },
+    cutAway(eye) {
+      b.sides.forEach((s, i) => {
+        s.group.visible = !s.outside(eye);
+        for (const object of against[i]) object.visible = s.group.visible;
+      });
+    },
+    showAll() {
+      for (const s of b.sides) s.group.visible = true;
+      for (const objects of against) for (const object of objects) object.visible = true;
+    },
     cutNow: () => b.sides.flatMap((s, i) => (s.group.visible ? [] : [SIDE_NAMES[i]])),
     ...extra,
   };
