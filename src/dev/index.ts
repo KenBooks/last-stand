@@ -7,6 +7,7 @@ import { Player } from '../entities/player';
 import { updateFloaters } from '../ui/floaters';
 import { applyFreeCam, freeCamOn, freeCamToHero, setFreeCam } from './freeCam';
 import { initPanel, refreshPanel, toggleFly, togglePanel } from './panel';
+import { agentFrame, initAgent } from './agent';
 import type { BiomeId } from '../data/biomes';
 import { offerStartsUpTo } from '../ui/menus';
 
@@ -76,6 +77,8 @@ export function flyFree(on: boolean, hooks: DevHooks): void {
 export function initDev(hooks: DevHooks): DevApi {
   patchGodMode();
   initPanel(hooks);
+  // (the owner's coding session invited into this game: agent.ts, #529)
+  initAgent({ fly: (on) => flyFree(on, hooks) });
   // (any starting wave up to the 20th on a portal's card or the ghost's, banked or not: from the owner, "allow
   // selecting any wave of enemies up to 20")
   offerStartsUpTo(DEV_STARTS);
@@ -104,6 +107,7 @@ export function initDev(hooks: DevHooks): DevApi {
         G.player.energy = G.player.stats.maxEnergy;
         G.player.cooldowns.clear();
       }
+      agentFrame();
       applyFreeCam(dt);
       // Labels must project through the flown camera even while simulation is frozen.
       if (freeCamOn()) updateFloaters(0);

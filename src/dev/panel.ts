@@ -22,6 +22,7 @@ import { classOf, emptyStash, slotsOf, stashEveryBase, stashNew, wearKit, wearNe
 import { cheats, flyFree, setFrozen, stepFrozen, time, type DevHooks } from './index';
 import { initDevHelp } from './help';
 import { changeDevBiome } from './biome';
+import { frameCounts } from './frameCounts';
 import { setMarkedShown, type Mark } from './marked';
 import type { RarityId, Slot } from '../types';
 import './dev.scss';
@@ -404,7 +405,8 @@ async function profileSpot(): Promise<void> {
 export function refreshPanel(): void {
   if (!panel) return;
   const info = G.renderer.info;
-  const programs = info.programs?.length ?? 0;
+  // (the engine's counts: three's own are its overlays' canvas alone, frameCounts.ts)
+  const counts = frameCounts();
   const state = [
     time.frozen, time.scale, freeCamOn(), freeCamLabels(), cheats.god, cheats.free, G.player.cls.id, perfHudSize(),
     document.body.classList.contains('dev-clean'), [...taken.keys()].join(), input.touchMode, G.mode, profiling,
@@ -413,8 +415,8 @@ export function refreshPanel(): void {
   const number = (n: number | undefined, digits = 1): string => n !== undefined && Number.isFinite(n) ? n.toFixed(digits) : '—';
   const values: Record<string, string> = {
     fps: number(stats?.fps, 0), frame: number(stats?.p50), cpu: number(stats?.cpu, 2), gpu: number(stats?.gpu, 2),
-    p95: number(stats?.p95), low: number(stats?.lowFps, 0), draws: String(info.render.calls),
-    tris: `${(info.render.triangles / 1000).toFixed(0)}k`, shaders: String(programs), memory: `${info.memory.geometries}/${info.memory.textures}`,
+    p95: number(stats?.p95), low: number(stats?.lowFps, 0), draws: String(counts.draws),
+    tris: `${(counts.triangles / 1000).toFixed(0)}k`, shaders: String(counts.pipelines), memory: `${info.memory.geometries}/${info.memory.textures}`,
   };
   for (const [key, value] of Object.entries(values)) {
     const el = $(`[data-v=${key}]`);
