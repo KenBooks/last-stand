@@ -982,7 +982,7 @@ export function updateNameTags(): void {
     const t = nameTagFor(p);
     const share = Math.max(0, p.life / p.stats.maxLife);
     const away = isAway(p);
-    const look = { ...ALLY_BAR, name: nameOf(p), nameStyle: ALLY_NAME, ...(away ? { over: 'AFK', overStyle: AWAY_WORD } : {}) };
+    const look = { ...ALLY_BAR, name: nameOf(p), nameStyle: ALLY_NAME, ...(away ? { over: 'Idle', overStyle: AWAY_WORD } : {}) };
     const step = barStep(look, share) * 2 + (away ? 1 : 0);
     if (step !== t.shown) {
       t.shown = step;

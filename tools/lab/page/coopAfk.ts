@@ -1,7 +1,7 @@
 // `lab coop`'s `afk` scenario (page/coop.ts plays it, node/coopAfk.mjs judges it; #847): the guest's page is hidden
 // for a while, as a player switching to another tab hides it, and shown again. On the host's screen the guest's name
-// tag must say AFK over the name meanwhile, and not before or after; on the guest's own its tag says it too. Read off
-// the tag as drawn: its art's height, a line taller while it says AFK. The canary keeps the guest's state from ever
+// tag must say Idle over the name meanwhile, and not before or after; on the guest's own its tag says it too. Read off
+// the tag as drawn: its art's height, a line taller while it says Idle. The canary keeps the guest's state from ever
 // saying it's away (`holdAwayWord`), which the host's screen must then miss.
 import { G } from '../../../src/state';
 import { holdAwayWord, noteInput } from '../../../src/net/afk';

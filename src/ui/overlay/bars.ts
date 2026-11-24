@@ -13,7 +13,7 @@ export interface BarLook {
   /** the name over it, if any, and how it's written */
   name?: string;
   nameStyle?: TextStyle;
-  /** a word over the name, if any (a partner away: AFK), and how it's written */
+  /** a word over the name, if any (a partner away: Idle, #847's review: not everyone knows what AFK is), and how it's written */
   over?: string;
   overStyle?: TextStyle;
 }

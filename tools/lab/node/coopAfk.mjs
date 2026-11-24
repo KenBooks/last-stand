@@ -1,5 +1,5 @@
 // `lab coop`'s `afk` scenario judged (page/coopAfk.ts plays it; #847): the guest's page hidden for a while. On the
-// host's screen the guest's name tag must stand a line taller (AFK over the name) within a second of the page going
+// host's screen the guest's name tag must stand a line taller (Idle over the name) within a second of the page going
 // hidden, stay so while it is, and be back to its height within a second of the page shown again; never so before.
 // On the guest's own screen its tag says it too.
 

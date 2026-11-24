@@ -716,7 +716,7 @@ const SCENARIOS: Record<string, Scenario> = {
   },
   afk: {
     about: 'the guest\'s page is hidden for 3 s, as a player switching tabs hides it, and shown again: the '
-      + 'host\'s screen must say AFK over its name tag meanwhile (#847)',
+      + 'host\'s screen must say Idle over its name tag meanwhile (#847)',
     frames: 360,
     host: [9, 19],
     guest: [11, 19],
