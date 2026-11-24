@@ -90,8 +90,10 @@ export const TRADE = {
 /** A duel, hero against hero (game/duel.ts; #406). */
 export const PVP = {
   /** the share of a skill's damage a hero takes from it: the skills are tuned for foes of many times a hero's life,
-   *  and at their full worth most killed a hero in a blow or two; the same for everyone, its damage over time too */
-  damage: 0.25,
+   *  and at their full worth most killed a hero in a blow or two; the same for everyone, its damage over time too. Half
+   *  (#854, from play: "players currently deal too little damage to each other and have too much health, making fights
+   *  last too long": at a quarter every duel took twice as long; no single hit takes more than `hitMost` of his life) */
+  damage: 0.5,
   /** the share of a freeze's, a daze's or a carry's time a hero is held for, and how long after it ends before he can
    *  be held again (s), so one hero is never held from one hold into the next */
   hold: 0.5,
