@@ -452,6 +452,23 @@ export function runeCircle(seed = 1, size = 1024): THREE.CanvasTexture {
 }
 
 // Radial soft decal (scorch / frost / shadow blob).
+/** A soft band of `colour` round a dark middle (a ground flash drawn hollow, a wave of light spreading out): clear to
+ *  `from` of the radius, whole at `peak`, clear again at the edge. */
+export function radialBand(colour = 'rgba(255,255,255,1)', from = 0.4, peak = 0.75) {
+  const size = 256;
+  const c = canvasOf(size);
+  const g = ctx2d(c);
+  const clear = colour.replace(/[\d.]+\)$/, '0)');
+  const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, clear);
+  grad.addColorStop(from, clear);
+  grad.addColorStop(peak, colour);
+  grad.addColorStop(1, clear);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, size, size);
+  return textureFromCanvas(c);
+}
+
 export function radialDecal(inner = 'rgba(0,0,0,0.9)', outer = 'rgba(0,0,0,0)', noisy = true, seed = 3) {
   const size = 256;
   const c = canvasOf(size);
