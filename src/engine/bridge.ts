@@ -157,6 +157,7 @@ export class Bridge {
   private record(mesh: THREE.Mesh, geometryId: number, material: AnyMaterial, first: number, count: number, set: number,
     bones: number, raw = 0, cast: Cast = 'own'): void {
     const core = this.core;
+    if (this.unseenNow && cast === 'own') cast = 'only';
     const materialId = this.materials.materialId(material);
     if (!materialId) { core.skip(material.type); return; }
     this.watched?.add(mesh);
@@ -178,7 +179,6 @@ export class Bridge {
       // (what a game marks as costing by its pixels, `userData.lowRes`, and the fires' flames: at a share of them)
       | (TUNE.lowRes && (mesh.userData.lowRes || mesh.userData.fireFlames) ? LOW_RES : 0);
     if (r[at + 6] & SOLID) core.stats.solid++;
-    if (cast === 'only') core.stats.casters++;
     // (his arms through his eyes: by their own view, never culled by the world's, casting nothing)
     if (this.armsNow) {
       r[at + 6] = ARMS | NEVER_CULLED;
@@ -235,9 +235,15 @@ export class Bridge {
     const whole = to === Infinity && from === 0 && !raw && !set && !this.armsNow && mesh.castShadow;
     const caster = whole ? casterGeometry(mesh) : null;
     const casterId = caster ? this.geometries.geometryId(caster, look?.position) : 0;
-    this.record(mesh, geometryId, material, from, to === Infinity ? 0 : range.count, set, bones, raw,
-      casterId ? 'none' : 'own');
-    if (casterId) this.record(mesh, casterId, material, 0, 0, set, bones, 0, 'only');
+    // (unseen, a piece that casts from fewer triangles is in the frame by those alone)
+    if (!(this.unseenNow && casterId)) {
+      this.record(mesh, geometryId, material, from, to === Infinity ? 0 : range.count, set, bones, raw,
+        casterId ? 'none' : 'own');
+    }
+    if (casterId) {
+      this.record(mesh, casterId, material, 0, 0, set, bones, 0, 'only');
+      this.core.stats.casters++;
+    }
   }
 
   /**
@@ -275,6 +281,15 @@ export class Bridge {
 
   /** the mesh being recorded is the hero's arms through his eyes */
   private armsNow = false;
+  /** the mesh being recorded isn't seen and casts its shadow alone (his body and arms through his eyes) */
+  private unseenNow = false;
+
+  /** `mesh` in the frame for its shadow alone. */
+  private addUnseen(mesh: THREE.Mesh): void {
+    this.unseenNow = true;
+    this.addMesh(mesh);
+    this.unseenNow = false;
+  }
   /** The first `lamps` lamps' shadows asked for, of `casters` (`lampShadows.ts`): drawn a lamp a frame. */
   bakeLamps(casters: THREE.Mesh[], lamps: number): void {
     this.lampShadows.ask(casters, lamps);
@@ -323,6 +338,12 @@ export class Bridge {
         this.armsNow = true;
         this.addMesh(object as THREE.Mesh);
         this.armsNow = false;
+        // (and their shadow cast where they are in the world, with his body's)
+        if ((object as THREE.Mesh).castShadow) this.addUnseen(object as THREE.Mesh);
+      } else if (object.userData.castsUnseen && (object as THREE.Mesh).castShadow) {
+        // (his body through his eyes, on the layer no camera draws: unseen, its shadow cast as he stands, as a
+        // lamp's casts it. Left out, he cast none in the sun or the moon through his eyes, as since #270)
+        this.addUnseen(object as THREE.Mesh);
       }
     } else if ((object as THREE.Light).isLight) {
       // (the rig's copies of the shown place's lights are three's: the place's own are added after the walk)
