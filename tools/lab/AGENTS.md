@@ -24,6 +24,7 @@ The lab as an agent works with it: what every command measures, in a line here a
 
 Every command in a line is [`COMMANDS.md`](COMMANDS.md)'s At a glance, made from the commands' modules (`npm run lab -- docs`; `npm run lab:test` fails while it's stale): read it to find the command for a measure, then its entry in full there or in `commands/<name>.md`.
 
+- **`join <code>` runs the lab's steps on the owner's live game, not a headless one** (`commands/join.md`, #529): he invites the session from the game's developer panel on a PR preview or a dev build (F8, Invite agent) and pastes its command; started as a background task it holds the link, and `join look`, `join picture`, `join set name=value`, `join eval <code>` and `join leave` go through it. Use it when he asks you to look at what he sees. Never production: the relay opens no agent room for it. `invite` checks the whole path against a relay of the lab's own.
 - **A new command touches no shared file.** It is a module in `node/commands/<name>.mjs`, default-exporting all of it (its `summary`, its line in COMMANDS.md; its `help`, `argument` and `options` as the command line reads them; its `each`, `finish`, `textOf`, `problemsOf`... as a side runs it: `node/commands/AGENTS.md`), a module in `page/commands/<fn>.ts` for each function its work calls on the page (`side.command('<fn>', ...)`, which loads its measure in `page/` as it runs: `page/commands/AGENTS.md`), and, past a line or two, its entry in full in `commands/<name>.md`; then `npm run lab -- docs`. Options several commands take are in `node/optionKit.mjs`, what several share of their work in `node/commandKit.mjs`.
 
 Options every command takes:
@@ -51,7 +52,7 @@ the lab loads whole, as it neared 120k characters. Read a command's entry there 
 changing it; a new command's line there is its module's `summary`, and its entry in full goes in
 `commands/<name>.md`. The largest entries are
 notes of their own in [`commands/`](commands) (`eyes`, `ui`, `gait`, `held`, `coop`, `swing`, `rush`, `check`,
-`traces`, `range`, `hood`, `village`, `fire`, `perf`, `hall`, `cast`, `photo`, `sit`), a line in `COMMANDS.md` pointing to each, as
+`traces`, `range`, `hood`, `village`, `fire`, `perf`, `hall`, `cast`, `photo`, `sit`, `join`), a line in `COMMANDS.md` pointing to each, as
 `COMMANDS.md` neared 120k in turn: an entry that grows past some 4k characters
 moves there too.
 
