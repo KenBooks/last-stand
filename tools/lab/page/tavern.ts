@@ -26,6 +26,7 @@ import { slipOf } from './feet';
 import { BodyClear, HandsSmooth, MugsHeld } from './keeperWatch';
 import { throughTheEyes } from './tavernEyes';
 import { solePoints } from './soles';
+import { talkAnswerable } from '../../../src/ui/screens/talk/talk';
 import { footShape, type FootShape } from '../../../src/entities/models/ik';
 
 /** `--canary`: the ale made a cast he may walk through. */
@@ -35,6 +36,8 @@ export interface TavernOptions {
 
 /** the frames a stand or a press settles for */
 const SETTLE = 12;
+/** the most frames the keeper's lines are given to show, all of them, before his replies are read */
+const TALK_READ = 10 * 60;
 /** the drink's beats pictured (shares of its time), and the frames W is held over its start */
 const PICTURED = [0.15, 0.3, 0.46, 0.62, 0.8, 0.95];
 const HELD_W = 40;
@@ -319,6 +322,8 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
   await useByE(lab, him, problems);
   watch.forget();
   await frames(SETTLE);
+  // (his lines come one at a time, the replies once they're all shown: ui/screens/talk/talk.ts)
+  if (await frames(TALK_READ, () => talkAnswerable()) < 0) problems.push('the keeper\'s lines never all showed');
   const card = document.getElementById('talk')!;
   if (card.classList.contains('hidden')) problems.push('E at the keeper opened no talk');
   const box = card.querySelector('.tk-box')!.getBoundingClientRect();
