@@ -130,7 +130,7 @@ unfixed; `page/villageFires.ts`; `--canary` throws them off)
 (`grassRingsGentle`: the light changed per band in a 0.5 m stride of the rings' middle, at most 10%; `--canary` hands
 over as they did) (`hoardShowsStash`: empty none at all, more as it fills; `--canary` reads
 five items as empty); the chest's draws (`chestDrawsFew`: at most 40, its parts of one material one mesh; `--canary` adds
-12 parts of their own to its box); how to play closed by Esc with the pointer locked, the browser's letting go of the lock as Esc is
+12 parts of their own to its box); the campfire used over the shoulder with the crosshair on its fire (`campfireUsedUpClose`: the fire's floor not outlined to sit on, E opens Play together; `--canary` leaves the fire's floor a seat there, as it was); how to play closed by Esc with the pointer locked, the browser's letting go of the lock as Esc is
 let go played by the page (`escClosesHelp`: no pause menu; `--canary` asks for the lock with Esc still down); from inside the hall of
 heroes over the shoulder, turned to its door (V pressed: the village's top view is its panels'), the frame drawn
 with what stands outside culled by the doorway (`world/doorways.ts`) and drawn whole, at midnight and noon:

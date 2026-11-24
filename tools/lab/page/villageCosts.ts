@@ -49,6 +49,7 @@ export const VILLAGE_COSTS: Readonly<Record<string, number>> = {
   curbsFaceUp: 1,
   hoardShowsStash: 2,
   chestDrawsFew: 1,
+  campfireUsedUpClose: 1,
   escClosesHelp: 1,
   wornStaysOn: 1,
   heroFaceNotBlinding: 2,

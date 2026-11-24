@@ -65,6 +65,7 @@ import { lampHandOverByFaces } from './villageLampHandOver';
 import { heroesStandInPieces } from './villageHeroesStand';
 import { curbsFaceUp, roadsBendWide } from './villageRoads';
 import { chestDrawsFew, hoardShowsStash } from './villageHoard';
+import { campfireUsedUpClose } from './villageCampfireUse';
 import { escClosesHelp } from './villageHelpEsc';
 import { propHoleWhereHidden } from './villageSeeThrough';
 import { housesBesideFence, housesPastFence } from './villageFence';
@@ -195,6 +196,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     curbsFaceUp: () => curbsFaceUp(options.canary),
     hoardShowsStash: () => hoardShowsStash(lab, options.canary),
     chestDrawsFew: async () => chestDrawsFew(options.canary),
+    campfireUsedUpClose: () => campfireUsedUpClose(lab, options.canary),
     escClosesHelp: () => escClosesHelp(lab, options.canary),
     wornStaysOn: () => wornStaysOn(lab, options.canary),
     heroFaceNotBlinding: () => heroFaceNotBlinding(lab, options.canary),

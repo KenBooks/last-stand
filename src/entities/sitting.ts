@@ -15,6 +15,15 @@ import { outline } from '../ui/overlay/outline';
 import { navTarget, steerClear } from '../world/navigation';
 import type { Obstacle } from '../types';
 
+/** A seat left to what stands at it while that holds (`leaveSeatsTo`): asked of the seat the cursor points at. */
+let leftAlone: (seat: Seat) => boolean = () => false;
+
+/** Tells which seats aren't the sit's to take while something else there takes E (`game/village.ts`: a fire the hero
+ *  stands at to use, in a close view, where the crosshair rests on it as he faces it). */
+export function leaveSeatsTo(left: (seat: Seat) => boolean): void {
+  leftAlone = left;
+}
+
 export const SIT = {
   /** whether he goes to sit by himself once he's stood idle `after` (off: from the owner, "lets also disable automatic
    *  sitting"; E on the seat the cursor rests on sits him), how long he stands idle first (s), and how far off a seat
@@ -175,7 +184,7 @@ export class Sitting {
     let hit = peace && ray && free ? seatPointed(ray, G.arena.seats, me.pos, SIT.reach) : null;
     if (hit) {
       const spot = seatSpotAt(hit.seat, hit.x, hit.z, me.pos, me.radius);
-      if (!spot || seatTaken(spot, me)) hit = null;
+      if (!spot || seatTaken(spot, me) || leftAlone(hit.seat)) hit = null;
       else {
         this.hintPoint.x = hit.x;
         this.hintPoint.y = hit.y + SIT.hintOver;
