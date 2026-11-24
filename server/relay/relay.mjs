@@ -8,10 +8,12 @@
 //   game <-> relay { t: 'ping', n } / { t: 'pong', n } the game's round trip
 //   GET /health                                   200 "ok"
 //   GET /rooms?app=<app>                          the public rooms of the page's site (rooms.mjs)
+//   ws(s)://host/agent/open, /agent/join          an agent invited into a preview's game (agents.mjs): never co-op's
 // A peer whose socket drops and comes back with the same id within GRACE is the same peer: the others never see it go.
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
+import { agentRooms, DEFAULT_AGENT_ORIGINS } from './agents.mjs';
 import {
   addressOf, cardOf, hashPassword, LISTS_PER_MINUTE, listRooms, openingOf, passwordFits, passwordOf, PerMinute, siteOf,
   TRIES_PER_MINUTE,
@@ -43,10 +45,16 @@ const PASS_WAIT = 15000;
 /**
  * Starts a relay on `port` (0: any free one). `origins` the pages it takes, `grace` how long a dropped peer is held
  * (ms). `faults` are the lab's canaries alone, never set by the deploy: `anyPassword` lets any password in,
- * `listPrivate` lists private rooms. Resolves to the HTTP server once it listens.
+ * `listPrivate` lists private rooms. `agentOrigins` the pages that may invite an agent (agents.mjs: previews and dev
+ * builds, never production's), `agentTtl` how long an invitation's code is good unjoined (ms). Resolves to the HTTP
+ * server once it listens.
  */
-export function startRelay({ port = 0, origins = DEFAULT_ORIGINS, grace = 8000, faults = {}, log = defaultLog } = {}) {
+export function startRelay({
+  port = 0, origins = DEFAULT_ORIGINS, grace = 8000, faults = {}, log = defaultLog,
+  agentOrigins = DEFAULT_AGENT_ORIGINS, agentTtl,
+} = {}) {
   const ORIGINS = originsFrom(origins);
+  const agents = agentRooms({ origins: originsFrom(agentOrigins), ttl: agentTtl, faults, log });
   /** room key -> { peers: peer id -> peer, meta: the host's room (rooms.mjs) or null for a room opened by no host } */
   const rooms = new Map();
   const tries = new PerMinute(TRIES_PER_MINUTE), lists = new PerMinute(LISTS_PER_MINUTE);
@@ -76,6 +84,8 @@ export function startRelay({ port = 0, origins = DEFAULT_ORIGINS, grace = 8000, 
 
   http.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://x'), [, path, app, code] = url.pathname.split('/');
+    // (an agent's room is no co-op room: its own origins, codes and messages, agents.mjs)
+    if (path === 'agent') { agents.upgrade(req, socket, head, app); return; }
     const id = url.searchParams.get('id') ?? '', origin = req.headers.origin ?? '';
     const bad = path !== 'room' || !NAME.test(app ?? '') || !NAME.test(code ?? '') || !NAME.test(id) || !ORIGINS.has(origin);
     const key = `${app}/${code}`, room = rooms.get(key);
@@ -198,12 +208,14 @@ export function startRelay({ port = 0, origins = DEFAULT_ORIGINS, grace = 8000, 
     for (const ws of wss.clients) { if (!ws.alive) { ws.terminate(); continue; } ws.alive = false; ws.ping(); }
     tries.prune();
     lists.prune();
+    agents.tick();
   }, PING);
   // (closed, its sockets go too: an upgraded socket holds the HTTP server open, which would never close)
   const closeHttp = http.close.bind(http);
   http.close = (done) => {
     clearInterval(pinger);
     for (const ws of wss.clients) ws.terminate();
+    agents.close();
     for (const room of rooms.values()) for (const peer of room.peers.values()) clearTimeout(peer.gone);
     return closeHttp(done);
   };
@@ -218,6 +230,9 @@ function defaultLog(...a) { console.log(new Date().toISOString(), ...a); }
 
 // run as the deploy's process (not when the tests or the lab import it)
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  void startRelay({ port: Number(process.env.PORT ?? 8080), origins: process.env.ORIGINS ?? DEFAULT_ORIGINS });
+  void startRelay({
+    port: Number(process.env.PORT ?? 8080), origins: process.env.ORIGINS ?? DEFAULT_ORIGINS,
+    agentOrigins: process.env.AGENT_ORIGINS ?? DEFAULT_AGENT_ORIGINS,
+  });
   for (const s of ['SIGTERM', 'SIGINT']) process.on(s, () => { defaultLog('stopping'); process.exit(0); });
 }
