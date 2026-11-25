@@ -36,6 +36,7 @@ export const AI_NOTES: Record<string, string> = {
   cantor: 'Floats at a distance and chants: bone hands rise under you, a dirge of rings marches out, its choir rings the fight in, gravestones rise and stay, its guards ward it.',
   rootmother: 'Rooted in the middle of the arena: sends creeping vines, hurls branches where you are running (in pairs, and a rain of four later), flings seed pods, raises thorns round her trunk, and burrows under the floor to rise near a hero far off.',
   seedpod: 'Lies where it lands and hatches into Thornlings unless popped.',
+  bigpod: 'Lies where it lands and hatches into a Mossback unless popped: it takes several hits.',
 };
 
 /** A weapon way of holding the warrior's gear (or any class whose skills follow its gear): its name, how it plays,

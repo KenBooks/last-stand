@@ -22,10 +22,9 @@ export default {
       usage: 'a,b',
       choices: [
         'ladder', 'stand', 'toll', 'swing', 'encounter', 'bars', 'dive', 'choir', 'graves', 'rootPhases', 'vines',
-        'pods', 'heart', 'rootBurrow', 'branches', 'combos', 'rootCage', 'compiles', 'ttk', 'threat', 'rootThreat', 'rootSurvive',
-        'encounterPictures',
-        'cantorLook', 'film', 'choirPictures', 'frames', 'rootPictures', 'rootLook', 'rootBurrowPictures',
-        'branchPictures', 'rootCost', 'rootCagePictures', 'comboPictures',
+        'pods', 'heart', 'rootBurrow', 'branches', 'combos', 'rootCage', 'compiles', 'ttk', 'threat', 'rootThreat',
+        'rootSurvive', 'encounterPictures', 'cantorLook', 'film', 'choirPictures', 'frames', 'rootPictures', 'rootLook',
+        'rootBurrowPictures', 'branchPictures', 'rootCost', 'rootCagePictures', 'comboPictures', 'podPictures',
       ],
       help: 'the parts (all but those asked for by name, by default): ladder, stand, toll, swing, encounter, '
         + 'bars, dive, choir, graves (the Ossuary Cantor\'s encounter), rootPhases, vines, pods, heart, '
@@ -39,7 +38,8 @@ export default {
         + 'rootBurrowPictures (her burrow as the player sees it, her sink from her side), branchPictures (her '
         + 'branches from their side and as the player sees them), rootCost (her fight\'s cost to the frame, a root '
         + 'cage standing timed apart), rootCagePictures (her root cage: its warning, its roots bursting from the side, '
-        + 'a root broken, her blow); encounterPictures (the Cantor\'s encounter in each of its moments), cantorLook '
+        + 'a root broken, her blow), podPictures (her two pods side by side and a great one bursting); '
+        + 'encounterPictures (the Cantor\'s encounter in each of its moments), cantorLook '
         + '(the Cantor alone from every side and its skull close, its triangles held to 45k), film (a guard\'s toll '
         + 'and the guards as wave 10 sends them, as the game draws them from low at a hero\'s eye height), '
         + 'choirPictures (the ring, a stone, the arena late, the bars), frames (the frame\'s time through each of the '

@@ -451,6 +451,9 @@ export interface EnemyDef {
   /** a thing a boss brings into its fight (the Rootmother's seed pods), not a foe of any roster: warmed with its boss
    *  (game/bossReady.ts), worth no score, kill or loot */
   broughtBy?: string;
+  /** hits it takes to fall, whatever each deals (the Rootmother's great seed pod: 5): each hit takes `1 / hits` of its
+   *  most life */
+  hits?: number;
   /** a foe a hero's lure never draws (the Rootmother, who moves only to drag herself to a hero her vine holds) */
   ignoresLures?: boolean;
 }

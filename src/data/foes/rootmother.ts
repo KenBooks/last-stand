@@ -4,7 +4,7 @@
 // and the guide.
 import type { FoeFile } from '../enemies';
 
-declare module '../enemies' { interface EnemyIds { rootmother: true; seedpod: true } }
+declare module '../enemies' { interface EnemyIds { rootmother: true; seedpod: true; bigpod: true } }
 
 export const FOES: FoeFile = {
   rootmother: {
@@ -53,10 +53,10 @@ export const FOES: FoeFile = {
     },
     note: {
       role: 'Boss of the Thornwood',
-      does: 'A giant woman grown out of a hollow tree in the middle of the arena, her lower half all roots. She sends vines creeping along the floor after you, snaps thorned branches off her crown and hurls them where you will be, reading which way you run, flings seed pods that hatch into Thornlings, and raises a ring of thorns round her trunk when you stand close. Under half her Health the canopy closes: spore clouds drift over the floor, the earth erupts under your feet and she throws her branches three at a time. Under a quarter she rages: quicker, a line of branches that stays as bramble, and the earth bursting under you three times as you run. Stand still too long and the earth cracks in a ring round you: roots burst up and close over you in a cage, and a great root rises beside it and slams down on it. She never walks: she sinks into the earth, a ridge of soil heaving over her way, and rises near you where the ground bulges and cracks.',
+      does: 'A giant woman grown out of a hollow tree in the middle of the arena, her lower half all roots. She sends vines creeping along the floor after you, snaps thorned branches off her crown and hurls them where you will be, reading which way you run, flings seed pods that hatch into Thornlings (and from half her Health great pods that hatch into Mossbacks), and raises a ring of thorns round her trunk when you stand close. Under half her Health the canopy closes: spore clouds drift over the floor, the earth erupts under your feet and she throws her branches three at a time. Under a quarter she rages: quicker, a line of branches that stays as bramble, and the earth bursting under you three times as you run. Stand still too long and the earth cracks in a ring round you: roots burst up and close over you in a cage, and a great root rises beside it and slams down on it. She never walks: she sinks into the earth, a ridge of soil heaving over her way, and rises near you where the ground bulges and cracks.',
       strengths: ['A vine that touches you holds you in place, and she throws a branch at you while it does.', 'Her thrown branches reach you anywhere in the arena, and land where you are running to.', 'She throws in combos: a pair (where you stand and where you are going), and from half her Health a rain of four, one after another.', 'Seed pods left alone burst into a pack of Thornlings.', 'Her thorns punish standing next to her trunk.', 'In her second phase, the floor itself turns against you: spores and eruptions.', 'Raging, she attacks more often, and her bramble cuts the arena.', 'Standing still is punished: she cages you in roots and brings a great root down on the cage.', 'Running from her is no escape: she goes under the floor and rises near you.'],
-      weaknesses: ['Her vines creep in a line and turn slowly: a step aside dodges one.', 'She snaps a branch off and draws her arm back before every throw, and its landing is marked on the floor while it flies: step off the mark.', 'One hit of anything pops a seed pod.', 'Her heart opens in her trunk every so often, plain to see: shots that strike it deal half again their damage, and she attacks nothing while it is open.', 'She never walks: to come after you she drives her roots into the earth and goes under, and while she is under the floor nothing strikes her.', 'The cage warns first, a ring of cracks round you; and a root of it breaks in a few hits, a gap of one enough to step out. Her great root comes down on the cage\'s place alone, after a long rise.', 'She shows where she will rise: the soil heaves along her way under the floor, and the ground bulges and cracks over the spot for a second first. Rising, she harms no one.'],
-      beat: ['Keep moving across her vines, not away along them.', 'When her arm goes back, change what you are doing as it leaves her hand: stop, turn back or step aside, and her lead misses. Running on in a straight line is what she reads best. Step off the ring her branch will land in. A fan lands three across, a line five: step along it, towards her or away.', 'Get out of a vine fast: she throws at whoever it holds.', 'Pop every pod as it lands, before it hatches.', 'Save your burst for when her heart opens, and aim it at the heart.', 'In her second phase, watch the floor: step out of a spore cloud, and off the cracks before they burst.', 'Raging, keep running: the earth bursts where you stood a moment ago, three times.', 'When the earth cracks in a ring round you, walk out of it before the roots close. Caged, cut a root at once and step out before her great root comes down.', 'When she sinks, follow the ridge of soil: be ready where the ground bulges, and use the time she is under to pop pods and heal.'],
+      weaknesses: ['Her vines creep in a line and turn slowly: a step aside dodges one.', 'She snaps a branch off and draws her arm back before every throw, and its landing is marked on the floor while it flies: step off the mark.', 'One hit of anything pops a seed pod; a great pod takes a few, and ripens slower.', 'Her heart opens in her trunk every so often, plain to see: shots that strike it deal half again their damage, and she attacks nothing while it is open.', 'She never walks: to come after you she drives her roots into the earth and goes under, and while she is under the floor nothing strikes her.', 'The cage warns first, a ring of cracks round you; and a root of it breaks in a few hits, a gap of one enough to step out. Her great root comes down on the cage\'s place alone, after a long rise.', 'She shows where she will rise: the soil heaves along her way under the floor, and the ground bulges and cracks over the spot for a second first. Rising, she harms no one.'],
+      beat: ['Keep moving across her vines, not away along them.', 'When her arm goes back, change what you are doing as it leaves her hand: stop, turn back or step aside, and her lead misses. Running on in a straight line is what she reads best. Step off the ring her branch will land in. A fan lands three across, a line five: step along it, towards her or away.', 'Get out of a vine fast: she throws at whoever it holds.', 'Pop every pod as it lands, before it hatches; start on a great pod at once, as it takes a few hits.', 'Save your burst for when her heart opens, and aim it at the heart.', 'In her second phase, watch the floor: step out of a spore cloud, and off the cracks before they burst.', 'Raging, keep running: the earth bursts where you stood a moment ago, three times.', 'When the earth cracks in a ring round you, walk out of it before the roots close. Caged, cut a root at once and step out before her great root comes down.', 'When she sinks, follow the ridge of soil: be ready where the ground bulges, and use the time she is under to pop pods and heal.'],
       vs: {
         warrior: 'Bull Rush or a dash tears you free of a vine and breaks a root of her cage; raise your shield towards her and her branches break on it, and it takes most of her great root\'s blow; stay out of her thorns between hits.',
         mage: 'Veilstep frees you from a vine, takes you off a branch\'s mark and through the bars of her cage; bolts into her open heart.',
@@ -80,6 +80,23 @@ export const FOES: FoeFile = {
       beat: ['Pop them as soon as they land, before they hatch.', 'An area attack or a passing shot is enough.'],
     },
   },
+  // (her great pod, from her second phase: brought into her fight as her small ones are; `hits` to pop it, whatever
+  // each deals: from Kenneth, "Can you have stronger mobs come from larger cacoons for the mother")
+  bigpod: {
+    def: {
+      name: 'Great Seed Pod', model: 'bigpod', ai: 'seedpod',
+      life: 1, damage: 0, damageType: 'physical', speed: 0, radius: 0.85, hits: 5,
+      range: 0, windup: 1, recover: 1, cooldown: 1,
+      cost: 0, score: 0, knockbackResist: 1, freezeResist: 1, broughtBy: 'rootmother',
+    },
+    note: {
+      role: 'The Rootmother\'s greater brood',
+      does: 'A swollen husk twice a seed pod\'s size, glowing amber through its veins, that the Rootmother flings from her second phase on. Left alone, it splits open and a Mossback climbs out.',
+      strengths: ['What hatches from it is a Mossback, far tougher than a Thornling.', 'It takes several hits to pop, whatever each deals.'],
+      weaknesses: ['It ripens slower than a small pod.', 'It never moves or attacks.', 'Its amber glow shows it from across the arena.'],
+      beat: ['Pop the great pods first: a small pod falls to one hit, a great one takes a few.', 'A quick weapon or a volley of arrows pops it fastest: it counts hits, not damage.'],
+    },
+  },
 };
 
 /**
@@ -88,7 +105,10 @@ export const FOES: FoeFile = {
  * laid in pieces of `piece` m to `length` m at most; any of it a hero touches within `reach` (m) holds him `hold` s; it
  * lies `lies` s once grown, then withers. One arrow cuts a vine (entities/throws.ts `cutVineAlong`). `seeds`: `count`
  * pods flung `flight` s to land `near`..`far` m from her (and `clear` m from every hero), each bursting into `brood`
- * Thornlings after `hatch` s unless popped, while fewer than `aliveMost` foes stand. `thorns`: rise from her trunk out
+ * Thornlings after `hatch` s unless popped, while fewer than `aliveMost` foes stand. `great` (from Kenneth: "Can you have
+ * stronger mobs come from larger cacoons for the mother"): of each volley, `byPhase` of her phase are great pods
+ * (`bigpod`: none in phase 1, one in phase 2, two raging), each taking its `hits` (5) to pop, whatever each deals, and
+ * bursting into `brood` `hatches` (a Mossback) after `hatch` s unless popped; her heart's pods are small. `thorns`: rise from her trunk out
  * to `radius` m for `last` s, hurting a hero in them `hurt` of her damage every `tick` s; she raises them while a hero
  * stands within `near` m. Phase 2: `spores`, a cloud every `every` s while fewer than `most` drift, `radius` m wide,
  * drifting at `speed` m/s for `life` s, hurting `hurt` every `tick` s whoever stands in one; `erupt`, spikes bursting
@@ -149,7 +169,10 @@ export const FOES: FoeFile = {
  */
 export const ROOTMOTHER = {
   vines: { count: [2, 3] as [number, number], speed: 5.5, turn: 0.8, piece: 1.6, length: 24, reach: 0.6, hold: 2, lies: 1.5 },
-  seeds: { count: 3, flight: 1.1, near: 7, far: 21, clear: 3, hatch: 10, brood: 2, aliveMost: 14 },
+  seeds: {
+    count: 3, flight: 1.1, near: 7, far: 21, clear: 3, hatch: 10, brood: 2, aliveMost: 14,
+    great: { byPhase: [0, 1, 2] as [number, number, number], hatch: 16, hatches: 'mossback', brood: 1 },
+  },
   burrow: {
     sink: 1.3, roots: 0.4, depth: 8, hidden: 0.5, shows: 1, speed: 9, least: 0.6, warn: 1.2, rise: 1.1,
     ring: [7.5, 9.5] as [number, number], clear: 1, far: 13, farFor: 9, every: 24, first: 15,

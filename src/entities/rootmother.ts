@@ -77,6 +77,8 @@ import type { Player } from './player';
 const R = ROOTMOTHER;
 /** her sap's green (the thorn ring's warning, the pods' flight), and her heart's amber (an eruption's warning) */
 const SAP = 0x9aff40, AMBER = 0xff9a38;
+/** a great pod's glow (amber, so it reads apart from a small pod's green from above) */
+const GREAT_GLOW = 0xffb040;
 /** how high her hand flings a pod from (m), and how high its arc rises over the straight line (m) */
 const FLING_Y = 5.4, ARC = 4;
 /** how fast a cut vine withers, and one left to lie once its last piece is laid (s) */
@@ -462,22 +464,24 @@ function touch(c: Creeper, p: Player): void {
 
 // --- the seed pods ----------------------------------------------------------------------------------------
 
-/** Her pods flung from her hand to land round the arena, each a foe there when it lands, while the arena isn't full. */
+/** Her pods flung from her hand to land round the arena, each a foe there when it lands, while the arena isn't full:
+ *  of them, `great.byPhase` of her phase are great pods (from her second phase). */
 function flingSeeds(e: Enemy): void {
-  for (let i = 0; i < R.seeds.count; i++) flingPod(e);
+  const great = R.seeds.great.byPhase[Math.min(2, e.bossPhase)];
+  for (let i = 0; i < R.seeds.count; i++) flingPod(e, i < great);
 }
 
-/** A pod flung from her hand to land somewhere round the arena (`podSpot`), a foe there as it lands, while the arena
- *  isn't full. */
-function flingPod(e: Enemy): void {
+/** A pod (`great`: a great one) flung from her hand to land somewhere round the arena (`podSpot`), a foe there as it
+ *  lands, while the arena isn't full. */
+function flingPod(e: Enemy, great = false): void {
   const s = R.seeds;
   if (G.enemies.filter((x) => x.alive).length >= s.aliveMost) return;
   const at = podSpot(e);
   if (!at) return;
-  fx('seedFling', e.pos.x, e.pos.z, at.x, at.z, s.flight);
+  fx('seedFling', e.pos.x, e.pos.z, at.x, at.z, s.flight, great ? 1 : 0);
   schedule(s.flight, () => {
     if (!e.alive) return;
-    spawnEnemy('seedpod', at, { wave: G.run?.wave ?? 1, training: e.training });
+    spawnEnemy(great ? 'bigpod' : 'seedpod', at, { wave: G.run?.wave ?? 1, training: e.training });
   });
 }
 
@@ -494,29 +498,33 @@ function podSpot(e: Enemy): THREE.Vector3 | null {
   return null;
 }
 
-/** A seed pod's AI, where simulated: it ripens where it fell (its `ripen` action, for its look), and bursts into
- *  Thornlings when `hatch` s have passed since it rose (frozen, its time stands still with it). */
+/** A seed pod's AI, where simulated: it ripens where it fell (its `ripen` action, for its look), and bursts into its
+ *  brood when its `hatch` s have passed since it rose (frozen, its time stands still with it): a small pod's
+ *  Thornlings, a great pod's (`bigpod`) Mossback, each a foe of its kind as a wave brings it. */
 export function seedPodAI(e: Enemy, dt: number): void {
-  const b = e.brain, hatch = R.seeds.hatch;
+  const great = e.type === 'bigpod', g = R.seeds.great;
+  const b = e.brain, hatch = great ? g.hatch : R.seeds.hatch;
   e.desired.set(0, 0, 0);
   b.ripe = (b.ripe ?? 0) + dt;
   if (!e.action) e.startAction('ripen', Math.max(0.05, hatch - b.ripe) + 0.5);
   if (b.ripe < hatch) return;
-  fx('podBurst', e.pos.x, e.pos.z);
-  for (let i = 0; i < R.seeds.brood; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const at = new THREE.Vector3(e.pos.x + Math.sin(a) * 0.9, 0, e.pos.z + Math.cos(a) * 0.9);
-    spawnEnemy(BROOD, at, { wave: G.run?.wave ?? 1, lifeMult: partyScale(G.run?.party ?? 1).life, training: e.training });
+  fx('podBurst', e.pos.x, e.pos.z, great ? 1 : 0);
+  const kind = (great ? g.hatches : BROOD) as EnemyId, count = great ? g.brood : R.seeds.brood;
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2, out = count > 1 ? 0.9 : 0;
+    const at = new THREE.Vector3(e.pos.x + Math.sin(a) * out, 0, e.pos.z + Math.cos(a) * out);
+    spawnEnemy(kind, at, { wave: G.run?.wave ?? 1, lifeMult: partyScale(G.run?.party ?? 1).life, training: e.training });
   }
   e.die();
 }
 
 // --- what every game plays (enemyAI's fx) ---------------------------------------------------------------
 
-/** A pod flung from over (ox, oz) to land at (tx, tz) in `flight` s (`seedFling` fx): a glowing seed on its arc, a
- *  ring where it will land. */
-export function seedFlung(ox: number, oz: number, tx: number, tz: number, flight: number): void {
-  telegraph({ x: tx, z: tz }, 0.8, flight, SAP);
+/** A pod flung from over (ox, oz) to land at (tx, tz) in `flight` s (`seedFling` fx; `great` 1: a great pod, its ring
+ *  and trail larger and amber): a glowing seed on its arc, a ring where it will land. */
+export function seedFlung(ox: number, oz: number, tx: number, tz: number, flight: number, great = 0): void {
+  const colour = great ? GREAT_GLOW : SAP, size = great ? 1.8 : 1;
+  telegraph({ x: tx, z: tz }, 0.8 * size, flight, colour);
   sfx.swing();
   const at = new THREE.Vector3();
   let t = 0, trail = 0;
@@ -528,7 +536,7 @@ export function seedFlung(ox: number, oz: number, tx: number, tz: number, flight
       trail += dt;
       if (trail > 0.03) {
         trail = 0;
-        burst(at, { count: 2, color: SAP, speed: 0.4, up: 0, life: 0.35, size: 0.22, sizeEnd: 0.05, gravity: 0 });
+        burst(at, { count: 2, color: colour, speed: 0.4, up: 0, life: 0.35, size: 0.22 * size, sizeEnd: 0.05, gravity: 0 });
       }
       if (t < flight) return true;
       debris(at, { count: 6, speed: 2 });
@@ -539,11 +547,12 @@ export function seedFlung(ox: number, oz: number, tx: number, tz: number, flight
   });
 }
 
-/** A pod burst into Thornlings at (x, z) (`podBurst` fx): sap and husk. */
-export function podBurst(x: number, z: number): void {
-  const at = new THREE.Vector3(x, groundHeight(x, z) + 0.6, z);
-  burst(at, { count: 26, color: SAP, speed: 4.5, up: 2, life: 0.6, size: 0.22 });
-  debris(at, { count: 10, color: 0x6a5a2a, speed: 4 });
+/** A pod burst into its brood at (x, z) (`podBurst` fx; `great` 1: a great pod's, more and amber): sap and husk. */
+export function podBurst(x: number, z: number, great = 0): void {
+  const size = great ? 1.8 : 1;
+  const at = new THREE.Vector3(x, groundHeight(x, z) + 0.6 * size, z);
+  burst(at, { count: Math.round(26 * size), color: great ? GREAT_GLOW : SAP, speed: 4.5 * size, up: 2, life: 0.6, size: 0.22 });
+  debris(at, { count: Math.round(10 * size), color: 0x6a5a2a, speed: 4 * size });
   rootSounds.pod();
 }
 

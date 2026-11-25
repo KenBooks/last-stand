@@ -3,7 +3,7 @@
 // and the attacks the battle log names. Loaded at her wave (entities/bosses.ts), her pods with her.
 import { foeAI, foeFx, foeModels } from '../foeKit';
 import { buildRootmother } from '../models/rootmother';
-import { buildSeedPod } from '../models/seedpod';
+import { buildGreatPod, buildSeedPod } from '../models/seedpod';
 import {
   branchAt, branchTorn, cracksAt, creeperPiece, eruptAt, heartOpened, podBurst, rootmotherAI, seedFlung, seedPodAI,
   sporesAt, thornsAt,
@@ -22,9 +22,9 @@ declare module '../foeKit' {
     /** the Rootmother `id`'s heart opened for `open` s (its banner, its beat, its light) */
     heartOpens(id: number, open: number): void;
     /** a seed pod flung from over (ox, oz) to land at (tx, tz) in `flight` s */
-    seedFling(ox: number, oz: number, tx: number, tz: number, flight: number): void;
+    seedFling(ox: number, oz: number, tx: number, tz: number, flight: number, great: number): void;
     /** a seed pod burst into Thornlings at (x, z) */
-    podBurst(x: number, z: number): void;
+    podBurst(x: number, z: number, great: number): void;
     /** thorns risen round the Rootmother `id`'s trunk out to `radius` for `last` s, hurting whoever stands in them */
     thorns(id: number, x: number, z: number, radius: number, last: number, damage: number): void;
     /** the earth cracking in a ring at (x, z) for `warn` s before the Rootmother `id`'s root cage shuts there */
@@ -54,14 +54,14 @@ declare module '../foeKit' {
 declare module '../../types' { interface EnemyAIKinds { rootmother: true; seedpod: true } }
 declare module '../../combat/damage' { interface EnemyAttacks { thorns: true; roots: true; spores: true; branch: true; bramble: true; crush: true } }
 
-foeModels({ rootmother: buildRootmother, seedpod: buildSeedPod });
+foeModels({ rootmother: buildRootmother, seedpod: buildSeedPod, bigpod: buildGreatPod });
 foeAI({ rootmother: (e, dt) => rootmotherAI(e, dt), seedpod: (e, dt) => seedPodAI(e, dt) });
 foeFx({
   creeper: (_id, vine, x, z, angle, length) => creeperPiece(vine, x, z, angle, length),
   burrow: (id, fx, fz, tx, tz, travel) => burrowAt(id, fx, fz, tx, tz, travel),
   heartOpens: (id, open) => heartOpened(id, open),
-  seedFling: (ox, oz, tx, tz, flight) => seedFlung(ox, oz, tx, tz, flight),
-  podBurst: (x, z) => podBurst(x, z),
+  seedFling: (ox, oz, tx, tz, flight, great) => seedFlung(ox, oz, tx, tz, flight, great),
+  podBurst: (x, z, great) => podBurst(x, z, great),
   thorns: (id, x, z, radius, last, damage) => thornsAt(id, x, z, radius, last, damage),
   cracks: (x, z, warn) => cracksAt(x, z, warn),
   cageWarn: (id, x, z, warn) => cageWarnAt(id, x, z, warn),

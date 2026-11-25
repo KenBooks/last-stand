@@ -8,20 +8,23 @@
 // - `vines`: one creeping vine sent at the hero standing still: it must reach and hold him (`Player.rooted`) for its
 //   `hold` (within a few frames); with a bow (`--class ranger`), a shot into the vine holding him must cut it, letting
 //   him go within a quarter of a second, and the vine withering.
-// - `pods`: her pods flung (as many as she flings, each landing `near`..`far` from her and `clear` of the hero), one
-//   left alone bursting into its brood of Thornlings `hatch` s after it rose, and one struck by the hero's basic attack
-//   (an arrow, a blow, a bolt) popped by it before it can hatch, nothing hatching from it.
+// - `pods`: her pods flung (as many as she flings, each landing `near`..`far` from her and `clear` of the hero), and
+//   in her second phase as many great pods among them as `great.byPhase` says; for each size, one left alone bursting
+//   into its brood (a small pod's Thornlings, a great pod's Mossback) its `hatch` s after it rose, and one struck by the
+//   hero's basic attack (an arrow, a blow, a bolt) popped in its hits (1, a great pod's `hits`) before it can hatch,
+//   nothing hatching from it.
 // - `heart`: in her second phase, an eruption at the hero standing still: its hurt landing no sooner than its warning
 //   after the earth began to crack, then her heart open for its `heart` s at `taken` times the damage, nothing
 //   attacked meanwhile, and shut again after.
 //
 // `rootPictures` (asked for alone): her fight's moments, a sheet for the eye. `--canary` plants a fault in each part:
-// her second phase's share moved, a vine that reaches no one, pods that never hatch, a heart that never opens.
+// her second phase's share moved, a vine that reaches no one, pods that never hatch, a great pod hatching the small
+// pod's brood, a heart that never opens.
 import * as THREE from 'three';
 import type { Lab, Pictured, ViewName } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import { G } from '../../../src/state';
-import { ENEMIES, SCALING } from '../../../src/data/enemies';
+import { ENEMIES, SCALING, type EnemyId } from '../../../src/data/enemies';
 import { ROOTMOTHER } from '../../../src/data/foes/rootmother';
 import { spotTaken } from '../../../src/entities/bossKit';
 import { CREEPERS, ROUNDS, type Attack } from '../../../src/entities/rootmother';
@@ -286,34 +289,63 @@ function stoodProblems(stood: VineCase, lines: string[], problems: string[]): vo
 
 // --- the pods -----------------------------------------------------------------------------------------------
 
-const podsAlive = (): Enemy[] => G.enemies.filter((e) => e.alive && e.type === 'seedpod');
-const thornlings = (): number => G.enemies.filter((e) => e.alive && e.type === 'thornling').length;
+/** A pod's size: the small pod or the great one. */
+type Pod = 'seedpod' | 'bigpod';
+/** What a pod of each size hatches, how many, after how long, and in how many hits it pops (as the game ships it). */
+interface PodWants { brood: EnemyId; count: number; hatch: number; hits: number }
 
-/** Her pods flung, one left to hatch, one popped by the hero's basic attack. */
-export async function pods(lab: Lab, options: BossOptions, lines: string[], problems: string[]): Promise<void> {
+const podsAlive = (kind?: Pod): Enemy[] => G.enemies.filter((e) => e.alive && (kind
+  ? e.type === kind : e.type === 'seedpod' || e.type === 'bigpod'));
+const alive = (kind: EnemyId): number => G.enemies.filter((e) => e.alive && e.type === kind).length;
+
+/** Each size's wants, read before any canary plants its fault. */
+function podWants(): Record<Pod, PodWants> {
   const s = ROOTMOTHER.seeds;
-  const hatch = s.hatch;
-  if (options.canary) s.hatch = 1e4;
-  try {
-    await flung(lab, options, lines, problems);
-    await hatched(lab, options, lines, problems, hatch);
-  } finally {
-    s.hatch = hatch;
-  }
-  await popped(lab, options, lines, problems);
+  return {
+    seedpod: { brood: 'thornling', count: s.brood, hatch: s.hatch, hits: 1 },
+    bigpod: { brood: s.great.hatches as EnemyId, count: s.great.brood, hatch: s.great.hatch, hits: ENEMIES.bigpod.hits ?? 1 },
+  };
 }
 
-/** Her pods flung: as many as she flings, each where it should land. */
-async function flung(lab: Lab, options: BossOptions, lines: string[], problems: string[]): Promise<void> {
+/** Her pods flung, in her first phase and her second; for each size one left to hatch, one popped by the hero. */
+export async function pods(lab: Lab, options: BossOptions, lines: string[], problems: string[]): Promise<void> {
+  const s = ROOTMOTHER.seeds, wants = podWants();
+  const was = { hatch: s.hatch, hatches: s.great.hatches, brood: s.great.brood };
+  // (the canary: small pods that never hatch, and a great pod hatching the small pod's brood)
+  if (options.canary) {
+    s.hatch = 1e4;
+    s.great.hatches = 'thornling';
+    s.great.brood = s.brood;
+  }
+  try {
+    await flung(lab, options, lines, problems, 1);
+    await flung(lab, options, lines, problems, 0.45);
+    for (const kind of ['seedpod', 'bigpod'] as Pod[]) await hatched(lab, options, lines, problems, kind, wants[kind]);
+  } finally {
+    Object.assign(s, { hatch: was.hatch });
+    Object.assign(s.great, { hatches: was.hatches, brood: was.brood });
+  }
+  for (const kind of ['seedpod', 'bigpod'] as Pod[]) await popped(lab, options, lines, problems, kind, wants[kind]);
+}
+
+/** Her pods flung at her life's share `life` (her phase): as many as she flings, each where it should land, as many
+ *  great ones among them as her phase flings. */
+async function flung(lab: Lab, options: BossOptions, lines: string[], problems: string[], life: number): Promise<void> {
   const s = ROOTMOTHER.seeds;
   await standClear(lab, options);
   const boss = await rootmother(lab);
+  if (life < 1) boss.takeDamage(boss.life - life * boss.maxLife, {});
+  // (her phase entered before she's told what to do: entering it sets her round back)
+  await lab.step(2);
   nextIs(boss, 'seeds');
   await lab.step(ATTACK_FRAMES, () => ({}), () => holdHerAfter(boss, 'seeds'));
-  const landed = podsAlive();
+  const landed = podsAlive(), great = podsAlive('bigpod').length;
+  const wantGreat = s.great.byPhase[Math.min(2, boss.bossPhase)];
   const spots = landed.map((pod) => `${fixed(flat(pod.pos, boss.pos), 1)} m out`);
-  lines.push(`pods: flung ${landed.length} (of ${s.count}): ${spots.join(', ')}`);
+  lines.push(`pods: in her phase ${boss.bossPhase + 1}, flung ${landed.length} (of ${s.count}), ${great} great: `
+    + spots.join(', '));
   if (landed.length !== s.count) problems.push(`pods: ${landed.length} pods landed of the ${s.count} she flings`);
+  if (great !== wantGreat) problems.push(`pods: ${great} great pods in her phase ${boss.bossPhase + 1}, not ${wantGreat}`);
   for (const pod of landed) {
     const out = flat(pod.pos, boss.pos);
     if (out < s.near - 0.1 || out > s.far + 0.1) {
@@ -322,60 +354,77 @@ async function flung(lab: Lab, options: BossOptions, lines: string[], problems: 
   }
 }
 
-/** A pod left alone: it must burst into its brood `hatch` s (as the game ships it) after it rose. */
-async function hatched(lab: Lab, options: BossOptions, lines: string[], problems: string[],
-  hatch: number): Promise<void> {
-  const s = ROOTMOTHER.seeds;
+/** A pod of size `kind` left alone: it must burst into its brood its `hatch` s after it rose (as the game ships it),
+ *  and nothing else come out of it. */
+async function hatched(lab: Lab, options: BossOptions, lines: string[], problems: string[], kind: Pod,
+  want: PodWants): Promise<void> {
   await standClear(lab, options);
   lab.letWavesCome();
   const at = G.player.pos.clone().multiplyScalar(0.6);
-  const pod = lab.spawnFoe('seedpod', at);
+  const pod = lab.spawnFoe(kind, at);
   await lab.until(() => pod.spawning <= 0, RISE_FRAMES, 'the pod never rose');
-  const before = thornlings();
+  const before = { thornling: alive('thornling'), mossback: alive('mossback'), brood: alive(want.brood) };
   let burstAt = -1;
-  await lab.step(Math.round((hatch + 1) * FPS), () => ({}), (f) => {
+  await lab.step(Math.round((want.hatch + 1) * FPS), () => ({}), (f) => {
     if (burstAt < 0 && !pod.alive) burstAt = f + 1;
   });
-  const brood = thornlings() - before;
-  const burst = burstAt < 0 ? `never burst in ${hatch + 1} s` : `burst ${fixed(secondsOf(burstAt))} s after it rose`;
-  lines.push(`pods: left alone: ${burst}, ${brood} Thornlings`);
-  if (burstAt < 0) problems.push(`pods: a pod left alone never burst in ${hatch + 1} s`);
-  else {
-    const off = Math.abs(secondsOf(burstAt) - hatch);
-    if (off > HATCH_SLACK) {
-      problems.push(`pods: a pod burst ${fixed(secondsOf(burstAt))} s after it rose, not ${hatch}`);
-    }
-    if (brood !== s.brood) problems.push(`pods: a pod burst into ${brood} Thornlings, not ${s.brood}`);
+  const out = { thornling: alive('thornling') - before.thornling, mossback: alive('mossback') - before.mossback };
+  const brood = alive(want.brood) - before.brood;
+  const what = `pods: ${kind === 'bigpod' ? 'a great pod' : 'a pod'} left alone`;
+  const burst = burstAt < 0 ? `never burst in ${want.hatch + 1} s` : `burst ${fixed(secondsOf(burstAt))} s after it rose`;
+  lines.push(`${what}: ${burst}, ${out.thornling} Thornlings and ${out.mossback} Mossbacks out of it`);
+  if (burstAt < 0) {
+    problems.push(`${what} never burst in ${want.hatch + 1} s`);
+    return;
+  }
+  if (Math.abs(secondsOf(burstAt) - want.hatch) > HATCH_SLACK) {
+    problems.push(`${what} burst ${fixed(secondsOf(burstAt))} s after it rose, not ${want.hatch}`);
+  }
+  const others = out.thornling + out.mossback - brood;
+  if (brood !== want.count || others > 0) {
+    problems.push(`${what} burst into ${out.thornling} Thornlings and ${out.mossback} Mossbacks, not ${want.count} `
+      + `${ENEMIES[want.brood].name}${want.count > 1 ? 's' : ''}`);
   }
 }
 
-/** A pod before the hero, his basic attack held on it: popped, and nothing hatched from it. */
-async function popped(lab: Lab, options: BossOptions, lines: string[], problems: string[]): Promise<void> {
+/** A pod of size `kind` before the hero, his basic attack held on it: popped in its hits, nothing hatched from it. */
+async function popped(lab: Lab, options: BossOptions, lines: string[], problems: string[], kind: Pod,
+  want: PodWants): Promise<void> {
   await standClear(lab, options);
   lab.letWavesCome();
   const hero = G.player;
   const attack = hero.skillAt('mouse0')!.def;
   const melee = !attack.draw && !attack.speed;
   const ahead = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
-  const pod = lab.spawnFoe('seedpod', hero.pos.clone().addScaledVector(ahead, melee ? POP_MELEE : POP_SHOT).setY(0));
+  const pod = lab.spawnFoe(kind, hero.pos.clone().addScaledVector(ahead, melee ? POP_MELEE : POP_SHOT).setY(0));
   await lab.until(() => pod.spawning <= 0, RISE_FRAMES, 'the pod never rose');
-  const before = thornlings();
+  const before = alive(want.brood);
+  // (its hits counted as it takes them)
+  let hits = 0;
+  const take = pod.takeDamage.bind(pod);
+  pod.takeDamage = (amount, info) => {
+    if (amount > 0 && pod.alive) hits++;
+    return take(amount, info);
+  };
   const aim = pod.pos.clone().setY(0.5);
   const cycle = attack.draw ? Math.round((attack.draw + 0.1) * FPS) + 1 : 0;
   let poppedAt = -1;
   const life = pod.life;
-  await lab.step(POP_HOLD * FPS, (f) => {
+  await lab.step(POP_HOLD * want.hits * FPS, (f) => {
     hero.facing = Math.atan2(pod.pos.x - hero.pos.x, pod.pos.z - hero.pos.z);
     hero.energy = hero.stats.maxEnergy;
     return pressing('mouse0', aim, poppedAt < 0 && (cycle === 0 || f % cycle !== cycle - 1));
   }, (f) => {
     if (poppedAt < 0 && !pod.alive) poppedAt = f + 1;
   });
-  const brood = thornlings() - before;
+  const brood = alive(want.brood) - before;
+  const what = `pods: ${kind === 'bigpod' ? 'a great pod' : 'a pod'}`;
   const fate = poppedAt < 0 ? 'never popped' : `popped ${fixed(secondsOf(poppedAt))} s into the hold`;
-  lines.push(`pods: struck by ${attack.name}: ${fate} (its life ${fixed(life, 0)}), ${brood} Thornlings`);
-  if (poppedAt < 0) problems.push(`pods: the ${hero.cls.id}'s ${attack.name} never popped a pod in ${POP_HOLD} s`);
-  if (brood > 0) problems.push(`pods: ${brood} Thornlings came from a pod the hero popped`);
+  lines.push(`${what} struck by ${attack.name}: ${fate} in ${hits} hits (its life ${fixed(life, 0)}), ${brood} `
+    + `${ENEMIES[want.brood].name}s`);
+  if (poppedAt < 0) problems.push(`${what}: the ${hero.cls.id}'s ${attack.name} never popped it in ${POP_HOLD * want.hits} s`);
+  else if (hits !== want.hits) problems.push(`${what} popped in ${hits} hits, not ${want.hits}`);
+  if (brood > 0) problems.push(`${what}: ${brood} came out of a pod the hero popped`);
 }
 
 // --- her heart ----------------------------------------------------------------------------------------------
@@ -569,8 +618,8 @@ async function eruption(lab: Lab, options: BossOptions, lines: string[], problem
 
 // --- the programs -------------------------------------------------------------------------------------------
 
-/** Every effect of her fight drawn (a vine, a pod flung and burst, the thorns, the cracks, an eruption, spores, the
- *  canopy closed, a pod, a Thornling): the programs compiled meanwhile. */
+/** Every effect of her fight drawn (a vine, a pod and a great pod flung and burst, the thorns, the cracks, an eruption,
+ *  spores, the canopy closed, a pod, a great pod, a Thornling, a Mossback): the programs compiled meanwhile. */
 export async function rootCompiles(lab: Lab, options: BossOptions): Promise<number> {
   await standIn(lab, options.fixture, 'forest');
   const boss = await rootmother(lab);
@@ -581,15 +630,19 @@ export async function rootCompiles(lab: Lab, options: BossOptions): Promise<numb
     const before = PIPELINES.made;
     const h = G.player.pos;
     fx('creeper', boss.id, 999001, h.x - 6, h.z - 1, 1.2, 1.6);
-    fx('seedFling', 0, 0, h.x - 4, h.z - 3, 0.6);
+    fx('seedFling', 0, 0, h.x - 4, h.z - 3, 0.6, 0);
+    fx('seedFling', 0, 0, h.x - 6, h.z + 5, 0.6, 1);
     fx('thorns', boss.id, 0, 0, ROOTMOTHER.thorns.radius, 1.5, 0);
     fx('cracks', h.x - 3, h.z, 0.6);
     await lab.step(40);
     fx('erupt', boss.id, h.x - 3, h.z, ROOTMOTHER.erupt.radius, 0);
-    fx('podBurst', h.x - 4, h.z - 3);
+    fx('podBurst', h.x - 4, h.z - 3, 0);
+    fx('podBurst', h.x - 6, h.z + 5, 1);
     fx('spores', boss.id, h.x - 5, h.z, 0.5, 0, 3, 0);
     fx('bossWeak', boss.id, 2);
     lab.spawnFoe('seedpod', new THREE.Vector3(h.x - 4, 0, h.z + 3));
+    lab.spawnFoe('bigpod', new THREE.Vector3(h.x - 7, 0, h.z + 2));
+    lab.spawnFoe('mossback', new THREE.Vector3(h.x - 6, 0, h.z + 6));
     lab.spawnFoe('thornling', new THREE.Vector3(h.x - 5, 0, h.z + 4));
     G.arena.setShade(1, true);
     // (her root cage round the hero, its roots raised and closed, and her great root rising and falling on it)

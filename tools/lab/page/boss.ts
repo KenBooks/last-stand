@@ -35,6 +35,7 @@ import { branchPictures, branches, rootCost } from './bossRootBranches';
 import { rootCage, rootCagePictures } from './bossRootCage';
 import { rootSurvive, rootThreat } from './bossRootThreat';
 import { comboPictures, combos } from './bossRootCombos';
+import { podPictures } from './bossRootPods';
 
 /** The parts the command runs, in order. */
 /** the Rootmother's parts that are judged */
@@ -42,7 +43,7 @@ type RootPart = 'rootPhases' | 'vines' | 'pods' | 'heart' | 'rootBurrow' | 'bran
   | 'rootThreat' | 'rootSurvive' | 'combos';
 /** the parts that picture moments for the eye alone, asked for by name */
 type PicturePart = 'rootPictures' | 'rootLook' | 'rootBurrowPictures' | 'branchPictures' | 'rootCost'
-  | 'rootCagePictures' | 'comboPictures';
+  | 'rootCagePictures' | 'comboPictures' | 'podPictures';
 export type BossPart = 'ladder' | 'stand' | 'ttk' | EncounterPart | RootPart | PicturePart;
 // (`compiles` is one part for every boss: the encounter's and the Rootmother's, after both)
 export const BOSS_PARTS: BossPart[] = [
@@ -51,6 +52,7 @@ export const BOSS_PARTS: BossPart[] = [
 ];
 const PICTURE_PARTS: BossPart[] = [
   'rootPictures', 'rootLook', 'rootBurrowPictures', 'branchPictures', 'rootCost', 'rootCagePictures', 'comboPictures',
+  'podPictures',
 ];
 
 export interface BossOptions {
@@ -320,6 +322,7 @@ export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
       else if (part === 'rootCost') await rootCost(lab, options, lines);
       else if (part === 'rootCagePictures') moments.push(...await rootCagePictures(lab, options, lines));
       else if (part === 'comboPictures') moments.push(...await comboPictures(lab, options, lines));
+      else if (part === 'podPictures') moments.push(...await podPictures(lab, options, lines));
       else if (part in run) await run[part as keyof typeof run](lab, options, lines, problems);
       else moments.push(...await encounterPart(part as EncounterPart, lab, options, lines, problems));
     }

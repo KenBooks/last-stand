@@ -729,6 +729,8 @@ export class Enemy {
   takeDamage(amount: number, info: DamageInfo = {}): number {
     if (!this.alive) return 0;
     const before = this.life;
+    // (a foe that falls in so many hits, whatever each deals: each takes its share of its most life)
+    if (this.def.hits && amount > 0) amount = this.maxLife / this.def.hits + 1e-6;
     if (!this.meter) this.life -= amount;
     // (a boss sharing its life: its partner's follows it, entities/bossKit.ts)
     if (this.def.shares && !this.meter) shareHit(this, amount);

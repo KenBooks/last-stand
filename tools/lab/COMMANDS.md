@@ -935,8 +935,12 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   let him go within 15 frames of the loose, the bow let go 10 frames into the hold, drawn as far as it is, and the
   arrow must leave while the vine holds him (held for its whole draw it left 19 frames after the hold's own end, and
   the part passed testing nothing; `throws`' shot had the same). `pods`: her pods flung (as many as she flings, each `near` to `far` from
-  her), one left alone bursting into its brood `hatch` s after it rose (within 0.15 s), one struck by his basic
-  attack held on it popped within 3 s, nothing hatching from it. `heart`: her heart brought to open (1 s in, as its own
+  her) in her first phase and her second, as many great pods among them as `great.byPhase` says (0, then 1); for each
+  size one left alone bursting into its brood its `hatch` s after it rose (within 0.15 s: a small pod's 2 Thornlings at
+  10 s, a great pod's Mossback at 16 s, nothing else out of it), and one struck by his basic attack held on it popped
+  in its hits (1, a great pod's 5, each counted as it takes it), nothing hatching from it. Its canary has small pods
+  never hatch and a great pod hatch the small pod's brood. `podPictures` (by name): a small pod and a great one side
+  by side as the player sees them, and a great pod bursting into its Mossback. `heart`: her heart brought to open (1 s in, as its own
   45 s are too long to wait): open its `open` s (within 0.1), its banner, nothing attacked through it, `pods` pods
   flung; the spot read at points on her (in her heart its `taken`, her flank and back 1, shut 1); with a bow, in a
   second opening with her pods held back (flung between him and her, they took the arrows), two shots at her flank
