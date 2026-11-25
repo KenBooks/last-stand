@@ -14,7 +14,7 @@ import { holdHour } from '../../../src/game/clock';
 import { groundHeight } from '../../../src/world/ground';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
 import { HALL, TERRACE } from '../../../src/data/village';
-import { heroesStanding, standHeroes } from '../../../src/game/hall';
+import { heroesStanding, standHeroes, stillSaid } from '../../../src/game/hall';
 import { stillAsOne } from '../../../src/entities/models/stillAsOne';
 import { isWarm } from '../../../src/game/warm';
 import { changedShare, countedFrame, viewBy, type Counted } from './villageHallCull';
@@ -126,7 +126,8 @@ function mergeChanges(lab: Lab, canary: boolean): { saved: number; seen: number;
 
 /** What stands them: the heroes' warm-up, and how many stand on the dais. */
 function standingNow(): string {
-  return `the heroes ${isWarm('heroes') ? 'warm' : 'cold'}, ${heroesStanding().length} standing`;
+  const each = stillSaid().join('; ');
+  return `the heroes ${isWarm('heroes') ? 'warm' : 'cold'}, ${heroesStanding().length} standing: ${each}`;
 }
 
 /** How many meshes the hall's heroes are drawn with merged. */
@@ -160,13 +161,14 @@ export async function heroesStillAsOne(lab: Lab, canary: boolean): Promise<Light
         await drawnSettle(lab);
         // (the state it measures: the heroes standing still and merged by the game's own frames)
         const merged = mergedMeshes();
+        const asLeft = standingNow();
         const { saved, seen, close } = mergeChanges(lab, canary);
         read.push(`${hour}:00 ${merged} merged meshes, ${saved} draws fewer, ${percent(seen)} of pixels changed as `
           + `seen, ${percent(close)} close`);
         if (Math.max(seen, close) > MOST_CHANGED) caught = true;
         if (canary) continue;
         const at = `the hall's still heroes, ${stand.name}, at ${hour}:00`;
-        if (merged === 0) problems.push(`${at}: they weren't merged (${standingNow()})`);
+        if (merged === 0) problems.push(`${at}: they weren't merged (${asLeft})`);
         else if (saved < FEWEST_SAVED) problems.push(`${at}: merged, they're ${saved} draws fewer, not ${FEWEST_SAVED}`);
         if (seen > MOST_CHANGED) problems.push(`${at}: the frame changed`);
         if (close > MOST_CHANGED) problems.push(`${at}: they changed, close`);

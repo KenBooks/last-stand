@@ -13,10 +13,12 @@
 import * as THREE from 'three';
 import { perfClock } from '../../core/perfClock';
 
-/** Whether a still hero is drawn as a few meshes (it was WebGL's alone: off until something switches it on), read at
- *  each step. */
+/** Whether a still hero is drawn as a few meshes (`?stillAsOne=0`: each part on its own), read at each step. Off on
+ *  WebGPU while it drew a hero as one its own way (`drawAsOne.ts`), and left off when that went with three's drawing
+ *  of the scene: under the engine no hero was merged, 48 draws more from the square (`lab village --only
+ *  heroesStillAsOne`). */
 export const stillAsOne = {
-  on: false,
+  on: typeof location === 'undefined' || !/[?&]stillAsOne=0/.test(location.search),
   /** the lab's canary: normals laid as they were made, not turned as their parts are drawn (`lab village --only
    *  heroesStillAsOne`) */
   unturned: false,
@@ -361,10 +363,26 @@ export class StillAsOne {
 
   constructor(private readonly holder: THREE.Object3D) {}
 
+  /** how many times a merge was let go, and why the last was (a lab's report of a hero never merged) */
+  private undone = 0;
+  private lastUndone = '';
+  /** how many frames it was stepped */
+  private stepped = 0;
+
+  /** Where his merge stands, said: merged, under way or not begun, the parts merged, and what last let one go. */
+  said(): string {
+    const where = this.done ? 'merged' : this.steps ? 'merging' : 'not merging';
+    const why = this.undone ? `, let go ${this.undone} times (last: ${this.lastUndone})` : '';
+    const on = stillAsOne.on ? '' : ', merging held off';
+    return `${where}, ${this.merged.length} parts merged, stepped ${this.stepped} times${why}${on}`;
+  }
+
   /** The merge a slice further, or begun again once a part it was made of changed. */
   step(): void {
+    this.stepped++;
     // (read each step: the lab draws a frame merged and one not, `lab village`)
-    if (!stillAsOne.on || this.stale()) this.undo();
+    if (!stillAsOne.on) this.letGo('held off');
+    else if (this.stale()) this.letGo(this.staleWhy());
     if (!stillAsOne.on || this.done) return;
     this.steps ??= this.merge();
     const since = perfClock.now();
@@ -374,9 +392,27 @@ export class StillAsOne {
       this.steps = null;
       // (a part changed as it was merged: begun again next frame)
       if (step.value) this.done = true;
-      else this.undo();
+      else this.letGo('a part changed as it was merged');
       return;
     }
+  }
+
+  /** `undo`, counted with why, where something but his leaving lets the merge go. */
+  private letGo(why: string): void {
+    if (this.merged.length === 0 && !this.steps && !this.done) return;
+    this.undone++;
+    this.lastUndone = why;
+    this.undo();
+  }
+
+  /** Why the merge is stale: the first part merged that changed, and how. */
+  private staleWhy(): string {
+    const part = this.merged.find((one) => one.mesh.layers.mask !== 0 || changedSince(one, this.holder));
+    if (!part) return 'nothing';
+    const how = part.mesh.layers.mask !== 0 ? 'put on a layer'
+      : !shownUnder(part.mesh, this.holder) ? 'hidden'
+        : part.mesh.geometry !== part.geometry ? 'another geometry' : 'another material';
+    return `${part.mesh.name || 'a part'} ${how}`;
   }
 
   /** His parts drawn again, the merged meshes let go of; a merge under way dropped. */

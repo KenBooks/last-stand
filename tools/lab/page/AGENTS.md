@@ -162,8 +162,10 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   read again so; the switches (`materialSwitches`, `programSwitches`) stay 0. The still heroes' frames hold the sun's
   turns off (`rust.shadowTurns` 0): kept every other frame, the frames merged and apart differed by 0.5 to 1.1% with
   the heroes the same to the pixel close. Stood on the square with the heroes warm and both standing, the game never
-  merged them under the engine (0 merged meshes; merged by the check's own `standHeroes`, 48 draws fewer): not looked
-  into.
+  merged them under the engine (0 merged meshes; merged by the check's own `standHeroes`, 48 draws fewer): the merge
+  was off by default (`stillAsOne.on`, WebGL's alone, left off as WebGPU's own `drawAsOne` went), and the check's
+  noon passed only as its midnight reading's clean-up switched it on. A hero never merged is said with why
+  (`stillSaid`: shown or hidden, the merge's state, how often and why it was let go, merging held off).
 - `villageSunStep.ts`, `villageLampHandOver.ts`, `villageHeroShadow.ts`: a frame's draws are the engine's counts
   (`FrameStats.lampFaces`, `moverFaces`, `shadowDraws`, `shadowTriangles`); a map drawn whole is told from the movers
   over a copy by its triangles, the draws alike as the idling hero is among the movers. The moon's map at midnight was
