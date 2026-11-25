@@ -12,7 +12,7 @@ import { ABANDON_HOLD_MS, PAUSE_TAB_COOKIE, pauseTab, showPause, type PauseTab }
 import { audioContext, musicOutput, setVolumes } from '../../../src/core/audio';
 import { readCookie, removeCookie, writeCookie } from '../../../src/core/cookies';
 import { G } from '../../../src/state';
-import { heroColour } from '../../../src/data/heroColours';
+import * as colourData from '../../../src/data/heroColours';
 import { savedColour } from '../../../src/net/heroColour';
 import * as colourSession from '../../../src/net/session';
 import type { HeroColourId } from '../../../src/data/heroColours';
@@ -321,13 +321,49 @@ function playersPauseShown(tab: PauseTab): PauseFound {
   return { lines, problems };
 }
 
+/** where on the wheel's disc a pick is made: a share of its radius out from the middle, to the right (hue 0) */
+const WHEEL_OUT = 0.6;
+
+/** The colour wheel (#732) opened by its button in Settings and a colour picked on its disc as a player does: it must
+ *  be a wheel's colour (`#rrggbb`), saved, worn and lit on the button, the panel within the menu. None in a tree
+ *  from before it. */
+async function wheelPicked(lab: Lab, picker: HTMLElement, found: PauseFound): Promise<void> {
+  const open = picker.querySelector<HTMLButtonElement>('.cc-wheel-open');
+  if (!open) return;
+  const touch = document.body.classList.contains('touch');
+  if (touch) await lab.tap(middleOf(open));
+  else await lab.clickOn(open);
+  const disc = picker.querySelector<HTMLCanvasElement>('.cc-wheel canvas');
+  if (!disc?.checkVisibility()) {
+    found.problems.push('settings: the colour wheel did not open');
+    return;
+  }
+  const box = disc.getBoundingClientRect();
+  const at = { x: box.left + box.width / 2 * (1 + WHEEL_OUT), y: box.top + box.height / 2 };
+  if (touch) await lab.tap(at);
+  else await lab.click(at);
+  const worn = savedColour();
+  const wheels = typeof worn === 'string' && worn.startsWith('#');
+  if (!wheels || G.player.colour !== worn) found.problems.push(`settings: the wheel's pick was not saved and worn (${worn})`);
+  if (!open.classList.contains('cc-worn')) found.problems.push('settings: the wheel button not lit with its colour');
+  const menu = picker.closest<HTMLElement>('.modal-box')?.getBoundingClientRect();
+  const panel = picker.querySelector<HTMLElement>('.cc-wheel')!.getBoundingClientRect();
+  if (menu && (panel.bottom > menu.bottom || panel.right > menu.right)) {
+    found.problems.push('settings: the colour wheel reaches past the menu');
+  }
+  found.lines.push(`  colour wheel: opened, ${wheels ? `${worn} picked on its disc, saved and worn` : 'nothing picked'}`);
+  if (touch) await lab.tap(middleOf(open));
+  else await lab.clickOn(open);
+}
+
 /** Single-player colour controls are reachable in Settings, saved and applied to the actual hero. */
 export async function pauseColourChecked(lab: Lab): Promise<PauseFound> {
   const found = pauseShown('settings');
   const picker = document.getElementById('hero-colour-settings');
   if (!picker) return { ...found, problems: [...found.problems, 'settings: no solo colour picker in this tree'] };
   const swatches = [...picker.querySelectorAll<HTMLButtonElement>('.cc-swatch')];
-  if (swatches.length !== 13) found.problems.push('settings: expected twelve colours and Any');
+  const shown = colourData.HERO_COLOURS.length;
+  if (swatches.length !== shown + 1) found.problems.push(`settings: expected ${shown} colours and Any`);
   for (const button of swatches) {
     const box = button.getBoundingClientRect();
     const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
@@ -338,14 +374,15 @@ export async function pauseColourChecked(lab: Lab): Promise<PauseFound> {
   }
   const previous = savedColour();
   try {
-    const teal = picker.querySelector<HTMLButtonElement>('[data-colour="teal"]')!;
-    if (document.body.classList.contains('touch')) await lab.tap(middleOf(teal));
-    else await lab.clickOn(teal);
-    if (savedColour() !== 'teal' || G.player.colour !== 'teal' || teal.getAttribute('aria-checked') !== 'true') {
+    const purple = picker.querySelector<HTMLButtonElement>('[data-colour="purple"]')!;
+    if (document.body.classList.contains('touch')) await lab.tap(middleOf(purple));
+    else await lab.clickOn(purple);
+    if (savedColour() !== 'purple' || G.player.colour !== 'purple' || purple.getAttribute('aria-checked') !== 'true') {
       found.problems.push('settings: solo colour was not applied, kept and selected');
     }
-    if (!heroColour(G.player.colour)) found.problems.push('settings: no valid worn colour');
-    found.lines.push('  solo colour: twelve swatches and Any reachable; Teal clicked, saved and worn');
+    if (!colourData.heroColour(G.player.colour)) found.problems.push('settings: no valid worn colour');
+    found.lines.push(`  solo colour: ${shown} swatches and Any reachable; Purple clicked, saved and worn`);
+    await wheelPicked(lab, picker, found);
   } finally {
     (colourSession as { chooseColour?: (id: HeroColourId | null) => void }).chooseColour?.(previous);
   }

@@ -3,8 +3,11 @@
 // Each is the main cloth's colour (HSL, sRGB); the hero's other
 // dyed cloths keep their shade against it (models/dye.ts). A class's own colour is its look as built, untouched.
 
-export type HeroColourId = 'red' | 'blue' | 'green' | 'gold' | 'purple' | 'white'
+/** A preset's id. */
+export type PresetColourId = 'red' | 'blue' | 'green' | 'gold' | 'purple' | 'white'
   | 'orange' | 'teal' | 'cyan' | 'rose' | 'brown' | 'black';
+/** A colour's id: a preset's, or a colour picked on the wheel as its hex (`#rrggbb`, lower case: `customColour`). */
+export type HeroColourId = PresetColourId | `#${string}`;
 
 export interface HeroColour {
   id: HeroColourId;
@@ -35,5 +38,50 @@ export const HERO_COLOURS: readonly HeroColour[] = [
   { id: 'black', name: 'Black', hsl: [0.61, 0.1, 0.12], swatch: '#30333b' },
 ];
 
+/** How far a wheel's colour is let go as cloth: its saturation at most, and its lightness between (judged as the
+ *  presets were: saturated past 0.65 the cloth looked plastic beside the game's muted cloth, and the presets' own
+ *  lightness runs 0.12 to 0.66) */
+export const CUSTOM_RANGE = { saturation: 0.65, light: [0.12, 0.66] as const };
+
+/** A wheel's colour's id, as `#rrggbb` (lower case). */
+const CUSTOM_ID = /^#[0-9a-f]{6}$/;
+
+/** `hex` (`#rrggbb`) as hue, saturation and lightness (0..1), or null. */
+export function hexToHsl(hex: string): [number, number, number] | null {
+  if (!CUSTOM_ID.test(hex)) return null;
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const most = Math.max(r, g, b);
+  const least = Math.min(r, g, b);
+  const l = (most + least) / 2;
+  const d = most - least;
+  if (d === 0) return [0, 0, l];
+  const s = d / (1 - Math.abs(2 * l - 1));
+  const h = most === r ? ((g - b) / d + 6) % 6 : most === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h / 6, s, l];
+}
+
+/** Hue, saturation and lightness (0..1) as `#rrggbb`. */
+export function hslToHex(h: number, s: number, l: number): string {
+  const k = (n: number): number => (n + h * 12) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number): number => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+  return `#${[f(0), f(8), f(4)].map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** A colour picked on the wheel at hue `h`, saturation `s` and lightness `l` (0..1), held within the cloth's range
+ *  (`CUSTOM_RANGE`): its id is its hex, so it's kept, sent and compared as a preset's id is. */
+export function customColourId(h: number, s: number, l: number): HeroColourId {
+  const [low, high] = CUSTOM_RANGE.light;
+  return hslToHex(h, Math.min(s, CUSTOM_RANGE.saturation), Math.min(high, Math.max(low, l))) as HeroColourId;
+}
+
+/** The colour a `#rrggbb` id names, held within the cloth's range, or null. */
+function customColour(id: string): HeroColour | null {
+  const hsl = hexToHsl(id);
+  if (!hsl) return null;
+  const held = customColourId(...hsl);
+  return { id: held, name: 'Custom', hsl: hexToHsl(held)!, swatch: held };
+}
+
 export const heroColour = (id: string | null | undefined): HeroColour | null =>
-  HERO_COLOURS.find((c) => c.id === id) ?? null;
+  HERO_COLOURS.find((c) => c.id === id) ?? (typeof id === 'string' ? customColour(id) : null);

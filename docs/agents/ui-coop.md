@@ -10,11 +10,19 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 - **The watching bar** (`#spectate`, `coop.ts` `bindSpectate`, `game/spectate.ts`): out of a co-op run, at the top of the HUD, in one row, the previous partner's button, who is watched (or the free camera), the next's and Free camera / Follow, each the touch path of a key (the camera turns by two fingers twisted, as everywhere on touch: from play, "rotation of the camera should be done using regular controls on touch, why we need buttons?"); on desktop a line of the keys under them (LMB next, RMB previous, Q / E turn, F free camera; flying, WASD), hidden on touch. Its buttons are a finger's 40 css px at least and laid out alike whatever the pointer: sized for touch alone, a first tap on a screen with a mouse too put the page in touch mode as it went down and laid the bar out again under the finger, its click landing on another button. Its icons drawn (‹ and › as text were a third of the turns' size). Check with `npm run lab -- coop` (`--party 4`, `--pictures`: `out/coop/watching-bar-<n>.png`): each button tapped, the bar fitted on a desktop's, phones' and tablets' screens, within the window, over no part of the HUD (two rows on an upright tablet lay over the partners' frames) and no further than 40% down, over the hero it follows.
 - **The players' name tags** (`updateNameTags` in `coop.ts`, every frame in a room): over every hero in the room, our own too, in the lobby and in a run, the name over its life bar; none over a hero away in the other place, hidden (the hall of heroes hides the partners: `game/hall.ts` every frame, as a partner joining or reset was shown again among its heroes, and a hidden partner plays no casts, `Player.replay`), fallen, or our own through our eyes. From play: "name tags should be visible above other players in lobby, and above me as well". `npm run lab -- coop` holds every hero each game shows to its tag drawn, every frame of the scenarios and the lobby after them, and opens the host's hall of heroes as the others cast in their lobbies.
 - **The hero's colour is picked in Settings and Play together** (`colourPicker.ts`, `net/heroColour.ts`): twelve
-  colours and Any, worn at once solo and kept. In a room available swatches ask the host for a live change;
+  colours, Any and the colour wheel (#732, from the owner: "More niche colours can be selected using the colour
+  wheel"; the twelve kept, from review: "Lets keep the original colors, they were tested and look good"): its button, a
+  ring of hues (in Settings beside the label: after Any, on a phone held sideways the touch swatches filled their row and
+  it took a row of its own, the tab scrolling; in Play together after Any), opens a disc of
+  hue round and saturation out and a slider of lightness under the swatches, the colour picked as the pointer lifts off
+  the disc or the slider is let go (a party's host asked once a pick), held to what reads as cloth (`CUSTOM_RANGE` in
+  `data/heroColours.ts`: saturation 0.65 at most, lightness 0.12 to 0.66, as the presets' own run); its id is its
+  `#rrggbb`, kept, sent and compared as a preset's (the protocol's part `colour-wheel-1`), the wheel's button lit with
+  one worn. All of them worn at once solo and kept. In a room available swatches ask the host for a live change;
   occupied colours are disabled and a conflicting in-flight request keeps the existing colour. Settings refreshes
   the checked/disabled state in place so a party update does not replace a focused control. Touch swatches are
   40 actual css pixels after UI zoom. The Settings palette spans both columns; a short touch screen's co-op dialog
-  uses the available width so twelve touch targets fit without hiding Host/Join. On short screens the colours come under Host and Join
+  uses the available width so the touch targets fit without hiding Host/Join. On short screens the colours come under Host and Join
   (`order`): their row pushed Open a room under the fold of a phone held sideways asked to rename. Check with
   `npm run lab -- ui --states coop,coopRename,coopTouch` at each screen `src/ui/AGENTS.md` lists (`page/uiCoop.ts`: every swatch found
   at its middle, scrolled to as a player scrolls; gold clicked and blue tapped on touch: marked alone, kept, and the
