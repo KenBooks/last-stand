@@ -963,7 +963,7 @@ function sightEyeZ(x: number, z: number): number {
   }
   return HALL.door + (eyeInside ? -SIGHT_DOOR_HOLD : SIGHT_DOOR_HOLD);
 }
-/** how far a wall before him thins by the door: at 72% he stood dim behind it, a figure in the dark (`hallWallsOneByOne`) */
+/** how far a wall before him thins by the door: at 72% he stood dim behind it, a figure in the dark (the retired `hallWallsOneByOne`) */
 const WALL_GHOST = 0.85;
 /** how far the hall's walls and columns thin where they hide the floor he sees from above (`hallSightCone`): at the
  *  walls' own ghost the building was all but gone, from play, "I cannot see a corner here, bug ?" */

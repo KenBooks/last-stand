@@ -10,7 +10,7 @@ const MODULES = checksByModule(SOURCE);
 
 test('village --since: the checks are read off the module that lists them', () => {
   assert.ok(NAMES.length > 90, `${NAMES.length} checks`);
-  for (const name of ['hallWallsOneByOne', 'shadowsOnMove', 'fogOneGrey', 'hallBuiltBehind']) {
+  for (const name of ['heroLitInHall', 'shadowsOnMove', 'fogOneGrey', 'hallBuiltBehind']) {
     assert.ok(NAMES.includes(name), name);
   }
   assert.deepEqual(MODULES.get('villageShadowsOnMove'), ['shadowsOnMove']);

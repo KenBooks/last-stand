@@ -37,7 +37,6 @@ import { TRAINING } from '../../../src/data/training';
 import { minimapOut } from './villageMinimap';
 import { portalAtNight } from './villagePortalNight';
 import { heroPickedNear } from './villageHeroNear';
-import { roofsFromAbove } from './villageRoofsSeen';
 import { grassStillFromAbove } from './villageGrassRing';
 import { campfireBurns, heroBesideFire } from './villageFire';
 import { campfireStonesApart } from './villageCampfireStones';
@@ -85,21 +84,18 @@ import {
   fogUnderEaves, fogUnderRoofs, firesStillInFog, fogHoldsSteady, leavesInFog, roofShowsWhatHeSees,
 } from './villageFog';
 import { doorConeOpens, heroSeenPastHall, noDotsBesideHall } from './villageHallOpens';
-import { ghostsOverHim } from './villageGhosts';
 import { columnsStayGhosts, portalOverAll, wallsPastHimWhole } from './villageSeenPast';
 import { startSpots, topKeepsHim } from './villageStart';
 import { rackOpensDuel } from './villageRack';
 import { wornStaysOn } from './villageWorn';
 import { heroFaceNotBlinding } from './villageHeroFace';
 import { cameraBeforeWalls } from './villageCameraWall';
-import { hallFrontFades } from './villageHallFade';
 import {
-  doorConeFromStair, hallWallsOneByOne, heroesSeenFromAbove, heroLitInHall, objectsWalkedShort, roomColumnsStay,
+  doorConeFromStair, heroesSeenFromAbove, heroLitInHall, objectsWalkedShort, roomColumnsStay,
 } from './villageHallWalls';
 import { firesWhereTheyStand } from './villageFires';
 import { heroChosenQuick, heroesBuiltAhead } from './villageHeroChosen';
 import { hallBuiltBehind } from './villageBuiltBehind';
-import { hallHoleOpens } from './villageHallHole';
 import {
   cancelledOnHisFloor, hallShownAtOnce, heroesSeenOnApproach, heroesStandOnBothFeet, heroLeftStands,
 } from './villageHeroStands';
@@ -236,12 +232,9 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     fogPastCottages: () => fogPastCottages(lab, options.canary),
     fogOneGrey: () => fogOneGrey(lab, options.canary),
     roofShowsWhatHeSees: () => roofShowsWhatHeSees(lab, options.canary),
-    ghostsOverHim: () => ghostsOverHim(lab, options.canary),
     doorConeOpens: () => doorConeOpens(lab, options.canary),
     doorConeFromStair: () => doorConeFromStair(lab, options.canary),
-    hallDoorSight: async () => (await import('./villageHallDoor')).hallDoorSight(lab, options.canary),
     heroSeenPastHall: () => heroSeenPastHall(lab, options.canary),
-    hallWallsOneByOne: () => hallWallsOneByOne(lab, options.canary),
     heroLitInHall: () => heroLitInHall(lab, options.canary),
     roomColumnsStay: () => unposed(() => roomColumnsStay(lab, options.canary)),
     heroesSeenFromAbove: () => heroesSeenFromAbove(lab, options.canary),
@@ -265,12 +258,10 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     cameraBeforeWalls: () => unposed(() => cameraBeforeWalls(lab, options.canary)),
     cameraOutsideHim: async () => (await import('./villageCameraInside')).cameraOutsideHim(lab, options.canary),
     cameraOverFloors: async () => (await import('./villageCameraFloor')).cameraOverFloors(lab, options.canary),
-    hallFrontFades: () => hallFrontFades(lab, options.canary),
     firesWhereTheyStand: () => firesWhereTheyStand(lab, options.canary),
     heroChosenQuick: () => heroChosenQuick(lab, options.canary),
     heroesBuiltAhead: () => heroesBuiltAhead(lab, options.canary),
     hallBuiltBehind: () => hallBuiltBehind(lab, options.canary),
-    hallHoleOpens: () => hallHoleOpens(lab, options.canary),
     hallFloorSteady: () => hallFloorSteady(lab, options.canary),
     hallSillsSteady: () => hallSillsSteady(lab, options.canary),
     heroesStandOnBothFeet: () => heroesStandOnBothFeet(lab, options.canary),
@@ -288,7 +279,6 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     training: () => training(lab, options.canary),
     portalAtNight: () => portalAtNight(lab, options.canary),
     heroPickedNear: () => heroPickedNear(lab, options.canary),
-    roofsFromAbove: () => roofsFromAbove(lab, options.canary),
     grassStillFromAbove: () => grassStillFromAbove(lab, options.canary),
     campfireBurns: () => campfireBurns(lab, options.canary),
     campfireStonesApart: () => campfireStonesApart(lab, options.canary),

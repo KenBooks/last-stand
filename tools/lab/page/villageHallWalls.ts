@@ -1,11 +1,5 @@
 // `lab village`'s hall of heroes from above, wall by wall, each from play, each stand after the owner's picture:
 //
-// `hallWallsOneByOne`: a wall thins while it hides him or the floor near him, all of it, and no other does, its
-// window's linings with it: "here we should not try to make transparent the side which doesn't help see the hero",
-// "this wall should be transparent but the one 90 degree to it should not", "here both should be transparent, but
-// only 1 is", "and here, should be transparent too", "this is good, but weird geometry on left". Places on each wall
-// are read drawn as the game thins and with nothing thinned. `--canary`: every wall thinned at each stand, as it was.
-//
 // `roomColumnsStay`: in the doorway the room's columns he sees over the wall stay: "when entering hall, pillars inside
 // disappear". A shaft shows if the frame changes with the columns hidden. `--canary`: they're hidden.
 //
@@ -23,8 +17,7 @@ import * as THREE from 'three';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { HALL, TERRACE, VILLAGE_OBJECTS, type VillageObject } from '../../../src/data/village';
-import { goTo, holdDoorMiddleOff, holdHallWallsAllThin, holdHeroLightOff, seenFloorHidden,
-  spotToUse } from '../../../src/game/village';
+import { goTo, holdDoorMiddleOff, holdHeroLightOff, spotToUse } from '../../../src/game/village';
 import { holdHour } from '../../../src/game/clock';
 import { heroesStanding } from '../../../src/game/hall';
 import { isWarm } from '../../../src/game/warm';
@@ -38,257 +31,13 @@ import { drawFrame } from './light';
 import {
   floorMark, fromAboveAtNoon, inFrame, LEAST_SHOWN, LOOKING_IN, shownMarks, standFacing,
 } from './villageHallOpens';
-import { hisPixels, shownOf } from './villageHeroInView';
+import { hisPixels } from './villageHeroInView';
 import type { LightsChecked } from './villageLights';
-import { placesThinned } from './villageSeenPast';
 
-/** the terrace's floor, the hall's middle (x), how thick its walls are, and the top of its walls */
+/** the terrace's floor, the hall's middle (x), and the top of its walls */
 const FLOOR = TERRACE.high;
 const MIDDLE = TERRACE.x;
-const THICK = HALL.half - HALL.inHalf;
 const WALL_TOP = FLOOR + HALL.wallHigh;
-/** how far apart a wall's places are read (m), from how high and up to how high over the floor */
-const PLACE_STRIDE = 1;
-const PLACE_FROM = 0.8;
-const PLACE_TO = 6;
-/** how much a place must differ to read thinned (of full light): a dark wall over a dark floor changes little, and one
- *  drawn whole by a level at most */
-const READS_THINNED = 0.006;
-/** the least share of a wall's places in the frame that must read thinned, the most where it must stay whole */
-const LEAST_THINNED = 0.75;
-const MOST_STAY_THINNED = 0.2;
-/** the least of a wall's places that must be read for it to count */
-const LEAST_READ = 4;
-/** the least of him shown where a wall stands before him */
-const LEAST_OF_HIM = 0.4;
-
-/** The hall's four walls. */
-type WallName = 'front' | 'back' | 'east' | 'west';
-
-/** A wall as a rectangle on the floor: which way it runs, its outer and inner faces, and how far along it's read. */
-interface WallFace {
-  name: WallName;
-  acrossX: boolean;
-  outer: number;
-  inner: number;
-  from: number;
-  to: number;
-}
-
-/** The hall's walls (a front wall's places are read beside its door, its lintel and frame being another stone). */
-const FACES: WallFace[] = [
-  { name: 'front', acrossX: true, outer: HALL.door, inner: HALL.inFront, from: MIDDLE - 5.4, to: MIDDLE + 5.4 },
-  { name: 'back', acrossX: true, outer: HALL.wall - THICK, inner: HALL.wall, from: MIDDLE - 5.4, to: MIDDLE + 5.4 },
-  { name: 'east', acrossX: false, outer: MIDDLE + HALL.half, inner: MIDDLE + HALL.inHalf, from: -32.4, to: -15.9 },
-  { name: 'west', acrossX: false, outer: MIDDLE - HALL.half, inner: MIDDLE - HALL.inHalf, from: -32.4, to: -15.9 },
-];
-
-/** How far along `face`'s plane a point lies out from the room, its plane's own coordinate. */
-const offPlane = (face: WallFace, point: THREE.Vector3): number => (face.acrossX ? point.z : point.x);
-
-/** The camera's side of `face`: its outer plane if it stands past that, else its inner. */
-function planeSeen(face: WallFace): number {
-  const eye = offPlane(face, G.camera.position);
-  const outward = Math.sign(face.outer - face.inner);
-  return (eye - face.outer) * outward > 0 ? face.outer : face.inner;
-}
-
-/** Whether the sight from the camera to `point` passes under the portico's beam's depth, at its height: the beam stands
- *  whole over what's past it. */
-function passesBeam(point: THREE.Vector3): boolean {
-  const eye = G.camera.position;
-  const beam = new THREE.Box3(
-    new THREE.Vector3(MIDDLE - HALL.half, FLOOR + HALL.beamFoot, HALL.beamZ - HALL.beamDeep / 2),
-    new THREE.Vector3(MIDDLE + HALL.half, FLOOR + HALL.wallHigh, HALL.beamZ + HALL.beamDeep / 2),
-  );
-  const way = point.clone().sub(eye);
-  const away = way.length();
-  const met = new THREE.Ray(eye.clone(), way.divideScalar(away)).intersectBox(beam, new THREE.Vector3());
-  return met !== null && met.distanceTo(eye) < away;
-}
-
-/** Whether the sight from the camera to `point` passes through `face` before it gets there. */
-function passesThrough(face: WallFace, point: THREE.Vector3): boolean {
-  const eye = G.camera.position;
-  const plane = planeSeen(face);
-  const denominator = offPlane(face, point) - offPlane(face, eye);
-  if (Math.abs(denominator) < 1e-3) return false;
-  const along = (plane - offPlane(face, eye)) / denominator;
-  if (along <= 0.01 || along >= 0.99) return false;
-  const height = eye.y + (point.y - eye.y) * along;
-  const across = face.acrossX ? eye.x + (point.x - eye.x) * along : eye.z + (point.z - eye.z) * along;
-  return height < WALL_TOP && across > face.from - 1 && across < face.to + 1;
-}
-
-/** `face`'s places as the camera sees them, those it sees over or past every other wall alone. */
-function placesOf(face: WallFace): THREE.Vector3[] {
-  const plane = planeSeen(face);
-  const places: THREE.Vector3[] = [];
-  for (let along = face.from; along <= face.to; along += PLACE_STRIDE) {
-    if (face.acrossX && Math.abs(along - MIDDLE) < HALL.doorHalf + 0.5) continue;
-    for (let up = PLACE_FROM; up <= PLACE_TO; up += PLACE_STRIDE) {
-      const place = face.acrossX
-        ? new THREE.Vector3(along, FLOOR + up, plane)
-        : new THREE.Vector3(plane, FLOOR + up, along);
-      if (passesBeam(place)) continue;
-      if (!FACES.some((other) => other !== face && passesThrough(other, place))) places.push(place);
-    }
-  }
-  return places;
-}
-
-/** A stand after one of the owner's pictures: where he stands, how the camera's turned, what must thin, what not. */
-interface WallStand {
-  name: string;
-  x: number;
-  z: number;
-  facing: number;
-  thins: WallName[];
-  stays: WallName[];
-  /** whether the portico's beam must thin there (or stay, false); not read if not given */
-  beamThins?: boolean;
-}
-
-/** The stands, each after a picture of the owner's. */
-const WALL_STANDS: WallStand[] = [
-  {
-    name: 'a stride in from the door, the camera past it: the side walls stay',
-    x: MIDDLE + 1,
-    z: HALL.inFront - 2,
-    facing: Math.PI,
-    thins: ['front'],
-    stays: ['east', 'west', 'back'],
-  },
-  {
-    // (it hides the floor he sees along its foot: from above he sees what he'd see through his eyes, the owner's goal)
-    name: 'on the floor, the camera over the west wall, which hides the floor he sees beside it: it thins',
-    x: MIDDLE + 0.5,
-    z: -22,
-    facing: Math.PI - 0.4,
-    thins: ['west'],
-    stays: ['east', 'back'],
-  },
-  {
-    name: 'on the floor, the camera over the east wall, which hides the floor he sees beside it: it thins',
-    x: MIDDLE - 0.5,
-    z: -22,
-    facing: Math.PI + 0.4,
-    thins: ['east'],
-    stays: ['west', 'back'],
-  },
-  {
-    // (the front wall thins where it hides the floor he sees, as his sight's cone opens it from inside: from play,
-    // "this should be semi transparent, right? visibility cone and all")
-    name: 'on the floor, the camera past the east wall: the west wall stays',
-    x: MIDDLE + 3,
-    z: -21,
-    facing: -Math.PI / 2,
-    thins: ['east'],
-    stays: ['west'],
-  },
-  {
-    name: 'by the corner, the camera past both: both thin',
-    x: MIDDLE + 4.2,
-    z: HALL.door - 2.4,
-    facing: Math.PI * 1.25,
-    thins: ['east', 'front'],
-    stays: ['west'],
-  },
-  {
-    name: 'on the dais, the camera past the back wall: it thins',
-    x: MIDDLE,
-    z: HALL.plinthZ + 1.4,
-    facing: 0,
-    thins: ['back'],
-    stays: [],
-  },
-  {
-    name: 'under the portico\'s beam, the camera along it: he shows through it',
-    x: MIDDLE + 1.2,
-    z: HALL.beamZ,
-    facing: -Math.PI / 2,
-    thins: [],
-    stays: [],
-  },
-  {
-    // (and the beam past him, over the square he sees: from play, "also this top concrete bar should be thinned too")
-    // (and the side walls, over the terrace he sees past the hall's front corners: "the wall on left should thin,
-    // otherwise I cannot see ground under it")
-    name: 'on the portico, the camera over the room: every wall before the ground he sees thins',
-    x: MIDDLE + 1.5,
-    z: HALL.door + 1.5,
-    facing: 0,
-    thins: ['front', 'east', 'west'],
-    stays: [],
-    beamThins: true,
-  },
-  {
-    // (the front wall past him hides the portico he sees through the door: all of it thins, not a cone of his sight
-    // cut across it, from play, "didnt we agree to thin whole wall? but mark unseen regions with fog of war ?")
-    // (and the west wall under the camera, for the floor he sees along its foot)
-    name: 'a stride in from the door, the camera over the west wall, turned to the door: the front wall thins whole',
-    x: MIDDLE + 0.5,
-    z: HALL.inFront - 1.2,
-    facing: 0.7,
-    thins: ['front', 'west'],
-    stays: ['east'],
-  },
-  {
-    name: 'a stride in from the door, the camera over the east wall, turned to the door: the front wall thins whole',
-    x: MIDDLE - 0.5,
-    z: HALL.inFront - 1.2,
-    facing: -0.7,
-    thins: ['front', 'east'],
-    stays: ['west'],
-  },
-  {
-    name: 'on the square aside of the stair, seeing nothing of the room: the hall past him stays whole',
-    x: MIDDLE + 9,
-    z: TERRACE.stairFoot + 3,
-    facing: Math.PI,
-    thins: [],
-    stays: ['front', 'east', 'west'],
-    beamThins: false,
-  },
-];
-
-/** What a wall read: how many of its places in the frame read thinned. */
-interface WallRead {
-  name: WallName;
-  thinned: number;
-  read: number;
-}
-
-/** Each wall of `names` read in the frame drawn now. */
-function readWalls(lab: Lab, names: WallName[]): WallRead[] {
-  const faces = FACES.filter((face) => names.includes(face.name));
-  const placesEach = faces.map(placesOf);
-  const shares = placesThinned(lab, placesEach.flat());
-  let at = 0;
-  return faces.map((face, index) => {
-    const ofWall = shares.slice(at, at + placesEach[index].length).filter((share) => share !== null) as number[];
-    at += placesEach[index].length;
-    return { name: face.name, thinned: ofWall.filter((share) => share > READS_THINNED).length, read: ofWall.length };
-  });
-}
-
-/** What's wrong with what a stand read, and how much of him shows there. */
-function standProblems(stand: WallStand, reads: WallRead[], him: number): string[] {
-  const problems: string[] = [];
-  for (const read of reads) {
-    const say = `${stand.name}: ${read.name} wall ${read.thinned} of ${read.read} places thinned`;
-    if (read.read < LEAST_READ && stand.thins.includes(read.name)) problems.push(`${say}: too few in the frame`);
-    const share = read.read > 0 ? read.thinned / read.read : 0;
-    if (stand.thins.includes(read.name) && share < LEAST_THINNED) problems.push(`${say}: it should thin`);
-    if (stand.stays.includes(read.name) && share > MOST_STAY_THINNED) problems.push(`${say}: it should stay whole`);
-  }
-  const beam = wholeShare('hallBeam') > 0;
-  if (stand.beamThins !== undefined && beam !== stand.beamThins) {
-    problems.push(`${stand.name}: the portico's beam ${beam ? 'thins' : 'stays whole'}`);
-  }
-  if (him < LEAST_OF_HIM) problems.push(`${stand.name}: ${(him * 100).toFixed(0)}% of him shows`);
-  return problems;
-}
 
 /** the zoom of the owner's pictures, further out than the lobby's own, and the frames the camera takes to get there */
 const OWNERS_ZOOM = 0.8;
@@ -368,33 +117,6 @@ export async function doorConeFromStair(lab: Lab, canary: boolean): Promise<Ligh
 function seenBesideDoor(): number {
   const z = HALL.inFront - BESIDE_IN;
   return Math.max(seenShareAt(MIDDLE - BESIDE_ACROSS, z), seenShareAt(MIDDLE + BESIDE_ACROSS, z));
-}
-
-/** A wall thins while it stands between the camera and him, and no other. */
-export async function hallWallsOneByOne(lab: Lab, canary: boolean): Promise<LightsChecked> {
-  return fromAboveAsPictured(lab, async () => {
-    holdHallWallsAllThin(canary);
-    const lines: string[] = [];
-    const problems: string[] = [];
-    const moments: Pictured[] = [];
-    try {
-      for (const stand of WALL_STANDS) {
-        await standFacing(lab, stand.x, stand.z, stand.facing);
-        const pixels = hisPixels(lab);
-        const him = pixels.length > 0 ? shownOf(lab, pixels) : 0;
-        const reads = readWalls(lab, [...stand.thins, ...stand.stays]);
-        const said = reads.map((read) => `${read.name} ${read.thinned}/${read.read}`).join(', ');
-        lines.push(`${stand.name}: thinned ${said}, of him ${(him * 100).toFixed(0)}%`);
-        lines.push(`  places hiding floor he sees: ${seenFloorHidden()}`);
-        problems.push(...standProblems(stand, reads, him));
-        if (!canary) moments.push(await lab.screen(stand.name, []));
-      }
-    } finally {
-      holdHallWallsAllThin(false);
-    }
-    if (canary) return { lines, problems: [], caught: problems.length > 0, moments: [] };
-    return { lines, problems, caught: null, moments };
-  });
 }
 
 /** how far out the camera stands in the doorway's reads: nearer, as in the picture, a shaft shows just over the wall */

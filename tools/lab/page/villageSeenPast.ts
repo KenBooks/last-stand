@@ -92,7 +92,7 @@ function stands(): Stand[] {
       past: [...backWall, ...backColumns],
     },
     // (well aside of the door: nearer it he sees into the room, and the wall over that floor thins whole for it,
-    // `hallWallsOneByOne`)
+    // the retired `hallWallsOneByOne`)
     { name: 'on the portico before the front wall', x: x + 4.6, z: HALL.door + 1.4, facing: north, past: frontWall },
     {
       name: 'before a cottage\'s front',
@@ -164,25 +164,6 @@ function readStand(lab: Lab, stand: Stand): { wrong: number; read: number; worst
     places.push(`${point.x.toFixed(1)},${point.y.toFixed(1)},${point.z.toFixed(1)} ${(share * 100).toFixed(0)}%`);
   }
   return { wrong, read, worst, places: places.join('; ') };
-}
-
-/** How far each of `points` differs thinned as the game thins from nothing thinned, the hall's columns out of both
- *  frames: of full light, null off the frame. */
-export function placesThinned(lab: Lab, points: THREE.Vector3[]): (number | null)[] {
-  hideHallColumns(true);
-  const canvas = drawFrame(lab);
-  const thinned = canvas.pixels.slice();
-  const giveBack = nothingThinned();
-  const whole = drawFrame(lab).pixels;
-  giveBack();
-  hideHallColumns(false);
-  return points.map((point) => {
-    const pixel = pixelOf(point, canvas.width, canvas.height);
-    if (pixel === null) return null;
-    let differs = 0;
-    for (let part = 0; part < 3; part++) differs += Math.abs(thinned[pixel + part] - whole[pixel + part]);
-    return differs / 3;
-  });
 }
 
 /** From above, what stands past him is drawn whole. */
