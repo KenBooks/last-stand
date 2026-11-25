@@ -1,8 +1,9 @@
 // `lab village --only grassOnLow`: the grass as Low draws it against High, in the lobby's view and over the shoulder
 // (from play, an S25 Edge's Profile at full res: the grass 21 ms of an 80 ms frame; the owner's choice, "Keep cheaper
 // grass"). Low spreads the blades twice as far apart, each twice as wide (`grassSpread`, `setGrassSpread` in
-// meadow.ts): the vertices the grass's rings shade a frame are counted on each level, from the counts each ring lists
-// as it's drawn, and Low must shade at most a third of High's; the switch, there and back, must compile no program.
+// meadow.ts): the vertices the grass shades a frame are counted on each level, those its rings list at the share of
+// blades the engine's pass keeps (Bulwark's gpu/placed.rs: counted as listed, they read the blades it drops too, Low
+// 191% of High from above), and Low must shade at most a third of High's; the switch, there and back, must compile no program.
 // Very low spreads them four times as far (from play, a laptop's integrated GPU at 5 frames a second over the shoulder
 // with a sixteenth of its pixels drawn: the grass was 296k of the frame's 534k triangles) and must shade at most a
 // tenth of High's. Each is pictured. `canary` leaves the blades as close as High's on Low, which must be found.
@@ -15,7 +16,7 @@ import { qualityLevel, useQuality } from '../../../src/core/quality';
 import { setGrassSpread } from '../../../src/world/meadow';
 import { drawFrame } from './light';
 import { viewBy } from './villageHallCull';
-import { grassVertices } from './grassCount';
+import { grassShaded } from './grassCount';
 import type { LightsChecked } from './villageLights';
 import { PIPELINES } from '../../../src/engine/pipelinesAside';
 import { plainMade } from './villageBloomLow';
@@ -28,8 +29,11 @@ const SETTLE = 30;
 /** the most vertices the grass may shade a frame on each level, in either view (from play, "we need below 1M tris on
  *  high" for the whole frame): High's tufts are a card each, so its count is no longer the most of the three, and Low
  *  and Very low are held to their own (Low drew 502k over the shoulder and Very low 131k before the tiles were made
- *  fine) */
-const MOST = { high: 420_000, low: 360_000, verylow: 95_000 };
+ *  fine). Read again on 2026-11-25 under the engine, its pass's blades kept, at some 15% over what it shades: High
+ *  636k over the shoulder, Low 481k, Very low 280k, Very low's lawn thinned half as hard since 63dda4ab6 (from play,
+ *  "why I see different grass on very low?": it kept every blade within 4 m alone, clumps on bare ground), and High's
+ *  and Low's blades as many a cell, High's in tufts (three's budgets were 420k, 360k and 95k) */
+const MOST = { high: 730_000, low: 560_000, verylow: 330_000 };
 /** the views read: the lobby's own, and over the shoulder */
 const VIEWS: ViewMode[] = ['top', 'third'];
 
@@ -49,7 +53,8 @@ async function drawnAt(lab: Lab, level: Level, canary: boolean): Promise<{ verti
   const before = PIPELINES.made;
   await lab.step(SETTLE);
   drawFrame(lab);
-  return { vertices: grassVertices(), made: PIPELINES.made - before };
+  const { vertices } = await grassShaded(lab);
+  return { vertices, made: PIPELINES.made - before };
 }
 
 /** The grass on Low against High in each view, its vertices counted and pictured. */
