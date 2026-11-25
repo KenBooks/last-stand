@@ -7,7 +7,7 @@
 // of a 16.8 ms frame, 1.7 of it its shading (J0RW-1EP5, SSB2-NWEB).
 import * as THREE from 'three';
 import type { BladeNumbers, BladeUniforms } from '../../world/meadowNodes';
-import type { RustLook, RustShader } from '../custom';
+import { rustShader, type RustLook, type RustShader } from '../custom';
 import { TUNE } from '../globals';
 import { ONE_GRASS } from '../../world/meadowOne';
 import { noiseTable, noiseWgsl } from './noiseTable';
@@ -94,7 +94,7 @@ fn meadow_at(xz: vec2f, span: f32) -> f32 {
 }
 `;
 
-const BLADES: RustShader = {
+const BLADES: RustShader = rustShader({
   name: 'meadow-blades',
   hooks: SHARED + TUFT_WGSL + /* wgsl */ `
 /// The lowest solid over xz (m, solidsOver in world/meadowSolids.ts: the mask's green, the lowest of the solids'
@@ -397,9 +397,9 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   return true;
 }
 `,
-};
+});
 
-const SWARD: RustShader = {
+const SWARD: RustShader = rustShader({
   name: 'meadow-sward',
   hooks: SHARED + /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {}
@@ -416,7 +416,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   return true;
 }
 `,
-};
+});
 
 /** A ring's blades: its uniforms as `world/meadow.ts` sets them when its mesh is about to be drawn. */
 export function bladeLook(u: BladeUniforms, combed: boolean, numbers: BladeNumbers, plain: () => boolean,

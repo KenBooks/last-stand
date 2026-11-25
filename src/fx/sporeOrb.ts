@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { particles, col } from './particles';
 import { portShader, wgslNoise } from '../core/shaderPorts';
-import { effectLook, num, rgb } from '../engine/effects';
+import { effectLook, num, rgb, effectShader } from '../engine/effects';
 
 const geo = new THREE.SphereGeometry(1, 20, 14);
 /** one per colour (same program); their time moves together */
@@ -117,3 +117,6 @@ export function sporeOrbTick(mesh: THREE.Object3D, pos: THREE.Vector3, color: nu
 
 /** Sample for the load-time warm-up. */
 export const sporeOrbSample = (): THREE.Mesh => sporeOrb(0x6fd82a, 0.3);
+
+// (its effect's shader listed for the engine as this module loads: joined with the other effects')
+effectShader('spore-orb', SPORE_HOOKS);

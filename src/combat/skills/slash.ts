@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { nearGlow } from '../../core/materials';
 import { portShader } from '../../core/shaderPorts';
-import { effectLook, num, rgb } from '../../engine/effects';
+import { effectLook, num, rgb, effectShader } from '../../engine/effects';
 
 function slashMaterial(color: THREE.ColorRepresentation): THREE.ShaderMaterial {
   return effectLook(portShader(nearGlow(new THREE.ShaderMaterial({
@@ -114,3 +114,6 @@ export function slashMesh(arc: number, inner: number, color: THREE.ColorRepresen
 
 /** Shortest angle between two headings. */
 export const angleBetween = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+
+// (its effect's shader listed for the engine as this module loads: joined with the other effects')
+effectShader('slash-arc', SLASH_HOOKS);

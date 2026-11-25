@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import { portShader, wgslNoise, type Tsl } from '../core/shaderPorts';
 import { NEAR_GLOW } from '../core/materials';
-import { effectLook, num, rgb } from '../engine/effects';
+import { effectLook, num, rgb, effectShader } from '../engine/effects';
 import { groundHeight } from '../world/ground';
 import { floorPatch, lay } from './floorPatch';
 import { particles, col } from './particles';
@@ -658,3 +658,8 @@ export class Firestorm {
     this.floorGeo.dispose();
   }
 }
+
+// (its effect's shaders listed for the engine as this module loads: joined with the other effects')
+effectShader('storm-ribbon', RIBBON_HOOKS);
+effectShader('storm-smoke', SMOKE_HOOKS);
+effectShader('storm-floor', FLOOR_HOOKS);

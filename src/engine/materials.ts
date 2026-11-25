@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { COLUMN_SHAFT, type SeeThrough } from '../core/seeThrough';
 import type { Core } from './core';
-import { lookOf, LOOK_FLOATS, type RustLook } from './custom';
+import { lookOf, LOOK_FLOATS, RUST_SHADERS, type RustLook, type RustShader } from './custom';
 import { TUNE } from './globals';
 import { NEAR_GLOW } from '../core/materials';
 import { isDualQuaternionSkinned } from '../entities/models/dualQuaternion';
@@ -44,6 +44,9 @@ export type AnyMaterial = THREE.Material & Partial<{
   positionNode: unknown; colorNode: unknown; fragmentNode: unknown; vertexNode: unknown; seeThrough: unknown;
 }>;
 
+/** the name the engine's module of the looks joined is known by (a breakdown's rows: perf/gpuParts.ts) */
+const JOINED_NAME = 'looks joined';
+
 export class Materials {
   private materials = new WeakMap<THREE.Material, MaterialEntry>();
   /** the engine's materials by what they hold: two of the game's that look alike are one there, and their meshes
@@ -59,7 +62,21 @@ export class Materials {
   /** a look's two maps, then its volume */
   private scratchExtra = new Uint32Array(5);
 
-  constructor(private core: Core, private maps: Maps, private seeKinds: SeeKinds) {}
+  constructor(private core: Core, private maps: Maps, private seeKinds: SeeKinds) {
+    this.joinLooks();
+  }
+
+  /** Every look's shader the game has (`RUST_SHADERS`) handed over and drawn by one module of the engine's (its
+   *  `join_shaders`), each picked by its material: compiled once for them all, where a module each was compiled
+   *  for each. Any met only as a material is made has a module of its own. */
+  private joinLooks(): void {
+    for (const group of [undefined, 'effects'] as const) {
+      const ids = RUST_SHADERS.filter((shader) => shader.group === group).map((shader) => this.shaderIdOf(shader));
+      const joint = this.core.engine.join_shaders(Uint32Array.from(ids));
+      if (joint) this.shaders.set(`${JOINED_NAME}: ${group ?? 'the world\'s'}`, joint);
+      this.core.freshViews();
+    }
+  }
 
   /** What's kept of the materials handed over forgotten: the next frame hands each over again. */
   forget(): void {
@@ -68,6 +85,7 @@ export class Materials {
     this.tails = new Map();
     this.shaders = new Map();
     this.volumes = new WeakMap();
+    this.joinLooks();
   }
 
   /** A material's numbers, maps and key written to the scratch arrays; false for one the engine can't draw. */
@@ -230,16 +248,21 @@ export class Materials {
     return new Map([...this.shaders].map(([name, id]) => [id, name]));
   }
 
-  /** A shader of the page's by its name, handed over the first time it's asked for. */
+  /** A look's shader's id, handed over the first time it's asked for. */
   private shaderId(look: RustLook): number {
-    let id = this.shaders.get(look.shader.name);
+    return this.shaderIdOf(look.shader);
+  }
+
+  /** A shader of the page's by its name, handed over the first time it's asked for. */
+  private shaderIdOf(shader: RustShader): number {
+    let id = this.shaders.get(shader.name);
     if (id === undefined) {
-      id = this.core.engine.add_shader(look.shader.hooks);
+      id = this.core.engine.add_shader(shader.hooks);
       // (one first met once the loading screens are done with: its pipelines compile as the player plays)
       if (PIPELINES.waitLeft === Infinity) {
-        PIPELINES.notes.push([Math.round(performance.now()), `(a shader first met in play: ${look.shader.name})`]);
+        PIPELINES.notes.push([Math.round(performance.now()), `(a shader first met in play: ${shader.name})`]);
       }
-      this.shaders.set(look.shader.name, id);
+      this.shaders.set(shader.name, id);
       this.core.freshViews();
     }
     return id;

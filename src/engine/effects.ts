@@ -4,7 +4,7 @@
 // it's drawn. Without a look a shader material isn't drawn at all (from play: "no mage visual effects on spells").
 import type * as THREE from 'three';
 import { NEAR_GLOW } from '../core/materials';
-import { rustLook, type RustLook } from './custom';
+import { rustLook, rustShader, type RustLook } from './custom';
 
 /** the effects' shared noise, as `wgslNoise` has it for three's nodes (`fx_` before each name) */
 export const FX_NOISE = /* wgsl */ `
@@ -59,6 +59,12 @@ export function rgb(uniforms: Uniforms, name: string, out: Float32Array, at: num
   out[at] = value.r ?? value.x ?? 0;
   out[at + 1] = value.g ?? value.y ?? 0;
   out[at + 2] = value.b ?? value.z ?? 0;
+}
+
+/** An effect's shader listed for the engine as its module loads (`RUST_SHADERS`): joined with the other effects'
+ *  into one module, as `effectLook` makes it for each material by its name and hooks (the same two given each). */
+export function effectShader(name: string, hooks: string): void {
+  rustShader({ name, hooks: FX_NOISE + hooks, group: 'effects' });
 }
 
 /** `material` drawn by the engine with `hooks` (its two functions' WGSL, `FX_NOISE` before them), named `name`. */

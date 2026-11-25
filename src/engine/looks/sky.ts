@@ -1,7 +1,7 @@
 // The skies under the Rust engine: `world/skyNodes.ts`'s domes for the engine's hooks, their WGSL as it is there.
 // Each is drawn on the far plane, unlit and out of the fog.
 import type * as THREE from 'three';
-import type { RustLook, RustShader } from '../custom';
+import { rustShader, type RustLook, type RustShader } from '../custom';
 
 type Uniforms = Record<string, THREE.IUniform>;
 
@@ -41,7 +41,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 }
 `;
 
-const NIGHT: RustShader = {
+const NIGHT: RustShader = rustShader({
   name: 'sky-night',
   hooks: DOME_VERTEX + STAR_HASH + /* wgsl */ `
 fn sky_night(direction: vec3f, fog: vec3f, moon: vec3f, zenith: vec3f) -> vec3f {
@@ -63,9 +63,9 @@ fn sky_night(direction: vec3f, fog: vec3f, moon: vec3f, zenith: vec3f) -> vec3f 
   return c;
 }
 ` + domeSurface('sky_night(in.c0.xyz, m.c[0].xyz, m.c[1].xyz, m.c[2].xyz)'),
-};
+});
 
-const DAY: RustShader = {
+const DAY: RustShader = rustShader({
   name: 'sky-day',
   hooks: DOME_VERTEX + CLOUDS + /* wgsl */ `
 fn sky_day(direction: vec3f, horizon: vec3f, zenith: vec3f, sun: vec3f, time: f32) -> vec3f {
@@ -82,9 +82,9 @@ fn sky_day(direction: vec3f, horizon: vec3f, zenith: vec3f, sun: vec3f, time: f3
   return c;
 }
 ` + domeSurface('sky_day(in.c0.xyz, m.c[0].xyz, m.c[1].xyz, m.c[2].xyz, m.c[3].x)'),
-};
+});
 
-const VILLAGE: RustShader = {
+const VILLAGE: RustShader = rustShader({
   name: 'sky-village',
   hooks: DOME_VERTEX + STAR_HASH + CLOUDS + /* wgsl */ `
 fn sky_village(direction: vec3f, horizon: vec3f, zenith: vec3f, sun: vec3f, day: f32, time: f32) -> vec3f {
@@ -109,7 +109,7 @@ fn sky_village(direction: vec3f, horizon: vec3f, zenith: vec3f, sun: vec3f, day:
   return c;
 }
 ` + domeSurface('sky_village(in.c0.xyz, m.c[0].xyz, m.c[1].xyz, m.c[2].xyz, m.c[3].x, m.c[3].y)'),
-};
+});
 
 /** A uniform's three numbers (a colour's or a vector's) written at `at`. */
 function three(out: Float32Array, at: number, uniform: THREE.IUniform | undefined): void {

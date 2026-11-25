@@ -6,7 +6,7 @@
 // (entities/models/furSway.ts), and a hand's maps read triplanar (entities/models/triplanar.ts). A held blade's highlights through the eyes are held to a most (`kit.u.uShine`).
 import type * as THREE from 'three';
 import { NEAR_GLOW, itemGlowUniforms, type KitLooks } from '../../core/materials';
-import { rustLook, type RustLook, type RustShader } from '../custom';
+import { rustLook, rustShader, type RustLook, type RustShader } from '../custom';
 
 /** how many of the look's numbers tell two materials apart (past them: the clocks, and the glow's shape) */
 const NUMBERS = 32;
@@ -16,7 +16,7 @@ const AT = { shade: 16, aura: 20, hairTinted: 23, hair: 24, fur: 27, lag: 28, tr
 /** the fur's sway on a material (entities/models/furSway.ts): its lag and its clock */
 interface Fur { lag: { value: THREE.Vector3 }; time: { value: number } }
 
-const KIT: RustShader = {
+const KIT: RustShader = rustShader({
   name: 'kit',
   hooks: /* wgsl */ `
 fn kit_hash(start: vec3f) -> f32 {
@@ -156,7 +156,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   return true;
 }
 `,
-};
+});
 
 function kitLook(kit: KitLooks, material: THREE.MeshStandardMaterial): RustLook {
   // (what the material showed by when it was last described: the kit's numbers, and what the game changes on a

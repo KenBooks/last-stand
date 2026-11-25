@@ -16,7 +16,8 @@ import { programsCompiledInGame } from '../../../src/core/shaders';
 import {
   AHEAD, DEVICE_ASKED, PIPELINES, PIPELINES_ASKED, engineDevice, type PipelineAsked,
 } from '../../../src/engine/pipelinesAside';
-import { cacheCanary, costs, longestText, summedText, unsaltedText } from './programCost';
+import { cacheCanary, costs, costsShared, longestText, summedText, unsaltedText } from './programCost';
+import { compilesCanary, compilesReport } from './programCompiles';
 import { limitsReport } from './programLimits';
 
 export interface ProgramsOptions {
@@ -149,6 +150,8 @@ async function costReport(asked: readonly PipelineAsked[]): Promise<Report> {
   const measured = await costs(device, asked);
   const total = measured.reduce((sum, { ms }) => sum + ms, 0);
   const canaryReport = await cacheCanary(device, measured, `canary ${Date.now()}`);
+  const shared = await costsShared(device, asked);
+  const sharedTotal = shared.reduce((sum, { ms }) => sum + ms, 0);
   const lines = [
     `compiled again alone, one after another, their shaders salted so no cache answers: ${measured.length} `
       + `pipelines, ${(total / 1000).toFixed(1)} s in all (the GPU's process's time on them; the game compiles them `
@@ -159,11 +162,16 @@ async function costReport(asked: readonly PipelineAsked[]): Promise<Report> {
     `  by samples: ${summedText(measured, fieldOf('samples'))}`,
     '  the longest:',
     ...longestText(measured),
+    `compiled again as the game asks, a module's pipelines sharing its one salted copy: ${shared.length} pipelines, `
+      + `${(sharedTotal / 1000).toFixed(1)} s in all (what of a pipeline's cost another of the same module pays again)`,
+    `  by kind: ${summedText(shared, (pipeline) => pipeline.kind)}`,
+    `  by shader: ${summedText(shared, fieldOf('shader'))}`,
     canaryReport.text,
   ];
   const problems = [...canaryReport.problems];
   if (!measured.length) problems.push('--cost: no pipeline compiled again (no shader\'s code kept)');
-  return { text: lines.join('\n'), problems, counts: { 'compile ms': Math.round(total) } };
+  const counts = { 'compile ms': Math.round(total), 'shared compile ms': Math.round(sharedTotal) };
+  return { text: lines.join('\n'), problems, counts };
 }
 
 export async function programs(lab: Lab, options: ProgramsOptions): Promise<Report> {
@@ -172,8 +180,10 @@ export async function programs(lab: Lab, options: ProgramsOptions): Promise<Repo
   if (asked.length === 0) problems.push('no pipeline in the engine\'s census: nothing was asked for');
   const late = lateCounted();
   problems.push(...late.problems);
-  const lines = [...listing(asked), late.text];
-  const counts: Record<string, number> = { pipelines: asked.length };
+  const compiled = compilesReport(asked);
+  problems.push(...compiled.problems);
+  const lines = [...listing(asked), compiled.text, late.text];
+  const counts: Record<string, number> = { pipelines: asked.length, ...compiled.counts };
   if (options.cost) {
     const report = await costReport(asked);
     lines.push(report.text);
@@ -186,9 +196,10 @@ export async function programs(lab: Lab, options: ProgramsOptions): Promise<Repo
     problems.push(...report.problems);
   }
   if (options.canary) {
-    const report = await canary(lab);
-    lines.push(report.text);
-    problems.push(...report.problems);
+    for (const report of [await canary(lab), compilesCanary(lab)]) {
+      lines.push(report.text);
+      problems.push(...report.problems);
+    }
   }
   return { text: lines.join('\n'), problems, counts };
 }

@@ -48,21 +48,8 @@ const realNow = (): number => window.__labClock.realNow();
 
 /** `descriptor`'s pipeline compiled on `device` with its shaders' code salted by `salt`: its time (ms), from its
  *  shaders made to it ready. */
-async function compileAlone(device: Device, descriptor: Descriptor, salt: string): Promise<number> {
-  const began = realNow();
-  const made = new Map<object, object>();
-  const stage = (given: Stage): Stage => {
-    let module = made.get(given.module);
-    if (!module) {
-      module = device.createShaderModule({ code: `${codeOf(given.module)}\n// lab programs --cost: ${salt}\n` });
-      made.set(given.module, module);
-    }
-    return { ...given, module };
-  };
-  const vertex = stage(descriptor.vertex);
-  const fragment = descriptor.fragment ? stage(descriptor.fragment) : undefined;
-  await device.createRenderPipelineAsync({ ...descriptor, vertex, fragment });
-  return realNow() - began;
+function compileAlone(device: Device, descriptor: Descriptor, salt: string): Promise<number> {
+  return compileSharing(device, descriptor, new Map(), salt);
 }
 
 /** Each of `asked` whose shaders' code is kept compiled again alone, one after another, on `device`. */
@@ -72,6 +59,46 @@ export async function costs(device: object, asked: readonly PipelineAsked[]): Pr
   for (const [index, pipeline] of asked.entries()) {
     if (!salted(pipeline)) continue;
     const ms = await compileAlone(device as Device, pipeline.descriptor as Descriptor, `${salt}.${index}`);
+    measured.push({ pipeline, ms });
+  }
+  return measured;
+}
+
+/** A module's salted copy, made once a module: shared by every pipeline compiled with it. */
+type SaltedModules = Map<object, object>;
+
+/** `descriptor`'s pipeline compiled on `device` with each module's salted copy in `modules` (made the first time a
+ *  module is met): its time (ms). */
+async function compileSharing(device: Device, descriptor: Descriptor, modules: SaltedModules, salt: string)
+  : Promise<number> {
+  const began = realNow();
+  const stage = (given: Stage): Stage => {
+    let module = modules.get(given.module);
+    if (!module) {
+      module = device.createShaderModule({ code: `${codeOf(given.module)}\n// lab programs --cost: ${salt}\n` });
+      modules.set(given.module, module);
+    }
+    return { ...given, module };
+  };
+  const vertex = stage(descriptor.vertex);
+  const fragment = descriptor.fragment ? stage(descriptor.fragment) : undefined;
+  await device.createRenderPipelineAsync({ ...descriptor, vertex, fragment });
+  return realNow() - began;
+}
+
+/**
+ * Each of `asked` compiled again as the game asks for them: one salt for all, so a module's pipelines share its
+ * salted copy and whatever the browser keeps of a module's compile between its pipelines answers, one after another.
+ * Against `costs` (each salted alone) it says how much of a pipeline's cost is its shaders' own code, which another
+ * pipeline of the same module with other states (its culling, its depth) pays again or not.
+ */
+export async function costsShared(device: object, asked: readonly PipelineAsked[]): Promise<PipelineCost[]> {
+  const modules: SaltedModules = new Map();
+  const salt = `shared ${Date.now()}`;
+  const measured: PipelineCost[] = [];
+  for (const pipeline of asked) {
+    if (!salted(pipeline)) continue;
+    const ms = await compileSharing(device as Device, pipeline.descriptor as Descriptor, modules, salt);
     measured.push({ pipeline, ms });
   }
   return measured;

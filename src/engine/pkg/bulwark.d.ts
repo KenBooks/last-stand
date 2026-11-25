@@ -82,6 +82,12 @@ export class Engine {
      */
     hold_shadow(held: boolean): void;
     /**
+     * Shaders of the page's drawn by one module from now on (joined.rs): their materials made after this draw
+     * with its pipelines, one compile for them all. Those that place their instances are left as they are. The
+     * joined shader's id; 0 if fewer than two could be joined.
+     */
+    join_shaders(ids: Uint32Array | number[]): number;
+    /**
      * `count` of the records the page wrote, from the one at `first` on, kept by the engine (kept.rs): what
      * stands still, handed over once and drawn every frame after with no record of the page's. The id of the
      * first, the rest following. Growing what's kept moves this module's memory, as `records` does.
@@ -242,6 +248,7 @@ export interface InitOutput {
     readonly engine_drop_texture: (a: number, b: number) => void;
     readonly engine_globals: (a: number) => number;
     readonly engine_hold_shadow: (a: number, b: number) => void;
+    readonly engine_join_shaders: (a: number, b: number, c: number) => number;
     readonly engine_keep: (a: number, b: number, c: number) => number;
     readonly engine_kept: (a: number) => number;
     readonly engine_poll_clock: (a: number) => void;
@@ -276,12 +283,12 @@ export interface InitOutput {
     readonly engine_show_kept: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1789: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1814: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_663: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_663_60: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_663_61: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_665: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1800: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1825: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_674: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_674_61: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_674_62: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_676: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

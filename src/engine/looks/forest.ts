@@ -4,7 +4,7 @@
 import type * as THREE from 'three';
 import type { Sway } from '../../world/forestNodes';
 import type { FloorRelief } from '../../core/parallax';
-import type { RustLook, RustShader } from '../custom';
+import { rustShader, type RustLook, type RustShader } from '../custom';
 import { RELIEF, reliefNumbers } from './relief';
 
 const MOSS_NOISE = /* wgsl */ `
@@ -18,7 +18,7 @@ fn moss_noise(p: vec2f) -> f32 {
 }
 `;
 
-const MOSS: RustShader = {
+const MOSS: RustShader = rustShader({
   name: 'forest-moss',
   hooks: MOSS_NOISE + RELIEF + /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {}
@@ -33,9 +33,9 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   return true;
 }
 `,
-};
+});
 
-const GRASS: RustShader = {
+const GRASS: RustShader = rustShader({
   name: 'forest-grass',
   hooks: /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
@@ -53,9 +53,9 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
 
 fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool { return true; }
 `,
-};
+});
 
-const SHAFTS: RustShader = {
+const SHAFTS: RustShader = rustShader({
   name: 'forest-shafts',
   hooks: MOSS_NOISE + /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {}
@@ -70,7 +70,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   return true;
 }
 `,
-};
+});
 
 /** The floor's moss, over the material's own colour. */
 export const mossLook = (relief: FloorRelief): RustLook => ({

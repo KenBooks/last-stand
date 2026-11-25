@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { addEffect } from './effects';
 import { portShader } from '../core/shaderPorts';
-import { effectLook, num, rgb } from '../engine/effects';
+import { effectLook, num, rgb, effectShader } from '../engine/effects';
 import type { Player } from '../entities/player';
 
 /** (a deep gold: paler, tone mapping washed it to white) */
@@ -275,3 +275,6 @@ export function glintShown(player: Player): number {
   const shown = motes.get(player);
   return shown?.mesh.visible ? shown.strength : 0;
 }
+
+// (its effect's shader listed for the engine as this module loads: joined with the other effects')
+effectShader('glint-motes', MOTES_HOOKS);

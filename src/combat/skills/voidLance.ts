@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { nearGlow } from '../../core/materials';
 import { portShader, wgslNoise } from '../../core/shaderPorts';
-import { effectLook, num, rgb } from '../../engine/effects';
+import { effectLook, num, rgb, effectShader } from '../../engine/effects';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { evades } from '../../entities/evade';
@@ -667,3 +667,7 @@ const skill: ChannelSkill<LanceState> = {
 };
 
 export default skill;
+
+// (its effect's shaders listed for the engine as this module loads: joined with the other effects')
+effectShader('lance-beam', BEAM_HOOKS);
+effectShader('lance-portal', PORTAL_HOOKS);

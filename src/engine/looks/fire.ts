@@ -10,7 +10,8 @@ const LOG_ENDS = 16;
 /** where the logs' ends begin in `m.c`, in vec4s */
 const LOGS_AT = 8;
 
-/** the flames' shader, made once: the march is the same for every fire */
+/** the flames' shader, made once: the march is the same for every fire. Drawn by a module of its own, never joined
+ *  with the other looks' (`RUST_SHADERS`): its ray march would weigh on every look's pixels in a module they shared */
 let shader: RustShader | null = null;
 function flameShader(shape: FlameShape): RustShader {
   shader ??= {
@@ -58,7 +59,8 @@ export function flameLook(uniforms: FlameUniforms, shape: FlameShape): RustLook 
 /** how much of a standard material's sheen char keeps (world/fire.ts's `CHAR_SHEEN`) */
 const CHAR_SHEEN = 0.2;
 
-/** the embers' shader, made once */
+/** the embers' shader, made once (as it's first asked for: `emberWgsl` reads three's nodes, not yet there as this
+ *  module loads), drawn by a module of its own */
 let embers: RustShader | null = null;
 function emberShader(): RustShader {
   embers ??= {

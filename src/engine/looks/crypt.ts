@@ -4,7 +4,7 @@
 import type * as THREE from 'three';
 import type { Damp, Outside } from '../../world/cryptNodes';
 import type { FloorRelief } from '../../core/parallax';
-import type { RustLook, RustShader } from '../custom';
+import { rustShader, type RustLook, type RustShader } from '../custom';
 import { RELIEF, reliefNumbers } from './relief';
 
 /** where the looks' numbers are in `m.c`, in floats, and how many spots of earth the floor's shader reads at most */
@@ -19,7 +19,7 @@ fn dimmed_outside(xz: vec2f) -> f32 {
 }
 `;
 
-const OUTSIDE: RustShader = {
+const OUTSIDE: RustShader = rustShader({
   name: 'crypt-outside',
   hooks: DIM + /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {}
@@ -29,9 +29,9 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   return true;
 }
 `,
-};
+});
 
-const DAMP: RustShader = {
+const DAMP: RustShader = rustShader({
   name: 'crypt-damp',
   hooks: DIM + RELIEF + /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {}
@@ -74,7 +74,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   return true;
 }
 `,
-};
+});
 
 function dim(out: Float32Array, amount: { value: number }, { from, to, most }: Outside): void {
   out[AT.amount] = amount.value;
@@ -107,7 +107,7 @@ export function dampLook(damp: Damp, amount: { value: number }, outside: Outside
   };
 }
 
-const BEACON: RustShader = {
+const BEACON: RustShader = rustShader({
   name: 'crypt-beacon',
   hooks: /* wgsl */ `
 fn beacon_hash(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
@@ -143,7 +143,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   return true;
 }
 `,
-};
+});
 
 /** A beacon's cold flame, on its clock (`{ value }`). */
 export const beaconLook = (time: { value: number }): RustLook => ({

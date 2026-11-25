@@ -3,10 +3,10 @@
 // noise over the world picks them, and blended over a narrow band; broad patches of shade and stain lie over it.
 // With the maps read as they repeat, the square's stones came round every metre and a half in rows (from play, "too
 // obvious texture pieces (tiling is visible)", #819).
-import type { RustLook, RustShader } from '../custom';
+import { rustShader, type RustLook, type RustShader } from '../custom';
 import { noiseTable, noiseWgsl } from './noiseTable';
 
-const PAVING: RustShader = {
+const PAVING: RustShader = rustShader({
   name: 'paving-unrepeated',
   hooks: /* wgsl */ `
 ${noiseWgsl('ground_noise', 't_extra0')}
@@ -42,7 +42,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   return true;
 }
 `,
-};
+});
 
 /** The paving's look: its maps read unrepeated, its vertices where its mesh has them. */
 export const pavingLook = (): RustLook => ({ shader: PAVING, maps: [noiseTable()], casts: true, numbers() {} });

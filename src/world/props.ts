@@ -6,7 +6,7 @@ import { HERO_SHADOW_LAYER } from '../core/layers';
 import { keepMiddle, seeThroughFade, thinsByMiddle } from '../core/seeThrough';
 import { gpu, pipelinesAtOnce } from '../core/webgpu';
 import { portShader } from '../core/shaderPorts';
-import { effectLook, rgb } from '../engine/effects';
+import { effectLook, rgb, effectShader } from '../engine/effects';
 import { membraneMaterial, spillMaterial } from './portalNodes';
 import { daySkyMaterial, nightSkyMaterial } from './skyNodes';
 import { ALL_STILL, inShadowsOnly, type StillDrawn } from './culling';
@@ -1043,3 +1043,6 @@ export function taperedTube(curve: THREE.Curve<THREE.Vector3>, r0: number, r1: n
   g.computeVertexNormals();
   return g;
 }
+
+// (its effect's shader listed for the engine as this module loads: joined with the other effects')
+effectShader('env-sky', ENV_SKY_HOOKS);
