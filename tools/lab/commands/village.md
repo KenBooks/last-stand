@@ -31,7 +31,9 @@ the block over the door a part course off the wings, 45%; `--canary` moves one b
 from the middle of the hall turned to the dais, the hero hidden, at least 0.9% of the frame lit by the sun, drawn with
 it and without it
 (`page/villageWindows.ts`: from play, "windows need to be real, and let sun/moonlight through"; with them shut
-0.58%, open 1.38%; `--canary` draws both without the sun); through
+0.58%, open 1.38%; under the engine 0.00% till Bulwark 2fcca1d, kept from the sun whole under its shelter, 1.40% now),
+and at most 6% (the sun through the roof: the hall's walls and roof cast nothing at first, 80%), pictured; `--canary`
+draws both without the sun); through
 the eyes on the square, the view tilted from over level down toward the ground, the grass's rings' middle (`focusOf`
 in `world/meadow.ts`) moving at most 2 m a frame (the old rule
 threw it 22 m at a sight just under level: "grass a near circle that keeps updating in front of me"); over the

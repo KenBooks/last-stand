@@ -26,6 +26,9 @@ const NOT_BLACK = 0.02;
 /** the least share of the frame the sun lights (with the windows shut, the sun through the door and over the walls lit
  *  0.58% of it; open, 1.38% with the panes 8 cm in from each face, 2.0 to 2.2% set back to its middle) */
 const LEAST_LIT = 0.009;
+/** the most of it: lit through the roof (the engine's hall under its shelter, if its roof cast no shadow, was lit as the
+ *  square is at noon) */
+const MOST_LIT = 0.06;
 
 /** The sun's light. */
 function sunLight(): THREE.DirectionalLight {
@@ -79,7 +82,15 @@ export async function windowsLetSunIn(lab: Lab, canary: boolean): Promise<Lights
       + ` (at least ${LEAST_LIT * 100}%)`;
     const dark = share < LEAST_LIT;
     if (canary) return { lines: [line], problems: [], caught: dark, moments: [] };
-    return { lines: [line], problems: dark ? [`${line}: the windows let no sun in`] : [], caught: null, moments: [] };
+    const problems = dark ? [`${line}: the windows let no sun in`] : [];
+    if (share > MOST_LIT) problems.push(`${line}: more than ${MOST_LIT * 100}%, the sun through the hall's roof`);
+    G.player.obj.visible = false;
+    try {
+      const moment = await lab.screen(`the hall at ${HOUR} h, the sun through its east windows`, []);
+      return { lines: [line], problems, caught: null, moments: [moment] };
+    } finally {
+      G.player.obj.visible = true;
+    }
   } finally {
     holdHour(null);
     await viewBy(lab, kept);
