@@ -51,10 +51,11 @@ export const scholarPlant = { noSeatBlend: false, cowlLoose: false };
  *  kept close); how long after he sits it's let go of (s); and the fastest a joint of him turns on his feet (rad/s:
  *  where one hold handed on to another, a hand turned 12 to 37 degrees in a frame). Set straight to it, each new beat
  *  of his rounds began with a jump: from play, "lagged, not smooth continuation" */
-/** how far his bells fall back down his forearms at most (m, toward his elbows) and tip down from them (rad: a wide
- *  sleeve hangs, its rim down off the wrist, not round it), from how raised a forearm (its way's rise, 0 level) and
- *  over how much more, and how quickly they go (per s) */
-const SLEEVE_FALL = { most: 0.06, tip: 0.3, from: 0, over: 0.25, ease: 6 };
+/** how far his forearms' sleeves bunch back toward his elbows at most (m) and tip down from them (rad: hanging a little
+ *  off the wrist, not round it), from how raised a forearm (its way's rise, 0 level) and over how much more, and how
+ *  quickly they go (per s). Fitted, they only bunch: fallen back 6 cm and tipped 17 degrees as the wide bells did, a
+ *  raised forearm came out of the side of its sleeve, from play: "the arm/hand is outside of sleeve" */
+const SLEEVE_FALL = { most: 0.02, tip: 0.09, from: 0, over: 0.25, ease: 6 };
 const FOLLOW = { up: 14, settle: 0.8, most: THREE.MathUtils.degToRad(450), speeds: THREE.MathUtils.degToRad(15000) };
 /** how long a hand is drawn into a hold begun or changed, from where his pose's follow has it (s: from a pinch to flat fingers his thumb turns near half round, and over half a second it turned 10 degrees a frame) */
 const HOLD_IN = 0.9;
@@ -232,6 +233,9 @@ function foreArm(t: number, out: number, fore: number): number {
 }
 /** his forearm's sleeve from its cuff to over the elbow ([radius, y down the elbow joint], m): the forearm's swell,
  *  narrowing to the wrist, and turned out a little into a cuff over the undersleeve's */
+/** how far under the arm a forearm's sleeve laid on his table may lie at least (m): its undersleeve's round at the wrist
+ *  and its cloth's thickness */
+const UNDER_CLEAR = 0.033;
 const FORE_SLEEVE: [number, number][] = [[0.07, -0.25], [0.066, -0.235], [0.058, -0.2], [0.054, -0.15], [0.058, -0.08], [0.062, -0.02],
   [0.062, 0.03], [0.04, 0.06], [0, 0.068]];
 
@@ -1395,8 +1399,12 @@ function dressBells(j: Joints, add: Add, M: BodyMats, upper: { L: THREE.Vector3;
       M.habit, shoulder, 'sleeve');
   }
   for (const [elbow, down, s] of [[j.elbowL, fore.L, 1], [j.elbowR, fore.R, -1]] as const) {
-    const hang: Hang = onTable ? { down, droop: (y) => 0.03 * smooth(clamp(-y / 0.25, 0, 1)), floor: (y) => lerp(0.055, 0.02, smooth(clamp(-y / 0.24, 0, 1))) }
-      : { down: V(0, 0, -1), droop: (y) => 0.02 * smooth(clamp(-y / 0.25, 0, 1)), floor: () => Infinity };
+    // (laid on the table, its underside kept outside the undersleeve's (`UNDER_CLEAR`): flattened 2 cm under the arm at
+    // the cuff, as the wide bell lay, the linen inside came out through it as a white patch)
+    const hang: Hang = onTable ? { down, droop: (y) => 0.01 * smooth(clamp(-y / 0.25, 0, 1)), floor: (y) => lerp(0.055, UNDER_CLEAR, smooth(clamp(-y / 0.24, 0, 1))) }
+      // (hung free, fitted, it barely drops off the arm: dropped 2 cm at its cuff, as the bell did, the linen inside came
+      // out through its top side)
+      : { down: V(0, 0, -1), droop: (y) => 0.005 * smooth(clamp(-y / 0.25, 0, 1)), floor: () => Infinity };
     const outer = sleeve(bell, hang, 0.025, 9 + s, (y, x, z) => foreArm(clamp((0.04 - y) / 0.29, 0, 1), x * s, z));
     add(outer.geo, M.habitD, elbow, 'bell');
     const inner = bell.map(([r, y]) => [r - 0.008, y + 0.004] as [number, number]).filter(([, y]) => y < -0.06);
@@ -1406,7 +1414,8 @@ function dressBells(j: Joints, add: Add, M: BodyMats, upper: { L: THREE.Vector3;
     // the hand: the hand alone at the end of an empty bell looked cut off at the wrist, from play: "the wrists are
     // floating, add arms continuing after wrists")
     const fore = -j.P.foreL;
-    add(sleeve([[0.031, fore - 0.016], [0.035, fore - 0.008], [0.036, fore + 0.004], [0.033, fore + 0.016], [0.036, fore + 0.06],
+    // (gathered at the wrist to a wrist's round, inside the sleeve's cuff even laid on the table)
+    add(sleeve([[0.028, fore - 0.016], [0.031, fore - 0.008], [0.032, fore + 0.004], [0.03, fore + 0.016], [0.031, fore + 0.06],
       [0.041, -0.12], [0.046, -0.03], [0.047, 0.03]], { ...HANG_FREE }, 0.04, 13 + s).geo, M.linen, elbow, 'undersleeve');
   }
 }

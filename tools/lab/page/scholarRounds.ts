@@ -24,6 +24,11 @@ import { GRIP_SHUT, roundsPlant } from '../../../src/world/scholarRounds';
 import { CASE_R, type LadderPart } from '../../../src/world/houses/library';
 import type { Obstacle } from '../../../src/types';
 import { CHAIR, TABLE_INTO_MOST, chairHandOff, chairRead, intoTable } from './scholarChair';
+import { LINEN_OUT_MOST, MOUTH_MOST, linenOut as linenRead, mouthRead } from './scholarSleeves';
+
+/** the canary's sleeves' tip down off the forearm (rad): the wide bell's hang as it was, fallen and tipped from a raised
+ *  forearm (`SLEEVE_FALL` once: 0.3) and more, as Kenneth saw it hang apart from his arm */
+const MOUTH_CANARY_TIP = 0.6;
 import { GRAB, INTO_BOOK_MOST, PADS_MOST, PAGE_FACING, SLEEVES_INTO_BOOK_MOST, bookRead, fingerPoints, grabRead, intoBook, padsRead, pageFacing, printsOf, turnedRound } from './bookHold';
 
 /** whether the open book read wrong to him at some frame (its least facing under `PAGE_FACING`) */
@@ -357,6 +362,7 @@ interface Followed {
   turned: number; turnedAt: string; headOff: number; shoeOut: number; shoeAt: string;
   cowlInto: number; cowlGap: number; cowlAt: string; bookFrames: number; notBook: string; backInPlace: boolean;
   ladderInto: number; ladderAt: string; furnitureInto: number; furnitureAt: string;
+  mouthOff: number; mouthAt: string; linenOut: number; linenAt: string;
   tableInto: number; tableAt: string; chairFloor: number; chairInto: number; chairAt: string; chairMoved: number; chairHand: number; chairHandAt: string;
   chairOutMost: number; chairOutAtEnd: number;
   hipsSpeeds: number; hipsAt: string; jointSpeeds: number; jointAt: string; hoodGap: number; hoodAt: string;
@@ -426,6 +432,9 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
   let cowlInto = 0, cowlGap = 0, cowlAt = '', bookFrames = 0, notBook = '', lastOut = rounds.out, ladderInto = 0, ladderAt = '', furnitureInto = 0, furnitureAt = '';
   /** him against his table's top while he's sat or half sat, his chair on the floor and clear of what stands by it, and
    *  his hands on it while it moves (`scholarChair.ts`) */
+  /** his forearms through their sleeves' mouths (`scholarSleeves.ts`), at their worst; the canary's: each sleeve tipped
+   *  down as the wide bell hung, a frame as he looks a book over */
+  let mouthOff = 0, mouthAt = '', linenOut = 0, linenAt = '';
   let tableInto = 0, tableAt = '', chairFloor = 0, chairInto = 0, chairAt = '', chairMoved = 0, chairHand = 0, chairHandAt = '', chairOutMost = 0, chairWas = -1;
   const cases = G.arena.obstacles.filter((o) => o.r === CASE_R);
   const held = G.scene.getObjectByName('library held book') as THREE.Mesh;
@@ -553,6 +562,14 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
       const into = intoLadder(s);
       if (into > ladderInto) { ladderInto = into; ladderAt = rounds.doing; }
     }
+    // (his forearms out through their sleeves' mouths, each frame)
+    const mouth = mouthRead(s, canary && rounds.doing === 'looking a book over' ? MOUTH_CANARY_TIP : 0);
+    if (mouth.off > mouthOff) { mouthOff = mouth.off; mouthAt = `his ${mouth.side} forearm, ${rounds.doing}`; }
+    // (and his undersleeve's linen inside its sleeve above the cuff, a few frames apart)
+    if (frames % 4 === 0) {
+      const linen = linenRead(s);
+      if (linen.out > linenOut) { linenOut = linen.out; linenAt = `his ${linen.side} undersleeve ${(linen.at * 100).toFixed(0)} cm above the mouth, ${rounds.doing}`; }
+    }
     // (him against his table's top, sat or half sat, a few frames apart; his chair each frame)
     if (s.act.sit > 0 && frames % 3 === 0) {
       const table = intoTable(s);
@@ -608,6 +625,7 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
   }
   return { frames, beats, farthest, farAt, tightest, tightAt, gapsAtEnd: rounds.gaps, satAtEnd: s.act.sit, turned, turnedAt, headOff, shoeOut, shoeAt,
     cowlInto, cowlGap, cowlAt, bookFrames, notBook, backInPlace, ladderInto, ladderAt, furnitureInto, furnitureAt,
+    mouthOff, mouthAt, linenOut, linenAt,
     tableInto, tableAt, chairFloor, chairInto, chairAt, chairMoved, chairHand, chairHandAt, chairOutMost, chairOutAtEnd: chairWas,
     hipsSpeeds, hipsAt, jointSpeeds, jointAt, hoodGap: hoodWorst, hoodAt, bookFingers, bookSleeves, bookAt, pageAway, pageRight, pageAt,
     grabSide, grabAt, grabInto, grabIntoAt, grabFrames, padsOff, padsAt };
@@ -636,6 +654,8 @@ function problemsOf(name: string, r: Followed): string[] {
   if (r.hoodGap > HOOD_GAP_MOST) problems.push(`rounds (${name}): the hood's edge ${(r.hoodGap * 100).toFixed(1)} cm off what it lies on, ${r.hoodAt} (at most ${HOOD_GAP_MOST * 100})`);
   if (!r.backInPlace) problems.push(`rounds (${name}): the shelf's book not back in its place as it stood`);
   if (r.ladderInto > LADDER_INTO_MOST) problems.push(`rounds (${name}): he comes ${(r.ladderInto * 100).toFixed(1)} cm inside ${LADDER_MARGIN * 100} cm of the ladder, ${r.ladderAt} (at most ${LADDER_INTO_MOST * 100})`);
+  if (r.mouthOff > MOUTH_MOST) problems.push(`rounds (${name}): ${r.mouthAt} crosses its sleeve's mouth ${r.mouthOff.toFixed(2)} of its radius from its middle (at most ${MOUTH_MOST}: "the arm/hand is outside of sleeve")`);
+  if (r.linenOut > LINEN_OUT_MOST) problems.push(`rounds (${name}): ${r.linenAt} ${(r.linenOut * 1000).toFixed(0)} mm out through its sleeve above the cuff (at most ${LINEN_OUT_MOST * 1000}: "the arm/hand is outside of sleeve")`);
   if (r.tableInto > TABLE_INTO_MOST) problems.push(`rounds (${name}): ${(r.tableInto * 1000).toFixed(0)} mm of him into his table's top, ${r.tableAt} (at most ${TABLE_INTO_MOST * 1000}: "he overlaps the table lots")`);
   if (r.chairFloor > CHAIR.floor) problems.push(`rounds (${name}): his chair's feet ${(r.chairFloor * 1000).toFixed(0)} mm off the floor or into it (at most ${CHAIR.floor * 1000})`);
   if (r.chairInto > CHAIR.into) problems.push(`rounds (${name}): his chair ${(r.chairInto * 1000).toFixed(0)} mm into ${r.chairAt} (at most ${CHAIR.into * 1000})`);
@@ -652,6 +672,7 @@ const lineOf = (name: string, r: Followed) => `his rounds, ${name}: ${r.beats.jo
   + `a shoe at most ${(r.shoeOut * 100).toFixed(1)} cm out through his robe; his cowl at most ${(r.cowlInto * 100).toFixed(1)} cm into his neck `
   + `or head and its top ${(r.cowlGap * 100).toFixed(1)} cm off his neck; the shelf's own book in his hands ${r.bookFrames} frames${r.notBook ? ` (not: ${r.notBook})` : ''}; `
   + `at most ${(r.ladderInto * 100).toFixed(1)} cm inside ${LADDER_MARGIN * 100} cm of the ladder, his hands and book ${(r.furnitureInto * 100).toFixed(1)} cm into the other furniture; `
+  + `his forearms through their sleeves' mouths at most ${r.mouthOff.toFixed(2)} of their radius from the middle${r.mouthAt ? ` (${r.mouthAt})` : ''}, his undersleeves ${(r.linenOut * 1000).toFixed(0)} mm out through them; `
   + `${(r.tableInto * 1000).toFixed(0)} mm of him into his table's top at most${r.tableAt ? ` (${r.tableAt})` : ''}; his chair drawn out ${(r.chairOutMost * 100).toFixed(0)} cm (moved ${r.chairMoved} frames, his hand at most ${r.chairMoved ? (r.chairHand * 100).toFixed(1) : '-'} cm off it), its feet ${(r.chairFloor * 1000).toFixed(0)} mm off the floor, ${(r.chairInto * 1000).toFixed(0)} mm into what stands by it; `
   + `${continuity(r)}; his fingers at most ${(r.bookFingers * 1000).toFixed(1)} mm and his sleeves ${(r.bookSleeves * 100).toFixed(1)} cm into the open book; gripping a shut book (${r.grabFrames} frames) his right palm at least ${r.grabFrames ? r.grabSide.toFixed(2) : '-'} of the way to its spine, his fingers ${(r.grabInto * 1000).toFixed(1)} mm into it and his pads at most ${(r.padsOff * 1000).toFixed(1)} mm off it; the hood's edge at most ${(r.hoodGap * 1000).toFixed(1)} mm off what it lies on (${r.hoodAt})`;
 /** how fast his hips' speed and a joint's turning changed, at most */
@@ -723,6 +744,9 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
     const wrongSide = planted.grabFrames > 0 && planted.grabSide < GRAB.spine;
     lines.push(`canary: the book he takes turned round, its spine away ${wrongSide ? 'caught' : 'went unseen'} (his palm ${planted.grabSide.toFixed(2)} of the way to its spine)`);
     if (!wrongSide) problems.push('rounds: the canary\'s book turned round in his hand went unseen');
+    const outOfSleeve = planted.mouthOff > MOUTH_MOST;
+    lines.push(`canary: his sleeves tipped down off his forearms as the wide bells hung ${outOfSleeve ? 'caught' : 'went unseen'} (${planted.mouthOff.toFixed(2)} of a mouth's radius, ${planted.mouthAt})`);
+    if (!outOfSleeve) problems.push('rounds: the canary\'s sleeves tipped off his forearms went unseen');
     const overlapped = planted.tableInto > TABLE_INTO_MOST;
     lines.push(`canary: his chair left where it stands as he gets up and sits ${overlapped ? 'caught' : 'went unseen'} (${(planted.tableInto * 1000).toFixed(0)} mm of him into his table's top, ${planted.tableAt})`);
     if (!overlapped) problems.push('rounds: the canary\'s chair left where it stands went unseen');
