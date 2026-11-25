@@ -32,7 +32,7 @@ import { toVillage } from './village';
 import { DOOR_FRAMES, stand, useByE, viewAs } from './houses';
 import { holdThroughDoor } from './housesDoor';
 import { COWL_GAP_MOST, COWL_INTO_MOST, cowlClearance, gripsSwept, roundsChecked } from './scholarRounds';
-import { INTO_BOOK_MOST, SLEEVES_INTO_BOOK_MOST, bookRead, intoBook } from './bookHold';
+import { INTO_BOOK_MOST, PAGE_FACING, SLEEVES_INTO_BOOK_MOST, bookRead, intoBook, pageFacing, turnedRound } from './bookHold';
 
 export interface ScholarOptions {
   /** the views of the close-ups (`front,left,right,back,above` by default) */
@@ -414,6 +414,8 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
   /** his fingers and his sleeves against his table's book's solids over the loop (m), and where the deepest */
   let bookFingers = 0, bookSleeves = 0, bookAt = '';
   const tableBook = bookRead(s, false);
+  /** his table's book's pages as they read to him (`pageFacing`), at their worst; the canary's: turned half round */
+  let pageAway = Infinity, pageRight = Infinity, plantedAway = Infinity, plantedRight = Infinity;
   const frames = Math.round((SCHOLAR_LOOP + 8) / FRAME);
   hands.forEach((h, i) => h.getWorldPosition(handFrom[i]));
   for (let f = 0; f < frames; f++) {
@@ -438,6 +440,12 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
       const into = intoBook(s, tableBook);
       if (into.fingers > bookFingers) { bookFingers = into.fingers; bookAt = `${into.fat} at ${t.toFixed(2)} s`; }
       bookSleeves = Math.max(bookSleeves, into.sleeves);
+      const facing = pageFacing(s, s.book.prints);
+      pageAway = Math.min(pageAway, facing.away); pageRight = Math.min(pageRight, facing.right);
+      if (canary && f === frames >> 2) {
+        const turned = turnedRound(tableBook, () => pageFacing(s, s.book.prints));
+        plantedAway = turned.away; plantedRight = turned.right;
+      }
     }
     // (the page he turns against the blocks, and his fingertips against what they rest on)
     if (s.page.visible) {
@@ -505,6 +513,13 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
   const caught = canary && worst > SNAP;
   lines.push(`his fingers in his table's book: ${(bookFingers * 1000).toFixed(1)} mm at the deepest${bookAt ? ` (${bookAt})` : ''}, his sleeves ${(bookSleeves * 100).toFixed(1)} cm`);
   if (bookFingers > INTO_BOOK_MOST) problems.push(`his fingers ${(bookFingers * 1000).toFixed(1)} mm into his table's book, ${bookAt} (at most ${INTO_BOOK_MOST * 1000})`);
+  lines.push(`his table's book's pages: their tops at least ${pageAway.toFixed(2)} along his forward, their lines ${pageRight.toFixed(2)} along his right`);
+  if (pageAway < PAGE_FACING.away || pageRight < PAGE_FACING.right) problems.push(`his table's book reads wrong to him: its pages' tops ${pageAway.toFixed(2)} along his forward (at least ${PAGE_FACING.away}), their lines ${pageRight.toFixed(2)} along his right (at least ${PAGE_FACING.right}: "Fix upside down book")`);
+  if (canary) {
+    const caughtRound = plantedAway < PAGE_FACING.away || plantedRight < PAGE_FACING.right;
+    lines.push(`canary: his table's book turned half round ${caughtRound ? 'found' : 'unseen'} (its pages' tops ${plantedAway.toFixed(2)} along his forward)`);
+    if (!caughtRound) problems.push('the canary\'s table book turned round went unseen');
+  }
   if (bookSleeves > SLEEVES_INTO_BOOK_MOST) problems.push(`his sleeves ${(bookSleeves * 100).toFixed(1)} cm into his table's book (at most ${SLEEVES_INTO_BOOK_MOST * 100})`);
   if (canary) lines.push(`canary: his loop jumped 20 s at once ${caught ? 'found' : 'unseen'} (${worst.toFixed(0)}° in a frame)`);
   if (!canary && worst > SNAP) problems.push(`a snap in his loop: ${worstAt} turned ${worst.toFixed(1)}° in a frame (most ${SNAP})`);

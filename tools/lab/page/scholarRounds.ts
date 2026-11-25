@@ -23,7 +23,10 @@ import { HOOD, scholarPlant } from '../../../src/entities/models/scholar';
 import { GRIP_SHUT, roundsPlant } from '../../../src/world/scholarRounds';
 import { CASE_R, type LadderPart } from '../../../src/world/houses/library';
 import type { Obstacle } from '../../../src/types';
-import { GRAB, INTO_BOOK_MOST, PADS_MOST, SLEEVES_INTO_BOOK_MOST, bookRead, fingerPoints, grabRead, intoBook, padsRead } from './bookHold';
+import { GRAB, INTO_BOOK_MOST, PADS_MOST, PAGE_FACING, SLEEVES_INTO_BOOK_MOST, bookRead, fingerPoints, grabRead, intoBook, padsRead, pageFacing, printsOf, turnedRound } from './bookHold';
+
+/** whether the open book read wrong to him at some frame (its least facing under `PAGE_FACING`) */
+const pageWrong = (r: { pageAway: number; pageRight: number }) => r.pageAway < PAGE_FACING.away || r.pageRight < PAGE_FACING.right;
 
 /** the most frames a round may take (a minute and a half at 60 a second), how far a book may be from his nearer hand
  *  (m), how near what stands in the room his middle may come (m past its circle), how far off the hero his face must
@@ -350,7 +353,7 @@ interface Followed {
   cowlInto: number; cowlGap: number; cowlAt: string; bookFrames: number; notBook: string; backInPlace: boolean;
   ladderInto: number; ladderAt: string; furnitureInto: number; furnitureAt: string;
   hipsSpeeds: number; hipsAt: string; jointSpeeds: number; jointAt: string; hoodGap: number; hoodAt: string;
-  bookFingers: number; bookSleeves: number; bookAt: string;
+  bookFingers: number; bookSleeves: number; bookAt: string; pageAway: number; pageRight: number; pageAt: string;
   grabSide: number; grabAt: string; grabInto: number; grabIntoAt: string; grabFrames: number; padsOff: number; padsAt: string;
 }
 
@@ -420,7 +423,7 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
   const at = s.root.getWorldPosition(new THREE.Vector3()), was = at.clone(), way = new THREE.Vector3();
   // (his hips' speed and each joint's turning speed, frame to frame; the frames of `dts`' lengths, where given)
   let hipsSpeeds = 0, hipsAt = '', jointSpeeds = 0, jointAt = '', dt = 1 / 60, dtWas = dt, fresh = 0, hoodWorst = 0, hoodAt = '';
-  let bookFingers = 0, bookSleeves = 0, bookAt = '';
+  let bookFingers = 0, bookSleeves = 0, bookAt = '', pageAway = Infinity, pageRight = Infinity, pageAt = '';
   let grabSide = Infinity, grabAt = '', grabInto = 0, grabIntoAt = '', grabFrames = 0, padsOff = 0, padsAt = '';
   const hipsJoint = s.root.getObjectByName('scholar hips')!, hips = hipsJoint.getWorldPosition(new THREE.Vector3()), hipsWas = hips.clone();
   const speed = new THREE.Vector3(), speedWas = new THREE.Vector3(), turn = new THREE.Quaternion();
@@ -508,6 +511,13 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
       if (pushed) { open.position.copy(back); open.updateMatrixWorld(true); }
       if (into.fingers > bookFingers) { bookFingers = into.fingers; bookAt = `${into.fat}, ${rounds.doing}`; }
       bookSleeves = Math.max(bookSleeves, into.sleeves);
+      // (its pages the right way up to him and reading left to right; the canary's: the book turned half round, a frame
+      // as he reads)
+      const prints = printsOf(open), frame = open.children[0];
+      const facing = pushed ? turnedRound(frame, () => pageFacing(s, prints)) : pageFacing(s, prints);
+      if (Math.min(facing.away - PAGE_FACING.away, facing.right - PAGE_FACING.right) < Math.min(pageAway - PAGE_FACING.away, pageRight - PAGE_FACING.right)) {
+        pageAway = facing.away; pageRight = facing.right; pageAt = rounds.doing;
+      }
     }
     // (his right hand on the shut book as he takes it off the shelf and puts it back: round its spine, his fingers on
     // its boards; the canary's: the book turned round, its spine away, a frame as he draws it out)
@@ -572,7 +582,7 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
   }
   return { frames, beats, farthest, farAt, tightest, tightAt, gapsAtEnd: rounds.gaps, satAtEnd: s.act.sit, turned, turnedAt, headOff, shoeOut, shoeAt,
     cowlInto, cowlGap, cowlAt, bookFrames, notBook, backInPlace, ladderInto, ladderAt, furnitureInto, furnitureAt,
-    hipsSpeeds, hipsAt, jointSpeeds, jointAt, hoodGap: hoodWorst, hoodAt, bookFingers, bookSleeves, bookAt,
+    hipsSpeeds, hipsAt, jointSpeeds, jointAt, hoodGap: hoodWorst, hoodAt, bookFingers, bookSleeves, bookAt, pageAway, pageRight, pageAt,
     grabSide, grabAt, grabInto, grabIntoAt, grabFrames, padsOff, padsAt };
 }
 
@@ -590,6 +600,7 @@ function problemsOf(name: string, r: Followed): string[] {
   if (r.cowlGap > COWL_GAP_MOST) problems.push(`rounds (${name}): his cowl's top ${(r.cowlGap * 100).toFixed(1)} cm off his neck, ${r.cowlAt} (at most ${COWL_GAP_MOST * 100}: his neck and back seen down inside it)`);
   if (r.notBook) problems.push(`rounds (${name}): the book in his hands isn't the shelf's: ${r.notBook}`);
   problems.push(...jumpsOf(name, r));
+  if (pageWrong(r)) problems.push(`rounds (${name}): the open book reads wrong to him, ${r.pageAt}: its pages' tops ${r.pageAway.toFixed(2)} along his forward (at least ${PAGE_FACING.away}), their lines ${r.pageRight.toFixed(2)} along his right (at least ${PAGE_FACING.right}: "Fix upside down book")`);
   if (r.bookFingers > INTO_BOOK_MOST) problems.push(`rounds (${name}): his fingers ${(r.bookFingers * 1000).toFixed(1)} mm into the open book, ${r.bookAt} (at most ${INTO_BOOK_MOST * 1000}: "fingers go through the book")`);
   if (r.bookSleeves > SLEEVES_INTO_BOOK_MOST) problems.push(`rounds (${name}): his sleeves ${(r.bookSleeves * 100).toFixed(1)} cm into the open book (at most ${SLEEVES_INTO_BOOK_MOST * 100})`);
   if (r.grabFrames && r.grabSide < GRAB.spine) problems.push(`rounds (${name}): his right hand ${r.grabSide.toFixed(2)} of the way to the spine of the book he grips, ${r.grabAt} (at least ${GRAB.spine}: "have him grab from other side of book")`);
@@ -677,6 +688,9 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
     const wrongSide = planted.grabFrames > 0 && planted.grabSide < GRAB.spine;
     lines.push(`canary: the book he takes turned round, its spine away ${wrongSide ? 'caught' : 'went unseen'} (his palm ${planted.grabSide.toFixed(2)} of the way to its spine)`);
     if (!wrongSide) problems.push('rounds: the canary\'s book turned round in his hand went unseen');
+    const upsideDown = pageWrong(planted);
+    lines.push(`canary: the open book turned half round in his hands ${upsideDown ? 'caught' : 'went unseen'} (its pages' tops ${planted.pageAway.toFixed(2)} along his forward, their lines ${planted.pageRight.toFixed(2)} along his right)`);
+    if (!upsideDown) problems.push('rounds: the canary\'s book turned round went unseen');
     const pushedIn = planted.bookFingers > INTO_BOOK_MOST;
     lines.push(`canary: the open book pushed 3 cm onto his hands ${pushedIn ? 'caught' : 'went unseen'} (${(planted.bookFingers * 1000).toFixed(1)} mm, ${planted.bookAt})`);
     if (!pushedIn) problems.push('rounds: the canary\'s open book on his hands went unseen');

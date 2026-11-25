@@ -110,9 +110,10 @@ const OPEN_OFF = 0.45, OPEN_SLIDE = 0.08;
 /** how far he leans over to lay a book on his table's stack (as his bend to a low aim, `scholar.ts` `act.lean`) */
 const LAY_LEAN = 0.3;
 /** the open book's turn in the shut one's frame as it opens: its pages (+y) toward him, the shut one's front (-x), its
- *  height (+z) the shut one's (+y), across it (+x) to his left (the shut one's spine, +z, is to his right) */
+ *  lines (+x) to his right along the shut one's spine (+z), its pages' tops (-z) up the shut one (+y), as `readPose`
+ *  holds it */
 const OPEN_FROM_SHUT = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(
-  new THREE.Vector3(0, 0, -1), new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, 1, 0)));
+  new THREE.Vector3(0, 0, 1), new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, -1, 0)));
 /** a pinch of a shut book's end: how far his base knuckles come onto its board (m), how far off it his palm is (m: half
  *  its thickness), and how far up the book from its middle (a share of its height); where his knuckles are from his
  *  hand's aim (m along his fingers: an aim places his wrist); and how far his fingers curl (0 open, 1 a fist: barely,
@@ -415,12 +416,14 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   };
   /** where the open book is held to read: at his mid-chest, near him, its pages to his face, tilted back from upright
    *  by `READ_TILT` (its spine up and down his front). Held 44 degrees from flat, it read from the front as a plank
-   *  edge-on, from play: "I never seen someone hold a book like that" */
+   *  edge-on, from play: "I never seen someone hold a book like that". Its print's lines run along its +x and its pages'
+   *  tops are its -z (`book.ts` `printGeometry`), so +x is to his right: to his left, he read it upside down (from
+   *  play: "Fix upside down book") */
   const readPose = (out: typeof pose) => {
     const f = fwd(), l = left();
     out.at.set(me.p.x, HOLD.high + 0.03, me.p.y).addScaledVector(f, HOLD.ahead - 0.04);
     const y = f.clone().negate().multiplyScalar(Math.cos(READ_TILT)).add(new THREE.Vector3(0, Math.sin(READ_TILT), 0)).normalize();
-    const x = l.clone();
+    const x = l.clone().negate();
     const z = new THREE.Vector3().crossVectors(x, y);
     out.turn.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
     return out;
@@ -827,7 +830,8 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
      *  pages, his fingers up through them by the gutter and his forearm's linen lying along it, from play: "fingers go
      *  through the book") */
     const readHands = (q: typeof r, behind: number) => {
-      const y = new THREE.Vector3(0, 1, 0).applyQuaternion(q.turn), x = new THREE.Vector3(1, 0, 0).applyQuaternion(q.turn);
+      // (`x` to his left: the book's -x, its lines running to his right)
+      const y = new THREE.Vector3(0, 1, 0).applyQuaternion(q.turn), x = new THREE.Vector3(-1, 0, 0).applyQuaternion(q.turn);
       const upPage = new THREE.Vector3(0, 1, 0).addScaledVector(y, -y.y).normalize();
       // (each hand square to the board, its fingers each laid along its back (`layFlat`): a hand at rest curls a
       // little, and its fingers rose 2 cm over their length into the pages; tipped back off the board by one rest curl

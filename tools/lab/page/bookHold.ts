@@ -154,3 +154,53 @@ export function padsRead(s: Scholar, held: THREE.Object3D): { off: number; at: s
   }
   return { off, at };
 }
+
+/** how squarely an open book's pages read to him (cosines, at least): each page's top away from his chest (along his
+ *  forward: a page held up before him tilts its top up and away, one on his table lies with it away) and its lines
+ *  running left to right to his eyes (along his right). From play: "Fix upside down book": he read it upside down. */
+export const PAGE_FACING = { away: 0.2, right: 0.5 };
+
+/** An open book's printed pages (the meshes laid on its halves' tops). */
+export function printsOf(book: THREE.Object3D): THREE.Mesh[] {
+  const prints: THREE.Mesh[] = [];
+  book.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh && m.parent?.name === 'open book half' && m.name !== 'open book half') prints.push(m);
+  });
+  return prints;
+}
+
+/** How each printed page reads to him: the least, over `prints`, of its top's way (its texture's top, as the page is
+ *  printed: v up) along his forward and its lines' way (u) along his right. */
+export function pageFacing(s: Scholar, prints: THREE.Mesh[]): { away: number; right: number } {
+  s.root.updateMatrixWorld(true);
+  const turn = s.root.getWorldQuaternion(new THREE.Quaternion());
+  const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(turn), right = new THREE.Vector3(-1, 0, 0).applyQuaternion(turn);
+  let away = Infinity, rightward = Infinity;
+  for (const print of prints) {
+    print.updateMatrixWorld(true);
+    const pos = print.geometry.attributes.position, uv = print.geometry.attributes.uv;
+    // (the middle of its points at each end of its texture, each way: its top less its foot, its lines' ends less their starts)
+    const ends = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()], counts = [0, 0, 0, 0];
+    const at = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      at.fromBufferAttribute(pos, i).applyMatrix4(print.matrixWorld);
+      const u = uv.getX(i), v = uv.getY(i);
+      if (v > 0.75) { ends[0].add(at); counts[0]++; } else if (v < 0.25) { ends[1].add(at); counts[1]++; }
+      if (u > 0.75) { ends[2].add(at); counts[2]++; } else if (u < 0.25) { ends[3].add(at); counts[3]++; }
+    }
+    if (counts.some((c) => !c)) continue;
+    ends.forEach((e, i) => e.divideScalar(counts[i]));
+    away = Math.min(away, ends[0].sub(ends[1]).normalize().dot(forward));
+    rightward = Math.min(rightward, ends[2].sub(ends[3]).normalize().dot(right));
+  }
+  return { away, right: rightward };
+}
+
+/** `book` turned half round about its pages' facing for a moment, as `read` reads it (a canary: read upside down). */
+export function turnedRound<T>(book: THREE.Object3D, read: () => T): T {
+  const was = book.quaternion.clone();
+  book.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+  book.updateMatrixWorld(true);
+  try { return read(); } finally { book.quaternion.copy(was); book.updateMatrixWorld(true); }
+}
