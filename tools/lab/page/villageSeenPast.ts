@@ -19,12 +19,12 @@ import {
   holdBuiltOpenAlways,
   holdColumnsUnderWalls,
   holdThinningReach,
-  thinningLetGo,
 } from '../../../src/core/seeThrough';
 import { groundHeight } from '../../../src/world/ground';
 import { drawFrame } from './light';
 import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
+import { nothingThinned } from './nothingThinned';
 
 /** the frames given to settle */
 const SETTLE = 90;
@@ -140,7 +140,7 @@ function readStand(lab: Lab, stand: Stand): { wrong: number; read: number; worst
   if (stand.noColumns) hideHallColumns(true);
   const canvas = drawFrame(lab);
   const thinned = canvas.pixels.slice();
-  const giveBack = thinningLetGo();
+  const giveBack = nothingThinned();
   const whole = drawFrame(lab).pixels;
   giveBack();
   if (stand.noColumns) hideHallColumns(false);
@@ -172,7 +172,7 @@ export function placesThinned(lab: Lab, points: THREE.Vector3[]): (number | null
   hideHallColumns(true);
   const canvas = drawFrame(lab);
   const thinned = canvas.pixels.slice();
-  const giveBack = thinningLetGo();
+  const giveBack = nothingThinned();
   const whole = drawFrame(lab).pixels;
   giveBack();
   hideHallColumns(false);
@@ -229,7 +229,7 @@ function ghostShown(lab: Lab, point: THREE.Vector3): number {
   hideHallColumns(true);
   const none = drawFrame(lab).pixels.slice();
   hideHallColumns(false);
-  const giveBack = thinningLetGo();
+  const giveBack = nothingThinned();
   const whole = drawFrame(lab).pixels;
   giveBack();
   const pixel = pixelOf(point, canvas.width, canvas.height);

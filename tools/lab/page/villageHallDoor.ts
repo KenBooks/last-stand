@@ -30,13 +30,14 @@ import {
 } from '../../../src/game/village';
 import {
   doorFadeShare, GHOST_COUNT, hideHallColumns, holdHallFloorClear, holdPorticoDepthInside, holdRoomColumnsOverWalls,
-  thinningLetGo, thinsByBlending, wholeShare,
+  thinsByBlending, wholeShare,
 } from '../../../src/core/seeThrough';
 import { holdDoorWedgeCentered, seenShareAt } from '../../../src/core/sight';
 import { drawFrame } from './light';
 import { hisPixels } from './villageHeroInView';
 import { fromAboveAtNoon, LOOKING_IN, standFacing } from './villageHallOpens';
 import type { LightsChecked } from './villageLights';
+import { nothingThinned } from './nothingThinned';
 
 /** stands outside in front of the hall where `hallFront`, `hallBeam`, and portico columns stay solid */
 const STAND_OUTSIDE: readonly { name: string; x: number; z: number; facing: number }[] = [
@@ -164,7 +165,7 @@ function bleedBehindSolidFrontDiff(lab: Lab, wings: readonly (-1 | 1)[],
   return { diff: meanPointDiff(drawn, withoutCols, offsets), count: offsets.length };
 }
 
-/** Mean RGB difference across visible left portico column shafts against `thinningLetGo()`. */
+/** Mean RGB difference across visible left portico column shafts against `nothingThinned()`. */
 function porticoSolidDiff(lab: Lab): { diff: number; count: number } {
   const asDrawn = drawFrame(lab);
   const drawn = asDrawn.pixels.slice();
@@ -175,13 +176,13 @@ function porticoSolidDiff(lab: Lab): { diff: number; count: number } {
       if (px !== null) offsets.push(px);
     }
   }
-  const restore = thinningLetGo();
+  const restore = nothingThinned();
   const solid = drawFrame(lab).pixels;
   restore();
   return { diff: meanPointDiff(drawn, solid, offsets), count: offsets.length };
 }
 
-/** Mean RGB difference vs `thinningLetGo()` over world points on `hallFront` (`z = HALL.door`). */
+/** Mean RGB difference vs `nothingThinned()` over world points on `hallFront` (`z = HALL.door`). */
 function frontWallPointsDiff(lab: Lab, xs: readonly number[], ys: readonly number[]): { diff: number; count: number } {
   const asDrawn = drawFrame(lab);
   const drawn = asDrawn.pixels.slice();
@@ -192,7 +193,7 @@ function frontWallPointsDiff(lab: Lab, xs: readonly number[], ys: readonly numbe
       if (px !== null) offsets.push(px);
     }
   }
-  const restore = thinningLetGo();
+  const restore = nothingThinned();
   const solid = drawFrame(lab).pixels;
   restore();
   return { diff: meanPointDiff(drawn, solid, offsets), count: offsets.length };
@@ -265,7 +266,7 @@ function stackedVisibility(lab: Lab): number {
   }
 }
 
-/** Mean RGB difference over the bottom strip of the open wooden door leaves vs `thinningLetGo()`, sampled on each
+/** Mean RGB difference over the bottom strip of the open wooden door leaves vs `nothingThinned()`, sampled on each
  *  leaf's inward (camera-facing) face so the steep top-down view ray meets it below `FLOOR_CLEAR`. */
 function doorBottomDiff(lab: Lab): { diff: number; count: number } {
   const asDrawn = drawFrame(lab);
@@ -283,7 +284,7 @@ function doorBottomDiff(lab: Lab): { diff: number; count: number } {
       if (px !== null) offsets.push(px);
     }
   }
-  const restore = thinningLetGo();
+  const restore = nothingThinned();
   const solid = drawFrame(lab).pixels;
   restore();
   return { diff: meanPointDiff(drawn, solid, offsets), count: offsets.length };
