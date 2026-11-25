@@ -525,10 +525,13 @@ function hallInside(dt: number): void {
   // (with him outside, the hall's own ghost left a column under the camera as a dark slab over him, from play)
   // (on the portico, its columns are what hides him: at the room's ghost one before him by the chest stood half solid
   // over him, from play "this column thins less than others somehow")
+  // (a column of the room over the shoulder at the room's own ghost: at the portico's, with the hole round him, it was
+  // gone whole in the hall's dim light, from play "column is completely hidden", which breaks the rule that what's
+  // thinned still reads as what it was)
   const columnGhost = roofAway && inside ? (porticoHidesHim() ? OUTSIDE_GHOST : COLUMN_GHOST)
     : (lobby && view === 'top' && hallHidesHim() && !under) || (lobby && view !== 'first' && porticoHidesHim())
-      || (lobby && view !== 'first' && inside && roomColumnHidesHim()) || (roofAway && porticoConeOutsideHeld)
-      ? OUTSIDE_GHOST : 0;
+      || (roofAway && porticoConeOutsideHeld) ? OUTSIDE_GHOST
+      : lobby && view !== 'first' && inside && roomColumnHidesHim() ? ROOM_COLUMN_GHOST : 0;
   columnFade = THREE.MathUtils.damp(columnFade, columnGhost, CUT_AWAY_FADE, dt);
   // (all their depth kept in the hall alone: outside it, the fog read a ghost's place in the hall, unseen, as a slab)
   // (on the portico too: there the fog read a portico column's back, which he can't see, by its depth kept, and stood it
@@ -1012,6 +1015,11 @@ const COLUMN_GHOST = 0.55;
  *  portico before him from the square left him dim behind it, under half of him shown (`lab village --only
  *  heroBehindProps`), and from over the hall one under the camera stood over him as a dark slab */
 const OUTSIDE_GHOST = 0.8;
+/** how far the hall's columns thin over the shoulder where one of its room hides him: its near face is its unlit
+ *  side, over the room's dark floor, and thinned as the portico's (or as what stands free from above, 0.55, its pale
+ *  stone further) a ghost of it read as nothing, from play "column is completely hidden" (`lab village --only
+ *  heroBehindProps` reads how much of it still shows) */
+const ROOM_COLUMN_GHOST = 0.4;
 /** the cone he sees through the hall's door: how far from the door's inner face it's open whole and shut (m, out from it),
  *  from how far in it's shut and open whole, what share of what hides it is thinned, and how far in from the door the
  *  floor he must see through it lies (m, down its middle). Open while he sees in, as far out as the dais's heroes stand
