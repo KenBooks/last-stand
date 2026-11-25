@@ -97,6 +97,11 @@ let goneFor: NonNullable<ReturnType<typeof rootNearest>> | null = null;
 /** The host: pacing off till the guest is caged, then up beside the root nearest it, striking it till it breaks. */
 export function hostInput(frame: number): Frame {
   const hero = G.player;
+  // (her other attacks held while her cage stands: she throws at far heroes in turn, and her branches and vines at
+  // the host on his way kept him from the cage; what's judged is the cage alike on both screens)
+  if (CAGE) {
+    for (const foe of G.enemies) if (foe.def.ai === 'rootmother') foe.cd = Math.max(foe.cd, 1);
+  }
   const guest = G.players.find((player) => !player.local);
   const round = CAGE && guest && Math.hypot(guest.pos.x - CAGE.x, guest.pos.z - CAGE.z) < C.radius;
   if (!round || !CAGE?.roots.includes(goneFor!) || goneFor?.prop?.broken) goneFor = null;

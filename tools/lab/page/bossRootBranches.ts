@@ -22,6 +22,7 @@ import type { SkillKey } from '../../../src/types';
 import { ROOTMOTHER } from '../../../src/data/foes/rootmother';
 import { BRANCHES, type Attack, type ThrownBranch } from '../../../src/entities/rootmother';
 import { CAGE } from '../../../src/entities/rootCage';
+import { forgetBeats } from '../../../src/entities/bossKit';
 import { PIPELINES } from '../../../src/engine/pipelinesAside';
 import { fixed, type BossOptions } from './boss';
 import { holdHerAfter, nextIs, rootmother, standClear } from './bossRootmother';
@@ -66,6 +67,8 @@ async function throwCase(lab: Lab, options: BossOptions, attack: Attack, life: n
   await standClear(lab, options);
   const hero = G.player;
   const boss: Enemy = await rootmother(lab);
+  // (the set-up turns the clock back: the cases before's claimed beats would refuse her throw)
+  forgetBeats();
   if (life < 1) boss.takeDamage(boss.life - life * boss.maxLife, {});
   const from = BRANCHES.length ? BRANCHES[BRANCHES.length - 1] : null;
   const hits: Landed[] = [];

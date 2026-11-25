@@ -599,7 +599,7 @@ export async function rootCompiles(lab: Lab, options: BossOptions): Promise<numb
     fx('crushRise', boss.id, h.x, h.z, h.x - 4, h.z, 0.5);
     await lab.step(35);
     fx('crush', boss.id, h.x, h.z, h.x - 4, h.z, 0);
-    if (options.canary) await drawOdd(lab, boss.pos);
+    if (options.canary) await drawOdd(lab, boss.pos, true);
     await lab.step(60, () => ({}), () => { boss.cd = 99; });
     return PIPELINES.made - before;
   } finally {

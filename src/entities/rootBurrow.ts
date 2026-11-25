@@ -20,7 +20,7 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { ROOTMOTHER } from '../data/foes/rootmother';
 import { ARENA } from '../data/balance';
-import { addEffect, crackDecal, decal } from '../fx/effects';
+import { addEffect, crackDecal, decal, driftGlow } from '../fx/effects';
 import { debris, smokePuff } from '../fx/particles';
 import { addShake } from '../core/renderer';
 import { rootSounds } from '../core/sounds/rootmother';
@@ -43,6 +43,10 @@ const EARTH = 0x2a2418, AMBER = 0xff9a38;
  *  way (m: across, up, along) */
 const MOUND = { wide: 2.4, high: 1.1, settle: 2.5, bulge: 0.8, torn: 2.8 };
 const RIDGE = new THREE.Vector3(0.9, 0.55, 1.8);
+/** what shows her way from above: a soft glow under the ridge (m round, strength), the dust off it (s between puffs,
+ *  its colour) and how bright its cracks glow behind it */
+const RIDGE_GLOW = { radius: 2.2, intensity: 0.7, dustEvery: 0.1, cracks: 0.55 };
+const DUST = 0x8a7656;
 /** how many spots round the hero `riseSpot` tries, at each of three distances across `ring` */
 const TRIES = 24;
 
@@ -176,7 +180,7 @@ export function burrowAt(id: number, fx0: number, fz0: number, tx: number, tz: n
   rootSounds.groan(B.sink);
   rootSounds.crack(B.sink);
   addShake(0.25);
-  let t = 0, crackedTo = 0, puff = 0, warned = false, risen = false;
+  let t = 0, crackedTo = 0, puff = 0, dust = 0, warned = false, risen = false, glowing = false;
   addEffect({
     update(dt) {
       t += dt;
@@ -210,11 +214,27 @@ export function burrowAt(id: number, fx0: number, fz0: number, tx: number, tz: n
       if (t >= s.sink && t < s.under) {
         const k = (t - s.sink) / travel;
         const x = fx0 + (tx - fx0) * k, z = fz0 + (tz - fz0) * k;
+        // (seen from above, a mound of dark soil on dark ground hardly shows: a soft warm glow travels under the ridge
+        // with it, dust thrown up off it, and its cracks glow faintly behind it; all soft light and particles)
+        if (!glowing) {
+          glowing = true;
+          const along = (at: number, out: THREE.Vector3): boolean => {
+            const j = clamp01(at / travel);
+            out.set(fx0 + (tx - fx0) * j, 0, fz0 + (tz - fz0) * j);
+            return at < travel;
+          };
+          driftGlow(along, RIDGE_GLOW.radius, travel, { color: AMBER, intensity: RIDGE_GLOW.intensity });
+        }
+        if ((dust += dt) > RIDGE_GLOW.dustEvery) {
+          dust = 0;
+          smokePuff(_at.set(x, groundHeight(x, z) + 0.2, z),
+            { count: 2, color: DUST, alpha: 0.45, size: 0.7, sizeEnd: 1.8, speed: 1.2, life: 0.9 });
+        }
         _size.copy(RIDGE).multiplyScalar(Math.min(1, (t - s.sink) * 4, (s.under - t) * 4));
         placeLump(pool.ridge, _at.set(x, groundHeight(x, z) - RIDGE.y * 0.35, z), turn, _size);
         while (crackedTo < k * length) {
           const cx = fx0 + way.x * crackedTo, cz = fz0 + way.z * crackedTo;
-          crackDecal({ x: cx, z: cz }, { size: 1.6, color: EARTH, intensity: 0.6, life: 2.2 });
+          crackDecal({ x: cx, z: cz }, { size: 1.6, color: AMBER, intensity: RIDGE_GLOW.cracks, life: 2.2 });
           debris(_at.set(cx, groundHeight(cx, cz), cz), { count: 3, speed: 2, size: 0.14, life: 0.7 });
           crackedTo += 1.1;
         }

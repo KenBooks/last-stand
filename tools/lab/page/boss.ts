@@ -33,21 +33,24 @@ import { rootBurrow, rootBurrowPictures } from './bossRootBurrow';
 import { threat } from './bossThreat';
 import { branchPictures, branches, rootCost } from './bossRootBranches';
 import { rootCage, rootCagePictures } from './bossRootCage';
+import { rootSurvive, rootThreat } from './bossRootThreat';
+import { comboPictures, combos } from './bossRootCombos';
 
 /** The parts the command runs, in order. */
 /** the Rootmother's parts that are judged */
-type RootPart = 'rootPhases' | 'vines' | 'pods' | 'heart' | 'rootBurrow' | 'branches' | 'rootCage' | 'threat';
+type RootPart = 'rootPhases' | 'vines' | 'pods' | 'heart' | 'rootBurrow' | 'branches' | 'rootCage' | 'threat'
+  | 'rootThreat' | 'rootSurvive' | 'combos';
 /** the parts that picture moments for the eye alone, asked for by name */
 type PicturePart = 'rootPictures' | 'rootLook' | 'rootBurrowPictures' | 'branchPictures' | 'rootCost'
-  | 'rootCagePictures';
+  | 'rootCagePictures' | 'comboPictures';
 export type BossPart = 'ladder' | 'stand' | 'ttk' | EncounterPart | RootPart | PicturePart;
 // (`compiles` is one part for every boss: the encounter's and the Rootmother's, after both)
 export const BOSS_PARTS: BossPart[] = [
   'ladder', 'stand', ...ENCOUNTER_PARTS.filter((part) => part !== 'compiles'),
-  'rootPhases', 'vines', 'pods', 'heart', 'rootBurrow', 'branches', 'rootCage', 'compiles', 'ttk',
+  'rootPhases', 'vines', 'pods', 'heart', 'rootBurrow', 'branches', 'combos', 'rootCage', 'compiles', 'ttk',
 ];
 const PICTURE_PARTS: BossPart[] = [
-  'rootPictures', 'rootLook', 'rootBurrowPictures', 'branchPictures', 'rootCost', 'rootCagePictures',
+  'rootPictures', 'rootLook', 'rootBurrowPictures', 'branchPictures', 'rootCost', 'rootCagePictures', 'comboPictures',
 ];
 
 export interface BossOptions {
@@ -271,15 +274,24 @@ async function compiles(lab: Lab, options: BossOptions, lines: string[], problem
   if (rooted > 0) problems.push(`compiles: ${rooted} pipelines made in the Rootmother's fight`);
 }
 
-/** The `compiles` canary's plant: a mesh drawn a few frames at `at` in a blending, side and depth no other material has
- *  together (the engine's pipelines are set apart by those: a flat-shaded Phong of its own made none, `twins.ts`). */
-export async function drawOdd(lab: Lab, at: THREE.Vector3): Promise<void> {
+/**
+ * The `compiles` canary's plant: a mesh drawn a few frames at `at` in a blending, side and depth no other material has
+ * together (the engine's pipelines are set apart by those: a flat-shaded Phong of its own made none, `twins.ts`).
+ * `multiplied` blends it as light already multiplied by its alpha (the flames' blending) in place of added: a plant of
+ * its own for a second fight in one part (the Rootmother's after the Cantor's encounter, whose plant is the added one
+ * and made its pipeline first, so hers read none).
+ */
+export async function drawOdd(lab: Lab, at: THREE.Vector3, multiplied = false): Promise<void> {
   const material = new THREE.MeshBasicMaterial({
     color: 0x123456,
-    blending: THREE.AdditiveBlending,
+    blending: multiplied ? THREE.CustomBlending : THREE.AdditiveBlending,
     side: THREE.BackSide,
     depthWrite: true,
   });
+  if (multiplied) {
+    material.blendSrc = THREE.OneFactor;
+    material.blendDst = THREE.OneMinusSrcAlphaFactor;
+  }
   const odd = new THREE.Mesh(new THREE.TorusKnotGeometry(0.3, 0.1), material);
   odd.position.copy(at).setY(2);
   G.scene.add(odd);
@@ -295,6 +307,7 @@ export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
   const problems: string[] = [];
   const run: Record<'ladder' | 'stand' | 'ttk' | 'compiles' | RootPart, typeof ladder> = {
     ladder, stand, rootPhases, vines, pods, heart, rootBurrow, branches, rootCage, compiles, ttk, threat,
+    rootThreat, rootSurvive, combos,
   };
   const moments: Pictured[] = [];
   const was = G.arena.biome;
@@ -306,6 +319,7 @@ export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
       else if (part === 'branchPictures') moments.push(...await branchPictures(lab, options, lines));
       else if (part === 'rootCost') await rootCost(lab, options, lines);
       else if (part === 'rootCagePictures') moments.push(...await rootCagePictures(lab, options, lines));
+      else if (part === 'comboPictures') moments.push(...await comboPictures(lab, options, lines));
       else if (part in run) await run[part as keyof typeof run](lab, options, lines, problems);
       else moments.push(...await encounterPart(part as EncounterPart, lab, options, lines, problems));
     }

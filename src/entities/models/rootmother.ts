@@ -27,6 +27,7 @@ import { Sculpt, branches, lathe, leaf, limb, organic, skipping, taperTube } fro
 import { hangCagePool } from './rootCage';
 import { hangBurrowPool } from './rootBurrow';
 import { mulberry } from '../../util';
+import { FOES, ROOTMOTHER } from '../../data/foes/rootmother';
 import type { AnimState, Model } from '../../types';
 
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
@@ -54,6 +55,14 @@ const DIVE = { down: 1.15, drawn: 0.4, thrust: 0.18 };
 export const BRANCH_LENGTH = 2;
 /** how many thrown branches her model keeps (a line's five and one more: the oldest is taken past that) */
 const THROWN_POOL = 6;
+
+/** Her rain's throws, each a share of its action (data/foes/rootmother.ts: the first as its warning ends, one every
+ *  `rain.every` s after). */
+function rainShares(): number[] {
+  const rain = FOES.rootmother!.def.bossKit!.attacks!.rain, every = ROOTMOTHER.branch.rain.every;
+  const length = rain.warn + rain.recover;
+  return Array.from({ length: ROOTMOTHER.branch.rain.count }, (_, i) => (rain.warn + i * every) / length);
+}
 /** a branch's scale while it's not shown: tiny, never 0 (a zero scale's inverse is NaN, black lines on screen) */
 export const NO_SIZE = 1e-4;
 
@@ -600,7 +609,24 @@ export function buildRootmother(): Model {
         for (const s of arm) { s.x += -3.0 * lift - 0.9 * slam; s.z += 0.35 * lift - 0.1 * slam; s.el += -0.5 * lift + 0.2 * slam; }
         waistX += -0.2 * lift + 0.45 * slam; chestX += -0.12 * lift + 0.2 * slam; headX += -0.35 * lift + 0.3 * slam;
         glow += 1.6 * lift;
-      } else if (a.name === 'branch' || a.name === 'fan' || a.name === 'volley') {
+      } else if (a.name === 'rain') {
+        // her rain: a branch thrown overhand from each hand in turn, the first as its warning ends, one every
+        // `rain.every` s after (each a share of the action: `rainShares`), each arm drawn back and brought over in
+        // the time before its throw
+        const at = rainShares();
+        for (let i = 0; i < at.length; i++) {
+          const s = arm[i % 2];
+          const lead = i === 0 ? at[0] * 0.6 : at[i] - at[i - 1];
+          const back = ramp(w, at[i] - lead, at[i] - lead * 0.15), over = ramp(w, at[i] - lead * 0.15, at[i]);
+          const after = 1 - ramp(w, at[i], Math.min(1, at[i] + lead * 0.5));
+          const k = (w < at[i] ? 1 : after) * (w > at[i] - lead ? 1 : 0);
+          s.x += (-3.0 * back * (1 - over) - 0.9 * over) * k;
+          s.el += (-1.5 * back * (1 - over) - 0.1 * over) * k;
+          s.z += 0.15 * back * k;
+          waistX += (-0.1 * back + 0.25 * over) * k;
+        }
+        heldShown = w < at[0] ? ramp(w, 0, at[0] * 0.4) : 0;
+      } else if (a.name === 'branch' || a.name === 'fan' || a.name === 'volley' || a.name === 'pair') {
         // the branch grown out of her hand held up before her, snapped off, her arm drawn back over her shoulder (the
         // elbow bent, her body leaning back), then brought over fast and let go as it comes level, following through
         const grow = ramp(w, 0, h * 0.4), back = ramp(w, h * 0.4, h * 0.88), over = ramp(w, h * 0.88, h);

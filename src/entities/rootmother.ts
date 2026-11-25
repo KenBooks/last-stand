@@ -70,6 +70,7 @@ import { VINE, coilRound, layVine, liftVine, releaseFrom, type LyingVine } from 
 import { BRANCH_LENGTH, NO_SIZE } from './models/rootmother';
 import { cageDue, caged, tickCage } from './rootCage';
 import { burrowDue, tickBurrow } from './rootBurrow';
+import { THROWS, aheadOf, branchFlight, hurl, rainLater, rainOne, watchPaces, type Throw } from './rootVolleys';
 import type { Enemy } from './enemy';
 import type { Player } from './player';
 
@@ -90,25 +91,26 @@ const heroes = (): Player[] => G.players.filter((p) => p.active);
 // --- her decisions, where the fight is simulated ---------------------------------------------------------
 
 /** What she does next in turn: each phase's round (a throw only at a hero far enough off, the thorns only with one
- *  near), an eruption every `erupt.every` attacks in phase 2. */
-export type Attack = 'vines' | 'seeds' | 'thorns' | 'erupt' | 'branch' | 'fan' | 'volley' | 'chase';
+ *  near), an eruption every `erupt.every` attacks in phase 2. Her throws are named in rootVolleys.ts: a pair in every
+ *  phase, her rain from phase 2, a fan and a line as before. */
+export type Attack = 'vines' | 'seeds' | 'thorns' | 'erupt' | 'chase' | Throw;
 export const ROUNDS: Attack[][] = [
-  ['vines', 'branch', 'seeds', 'branch', 'thorns'],
-  ['vines', 'fan', 'seeds', 'branch', 'thorns'],
-  ['volley', 'fan', 'chase', 'vines', 'branch', 'thorns'],
+  ['vines', 'pair', 'seeds', 'branch', 'pair', 'thorns'],
+  ['vines', 'fan', 'rain', 'seeds', 'pair', 'thorns'],
+  ['volley', 'rain', 'chase', 'fan', 'vines', 'rain', 'thorns'],
 ];
-/** the throws, and how many branches each throws */
-const THROWS: Partial<Record<Attack, number>> = { branch: 1, fan: 3, volley: 5 };
-/** her pause between attacks in each phase, a share of phase 1's */
-const PAUSE = [1, 0.8, R.rage.quicker];
+/** Whether `a` is one of her throws. */
+const isThrow = (a: Attack): a is Throw => a in THROWS;
 
 /** The Rootmother's AI, where the fight is simulated: an attack whenever her cooldown allows, none while her heart is
  *  open or she's burrowing; the spores' clouds in phase 2; her burrow between her sets of attacks or to a hero far off. */
 export function rootmotherAI(e: Enemy, dt: number): void {
   const b = e.brain;
   e.desired.set(0, 0, 0);
+  // (each hero's pace over the floor, read every frame: her throws lead it)
+  watchPaces(heroes(), dt);
   if (tickBurrow(e, dt)) return;
-  tickCage(e, dt);
+  tickCage(e, dt, vineHolds);
   if (e.bossPhase >= 1) drift(e, dt);
   if (e.weak > 0) {
     meditate(e, dt);
@@ -136,15 +138,23 @@ export function rootmotherAI(e: Enemy, dt: number): void {
     const t = R.thorns;
     telegraphed(e, 'thorns', () => fx('thorns', e.id, e.pos.x, e.pos.z, t.radius, t.last, e.damage),
       { x: e.pos.x, z: e.pos.z, radius: t.radius, color: SAP });
-  } else if (THROWS[attack]) {
+  } else if (attack === 'rain') {
+    // (her rain: a branch as its warning ends and one every `rain.every` s after, each at the far hero whose turn it
+    // is as it leaves her hand)
+    fx('branchTorn', e.id, 1);
+    const turn = (i: number): Player | null => farInTurn(e, i) ?? (p.active ? p : null);
+    telegraphed(e, 'rain', () => rainOne(e, 0, () => turn(0)), undefined,
+      rainLater(e, e.def.bossKit!.attacks!.rain.warn, turn));
+  } else if (isThrow(attack)) {
     if (heldHero() === p) b.heldThrowT = G.time;
-    fx('branchTorn', e.id, THROWS[attack]! > 1 ? 2 : 1);
+    fx('branchTorn', e.id, THROWS[attack] > 1 ? 2 : 1);
     telegraphed(e, attack, () => hurl(e, attack, p));
   } else if (attack === 'chase') {
     telegraphed(e, 'chase', () => {});
     chaseEarth(e, p);
   } else {
-    const x = p.pos.x, z = p.pos.z;
+    // (her eruption: where he'll be as it bursts, led as her branches are, so a stop or a turn still takes him out)
+    const { x, z } = aheadOf(p, e.def.bossKit!.attacks!.erupt.warn);
     fx('cracks', x, z, telegraphTime(e, 'erupt') * 0.68);
     telegraphed(e, 'erupt', () => {
       fx('erupt', e.id, x, z, R.erupt.radius, e.damage);
@@ -153,20 +163,19 @@ export function rootmotherAI(e: Enemy, dt: number): void {
   rootSounds.groan(telegraphTime(e, attack) * 0.6);
   b.attacks = (b.attacks ?? 0) + 1;
   // (a pause after each, shorter in phase 2 and shorter still as she rages)
-  e.cd = telegraphTime(e, attack) + e.def.cooldown * rand(0.85, 1.15) * PAUSE[Math.min(2, e.bossPhase)];
+  e.cd = telegraphTime(e, attack) + e.def.cooldown * rand(0.85, 1.15) * R.tempo[Math.min(2, e.bossPhase)];
 }
-
-/** How long a branch flies `d` m (s). */
-export const branchFlight = (d: number): number => R.branch.flight[0] + R.branch.flight[1] * d;
 
 /** Where simulated: attack `attack` at hero `p` let land (`claimBeat`): its hits' first moment and their spread. */
 function claimed(e: Enemy, attack: Attack, p: Player): boolean {
   const B = R.branch, warn = e.def.bossKit!.attacks![attack].warn;
   const d = Math.hypot(p.pos.x - e.pos.x, p.pos.z - e.pos.z);
-  const n = THROWS[attack];
-  if (n) {
-    // (a fan's and a line's branches land a little apart, over their flights' differences too)
-    const spread = attack === 'volley' ? (n - 1) * B.lineEvery : attack === 'fan' ? 0.2 : 0;
+  if (isThrow(attack)) {
+    // (a fan's and a line's branches land a little apart, over their flights' differences too; a pair's second and a
+    // rain's last a while after its first)
+    const n = THROWS[attack];
+    const spread = attack === 'volley' ? (n - 1) * B.lineEvery : attack === 'fan' ? 0.2
+      : attack === 'pair' ? B.pair.later : attack === 'rain' ? (n - 1) * B.rain.every : 0;
     return claimBeat(warn + branchFlight(d) - 0.15, B.gap, spread + 0.3);
   }
   if (attack === 'chase') return claimBeat(R.rage.chase.warn, B.gap, (R.rage.chase.count - 1) * R.rage.chase.every);
@@ -187,41 +196,32 @@ function nextAttack(e: Enemy): { attack: Attack; at: Player } {
   const target = e.target!;
   if (phase === 1 && (b.attacks ?? 0) % R.erupt.every === 0) return { attack: 'erupt', at: target };
   const off = (p: Player): number => Math.hypot(p.pos.x - e.pos.x, p.pos.z - e.pos.z) - e.radius;
-  // (never a throw into her cage while it holds him: its blow is coming)
-  const far = heroes().filter((p) => off(p) >= R.branch.near && !caged(p)).sort((p, q) => off(p) - off(q))[0];
+  // (never a throw into her cage while it holds him: its blow is coming; the far heroes each in turn)
+  const far = farInTurn(e, 0, true);
   const near = heroes().some((p) => off(p) < R.thorns.near);
   for (let i = 0; i < round.length; i++) {
     // (wrapped both ways: a claim refused steps her round back one, and twice running it went under 0)
     const a = round[(b.round = (((b.round ?? -1) + 1) % round.length + round.length) % round.length)];
-    if (THROWS[a] && far) return { attack: a, at: far };
+    if (isThrow(a) && far) return { attack: a, at: far };
     if (a === 'thorns' && near) return { attack: a, at: target };
-    if (!THROWS[a] && a !== 'thorns') return { attack: a, at: target };
+    if (!isThrow(a) && a !== 'thorns') return { attack: a, at: target };
   }
   return { attack: 'vines', at: target };
 }
 
 // --- her thrown branches ------------------------------------------------------------------------------------
 
-/** Where simulated, as her arm comes over: `attack`'s branches let go from her hand at hero `p` where he stands now,
- *  a fan's three and a line's five across her line to him, each a `branch` fx every game flies. */
-function hurl(e: Enemy, attack: Attack, p: Player): void {
-  if (!e.alive || !p.active) return;
-  const B = R.branch, n = THROWS[attack] ?? 1;
-  const from = releaseFrom(e, new THREE.Vector3());
-  const ax = p.pos.x - e.pos.x, az = p.pos.z - e.pos.z, d = Math.max(1, Math.hypot(ax, az));
-  const cx = az / d, cz = -ax / d;
-  const apart = attack === 'volley' ? B.lineApart : B.apart;
-  const hurt = attack === 'branch' ? B.hurt : attack === 'fan' ? B.fanHurt : B.lineHurt;
-  const splash = attack === 'branch' ? B.splash : B.smallSplash;
-  const stay = attack === 'volley' ? B.bramble : 0;
-  for (let i = 0; i < n; i++) {
-    const across = (i - (n - 1) / 2) * apart;
-    const tx = p.pos.x + cx * across, tz = p.pos.z + cz * across;
-    // (a line's branches land one after another from its near end, a fan's a breath apart)
-    const late = attack === 'volley' ? i * B.lineEvery : attack === 'fan' ? Math.abs(across) / apart * 0.1 : 0;
-    const flight = branchFlight(Math.hypot(tx - from.x, tz - from.z)) + late;
-    fx('branch', e.id, from.x, from.y, from.z, tx, tz, flight, e.damage, hurt, splash, stay);
-  }
+/**
+ * The far heroes (`branch.near` m or more off her trunk, none her cage holds), each in turn: the `i`th after the one
+ * whose turn it is; `next` moves the turn on (her next throw). With several heroes far off she throws at each in
+ * turn, and her rain's branches go to them in turn.
+ */
+function farInTurn(e: Enemy, i: number, next = false): Player | null {
+  const off = (p: Player): number => Math.hypot(p.pos.x - e.pos.x, p.pos.z - e.pos.z) - e.radius;
+  const far = heroes().filter((p) => off(p) >= R.branch.near && !caged(p)).sort((p, q) => p.slot - q.slot);
+  if (!far.length) return null;
+  if (next) e.brain.farTurn = (e.brain.farTurn ?? -1) + 1;
+  return far[((e.brain.farTurn ?? 0) + i) % far.length];
 }
 
 /** Where simulated, her rage: the earth erupting under hero `p` `chase.count` times, each warned where he stands as
@@ -297,9 +297,17 @@ export function heartOpened(id: number, open: number): void {
   });
 }
 
-// --- dragging herself -------------------------------------------------------------------------------------
+// --- the heroes her vines hold ----------------------------------------------------------------------------
 
-/** A hero one of her vines holds now, as this game has it (the host's, which moves her), or null. */
+/** Whether one of her vines holds hero `p` now, as this game has it (the host's: a partner's copy too). */
+function vineHolds(p: Player): boolean {
+  for (const c of CREEPERS.values()) {
+    if (c.cut < 0 && !c.gone && G.time < c.heldUntil && c.caught.has(p)) return true;
+  }
+  return false;
+}
+
+/** A hero one of her vines holds now, as this game has it (the host's, which decides her throws), or null. */
 function heldHero(): Player | null {
   for (const c of CREEPERS.values()) {
     if (c.cut >= 0 || c.gone || G.time >= c.heldUntil) continue;

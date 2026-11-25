@@ -974,6 +974,20 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   `takeDamage`, his Health kept whole) as a share of his most Health a minute. Standing still is the worst a player
   does, so it reads each boss alike: before the branches the Rootmother landed nothing on a ranger 11 m off in her
   first phase; with them 73%. Its canary takes her damage away. About 3 minutes a hero.
+  `combos` (`page/bossRootCombos.ts`; entities/rootVolleys.ts; from Kenneth, "throw more sticks at the ground,
+  like combos, and they should even try to predict your path"): her volleys at the hero 14 m off running round her
+  (the touch stick, as a player steers him), each aim she took read against where he really was as it landed (his
+  track frame by frame): a branch at him running on (it strikes him), stopping as it leaves her hand (it misses), a
+  pair at him running on (its second strikes him) and turning back (both miss), her rain running on and zigzagging
+  (its landings at least 0.65 s apart: the flash rule), her fan; each led aim along his way (a lead aimed where he
+  stands is "not leading"), and each hero's dodge window (a branch's flight, its ring shown so long, against the time
+  his run takes him out of its ring). Its canary takes her lead away: every aim not leading, the runner unstruck.
+  `comboPictures` (by name): her rain and a pair at him running round her, as the player sees it, zoomed out.
+  `rootThreat` (by name; `page/bossRootThreat.ts`): `threat` for a hero who moves, the Rootmother alone, 11 m off
+  her body, standing, running straight (back and forth along a 26 m line across hers to him), strafing (round her) and
+  zigzagging (round her, turning across his way every 0.8 s), whole and at 45% and 20%. `rootSurvive` (by name): how
+  long the hero with the starting gear lasts strafing and zigzagging round her from her rise, attacking nothing, 75 s
+  at most.
   `branchPictures` (by name): a branch from its side at a man's eye (the side view `bossSideView.ts` holds), her
   wind-up, the throw, its flight end over end and its landing, and as the player sees it; her fan, her line and its
   bramble, and her eruption chasing him, as the player sees them. `rootCost` (by name): her fight's frame at its

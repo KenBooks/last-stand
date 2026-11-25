@@ -22,9 +22,10 @@ export default {
       usage: 'a,b',
       choices: [
         'ladder', 'stand', 'toll', 'swing', 'encounter', 'bars', 'dive', 'choir', 'graves', 'rootPhases', 'vines',
-        'pods', 'heart', 'rootBurrow', 'branches', 'rootCage', 'compiles', 'ttk', 'threat', 'encounterPictures',
+        'pods', 'heart', 'rootBurrow', 'branches', 'combos', 'rootCage', 'compiles', 'ttk', 'threat', 'rootThreat', 'rootSurvive',
+        'encounterPictures',
         'cantorLook', 'film', 'choirPictures', 'frames', 'rootPictures', 'rootLook', 'rootBurrowPictures',
-        'branchPictures', 'rootCost', 'rootCagePictures',
+        'branchPictures', 'rootCost', 'rootCagePictures', 'comboPictures',
       ],
       help: 'the parts (all but those asked for by name, by default): ladder, stand, toll, swing, encounter, '
         + 'bars, dive, choir, graves (the Ossuary Cantor\'s encounter), rootPhases, vines, pods, heart, '

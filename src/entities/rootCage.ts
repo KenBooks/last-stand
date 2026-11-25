@@ -53,13 +53,16 @@ const UP = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
 /** Where each hero has stood since when (by his slot): he stands still while he keeps within `still.radius` of it. */
 const STILL = new Map<number, { x: number; z: number; since: number }>();
 
-/** Where simulated, every frame: each hero's standing watched, her cage's wait counted down. */
-export function tickCage(e: Enemy, dt: number): void {
+/** Where simulated, every frame: each hero's standing watched, her cage's wait counted down. A hero `held` (her vine
+ *  holds him, as the host has it) or rooted, stunned or seized isn't standing still by choice: his clock starts again
+ *  while he's held, so her cage never warns at a hero who can't walk out of it (with her quicker tempo it came while
+ *  her vine held him). */
+export function tickCage(e: Enemy, dt: number, held: (p: Player) => boolean): void {
   e.brain.cageT = (e.brain.cageT ?? C.first) - dt;
   for (const p of G.players) {
     const s = STILL.get(p.slot);
     if (!p.active) STILL.delete(p.slot);
-    else if (!s || Math.hypot(p.pos.x - s.x, p.pos.z - s.z) > C.still.radius) {
+    else if (!s || Math.hypot(p.pos.x - s.x, p.pos.z - s.z) > C.still.radius || held(p) || p.rooted) {
       STILL.set(p.slot, { x: p.pos.x, z: p.pos.z, since: G.time });
     }
   }
