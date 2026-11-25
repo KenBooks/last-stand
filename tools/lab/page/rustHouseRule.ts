@@ -202,7 +202,7 @@ function stands(mesh: THREE.Mesh): boolean {
 }
 
 /** The scene's meshes of some kinds of see-through shown or hidden (a material hidden hides every mesh of it). */
-function show(kinds: readonly Parameters<typeof seeValue>[0][], shown: boolean, standing: boolean): void {
+export function show(kinds: readonly Parameters<typeof seeValue>[0][], shown: boolean, standing: boolean): void {
   const wanted = new Set<SeeThrough>(kinds.map((kind) => seeValue(kind)));
   G.scene.traverse((object) => {
     const mesh = object as THREE.Mesh;
@@ -220,7 +220,7 @@ function show(kinds: readonly Parameters<typeof seeValue>[0][], shown: boolean, 
 }
 
 /** The houses' parts shown or hidden: every mesh of a house's kind of see-through that stands over the ground. */
-function showHouses(shown: boolean): void {
+export function showHouses(shown: boolean): void {
   show(HOUSE_KINDS, shown, true);
 }
 
@@ -230,13 +230,13 @@ function showColumns(shown: boolean): void {
 }
 
 /** A frame as the browser pictures it: the lab's picture of it, and its pixels. */
-interface Shot {
+export interface Shot {
   pictured: Pictured;
   pixels: ImageData;
 }
 
 /** The frame pictured after a switch has had its frames. */
-async function shotAfter(lab: Lab, label: string): Promise<Shot> {
+export async function shotAfter(lab: Lab, label: string): Promise<Shot> {
   await lab.step(SWITCH_FRAMES);
   const pictured = await lab.screen(label);
   const image = new Image();
@@ -391,8 +391,9 @@ function readBlocks(view: RuleView, played: Float32Array, whole: Float32Array, b
   };
 }
 
-/** A view stood at and read: pictured as played, with nothing thinned and with the houses hidden. */
-export async function readView(lab: Lab, view: RuleView): Promise<[RuleRead, Pictured[]]> {
+/** `view` stood at and settled, its room's pipelines made, the game paused and drawn in plain colours: `done` puts
+ *  the game back. */
+export async function settledAt(lab: Lab, view: RuleView): Promise<{ done: () => Promise<void> }> {
   await standAt(lab, { biome: G.arena.biome, view: 'top', village: true, at: view.at, hour: 12, zoom: view.zoom });
   faceCamera((view.turned * Math.PI) / 180 - Math.PI);
   const drawing = lab.drawing;
@@ -406,11 +407,23 @@ export async function readView(lab: Lab, view: RuleView): Promise<[RuleRead, Pic
   if (!ROOMS.ready) throw new Error(`the rooms' pipelines never compiled in ${ROOMS_WAIT_FRAMES} frames`);
   await lab.step(SETTLE_FRAMES);
   const paused = G.paused;
-  const tune = { debug: RUST.tune.debug };
+  const debug = RUST.tune.debug;
   G.paused = true;
+  // (a plain colour in the lit shading's place: no shadow of a hidden house missing from the ground)
+  RUST.tune.debug = 3;
+  const done = async (): Promise<void> => {
+    RUST.tune.debug = debug;
+    G.paused = paused;
+    await lab.step(SWITCH_FRAMES);
+    lab.drawing = drawing;
+  };
+  return { done };
+}
+
+/** A view stood at and read: pictured as played, with nothing thinned and with the houses hidden. */
+export async function readView(lab: Lab, view: RuleView): Promise<[RuleRead, Pictured[]]> {
+  const settled = await settledAt(lab, view);
   try {
-    // (a plain colour in the lit shading's place: no shadow of a hidden house missing from the ground)
-    RUST.tune.debug = 3;
     showColumns(false);
     const played = await shotAfter(lab, `${view.name}: as played`);
     // (stood in a building its roof is gone whole, and read alone below: the rest is held against the frame
@@ -470,11 +483,8 @@ export async function readView(lab: Lab, view: RuleView): Promise<[RuleRead, Pic
   } finally {
     showHouses(true);
     showColumns(true);
-    RUST.tune.debug = tune.debug;
     RUST.tune.housesWhole = 0;
-    G.paused = paused;
-    await lab.step(SWITCH_FRAMES);
-    lab.drawing = drawing;
+    await settled.done();
   }
 }
 
@@ -534,6 +544,13 @@ export async function houseRule(lab: Lab, only = ''): Promise<[Checked[], Pictur
     checks.push(check);
     if (check.problems.length) moments.push(...pictures);
   }
+  // (and a column that stands over him, a ghost from foot to top: a measure of its own, `rustColumnOver.ts`)
+  const { COLUMN_VIEW_NAME, columnOverHim } = await import('./rustColumnOver');
+  if (COLUMN_VIEW_NAME.includes(only)) {
+    const [check, pictures] = await columnOverHim(lab);
+    checks.push(check);
+    moments.push(...pictures);
+  }
   return [checks, moments];
 }
 
@@ -575,6 +592,8 @@ export async function houseRuleHolds(lab: Lab): Promise<Checked> {
   } finally {
     RUST.tune.wallsSeenIn = 1;
   }
+  const { columnOverHim } = await import('./rustColumnOver');
+  broken.push(...(await columnOverHim(lab))[0].problems);
   if (broken.length) return failed(`a house from above: ${broken.join('; ')}`);
   return passed(`a house from above opens over ground he sees alone: the portico case from four sides, and a cottage (lab houserule: all)`);
 }

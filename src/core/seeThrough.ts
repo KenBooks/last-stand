@@ -64,6 +64,9 @@ interface Kind {
   /** how far round the line to him what thins whole reaches: from x it comes back, whole by y (m at his depth); all of it
    *  if not given */
   reach?: { value: THREE.Vector2 };
+  /** of a cover with a `reach`: how high it stands over its floor (m). Where it stands between the camera and him
+   *  all of it is a ghost, foot to top, by that height */
+  high?: number;
   /** the room it thins for (least x, least z, most x, most z): only what has it just past it along the view thins whole;
    *  everywhere if not given */
   room?: { value: THREE.Vector4 };
@@ -170,6 +173,8 @@ const HALL_K = { value: new THREE.Vector4(1.0, 1.8, 0, -1000) };
 /** a hall column's: no hole of its own, as the hall's walls have none: each thins whole. On top of that, a wall's hole cut
  *  a round bite out of the door's jambs and the lintel as he stood in the doorway, and a column's left it clear below and
  *  solid above, a smoke gradient (from play, "still looks broken to me"; a review) */
+/** how high the hall's columns stand over its floor, their capitals' tops (m) */
+const COLUMN_HIGH = 6;
 const COLUMN_K = { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) };
 /** the share of the floor he sees the hall's columns thin by (`HALL_SIGHT`; their pale surfaces further, `PALE`) */
 const COLUMN_SIGHT = 1.45;
@@ -249,7 +254,7 @@ const kinds = {
   // (those near the line to him: a column well aside of it hides nothing of him, and all gone, the portico stood on plinths)
   hallColumn: { k: COLUMN_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: { value: 0.4 }, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
     pale: true, sight: true, sightShare: COLUMN_SIGHT, sightOn: HALL_SIGHT_COLUMNS,
-    reach: { value: new THREE.Vector2(0.8, 1.6) }, room: HALL_ROOM, door: HALL_DOOR },
+    reach: { value: new THREE.Vector2(0.8, 1.6) }, room: HALL_ROOM, door: HALL_DOOR, high: COLUMN_HIGH },
 } satisfies Record<string, Kind>;
 
 /** how far the hall's walls thin where they hide the floor he sees (a share of their pixels, `hallSightCone`): from
@@ -549,6 +554,9 @@ export interface SeeThrough {
   whole: { value: number };
   ramp: { value: number };
   reach?: { value: THREE.Vector2 };
+  /** of a cover with a `reach`: how high it stands over its floor (m). Where it stands between the camera and him
+   *  all of it is a ghost, foot to top, by that height */
+  high?: number;
   room?: { value: THREE.Vector4 };
   door?: { value: THREE.Vector4 };
   doorOn?: { value: number };

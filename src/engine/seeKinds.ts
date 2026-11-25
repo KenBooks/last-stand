@@ -116,6 +116,10 @@ export class SeeKinds {
         // (what has a reach of its own stands as one, a column: judged by its foot, all of it alike, and the share of
         // it left there its own)
         g[at + 10] = see.reach ? Math.max(TUNE.columnLeft, 0.01) : 0;
+        // (and how high it stands over its floor: where it stands over him it's a ghost from foot to top, all of
+        // it alike; by each pixel's place its shaft was cut through and its capital left in the air, from play
+        // "just odd geometry... we should not make player wondering what the geometry was before thinning")
+        if (see.reach) g[at + 7] = TUNE.columnsWhole ? see.high ?? 0 : 0;
       }
       // (its cone of his sight, and the share it thins by there: none for a kind that reads none of his sight)
       // (a cover's second box ends in the first of these: written over, the box reached to the village's middle)
