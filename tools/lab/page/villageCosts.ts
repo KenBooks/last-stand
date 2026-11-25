@@ -127,6 +127,7 @@ export const VILLAGE_COSTS: Readonly<Record<string, number>> = {
   campfireStonesApart: 1,
   wallFurnitureCut: 1,
   dummiesSquare: 1,
+  dashKeptInYard: 3,
   grassNotThroughProps: 3,
   minimapOut: 1,
   hoursCompileNothing: 1,
