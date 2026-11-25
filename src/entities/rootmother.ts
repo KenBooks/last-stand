@@ -1,6 +1,6 @@
 // The Rootmother (the Thornwood's second boss, data/enemies.ts `rootmother`, its numbers `ROOTMOTHER`): a giant woman
-// grown out of a hollow tree in the arena's middle, her lower half all roots. She moves only to walk on her roots
-// towards a hero her vine holds. Built on the shared boss
+// grown out of a hollow tree in the arena's middle, her lower half all roots. She never walks: she burrows, going
+// under the floor and rising again near the hero she goes for (entities/rootBurrow.ts). Built on the shared boss
 // toolkit (entities/bossKit.ts): her phases, her telegraphed attacks, her heart as her weak-spot window. Her model is
 // models/rootmother.ts, her seed pods' models/seedpod.ts.
 //
@@ -36,14 +36,12 @@
 //   arena one after another (`heart.pods`).
 // - **Her root cage** (every phase; entities/rootCage.ts): a hero who stands still a couple of seconds is caged in
 //   roots, and a great root she raises beside the cage comes down on it.
-// - **Walking on her roots** (both phases): while one of her vines holds a hero, she heaves her trunk up onto her
-//   roots and walks on them towards him (from Victor, of her gliding: "how is she moving? would not be possible irl"),
-//   as her model steps them (models/rootmother.ts: half her roots planted and bearing her while the rest step ahead),
-//   her speed surging through each step and all but stopping as its roots land (a step every `drag.stride` m she
-//   covers, read from the ground she covered, so her model's steps land on her slowest), earth thrown up round her
-//   (enemyAI's `drag` fx); she stops looming over him or as the hold ends (its time out, the vine cut, a dash torn
-//   free), and settles into the earth; never with her heart open. Where she stops she stays.
-// (She grew in the middle and moves only so: a lure never draws her, `EnemyDef.ignoresLures`.)
+// - **Her burrow** (every phase; entities/rootBurrow.ts; from Kenneth: "instead of moving slowly, it teleports, just
+//   going underground, roots going into the ground, and then it appears near you"): her roots driven into the soil,
+//   her body after them, a ridge of soil travelling over her way under the floor, the earth bulging and cracking where
+//   she'll rise, then her roots bursting out and her body rising, a few metres from the hero she goes for. She attacks
+//   nothing and nothing strikes her from half under till she rises.
+// (She moves only so: a lure never draws her, `EnemyDef.ignoresLures`.)
 // Every attack goes through enemyAI's `fx`, so each co-op game plays it from the same numbers and judges its own hero
 // alone (`hurtPlayer` on the local player, `Player.root` on his own game).
 import * as THREE from 'three';
@@ -71,6 +69,7 @@ import { chase, fx } from './enemyAI';
 import { VINE, coilRound, layVine, liftVine, releaseFrom, type LyingVine } from './throws';
 import { BRANCH_LENGTH, NO_SIZE } from './models/rootmother';
 import { cageDue, caged, tickCage } from './rootCage';
+import { burrowDue, tickBurrow } from './rootBurrow';
 import type { Enemy } from './enemy';
 import type { Player } from './player';
 
@@ -104,11 +103,11 @@ const THROWS: Partial<Record<Attack, number>> = { branch: 1, fan: 3, volley: 5 }
 const PAUSE = [1, 0.8, R.rage.quicker];
 
 /** The Rootmother's AI, where the fight is simulated: an attack whenever her cooldown allows, none while her heart is
- *  open; the spores' clouds in phase 2; dragging herself towards a hero her vine holds. */
+ *  open or she's burrowing; the spores' clouds in phase 2; her burrow between her sets of attacks or to a hero far off. */
 export function rootmotherAI(e: Enemy, dt: number): void {
   const b = e.brain;
   e.desired.set(0, 0, 0);
-  dragTo(e, dt);
+  if (tickBurrow(e, dt)) return;
   tickCage(e, dt);
   if (e.bossPhase >= 1) drift(e, dt);
   if (e.weak > 0) {
@@ -120,6 +119,9 @@ export function rootmotherAI(e: Enemy, dt: number): void {
   if (e.action || e.cd > 0) return;
   // (a hero standing still caged first: it punishes standing still)
   if (cageDue(e)) return;
+  // (her burrow: between her sets of attacks, the last of a set done, or to a hero gone far off)
+  const set = ROUNDS[Math.min(2, e.bossPhase)].length;
+  if (burrowDue(e, b.round !== undefined && (b.round + 1) % set === 0)) return;
   const { attack, at: p } = nextAttack(e);
   e.faceTo(p.pos.x, p.pos.z);
   // (none of her hits lands within `branch.gap` s of another: one that would waits a moment and is chosen again)
@@ -304,72 +306,6 @@ function heldHero(): Player | null {
     for (const p of c.caught) if (p.active) return p;
   }
   return null;
-}
-
-/** Where simulated: walking on her roots towards a hero a vine holds (round what stands between), unless she's on him
- *  already or her heart is open; risen onto them first, then her speed surging through each step and all but stopped
- *  as its roots land, her steps counted from the ground she covers (as her model counts them); every game told as she
- *  starts and stops (the `drag` fx). */
-function dragTo(e: Enemy, dt: number): void {
-  const p = e.weak > 0 ? null : heldHero();
-  const on = !!p && Math.hypot(p.pos.x - e.pos.x, p.pos.z - e.pos.z) > e.radius + p.radius + R.drag.near;
-  const b = e.brain, d = R.drag;
-  // (her steps from the ground she covered: her model's own count, so its roots land on her slowest)
-  b.walked = (b.walked ?? 0) + (b.lastX === undefined ? 0 : Math.hypot(e.pos.x - b.lastX, e.pos.z - b.lastZ));
-  b.lastX = e.pos.x;
-  b.lastZ = e.pos.z;
-  if (on && p) {
-    b.risen = Math.min(1, (b.risen ?? 0) + dt / d.rise);
-    const u = (b.walked / d.stride) % 1;
-    const surge = b.risen * (d.slow + 2 * (1 - d.slow) * Math.sin(Math.PI * u) ** 2);
-    const target = e.target;
-    e.target = p;
-    e.faceTo(p.pos.x, p.pos.z);
-    chase(e, surge);
-    e.target = target;
-  } else b.risen = 0;
-  if (on !== !!e.brain.dragging) {
-    e.brain.dragging = on ? 1 : 0;
-    fx('drag', e.id, on ? 1 : 0);
-  }
-}
-
-/** which of her (by id) drag themselves now, on this game */
-const DRAGGING = new Set<number>();
-/** how often earth is thrown up behind her as she drags (s), and her roots tear at it (s) */
-const DRAG_DUST = 0.07, DRAG_TEAR = 1.1;
-
-/** Her dragging begun (`on` 1) or over (0) on this game (`drag` fx): earth and dust thrown up round her base and
- *  behind her, the roots tearing at the ground, a low shake, while it lasts. */
-export function dragged(id: number, on: number): void {
-  if (!on) { DRAGGING.delete(id); return; }
-  if (DRAGGING.has(id)) return;
-  DRAGGING.add(id);
-  rootSounds.groan(1.2);
-  let dust = 0, tear = 0;
-  addEffect({
-    update(dt) {
-      const foe = foeOf(id);
-      if (!foe || !foe.alive || !DRAGGING.has(id)) { DRAGGING.delete(id); return false; }
-      dust += dt;
-      tear += dt;
-      if (dust >= DRAG_DUST) {
-        dust = 0;
-        // (round her foot, more behind her, as the roots haul her on)
-        const a = foe.facing + Math.PI + (Math.random() - 0.5) * 2.6, r = foe.radius * rand(0.9, 1.6);
-        const x = foe.pos.x + Math.sin(a) * r, z = foe.pos.z + Math.cos(a) * r;
-        const at = new THREE.Vector3(x, groundHeight(x, z), z);
-        debris(at, { count: 2, speed: 2.2, size: 0.12, life: 0.7 });
-        smokePuff(at, { count: 1, color: 0x2a2418, alpha: 0.4, size: 0.8, sizeEnd: 2, speed: 0.7, life: 0.9 });
-      }
-      if (tear >= DRAG_TEAR) {
-        tear = 0;
-        rootSounds.crack(0.8);
-        addShake(0.1);
-      }
-      return true;
-    },
-  });
 }
 
 // --- the creeping vines -----------------------------------------------------------------------------------

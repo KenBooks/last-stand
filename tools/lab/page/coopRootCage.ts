@@ -17,7 +17,7 @@ const BESIDE = 2.5;
  *  pushed 0.3 m, it let its draws go early and missed */
 const NEAR_ENOUGH = 1;
 const PAST = 3;
-/** the host's pacing while it waits, so she cages the guest and never it (frames each way, along x) */
+/** the host's pacing while it waits, so she cages the guest and never it (frames each way, along its line to him) */
 const PACE = 50;
 /** how high up a root the host aims (m): its foot, where it's thickest */
 const AIM_HIGH = 0.6;
@@ -102,7 +102,14 @@ export function hostInput(frame: number): Frame {
   if (!round || !CAGE?.roots.includes(goneFor!) || goneFor?.prop?.broken) goneFor = null;
   if (round) goneFor ??= rootNearest(hero.pos.x, hero.pos.z);
   const root = goneFor;
-  if (!root || !CAGE) return { stick: stickToward(Math.floor(frame / PACE) % 2 ? -1 : 1, 0) };
+  if (!root || !CAGE) {
+    // (to and fro along his line to the guest: off it, a prop at the far end of a pace held him still, and caged)
+    const to = guest
+      ? new THREE.Vector2(guest.pos.x - hero.pos.x, guest.pos.z - hero.pos.z).normalize()
+      : new THREE.Vector2(1, 0);
+    const back = Math.floor(frame / PACE) % 2 ? -1 : 1;
+    return { stick: stickToward(to.x * back, to.y * back) };
+  }
   const out = new THREE.Vector2(root.x - CAGE.x, root.z - CAGE.z).normalize();
   const spot = { x: root.x + out.x * BESIDE, z: root.z + out.y * BESIDE };
   // (aimed at its foot's thick part all the while, walking up too: aimed at nothing, the aim fell back on her)

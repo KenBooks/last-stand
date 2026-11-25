@@ -7,8 +7,8 @@
 // - `ttk`: the hero's basic attack held on a boss held still, its damage a second, and from it the time each boss
 //   takes at the wave it comes on (the Colossus at 5, the Ossuary Cantor's encounter and the Rootmother at 10).
 // - The Cantor's encounter, its guards and their tolls: bossEncounter.ts's parts.
-// - the Rootmother's parts (`page/bossRootmother.ts`, `bossRootWalk.ts`, `bossRootBranches.ts`, `bossRootCage.ts`):
-//   `rootPhases`, `vines`, `pods`, `heart`, `rootWalk`, `branches`, `rootCage`; `compiles`, every effect of her fight
+// - the Rootmother's parts (`page/bossRootmother.ts`, `bossRootBurrow.ts`, `bossRootBranches.ts`, `bossRootCage.ts`):
+//   `rootPhases`, `vines`, `pods`, `heart`, `rootBurrow`, `branches`, `rootCage`; `compiles`, every effect of her fight
 //   drawn and no pipeline made; `threat` (`bossThreat.ts`) and her pictures and costs by name.
 //
 // `--canary` plants a fault each part must catch: a rung slipped onto the Crypt's ladder, a boss that yields as a
@@ -29,24 +29,25 @@ import { ARENA } from '../../../src/data/balance';
 import { inObstacle } from '../../../src/world/collision';
 import { lineClear } from '../../../src/world/navigation';
 import { heart, pods, rootCompiles, rootLook, rootPhases, rootPictures, rootTtkLines, vines } from './bossRootmother';
-import { rootWalk, rootWalkPictures } from './bossRootWalk';
+import { rootBurrow, rootBurrowPictures } from './bossRootBurrow';
 import { threat } from './bossThreat';
 import { branchPictures, branches, rootCost } from './bossRootBranches';
 import { rootCage, rootCagePictures } from './bossRootCage';
 
 /** The parts the command runs, in order. */
 /** the Rootmother's parts that are judged */
-type RootPart = 'rootPhases' | 'vines' | 'pods' | 'heart' | 'rootWalk' | 'branches' | 'rootCage' | 'threat';
+type RootPart = 'rootPhases' | 'vines' | 'pods' | 'heart' | 'rootBurrow' | 'branches' | 'rootCage' | 'threat';
 /** the parts that picture moments for the eye alone, asked for by name */
-type PicturePart = 'rootPictures' | 'rootLook' | 'rootWalkPictures' | 'branchPictures' | 'rootCost' | 'rootCagePictures';
+type PicturePart = 'rootPictures' | 'rootLook' | 'rootBurrowPictures' | 'branchPictures' | 'rootCost'
+  | 'rootCagePictures';
 export type BossPart = 'ladder' | 'stand' | 'ttk' | EncounterPart | RootPart | PicturePart;
 // (`compiles` is one part for every boss: the encounter's and the Rootmother's, after both)
 export const BOSS_PARTS: BossPart[] = [
   'ladder', 'stand', ...ENCOUNTER_PARTS.filter((part) => part !== 'compiles'),
-  'rootPhases', 'vines', 'pods', 'heart', 'rootWalk', 'branches', 'rootCage', 'compiles', 'ttk',
+  'rootPhases', 'vines', 'pods', 'heart', 'rootBurrow', 'branches', 'rootCage', 'compiles', 'ttk',
 ];
 const PICTURE_PARTS: BossPart[] = [
-  'rootPictures', 'rootLook', 'rootWalkPictures', 'branchPictures', 'rootCost', 'rootCagePictures',
+  'rootPictures', 'rootLook', 'rootBurrowPictures', 'branchPictures', 'rootCost', 'rootCagePictures',
 ];
 
 export interface BossOptions {
@@ -293,7 +294,7 @@ export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
   const run: Record<'ladder' | 'stand' | 'ttk' | 'compiles' | RootPart, typeof ladder> = {
-    ladder, stand, rootPhases, vines, pods, heart, rootWalk, branches, rootCage, compiles, ttk, threat,
+    ladder, stand, rootPhases, vines, pods, heart, rootBurrow, branches, rootCage, compiles, ttk, threat,
   };
   const moments: Pictured[] = [];
   const was = G.arena.biome;
@@ -301,7 +302,7 @@ export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
     for (const part of options.parts ?? BOSS_PARTS) {
       if (part === 'rootPictures') moments.push(...await rootPictures(lab, options, lines));
       else if (part === 'rootLook') moments.push(...await rootLook(lab, options, lines, problems));
-      else if (part === 'rootWalkPictures') moments.push(...await rootWalkPictures(lab, options, lines));
+      else if (part === 'rootBurrowPictures') moments.push(...await rootBurrowPictures(lab, options, lines));
       else if (part === 'branchPictures') moments.push(...await branchPictures(lab, options, lines));
       else if (part === 'rootCost') await rootCost(lab, options, lines);
       else if (part === 'rootCagePictures') moments.push(...await rootCagePictures(lab, options, lines));

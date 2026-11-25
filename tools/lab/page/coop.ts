@@ -172,6 +172,8 @@ export interface Sample {
   belt?: import('./coopBelt').BeltSample;
   /** in `rootcage`: the Rootmother's root cage as this game shows it (page/coopRootCage.ts) */
   cage?: import('./coopRootCage').CageSample;
+  /** in `rootburrow`: the Rootmother's burrow as this game shows it (page/coopRootBurrow.ts) */
+  burrow?: import('./coopRootBurrow').BurrowSample;
   /** in `chat`: the chat as this game's page shows it (page/coopChat.ts); the first sample also carries what the
    *  scenario says and when it presses Esc */
   chat?: ChatSample;
@@ -458,6 +460,7 @@ function wallInput(frame: number): Frame {
 let wallNow: (() => import('./coopWall').WallSample | null) | null = null;
 let belt: typeof import('./coopBelt') | null = null;
 let rootCage: typeof import('./coopRootCage') | null = null;
+let rootBurrow: typeof import('./coopRootBurrow') | null = null;
 
 /** The guest in `blink`: every so often it holds the blink aimed at its other spot and lets go, its cooldown and
  *  energy made ready first (a blink every few seconds, where its own cooldown would allow one in seven). */
@@ -689,8 +692,29 @@ const SCENARIOS: Record<string, Scenario> = {
     host: [15, 16],
     guest: [11, 12],
     foes: [{ type: 'rootmother', at: [0, 0] }],
-    hostInput: (frame) => rootCage?.hostInput(frame) ?? {},
+    hostInput: (frame) => {
+      // (her burrow held off: the guest stands far off her, and it's `rootburrow`'s)
+      for (const foe of G.enemies) {
+        if (foe.def.ai !== 'rootmother') continue;
+        foe.brain.burrowT = Infinity;
+        foe.brain.farT = -Infinity;
+      }
+      return rootCage?.hostInput(frame) ?? {};
+    },
     guestInput: () => rootCage?.guestInput() ?? {},
+  },
+  rootburrow: {
+    about: 'the Rootmother, both heroes far off her and standing still, burrows: her sink, her depth under the floor, '
+      + 'the spot she rises on and her rise alike on both screens, struck-proof on both while under',
+    frames: 900,
+    host: [-17, -15],
+    guest: [11, 12],
+    foes: [{ type: 'rootmother', at: [0, 0] }],
+    hostInput: () => {
+      rootBurrow?.hostFrame();
+      return {};
+    },
+    guestInput: () => ({}),
   },
   rootmother: {
     about: 'the Rootmother in the arena\'s middle throws her branches and sends her vines at the guest standing far '
@@ -700,9 +724,15 @@ const SCENARIOS: Record<string, Scenario> = {
     host: [-17, -15],
     guest: [11, 12],
     foes: [{ type: 'rootmother', at: [0, 0] }],
-    // (her root cage held off: both heroes stand still here, and it's `rootcage`'s)
+    // (her root cage and her burrow held off: both heroes stand still and far off here, and they're `rootcage`'s and
+    // `rootburrow`'s)
     hostInput: () => {
-      for (const foe of G.enemies) if (foe.def.ai === 'rootmother') foe.brain.cageT = Infinity;
+      for (const foe of G.enemies) {
+        if (foe.def.ai !== 'rootmother') continue;
+        foe.brain.cageT = Infinity;
+        foe.brain.burrowT = Infinity;
+        foe.brain.farT = -Infinity;
+      }
       return {};
     },
     guestInput: () => ({}),
@@ -1241,6 +1271,10 @@ export async function coopScenario(lab: Lab, { name, canary }: { name: string; c
   wallNow = name === 'wall' ? (await import('./coopWall')).wallNow : null;
   belt = name === 'belt' ? await import('./coopBelt') : null;
   rootCage = name === 'rootcage' ? await import('./coopRootCage') : null;
+  rootBurrow?.deafToBurrow(false);
+  rootBurrow = name === 'rootburrow' ? await import('./coopRootBurrow') : null;
+  // (the canary's: the guest's game deaf to her burrow)
+  rootBurrow?.deafToBurrow(Boolean(canary) && play.role === 'guest');
   // (the canary's: the guest's roots never told their life by the host)
   rootCage?.deafOnThisGame(Boolean(canary) && play.role === 'guest');
   // (the canary's: the guest's game never shows a skull lying where it landed)
@@ -1359,6 +1393,7 @@ function sampleNow(): Sample {
   if (play.scenario === 'wall' && wallNow) sample.wall = wallNow();
   if (play.scenario === 'belt' && belt) sample.belt = belt.beltNow();
   if (play.scenario === 'rootcage' && rootCage) sample.cage = rootCage.cageNow();
+  if (play.scenario === 'rootburrow' && rootBurrow) sample.burrow = rootBurrow.burrowNow();
   if (play.scenario === 'afk') {
     sample.afk = afkNow();
     if (!play.samples.length) Object.assign(sample, { afkHiddenAt: AFK_HIDDEN_AT, afkShownAt: AFK_SHOWN_AT });

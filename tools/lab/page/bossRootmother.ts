@@ -98,7 +98,17 @@ export async function rootmother(lab: Lab): Promise<Enemy> {
   boss.dazed = 1e4;
   // (her heart held shut but where a measure opens it: its minute would come in the middle of the others)
   boss.brain.heartT = 1e9;
+  // (and her burrow but where a measure lets her: the hero stands 14 m off, past her `far`, and she'd go under in the
+  // middle of what's measured; its wait and the far hero's count put past any case, `rootBurrow` setting them back)
+  holdBurrow(boss);
   return boss;
+}
+
+/** Her burrow held off (entities/rootBurrow.ts): her wait to burrow, and the time she counts the hero far, put past
+ *  any case. */
+export function holdBurrow(boss: Enemy): void {
+  boss.brain.burrowT = 1e9;
+  boss.brain.farT = -1e9;
 }
 
 /** Her next attack forced to be `name` (her round's turn set for it) and let think: she begins it at once. */
@@ -236,7 +246,7 @@ export async function vines(lab: Lab, options: BossOptions, lines: string[], pro
     else if (Math.abs(held - v.hold * FPS) > HOLD_SLACK) {
       problems.push(`vines: held him ${held} frames, not its hold of ${v.hold * FPS}`);
     }
-    dragProblems(stood, lines, problems);
+    stoodProblems(stood, lines, problems);
     const bow = bowShot();
     if (!bow) {
       lines.push(`vines: shot: not run (the ${G.player.cls.id} has no bow: --class ranger)`);
@@ -262,26 +272,16 @@ export async function vines(lab: Lab, options: BossOptions, lines: string[], pro
   }
 }
 
-/** least share of her `speed` times the hold she must walk towards a hero held from far off (her pace over her steps
- *  about three quarters of her speed, and her rising onto her roots first), and the most she may move once he's free
- *  (m: her own slowing to a stop, a tenth of a second at her speed) */
-const DRAGGED = 0.45;
-const STILL_AFTER = 0.15;
+/** the most she may move while a vine holds him and after (m): she never walks, and the hold is too short for her
+ *  burrow to come */
+const STILL_HELD = 0.01;
 
-/** Her walk as a vine held him (towards him, by at least `DRAGGED` of what her speed covers in the hold), and still
- *  once he was free. */
-function dragProblems(stood: VineCase, lines: string[], problems: string[]): void {
-  if (!stood.herAtHeld || !stood.herAtFree || !stood.herAtEnd) return;
-  const hero = G.player.pos;
-  const toward = flat(stood.herAtHeld, hero) - flat(stood.herAtFree, hero);
-  const after = flat(stood.herAtFree, stood.herAtEnd);
-  const least = DRAGGED * ENEMIES.rootmother.speed * ROOTMOTHER.vines.hold;
-  lines.push(`vines: she walked ${fixed(toward)} m towards him while he was held, and moved ${fixed(after)} m `
-    + 'after he was free');
-  if (toward < least) {
-    problems.push(`vines: she walked ${fixed(toward)} m towards the held hero, under ${fixed(least)}`);
-  }
-  if (after > STILL_AFTER) problems.push(`vines: she moved ${fixed(after)} m after the vine let him go`);
+/** Her standing where she stands while the vine held him and after (she never walks: entities/rootBurrow.ts). */
+function stoodProblems(stood: VineCase, lines: string[], problems: string[]): void {
+  if (!stood.herAtHeld || !stood.herAtEnd) return;
+  const moved = flat(stood.herAtHeld, stood.herAtEnd);
+  lines.push(`vines: she moved ${fixed(moved)} m while he was held and after`);
+  if (moved > STILL_HELD) problems.push(`vines: she moved ${fixed(moved)} m while the vine held him`);
 }
 
 // --- the pods -----------------------------------------------------------------------------------------------
@@ -771,8 +771,6 @@ export async function rootPictures(lab: Lab, options: BossOptions, lines: string
   await lab.step(20, () => ({}), quiet);
   await seen('4 held', 'a vine reached the hero: held 2 s, coils round his legs');
   close('4 held (close)', 'coils round his legs', ['back', 'left'], G.player.pos.clone().setY(1), 5);
-  close('4 dragging (close)', 'while he is held she tears her roots up and drags herself towards him, slowly',
-    ['left', 'right']);
   // pods
   await lab.step(150, () => ({}), quiet);
   nextIs(boss, 'seeds');

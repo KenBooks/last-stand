@@ -10,8 +10,8 @@ export const FOES: FoeFile = {
   rootmother: {
     def: {
       name: 'The Rootmother', model: 'rootmother', ai: 'rootmother',
-      // (her speed only while she walks on her roots to a hero a vine holds, the top of each step's surge but for its
-      // slowest share: `ROOTMOTHER.drag`; her pace over a step about three quarters of it)
+      // (she never walks: she burrows, `ROOTMOTHER.burrow`, going under the floor at its own speed; `speed` is read
+      // only by a wave's timing, game/run.ts `reachIn`, which divides by it)
       life: 4000, damage: 100, damageType: 'vitality', speed: 1.2, radius: 2.4, gait: 2.6,
       range: 6, windup: 1, recover: 1, cooldown: 2.3,
       summon: 'thornling',
@@ -49,10 +49,10 @@ export const FOES: FoeFile = {
     },
     note: {
       role: 'Boss of the Thornwood',
-      does: 'A giant woman grown out of a hollow tree in the middle of the arena, her lower half all roots. She sends vines creeping along the floor after you, snaps thorned branches off her crown and hurls them at you, flings seed pods that hatch into Thornlings, and raises a ring of thorns round her trunk when you stand close. Under half her Health the canopy closes: spore clouds drift over the floor, the earth erupts under your feet and she throws her branches three at a time. Under a quarter she rages: quicker, a line of branches that stays as bramble, and the earth bursting under you three times as you run. Stand still too long and the earth cracks in a ring round you: roots burst up and close over you in a cage, and a great root rises beside it and slams down on it.',
-      strengths: ['A vine that touches you holds you in place, and she walks towards you on her roots while it does, and throws a branch at you.', 'Her thrown branches reach you anywhere in the arena.', 'Seed pods left alone burst into a pack of Thornlings.', 'Her thorns punish standing next to her trunk.', 'In her second phase, the floor itself turns against you: spores and eruptions.', 'Raging, she attacks more often, and her bramble cuts the arena.', 'Standing still is punished: she cages you in roots and brings a great root down on the cage.'],
-      weaknesses: ['Her vines creep in a line and turn slowly: a step aside dodges one.', 'She snaps a branch off and draws her arm back before every throw, and its landing is marked on the floor while it flies: step off the mark.', 'One hit of anything pops a seed pod.', 'Her heart opens in her trunk every so often, plain to see: shots that strike it deal half again their damage, and she attacks nothing while it is open.', 'She is slow to move: she rises onto her roots and walks only to a hero her vine holds, and settles where she stops.', 'The cage warns first, a ring of cracks round you; and a root of it breaks in a few hits, a gap of one enough to step out. Her great root comes down on the cage\'s place alone, after a long rise.'],
-      beat: ['Keep moving across her vines, not away along them.', 'When her arm goes back, watch the floor: step off the ring her branch will land in. A fan lands three across, a line five: step along it, towards her or away.', 'Get out of a vine fast: she throws at whoever it holds.', 'Pop every pod as it lands, before it hatches.', 'Save your burst for when her heart opens, and aim it at the heart.', 'In her second phase, watch the floor: step out of a spore cloud, and off the cracks before they burst.', 'Raging, keep running: the earth bursts where you stood a moment ago, three times.', 'When the earth cracks in a ring round you, walk out of it before the roots close. Caged, cut a root at once and step out before her great root comes down.'],
+      does: 'A giant woman grown out of a hollow tree in the middle of the arena, her lower half all roots. She sends vines creeping along the floor after you, snaps thorned branches off her crown and hurls them at you, flings seed pods that hatch into Thornlings, and raises a ring of thorns round her trunk when you stand close. Under half her Health the canopy closes: spore clouds drift over the floor, the earth erupts under your feet and she throws her branches three at a time. Under a quarter she rages: quicker, a line of branches that stays as bramble, and the earth bursting under you three times as you run. Stand still too long and the earth cracks in a ring round you: roots burst up and close over you in a cage, and a great root rises beside it and slams down on it. She never walks: she sinks into the earth, a ridge of soil heaving over her way, and rises near you where the ground bulges and cracks.',
+      strengths: ['A vine that touches you holds you in place, and she throws a branch at you while it does.', 'Her thrown branches reach you anywhere in the arena.', 'Seed pods left alone burst into a pack of Thornlings.', 'Her thorns punish standing next to her trunk.', 'In her second phase, the floor itself turns against you: spores and eruptions.', 'Raging, she attacks more often, and her bramble cuts the arena.', 'Standing still is punished: she cages you in roots and brings a great root down on the cage.', 'Running from her is no escape: she goes under the floor and rises near you.'],
+      weaknesses: ['Her vines creep in a line and turn slowly: a step aside dodges one.', 'She snaps a branch off and draws her arm back before every throw, and its landing is marked on the floor while it flies: step off the mark.', 'One hit of anything pops a seed pod.', 'Her heart opens in her trunk every so often, plain to see: shots that strike it deal half again their damage, and she attacks nothing while it is open.', 'She never walks: to come after you she drives her roots into the earth and goes under, and while she is under the floor nothing strikes her.', 'The cage warns first, a ring of cracks round you; and a root of it breaks in a few hits, a gap of one enough to step out. Her great root comes down on the cage\'s place alone, after a long rise.', 'She shows where she will rise: the soil heaves along her way under the floor, and the ground bulges and cracks over the spot for a second first. Rising, she harms no one.'],
+      beat: ['Keep moving across her vines, not away along them.', 'When her arm goes back, watch the floor: step off the ring her branch will land in. A fan lands three across, a line five: step along it, towards her or away.', 'Get out of a vine fast: she throws at whoever it holds.', 'Pop every pod as it lands, before it hatches.', 'Save your burst for when her heart opens, and aim it at the heart.', 'In her second phase, watch the floor: step out of a spore cloud, and off the cracks before they burst.', 'Raging, keep running: the earth bursts where you stood a moment ago, three times.', 'When the earth cracks in a ring round you, walk out of it before the roots close. Caged, cut a root at once and step out before her great root comes down.', 'When she sinks, follow the ridge of soil: be ready where the ground bulges, and use the time she is under to pop pods and heal.'],
       vs: {
         warrior: 'Bull Rush or a dash tears you free of a vine and breaks a root of her cage; raise your shield towards her and her branches break on it, and it takes most of her great root\'s blow; stay out of her thorns between hits.',
         mage: 'Veilstep frees you from a vine, takes you off a branch\'s mark and through the bars of her cage; bolts into her open heart.',
@@ -91,10 +91,19 @@ export const FOES: FoeFile = {
  * `radius` m round where a hero stood (`hurt` of her damage). `every`: one attack in `every` of phase 2's is an
  * eruption. `heart`: her heart opens `first` s after she rises and every `every` s after (start to start), for `open`
  * s: she meditates, attacking nothing, and flings a pod every `podEvery` s, `pods` in all, round the arena; what
- * strikes her heart meanwhile takes `bossKit.weak.spot.taken` times the damage. `drag`: while a vine holds a hero she
- * rises onto her roots (over `rise` s) and walks on them towards him, a step every `stride` m she covers (half her roots
- * lifted and set down ahead, the rest bearing her: models/rootmother.ts), her speed surging through each step from
- * `slow` of her `speed` as its roots land; she stops `near` m (and her radius and his) from him, or as the hold ends.
+ * strikes her heart meanwhile takes `bossKit.weak.spot.taken` times the damage. `burrow` (from Kenneth: "instead of
+ * moving slowly, it teleports, just going underground, roots going into the ground, and then it appears near you. It
+ * should look like it actually going underground"): she never moves above ground. She goes under over `sink` s (her
+ * roots driven down into the soil over its first `roots` share, her body after them, `depth` m under the floor, the
+ * soil heaving round her and a mound left that settles), travels under the floor at `speed` m/s (`least` s at least), a
+ * ridge of soil heaving along her way and cracking behind it, then the earth bulges and cracks where she'll rise for
+ * `warn` s, and she rises over `rise` s (her roots burst out first, over its first `roots` share, spread and grip, her
+ * body after them). She rises `ring[0]` to `ring[1]` m (middle to middle) from the hero she goes for, on a spot clear of
+ * the props, the wall (`clear` m past her radius) and every hero; rising deals no damage. She can't be struck from the
+ * moment her body is half under (`hidden` of `sink`) until her crown breaks the floor as she rises (`shows` m up), and attacks nothing meanwhile. She
+ * burrows when the hero she goes for has been `far` m or more from her for `farFor` s, or at the end of a set of her
+ * attacks (`ROUNDS`) once `every` s have passed since she last rose (`first` s after she comes on); never with her heart
+ * open or her cage standing.
  * `branch`: a thorned branch snapped off her crown and hurled at a hero `near` m or more from her trunk (or one a vine
  * holds, wherever he is), on an arc from her hand to where he stood as it left it, flying `flight[0]` + `flight[1]` s a
  * metre, its landing marked on the floor while it flies; it bursts `splash` m round where it lands (`hurt` of her
@@ -123,7 +132,10 @@ export const FOES: FoeFile = {
 export const ROOTMOTHER = {
   vines: { count: [2, 3] as [number, number], speed: 5.5, turn: 0.8, piece: 1.6, length: 24, reach: 0.6, hold: 2, lies: 1.5 },
   seeds: { count: 3, flight: 1.1, near: 7, far: 21, clear: 3, hatch: 10, brood: 2, aliveMost: 14 },
-  drag: { near: 1.2, stride: 1.3, rise: 0.8, slow: 0.35 },
+  burrow: {
+    sink: 1.3, roots: 0.4, depth: 8, hidden: 0.5, shows: 1, speed: 9, least: 0.6, warn: 1.2, rise: 1.1,
+    ring: [7.5, 9.5] as [number, number], clear: 1, far: 13, farFor: 5, every: 24, first: 15,
+  },
   thorns: { radius: 6, last: 3, hurt: 0.22, tick: 0.5, near: 7 },
   spores: { every: 5.5, most: 3, radius: 2.6, speed: 1.3, life: 14, hurt: 0.07, tick: 0.5 },
   erupt: { radius: 2.2, hurt: 0.6, every: 2 },

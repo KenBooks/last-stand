@@ -1,4 +1,4 @@
-// A boss pictured from its side at a player's height (tools/lab `boss`, parts `rootWalkPictures` and
+// A boss pictured from its side at a player's height (tools/lab `boss`, parts `branchPictures` and
 // `stagStridePictures`): the developer mode's free camera (src/dev/freeCam.ts, which the engine draws from, as it
 // takes the game's camera after the game has placed it) held still beside the boss's path at a man's eye, looking
 // across it, and one crop of the screen kept for a whole strip. With the camera and the crop both still, a foot

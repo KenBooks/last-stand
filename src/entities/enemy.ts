@@ -151,6 +151,9 @@ export class Enemy {
   alive = true;
   spawning = RISE_TIME;
   invulnerable = true;
+  /** wholly under the floor (the Rootmother's burrow, entities/rootBurrow.ts): no body above it for a foe or a hero to
+   *  be pushed off (`separateEnemies`) */
+  buried = false;
   /** attack cooldown */
   cd = rand(0.3, 1.2);
   action: EnemyAction | null = null;

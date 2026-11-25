@@ -269,6 +269,12 @@ the garbage collected), and every part of a hero's update runs about 45% slower 
 there as in a run (`poses --lobby`: his update 1.05 ms a frame against 1.13, measured 300 frames after the lobby
 came; 1.51 measured as it came).
 
+- `rootburrow` (`page/coopRootBurrow.ts`; `src/entities/rootBurrow.ts`): both heroes far off the Rootmother and
+  standing still (the host at the arena's far side), her cage and heart held off and her wait given over, so she
+  burrows to the one she goes for. Her sink must show on the guest's screen within 30 frames of the host's (16 over
+  the lab's link), the spot she rises on in one place on both (0 cm), her depth under the floor on the guest's within
+  0.5 m of the host's (lagged by the link) all but 5% of the frames (0 of 645), and struck-proof on both every frame
+  she's wholly under. Its canary has the guest's game deaf to her `burrow` fx: never seen there, caught.
 - `rootcage` (`page/coopRootCage.ts`; `src/entities/rootCage.ts`): the Rootmother cages the guest standing still,
   the host pacing off so she cages the guest and never it; once the guest's cage stands, the host comes up 3 m
   outside the root nearest it and strikes it till it breaks, its aim on the root's foot all the while (aimed at

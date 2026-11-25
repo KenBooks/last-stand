@@ -12,7 +12,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
 - `behind`: the heroes built behind the lobby a piece a frame (the hall's heroes and the spares let go and built again: each frame's building by the browser's clock, at most 30 ms, the slowest pieces named; then the hall opened and another hero chosen, building none; and none of the guide's pictures made with it never opened)
 - `beyond`: the ranger's arrows loosed over the wall at the ground and the trees beyond it, over the shoulder; each arrow left standing must have a surface drawn at its point
 - `blink`: the mage's blink cast as the player casts it (open ground, past his reach, into a prop, past one, the arena's edge, onto the dais, his own feet: where it came out against its preview and his reach, the frames he was hidden and the blows that landed in them, the foes near and far it dazed and how they stood)
-- `boss`: the bosses' fights (`--parts`): each battleground's boss waves against its ladder and its exceptions, a boss standing its ground as the hero walks into it, the Ossuary Cantor's encounter (its guards' tolls near, further off and at a raised shield, their swing, warded while a guard stands, no two bosses' hits within its beat; its bars, its guards' ghosts diving, its choir's ring and rising graves), the Rootmother's phases, vines, pods, heart, walk, thrown branches and root cage, no program compiled in either fight, and the time each boss takes (`--canary`) (in full: [`commands/boss.md`](commands/boss.md))
+- `boss`: the bosses' fights (`--parts`): each battleground's boss waves against its ladder and its exceptions, a boss standing its ground as the hero walks into it, the Ossuary Cantor's encounter (its guards' tolls near, further off and at a raised shield, their swing, warded while a guard stands, no two bosses' hits within its beat; its bars, its guards' ghosts diving, its choir's ring and rising graves), the Rootmother's phases, vines, pods, heart, burrow, thrown branches and root cage, no program compiled in either fight, and the time each boss takes (`--canary`) (in full: [`commands/boss.md`](commands/boss.md))
 - `bosswave`: bosses loaded at their wave (game/bossReady.ts): booted cold, none loaded; Continue into the Crypt's waves 5, 10 and 15 shows the bar readying the Colossus, the Ossuary Cantor and its guards and the Ossuary Twins, who rise warm, nothing compiled late (`--canary` spawns the Twins unwarmed in wave 14).
 - `bowprop`: the ranger drawing at a prop he stands against, his bow's end in it (each biome, each kind of prop, 0.25 and 0.5 m off it: the nocked arrow, the bow's tip and the hero must not turn back frame after frame; the point the pose aims from within 5 cm of the arrow drawn level; the aim preview stopped by the prop, never through it; `--canary` aims the pose from the arrow as posed, #317)
 - `carry`: measures the carried bow
@@ -930,9 +930,8 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   Thornwood's middle where nothing stands between him and her (on the diagonal a stump took the arrows): `rootPhases`:
   her life a hundredth over and under her second phase's share, its banner, the canopy closed 4 s into it (`shade`
   over 0.95) and open 4 s after her death. `vines`: one vine sent at him standing still must hold him its `hold`
-  within 4 frames, and she must walk towards him meanwhile (at least 0.45 of what her speed covers in the hold:
-  her pace over her steps is about three quarters of it, and she rises onto her roots first) and stand still once
-  he's free (0.15 m, her slowing); with a bow (`--class ranger`) a shot at the floor 2.5 m back along it towards her must cut it and
+  within 4 frames, and she must stand where she stands meanwhile and after (1 cm: she never walks, and the hold is
+  too short for her burrow, which her set-up holds off); with a bow (`--class ranger`) a shot at the floor 2.5 m back along it towards her must cut it and
   let him go within 15 frames of the loose, the bow let go 10 frames into the hold, drawn as far as it is, and the
   arrow must leave while the vine holds him (held for its whole draw it left 19 frames after the hold's own end, and
   the part passed testing nothing; `throws`' shot had the same). `pods`: her pods flung (as many as she flings, each `near` to `far` from
@@ -942,26 +941,24 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   flung; the spot read at points on her (in her heart its `taken`, her flank and back 1, shut 1); with a bow, in a
   second opening with her pods held back (flung between him and her, they took the arrows), two shots at her flank
   and the rest in her heart, his crits held off: those in it `taken` times the others within 0.2; and in her second
-  phase an eruption at him hurting him no sooner than its warning and opening nothing. `rootWalk`
-  (`page/bossRootWalk.ts`; `models/rootmother.ts` `walkOn`; from Victor, of her gliding: "how is she moving? would
-  not be possible irl"): one vine holding him 9 s, she walks to him on her roots, read as drawn frame by frame (each
-  root's foot where it meets the floor, the model's `walk.feet`): at least 4 m and 8 steps (a foot lifted off the
-  floor and set down), a foot on the floor moving 3 cm at most over its stay there (4 mm as built; the slides found
-  on the way were a step's ends scraping the floor, a step cut short jumping to where it would have landed, and her
-  feet reckoned from her body's height as it eased down off the dais's edge), at least 4 feet on the floor every
-  frame she moves (5 as built), the trunk 0.25 m off the earth at the least while she goes at half her speed or more
-  (0.39), her speed through her steps rising to twice her slowest at least (0.43 to 1.74 m/s: a weight carried, not
-  a glide), and 3 s after he's free her feet back at rest (0.2 m) and the trunk down. Its canary carries her feet
-  with her and leaves the trunk on the earth (her feet slid 8 m: the old gliding). `rootWalkPictures` (alone)
-  pictures her walk from both her sides every 10 frames once she's 5.5 m out, her path along one of the dais's axes
-  between its corner stones (they hid her from the measure's spot, and aren't obstacles the line tests read), from
-  above and as the player sees it. `compiles` draws her fight's every effect too, and `ttk` adds the
+  phase an eruption at him hurting him no sooner than its warning and opening nothing. `rootBurrow`
+  (`page/bossRootBurrow.ts`; `src/entities/rootBurrow.ts`; from Kenneth: "instead of moving slowly, it teleports,
+  just going underground, roots going into the ground, and then it appears near you"): her wait given over and the
+  hero 14 m off (past her `far`), she burrows, read frame by frame: how far she moved with any of her drawn over the
+  floor (0 m: her top as drawn, her meshes' bounds, her kept pools left out), her top under the floor as she first
+  moves (0.77 m under), her rise warned at its spot for `warn` s at least (1.20), the spot `ring` m from the hero (7.5)
+  and clear of the props, the wall and every hero (`clearSpot`), struck-proof every frame from half under till she
+  rises, none of her hits landing meanwhile, no pipeline made. Its canary plays it three times more, a fault each
+  (`BURROW_CANARY`): moving as she begins to sink (5 m with her over the floor, her top 7.2 m up as she moved), rising
+  unwarned, rising on the hero; each must be caught, and the part says which were. `rootBurrowPictures` (by name):
+  her sink, the ridge travelling and her warned rise as the player sees them (the top view zoomed out as far as a
+  player may, her 14 m off), and her sink from her side, every 6 frames. above and as the player sees it. `compiles` draws her fight's every effect too, and `ttk` adds the
   Thornheart at wave 5 and the Rootmother at 10, on her body alone and with every hit through her heart's windows
   in it. `rootPictures` (asked for alone) pictures her fight's moments, and `rootLook` (alone too) her model: from
   above and over the shoulder as the player meets her, then close (whole from four sides, her face, body, roots,
   her heart shut and open), and her triangles against the Thornheart's, at most 45,000. Her canary's faults: her second phase's
-  share moved, a vine that reaches no one, pods that never hatch, a heart that never opens (its window of none), her
-  feet carried with her as she walks. About 15 s a hero.
+  share moved, a vine that reaches no one, pods that never hatch, a heart that never opens (its window of none), and
+  her burrow's three. About 15 s a hero.
   `branches` (`page/bossRootBranches.ts`; from Kenneth, "we need more attacks, what about spikes that it throws at
   you ... Needs to be more dangerous"): her thrown branches at the hero 14 m off, read as the game played them
   (`BRANCHES`: each branch's aim, the ring's middle, and where it came down; what landed on him by his own
@@ -977,7 +974,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   `takeDamage`, his Health kept whole) as a share of his most Health a minute. Standing still is the worst a player
   does, so it reads each boss alike: before the branches the Rootmother landed nothing on a ranger 11 m off in her
   first phase; with them 73%. Its canary takes her damage away. About 3 minutes a hero.
-  `branchPictures` (by name): a branch from its side at a man's eye (the side view of `rootWalkPictures`), her
+  `branchPictures` (by name): a branch from its side at a man's eye (the side view `bossSideView.ts` holds), her
   wind-up, the throw, its flight end over end and its landing, and as the player sees it; her fan, her line and its
   bramble, and her eruption chasing him, as the player sees them. `rootCost` (by name): her fight's frame at its
   busiest (her rage) against the battleground without her, in turns of 120 frames within one page (her body

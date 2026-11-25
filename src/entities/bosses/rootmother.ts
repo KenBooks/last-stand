@@ -5,18 +5,20 @@ import { foeAI, foeFx, foeModels } from '../foeKit';
 import { buildRootmother } from '../models/rootmother';
 import { buildSeedPod } from '../models/seedpod';
 import {
-  branchAt, branchTorn, cracksAt, creeperPiece, dragged, eruptAt, heartOpened, podBurst, rootmotherAI, seedFlung, seedPodAI,
+  branchAt, branchTorn, cracksAt, creeperPiece, eruptAt, heartOpened, podBurst, rootmotherAI, seedFlung, seedPodAI,
   sporesAt, thornsAt,
 } from '../rootmother';
 import { cageRootAt, cageShutAt, cageWarnAt, crushAt, crushRiseAt } from '../rootCage';
+import { burrowAt } from '../rootBurrow';
 
 declare module '../foeKit' {
   interface FoeFx {
     /** a piece of the Rootmother `id`'s creeping vine `vine` laid from (x, z) along `angle` for `length` m, each game's
      *  hero held by any of it he touches */
     creeper(id: number, vine: number, x: number, z: number, angle: number, length: number): void;
-    /** the Rootmother `id` dragging herself on her roots (`on` 1) towards a hero her vine holds, or stopped (0) */
-    drag(id: number, on: number): void;
+    /** the Rootmother `id` burrowing from (fx, fz) to rise at (tx, tz), `travel` s under the floor (her sink, the
+     *  ridge, the warning and her rise played alike on every game: entities/rootBurrow.ts) */
+    burrow(id: number, fx: number, fz: number, tx: number, tz: number, travel: number): void;
     /** the Rootmother `id`'s heart opened for `open` s (its banner, its beat, its light) */
     heartOpens(id: number, open: number): void;
     /** a seed pod flung from over (ox, oz) to land at (tx, tz) in `flight` s */
@@ -56,7 +58,7 @@ foeModels({ rootmother: buildRootmother, seedpod: buildSeedPod });
 foeAI({ rootmother: (e, dt) => rootmotherAI(e, dt), seedpod: (e, dt) => seedPodAI(e, dt) });
 foeFx({
   creeper: (_id, vine, x, z, angle, length) => creeperPiece(vine, x, z, angle, length),
-  drag: (id, on) => dragged(id, on),
+  burrow: (id, fx, fz, tx, tz, travel) => burrowAt(id, fx, fz, tx, tz, travel),
   heartOpens: (id, open) => heartOpened(id, open),
   seedFling: (ox, oz, tx, tz, flight) => seedFlung(ox, oz, tx, tz, flight),
   podBurst: (x, z) => podBurst(x, z),

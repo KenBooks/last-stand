@@ -12,22 +12,20 @@
 // (`ActionState.hit`); both arms for a fan or a line. What flies is one of the branches kept in her model at no size
 // (`userData.thrown`), so its look is warmed with hers, placed in the world by the throw's effect
 // (entities/rootmother.ts `branchAt`).
-// She walks on her roots, as a tree could if its roots were limbs (from Victor, of her gliding: "how is she moving?
-// would not be possible irl"): she heaves the trunk up off the earth on them, and they walk her in two halves by turns,
-// like a many-legged thing's, one half's feet planted where they are in the world and bearing her while the other's
-// tear up and reach a half stride ahead of where they rest; the trunk sways towards the half lifted and dips as it lands.
-// Each floor root is a joint at its knee aimed at its foot and drawn out or in along its length to reach it, so a foot
-// planted stays where it was set down. Stopped, her feet step back to rest a half at a time and she settles into the
-// earth (`walk`, read by `lab boss --parts rootWalk`).
+// She never walks: she burrows (entities/rootBurrow.ts; from Kenneth: "it teleports, just going underground, roots
+// going into the ground, and then it appears near you"). Each floor root is a joint at its knee, its +z along the root
+// to where its foot meets the floor: driven down into the soil it's turned down about its knee and drawn in along its
+// length (`bury.dive` 1), bursting out it's thrust out past its rest and settles back, gripping (`dive` under 0); her
+// whole body goes under the floor by `bury.depth`, the floor hiding what's under it. Both are set by her burrow's
+// effect on every game (`root.userData.bury`).
 // Drawn in its crowd (models/crowd.ts): every change is a joint's place or a glow's strength, nothing hidden.
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { bark, grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { joint, ramp } from './rig';
-import { ROOTMOTHER } from '../../data/foes/rootmother';
-import { groundHeight } from '../../world/ground';
 import { Sculpt, branches, lathe, leaf, limb, organic, skipping, taperTube } from './shapes';
 import { hangCagePool } from './rootCage';
+import { hangBurrowPool } from './rootBurrow';
 import { mulberry } from '../../util';
 import type { AnimState, Model } from '../../types';
 
@@ -48,17 +46,10 @@ const HEART_GAP = 0.55;
 const POD: [number, number][] = [[0.12, 0], [0.3, 0.12], [0.42, 0.34], [0.44, 0.52], [0.36, 0.74], [0.2, 0.92], [0.05, 1.02], [0.01, 1.05]];
 /** her arms' bones (m) */
 const UPPER = 1.35, FORE = 1.3;
-/** Her walk on her roots: how high the trunk is lifted off the earth (m) and how far it dips as a half lands; how far
- *  it leans forward walking, and more through each step's surge (rad); how far it sways towards the half lifted (rad);
- *  a stopped foot's step back to rest (s), and how far off rest a stopped foot may stay (m). Her stride (m covered a
- *  step) is the AI's, `ROOTMOTHER.drag.stride`. */
-const WALK = { rise: 0.5, dip: 0.12, lean: 0.05, surge: 0.05, sway: 0.035, settle: 0.8, still: 0.12 };
 const Z = V(0, 0, 1), Y = V(0, 1, 0);
-/** what of a step lifts the foot before it moves and sets it down after it (a share of the step at each end) */
-const LIFT_FIRST = 0.15;
-/** a move in one frame past this is a placing (a spawn, a set-up), not a walk (m): her feet set down at rest again; a
- *  turn, however sharp, is stepped round (planted, then stepped back to rest) */
-const PLACED_MOVE = 2;
+/** A floor root driven into the soil (`bury.dive` 1): how far it's turned down about its knee (rad) and what of its
+ *  length is drawn in; and thrust out as it bursts out of the earth (`dive` -1): what of its length more. */
+const DIVE = { down: 1.15, drawn: 0.4, thrust: 0.18 };
 /** a thrown branch's length (m), along its joint's +y from its butt to its tip */
 export const BRANCH_LENGTH = 2;
 /** how many thrown branches her model keeps (a line's five and one more: the oldest is taken past that) */
@@ -88,26 +79,13 @@ function branchOn(S: Sculpt, made: (f: () => THREE.BufferGeometry) => THREE.Buff
   }
 }
 
-/** How far along its way a foot is `s` of the way through its step: still as it lifts and as it sets down. */
-function along(s: number): number {
-  const k = Math.min(1, Math.max(0, (s - LIFT_FIRST) / (1 - 2 * LIFT_FIRST)));
-  return k * k * (3 - 2 * k);
-}
-/** how far under the floor its body must be for its feet to sink with it (m): rising out of the earth as it comes it
- *  is, not a frame or two behind a step up onto the dais (0.35 m), which sank every planted foot */
-const RISING = 0.4;
-const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _d = new THREE.Vector3();
+const _q = new THREE.Quaternion(), _x = new THREE.Vector3(1, 0, 0);
 
-/** One floor root as she walks: its joint at its knee (its +z laid along the root to its foot, `turned`), the knee and
- *  the foot where it meets the floor in the tree's frame at rest, and its length between them; how high it lifts, the
- *  half it steps with; where its foot is planted in the world (null till it first is), where its step set off from,
- *  which step that is (-1 none), and a stopped foot's step back to rest (its share done, -1 none). */
+/** One floor root: its joint at its knee (its +z laid along the root to its foot, `turned`), the knee and the foot
+ *  where it meets the floor in the tree's frame at rest, and its length between them. */
 interface Crawler {
   j: THREE.Group; turned: THREE.Quaternion; knee: THREE.Vector3; foot: THREE.Vector3; footIn: THREE.Vector3;
-  length: number; lift: number; half: number; at: THREE.Vector3 | null; from: THREE.Vector3; stepOf: number; settle: number;
-  /** where its foot was drawn last frame, and how high over the floor it was then (m); and the height a step or a
-   *  settle carrying on from the air set off at (m), which it comes down from */
-  now: THREE.Vector3; nowUp: number; up: number;
+  length: number;
 }
 
 /** The trunk's outside radius `y` m up. */
@@ -329,7 +307,7 @@ export function buildRootmother(): Model {
   }
 
   // --- her roots: from her waist in the hollow, over the rim, down the trunk and out into the ground --------------
-  /** each root's piece out over the floor, which she walks on */
+  /** each root's piece out over the floor, which she drives into the soil and thrusts out of it as she burrows */
   const crawlers: Crawler[] = [];
   // (a few great ones from her waist over the rim, the rest smaller, out of the trunk's wall low down: the tree shows
   // between them; none over her heart, a gap before it)
@@ -338,8 +316,8 @@ export function buildRootmother(): Model {
     const great = i % 3 === 0, out = (great ? 5.2 : 3.6) + r() * 1.6, twist = (r() - 0.5) * 0.7;
     const at = (rr: number, y: number, w = 0) => V(Math.sin(a + w) * rr, y, Math.cos(a + w) * rr);
     // (each in two: what comes down the trunk, fixed to it, and what lies out over the floor, on a joint at its knee
-    // where it meets the ground's edge, which lifts and sets it down again as she drags herself; the floor's piece
-    // starts a little up inside the trunk's, so they bend there without a gap or a ball)
+    // where it meets the ground's edge, which drives it into the soil and thrusts it out again as she burrows; the
+    // floor's piece starts a little up inside the trunk's, so they bend there without a gap or a ball)
     const knee = great ? at(2.35, 0.8, twist * 0.6) : at(trunkAt(0.7) + 0.15, 0.7, twist * 0.3);
     const upper = great
       ? [at(0.5, WAIST_Y - 0.1), at(1.35, WAIST_Y + 0.35), at(2.12, 3.15), at(2.1, 2.2, twist * 0.3), knee]
@@ -383,23 +361,10 @@ export function buildRootmother(): Model {
       S.add(made(() => organic(new THREE.SphereGeometry(1, 8, 6), 0.35, 3, 70 + i)), moss, crawl,
         local([lump])[0].toArray() as [number, number, number], turnedBy(a), [0.3, 0.13, 0.22]);
     }
-    // (the halves take every other root round her, so each half stands all round her: the great ones in both)
-    crawlers.push({
-      j: crawl, turned, knee, foot, footIn: local([foot])[0], length: foot.distanceTo(knee), lift: great ? 0.5 : 0.32,
-      half: i % 2, at: null, from: new THREE.Vector3(), stepOf: -1, settle: -1, now: new THREE.Vector3(), nowUp: 0, up: 0,
-    });
+    crawlers.push({ j: crawl, turned, knee, foot, footIn: local([foot])[0], length: foot.distanceTo(knee) });
   }
-  /** where each half's feet stand round her on average, in the tree's frame (x, z): the side the trunk sways to as
-   *  that half lifts */
-  const sideOf = [0, 1].map((h) => {
-    const mine = crawlers.filter((c) => c.half === h);
-    const x = mine.reduce((sum, c) => sum + c.foot.x, 0) / mine.length, z = mine.reduce((sum, c) => sum + c.foot.z, 0) / mine.length;
-    const d = Math.hypot(x, z) || 1;
-    return { x: x / d, z: z / d };
-  });
-
   // --- her body, from the waist up ------------------------------------------------------------------------
-  // (on the tree, so she rides it as it is lifted and sways on her roots)
+  // (on the tree)
   const waist = joint(tree, 0, WAIST_Y, 0);
   // (her hips and belly melting into the roots in the hollow)
   S.add(made(() => organic(taperTube([V(0, -0.6, 0), V(0, -0.1, 0), V(0, 0.45, 0.02), V(0, 0.95, 0.02)], (t) => 0.68 - 0.24 * Math.sin(t * Math.PI * 0.95), 14, 14), 0.04, 4, 2)),
@@ -564,119 +529,25 @@ export function buildRootmother(): Model {
   // her root cage and the great root she brings down on it: meshes of their own in her roots' bark, not her sculpt,
   // at no size till a cage places them (entities/rootCage.ts)
   root.userData.cage = hangCagePool(root, rootWood);
+  // her burrow's soil: the mounds where she sinks and rises and the ridge over her way (entities/rootBurrow.ts)
+  root.userData.burrow = hangBurrowPool(root, soil);
+  /** her burrow's pose, set by its effect on every game (entities/rootBurrow.ts): her floor roots' dive (1 driven into
+   *  the soil, under 0 thrust out of it) and how far under the floor her whole body is (m) */
+  const bury = { dive: 0, depth: 0 };
+  root.userData.bury = bury;
+  /** for the lab: her roots' joints, and where each foot meets the floor at rest (in its joint's frame) */
+  root.userData.roots = crawlers.map((c) => ({ joint: c.j, foot: c.footIn }));
 
-  // (eased: her heart's doors opening through the window, her fall, her walking)
-  let open = 0, sag = 0, crawling = 0;
-  // her walk: the steps she has covered (each `ROOTMOTHER.drag.stride` m), where she stood last frame, which way she
-  // goes (in the world), and which half a stopped walk's feet step back to rest next
-  let steps = 0, settleHalf = 0;
-  let last: THREE.Vector3 | null = null;
-  const way = new THREE.Vector3(0, 0, 1);
-  /** for the lab: her roots' joints and feet (each foot where it meets the floor, in its joint's frame), the tree, and
-   *  `carried` (its canary: her feet carried with her, never planted, and the trunk on the earth) */
-  const walk = { feet: crawlers.map((c) => ({ joint: c.j, foot: c.footIn })), tree, carried: false };
-  root.userData.walk = walk;
+  // (eased: her heart's doors opening through the window, her fall)
+  let open = 0, sag = 0;
 
-  /** A foot's place at rest in the world (on the earth under her as she stands). */
-  const restOf = (c: Crawler, to: THREE.Vector3): THREE.Vector3 => root.localToWorld(to.copy(c.foot));
-  /** `at` set down on the floor under it, as a foot meets it at rest (off the dais's top, its edge is lower); while she
-   *  is under the floor (rising out of the earth as she comes) her feet are as far under it with her. Her body easing
-   *  down after a step off the dais's edge is not counted: it lifted every foot off the floor for a frame. */
-  const onFloor = (at: THREE.Vector3, under: THREE.Vector3, c: Crawler): THREE.Vector3 => {
-    at.y = groundHeight(at.x, at.z) + c.foot.y + Math.min(0, under.y - groundHeight(under.x, under.z) + RISING);
-    return at;
-  };
-
-  /**
-   * Her walk on her roots this frame: the steps covered by the ground she moved (`walking` her share of it lifted on
-   * her roots), each foot planted where it is or carried through its half's step, a stopped one stepped back to rest;
-   * then the trunk lifted and swayed, and each root's joint aimed at its foot and drawn out to reach it.
-   */
-  function walkOn(dt: number, walking: number, stopped: boolean): void {
-    root.updateWorldMatrix(true, false);
-    const here = root.getWorldPosition(new THREE.Vector3());
-    let moved = last ? Math.hypot(here.x - last.x, here.z - last.z) : 0;
-    // (placed afresh: a spawn, a set-up; her feet set down at rest under her again)
-    if (!last || moved > PLACED_MOVE) {
-      moved = 0;
-      for (const c of crawlers) { c.at = null; c.stepOf = c.settle = -1; }
-    }
-    if (moved > 1e-5 && last) way.set(here.x - last.x, 0, here.z - last.z).normalize();
-    last = (last ?? new THREE.Vector3()).copy(here);
-    const stride = ROOTMOTHER.drag.stride;
-    steps += moved / stride;
-    const n = Math.floor(steps), u = steps - n, lifting = n % 2;
-    const stepping = !stopped && !walk.carried;
-
-    // the trunk: lifted off the earth on her roots, dipping as each half lands, leaning into her way, swaying to the
-    // half lifted
-    const swing = stepping ? Math.sin(Math.PI * u) : 0;
-    const side = sideOf[lifting];
-    tree.position.y = walk.carried ? 0 : walking * (WALK.rise - WALK.dip * (1 - swing));
-    tree.rotation.x = walking * (WALK.lean + WALK.surge * swing + WALK.sway * swing * side.z);
-    tree.rotation.z = -walking * WALK.sway * swing * side.x;
-    tree.updateWorldMatrix(false, false);
-
-    // (stopped mid-step: the feet in the air step on back to rest from where they are)
-    if (!stepping) {
-      for (const c of crawlers) {
-        if (c.stepOf >= 0 && c.at) { c.from.copy(c.now); c.up = c.nowUp; c.stepOf = -1; c.settle = 0; }
-      }
-    }
-    // (a stopped walk: the half furthest from rest steps back to it, a half at a time)
-    if (!stepping && crawlers.every((c) => c.settle < 0)) {
-      const offRest = (c: Crawler): number => {
-        const rest = restOf(c, _d);
-        return c.at ? Math.hypot(c.at.x - rest.x, c.at.z - rest.z) : 0;
-      };
-      const off = [0, 1].map((h) => Math.max(0, ...crawlers.filter((c) => c.half === h).map(offRest)));
-      const h = off[settleHalf] > WALK.still ? settleHalf : off[1 - settleHalf] > WALK.still ? 1 - settleHalf : -1;
-      if (h >= 0) {
-        for (const c of crawlers) if (c.half === h && c.at) { c.from.copy(c.at); c.up = 0; c.settle = 0; }
-        settleHalf = 1 - h;
-      }
-    }
+  /** Her floor roots driven into the soil (`dive` up to 1: turned down about the knee, drawn in) or thrust out of it as
+   *  they burst out and spread (`dive` under 0: drawn out past their rest), each from its turn as built. */
+  function rootsTo(dive: number): void {
+    const down = Math.max(0, dive), out = Math.max(0, -dive);
     for (const c of crawlers) {
-      const rest = restOf(c, _d);
-      let foot: THREE.Vector3;
-      if (walk.carried || !c.at) {
-        // (carried with her, or not yet planted: at rest under her)
-        foot = rest.clone();
-        if (!walk.carried) c.at = onFloor(rest.clone(), here, c);
-      } else if (stepping && c.half === lifting) {
-        // its half's step: torn up from where it stood and set down a half stride ahead of where it will rest as it
-        // lands (her body goes on the rest of the step meanwhile), lifted through the middle of it (by the ground she
-        // covers, so it lands as her body all but stops)
-        if (c.stepOf !== n) {
-          c.from.copy(c.settle >= 0 ? c.now : c.at);
-          c.up = c.settle >= 0 ? c.nowUp : 0;
-          c.stepOf = n;
-          c.settle = -1;
-        }
-        const ahead = onFloor(rest.clone().addScaledVector(way, stride * (1.5 - u)), here, c);
-        foot = onFloor(c.from.clone().lerp(ahead, along(u)), here, c);
-        foot.y += Math.max(c.lift * Math.sin(Math.PI * u), c.up * (1 - u));
-        c.at.copy(ahead);
-      } else if (c.settle >= 0) {
-        // a stopped foot stepped back to rest
-        c.settle = Math.min(1, c.settle + dt / WALK.settle);
-        foot = onFloor(c.from.clone().lerp(rest, along(c.settle)), here, c);
-        foot.y += Math.max(c.lift * Math.sin(Math.PI * c.settle), c.up * (1 - c.settle));
-        if (c.settle >= 1) { c.at!.copy(rest); c.settle = -1; }
-      } else {
-        // planted: where it was set down, bearing her
-        c.stepOf = -1;
-        foot = onFloor(c.at.clone(), here, c);
-      }
-      c.nowUp = c.at ? foot.y - onFloor(_p.copy(foot), here, c).y : 0;
-      c.now.copy(foot);
-      // its joint aimed at the foot from its knee, drawn out or in along the root to reach it
-      tree.worldToLocal(foot);
-      _d.copy(foot).sub(c.knee);
-      const reach = _d.length();
-      _q.setFromUnitVectors(_p.copy(c.foot).sub(c.knee).normalize(), _d.normalize());
-      c.j.quaternion.copy(_q).multiply(c.turned);
-      c.j.scale.set(1, 1, reach / c.length);
+      c.j.quaternion.copy(c.turned).multiply(_q.setFromAxisAngle(_x, DIVE.down * down));
+      c.j.scale.set(1, 1, 1 - DIVE.drawn * down + DIVE.thrust * out);
     }
   }
 
@@ -685,9 +556,6 @@ export function buildRootmother(): Model {
     const dead = st.dead >= 0 ? st.dead : 0;
     const weak = !!look && look.weak > 0 && dead === 0;
     const k = 1 - Math.exp(-dt * 5);
-    // (walking on her roots: eased in and out, so she rises onto them as she sets off and settles as she stops)
-    const going = dead === 0 && st.move > 0.02;
-    crawling += ((going ? Math.min(1, st.move * 5) : 0) - crawling) * (1 - Math.exp(-dt * 4));
     open += ((weak ? 1 : 0) - open) * k;
     sag += (dead - sag) * (1 - Math.exp(-dt * 3));
     const late = (look?.phase ?? 0) >= 1;
@@ -768,12 +636,13 @@ export function buildRootmother(): Model {
     waistX += -0.5 * sag; headX += 0.6 * sag;
     for (const s of arm) { s.x = s.x * (1 - sag) + 0.15 * sag; s.z = s.z * (1 - sag) + 0.1 * sag; s.el *= 1 - sag; }
 
-    // walking on her roots: the trunk lifted and swaying on them, she leans out over the rim towards where she goes,
-    // her arms out before her for her balance, swinging a little against the trunk's sway
-    walkOn(dt, crawling * (1 - sag), !going);
-    waistX += 0.12 * crawling;
-    const balance = Math.sin(Math.PI * (steps % 2));
-    arm.forEach((s, i) => { s.x += -0.8 * crawling; s.z += (0.25 + 0.12 * balance * (i ? -1 : 1)) * crawling; s.el += -0.25 * crawling; });
+    // her burrow: her roots driven into the soil or thrust out of it, her body under the floor by its depth; going
+    // under, her arms drawn in to her and her head bowed, rising, flung wide as she comes up
+    rootsTo(bury.dive);
+    root.position.y = -bury.depth;
+    const under = Math.min(1, bury.depth / 2);
+    waistX += 0.2 * under; headX += 0.3 * under;
+    for (const s of arm) { s.x += -0.6 * under; s.z += -0.2 * under; s.el += -0.6 * under; }
     waist.position.y = WAIST_Y - 1.1 * sag;
     waist.rotation.set(waistX, 0, waistZ);
     chest.rotation.x = chestX;
@@ -805,9 +674,8 @@ export function buildRootmother(): Model {
   return {
     root, kit, animate, height: 6.6,
     reset() {
-      open = sag = crawling = steps = 0;
-      last = null;
-      for (const c of crawlers) { c.at = null; c.stepOf = c.settle = -1; }
+      open = sag = 0;
+      bury.dive = bury.depth = 0;
     },
     dispose() { kit.dispose(); },
   };
