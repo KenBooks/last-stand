@@ -386,9 +386,11 @@ function makeMats(): Mats {
     // let through, from play "make hall windows semi transparent, so they actually show what's outside behind
     // them"; written no depth, it is never drawn solid; and under 1 of its own opacity, it is never taken for a wall's
     // ghost either, blended by the share the house rule leaves rather than its map's alpha: at 1, both ways its panes
-    // stood whole and dark, `flagsOf` in engine/seeKinds.ts)
+    // stood whole and dark, `flagsOf` in engine/seeKinds.ts). Matte to the lamps: a torch's lamp is lit 1.1 m out in
+    // the aisle from its flame (`wallTorch`), and glossy (0.1) the glass shone with it as a bright patch low on the
+    // middle windows, where no flame stood, at any hour (from play: "what's this light on window sill from ?")
     hallGlass: new THREE.MeshStandardMaterial({
-      name: 'hallGlass', map: panes.leads, transparent: true, opacity: GLASS.opacity, depthWrite: false, roughness: 0.1, metalness: 0,
+      name: 'hallGlass', map: panes.leads, transparent: true, opacity: GLASS.opacity, depthWrite: false, roughness: 1, metalness: 0,
       side: THREE.DoubleSide,
     }),
     glass: new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffc070, emissiveIntensity: 2.2 }),

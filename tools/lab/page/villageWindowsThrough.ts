@@ -39,6 +39,15 @@ const BOX_KEPT = 0.7;
  *  canary's opaque glass 0.18 to -0.16) */
 const MOST_CHANGED = 0.0005;
 const ALIKE = 0.2;
+/** from inside, at most `MOST_BRIGHTER` of the whole pane's pixels brighter through its glass than with none (by over
+ *  `BRIGHTENED` of white and `BRIGHTENED_BY` times): glass dims what's past it. A torch's lamp shone on the glossy
+ *  glass as a patch low on the window at any hour, where no flame was (from play, "what's this light on window sill
+ *  from ?"). From outside the glass mirrors the sky, brighter than the hall past it, and isn't read so. */
+const BRIGHTENED = 0.03;
+const BRIGHTENED_BY = 1.5;
+const MOST_BRIGHTER = 0.005;
+/** the glass's roughness the canary sets: as it was, glossy */
+const GLOSSY = 0.1;
 /** how far the camera may move as a frame is drawn (m) */
 const CAMERA_HELD = 0.01;
 /** the wall kinds that must stand whole for a reading: a thinned wall shows what's past it round the glass */
@@ -122,14 +131,14 @@ function aimCamera(stand: Stand): THREE.Vector3 {
 /** A box on the canvas, in pixels from its bottom left (as a canvas is read). */
 interface Box { left: number; right: number; bottom: number; top: number }
 
-/** The window's glass on the canvas as the camera has it, `BOX_KEPT` of it about its middle. */
-function windowBox(canvas: Canvas): Box {
+/** The window's glass on the canvas as the camera has it, `kept` of it about its middle. */
+function windowBox(canvas: Canvas, kept: number): Box {
   const { middle, half, high } = eastWindow();
   const xs: number[] = [];
   const ys: number[] = [];
   for (const along of [-1, 1]) {
     for (const up of [-1, 1]) {
-      const corner = middle.clone().add(new THREE.Vector3(0, up * high / 2 * BOX_KEPT, along * half * BOX_KEPT));
+      const corner = middle.clone().add(new THREE.Vector3(0, up * high / 2 * kept, along * half * kept));
       corner.project(G.camera);
       xs.push((corner.x + 1) / 2 * canvas.width);
       ys.push((corner.y + 1) / 2 * canvas.height);
@@ -183,9 +192,22 @@ function alike(a: Canvas, b: Canvas): number {
   return both / Math.max(1e-12, Math.sqrt(firsts * seconds));
 }
 
+/** The share of `through`'s pixels brighter than the same pixel of `bare` by over `BRIGHTENED` of white and
+ *  `BRIGHTENED_BY` times. */
+function brightenedShare(through: Canvas, bare: Canvas): number {
+  const lit = lightsOf(through);
+  const plain = lightsOf(bare);
+  let brightened = 0;
+  for (let k = 0; k < lit.length; k++) {
+    if (lit[k] - plain[k] > BRIGHTENED && lit[k] > plain[k] * BRIGHTENED_BY) brightened++;
+  }
+  return brightened / Math.max(1, lit.length);
+}
+
 /** What one hour's frames found: the share of the frame the cull changed, how alike the window's picture is through
- *  the glass and with none, and how far the camera moved as they were drawn. */
-interface HourRead { culled: number; shown: number; moved: number }
+ *  the glass and with none, the share of its pane brighter through the glass than with none, and how far the camera
+ *  moved as they were drawn. */
+interface HourRead { culled: number; shown: number; brighter: number; moved: number }
 
 /** One stand's three frames at the hour held. */
 function readHour(lab: Lab, stand: Stand): HourRead {
@@ -205,10 +227,12 @@ function readHour(lab: Lab, stand: Stand): HourRead {
     for (const mesh of glass) mesh.visible = true;
     setDoorCull('door');
   }
-  const box = windowBox(whole.canvas);
+  const box = windowBox(whole.canvas, BOX_KEPT);
+  const pane = windowBox(whole.canvas, 1);
   return {
     culled: changedShare(culled.canvas, whole.canvas),
     shown: alike(cropped(whole.canvas, box), cropped(bare, box)),
+    brighter: brightenedShare(cropped(whole.canvas, pane), cropped(bare, pane)),
     moved: G.camera.position.distanceTo(eye),
   };
 }
@@ -216,8 +240,9 @@ function readHour(lab: Lab, stand: Stand): HourRead {
 /** A share as a percentage. */
 const percent = (share: number): string => `${(share * 100).toFixed(3)}%`;
 
-/** What one stand found: its line, its problems, whether what's past the glass showed at every hour, its pictures. */
-interface StandRead { line: string; problems: string[]; showsThrough: boolean; moments: Pictured[] }
+/** What one stand found: its line, its problems, whether what's past the glass showed at every hour, whether the
+ *  glass shone brighter than what's past it at an hour (from inside), its pictures. */
+interface StandRead { line: string; problems: string[]; showsThrough: boolean; shone: boolean; moments: Pictured[] }
 
 /** One stand's readings at each hour, and its frame pictured at each as the check's camera has it. */
 async function readStand(lab: Lab, stand: Stand): Promise<StandRead> {
@@ -227,14 +252,20 @@ async function readStand(lab: Lab, stand: Stand): Promise<StandRead> {
   const read: string[] = [];
   const moments: Pictured[] = [];
   let showsThrough = true;
+  let shone = false;
   for (const hour of HOURS) {
     holdHour(hour);
     await lab.step(SETTLE);
     const thinned = WALLS.filter((kind) => fadedWhole(kind));
     if (thinned.length) problems.push(`${at}: at ${hour}:00 thinned: ${thinned.join(', ')}`);
-    const { culled, shown, moved } = readHour(lab, stand);
+    const { culled, shown, brighter, moved } = readHour(lab, stand);
     read.push(`${hour}:00 ${percent(culled)} of pixels changed by the cull, the window ${shown.toFixed(2)} alike `
-      + 'with no glass');
+      + `with no glass, ${percent(brighter)} of its pane brighter through it`);
+    if (stand.side < 0 && brighter > MOST_BRIGHTER) {
+      shone = true;
+      problems.push(`${at}: at ${hour}:00 ${percent(brighter)} of the window's pane is brighter through its glass `
+        + `than with none, not over ${percent(MOST_BRIGHTER)}: the glass shines`);
+    }
     aimCamera(stand);
     moments.push(await lab.screen(`${stand.name}, ${hour}:00`));
     if (moved > CAMERA_HELD) problems.push(`${at}: the camera moved ${moved.toFixed(2)} m as the frame was drawn`);
@@ -245,7 +276,7 @@ async function readStand(lab: Lab, stand: Stand): Promise<StandRead> {
         + `not ${ALIKE}`);
     }
   }
-  return { line: `${at}: ${read.join('; ')}`, problems, showsThrough, moments };
+  return { line: `${at}: ${read.join('; ')}`, problems, showsThrough, shone, moments };
 }
 
 /** The hall's windows seen through from outside and inside, at midnight and noon. */
@@ -256,19 +287,29 @@ export async function hallWindowsSeeThrough(lab: Lab, canary: boolean): Promise<
   }
   const view = viewMode();
   const glass = hallGlass();
-  const opacity = glass.opacity;
-  if (canary) glass.opacity = 1;
+  const { opacity, roughness } = glass;
   const reads: StandRead[] = [];
+  const glossy: StandRead[] = [];
   try {
+    if (canary) glass.opacity = 1;
     for (const stand of STANDS) reads.push(await readStand(lab, stand));
+    // (the second canary: the glass glossy as it was, read from inside)
+    if (canary) {
+      glass.opacity = opacity;
+      glass.roughness = GLOSSY;
+      glass.needsUpdate = true;
+      glossy.push(await readStand(lab, STANDS[1]));
+    }
   } finally {
     glass.opacity = opacity;
+    glass.roughness = roughness;
+    glass.needsUpdate = true;
     setDoorCull('door');
     holdHour(null);
     await viewBy(lab, view);
   }
-  const lines = reads.map((read) => read.line);
-  const problems = reads.flatMap((read) => read.problems);
-  const caught = canary ? reads.every((read) => !read.showsThrough) : null;
+  const lines = [...reads, ...glossy].map((read) => read.line);
+  const problems = [...reads, ...glossy].flatMap((read) => read.problems);
+  const caught = canary ? reads.every((read) => !read.showsThrough) && glossy.every((read) => read.shone) : null;
   return { lines, problems, caught, moments: reads.flatMap((read) => read.moments) };
 }
