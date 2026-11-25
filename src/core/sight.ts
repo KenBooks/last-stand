@@ -81,6 +81,8 @@ roofTexture.needsUpdate = true;
  *  lay half out of the fog, a strip of green round a house he can't see past (from play, "and here should be all grey,
  *  right ?") */
 const WITHIN_WALLS = 255;
+/** how far either side of a house's walls the map rises from the one to the other (m) */
+const ROOF_RAMP = 1;
 const UNDER_EAVES = 127;
 /** the roofs last painted, and whether a harness has their eaves count as within their walls, as they did */
 let roofsPainted: readonly SightRoof[] = [];
@@ -109,8 +111,15 @@ function paintRoofs(roofs: readonly SightRoof[]): void {
         const alongW = dx * roof.cos - dz * roof.sin;
         const alongD = dx * roof.sin + dz * roof.cos;
         if (Math.abs(alongW) <= roof.halfW + ROOF_EAVES && Math.abs(alongD) <= roof.halfD + ROOF_EAVES) {
-          const within = Math.abs(alongW) <= roof.halfW && Math.abs(alongD) <= roof.halfD;
-          roofMap[row * ROOFS_TEXELS + column] = within || eavesHeld ? WITHIN_WALLS : UNDER_EAVES;
+          // (how far in from the walls, m, under 0 past them: the map rises with it across `ROOF_RAMP` either side
+          // of the walls' line, halfway at the line itself. Read between its texels a ramp is exact, so a line
+          // drawn at one value of it is the wall's own, straight on a house turned any way; as two values with a
+          // step at the walls it was the texels' staircase, from play "wth is this wave", "same jigsaw blade")
+          const inside = Math.min(roof.halfW - Math.abs(alongW), roof.halfD - Math.abs(alongD));
+          const share = 0.5 + 0.5 * Math.max(-1, Math.min(1, inside / ROOF_RAMP));
+          const value = eavesHeld ? WITHIN_WALLS : Math.round(UNDER_EAVES + (WITHIN_WALLS - UNDER_EAVES) * share);
+          const at = row * ROOFS_TEXELS + column;
+          roofMap[at] = Math.max(roofMap[at], value);
         }
       }
     }
