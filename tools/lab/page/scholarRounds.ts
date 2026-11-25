@@ -23,6 +23,7 @@ import { HOOD, scholarPlant } from '../../../src/entities/models/scholar';
 import { GRIP_SHUT, roundsPlant } from '../../../src/world/scholarRounds';
 import { CASE_R, type LadderPart } from '../../../src/world/houses/library';
 import type { Obstacle } from '../../../src/types';
+import { CHAIR, TABLE_INTO_MOST, chairHandOff, chairRead, intoTable } from './scholarChair';
 import { GRAB, INTO_BOOK_MOST, PADS_MOST, PAGE_FACING, SLEEVES_INTO_BOOK_MOST, bookRead, fingerPoints, grabRead, intoBook, padsRead, pageFacing, printsOf, turnedRound } from './bookHold';
 
 /** whether the open book read wrong to him at some frame (its least facing under `PAGE_FACING`) */
@@ -168,6 +169,8 @@ const BODY_ROUNDS: { joint?: string; up: number; r: number }[] = [
  *  of it, below its top: its tables, chairs, hearth and stands; not the cases he reaches into for their books, nor the
  *  globe he turns by hand) */
 const FURNITURE_INTO_MOST = 0.01;
+/** how far from his table's group's place its own circles (his table's and his chair's) lie, at most (m) */
+const OWN_DESK = 1.2;
 
 /** How far his palms and the book in his hands go into what stands in the room but its cases (m past its circle, below
  *  its top). */
@@ -182,8 +185,10 @@ export function intoFurniture(s: Scholar, obstacles: readonly Obstacle[]): numbe
   }
   let into = 0;
   const globe = G.scene.getObjectByName('library globe')!.getWorldPosition(new THREE.Vector3());
+  // (his own table and chair aside: he handles his chair, drawing it out and pushing it in)
+  const desk = s.root.parent!.getWorldPosition(new THREE.Vector3());
   for (const o of obstacles) {
-    if (o.r === CASE_R || Math.hypot(o.x - globe.x, o.z - globe.z) < 0.1) continue;
+    if (o.r === CASE_R || Math.hypot(o.x - globe.x, o.z - globe.z) < 0.1 || Math.hypot(o.x - desk.x, o.z - desk.z) < OWN_DESK) continue;
     for (const p of points) if (p.y < o.h - 0.01) into = Math.max(into, o.r - Math.hypot(p.x - o.x, p.z - o.z));
   }
   return into;
@@ -352,6 +357,8 @@ interface Followed {
   turned: number; turnedAt: string; headOff: number; shoeOut: number; shoeAt: string;
   cowlInto: number; cowlGap: number; cowlAt: string; bookFrames: number; notBook: string; backInPlace: boolean;
   ladderInto: number; ladderAt: string; furnitureInto: number; furnitureAt: string;
+  tableInto: number; tableAt: string; chairFloor: number; chairInto: number; chairAt: string; chairMoved: number; chairHand: number; chairHandAt: string;
+  chairOutMost: number; chairOutAtEnd: number;
   hipsSpeeds: number; hipsAt: string; jointSpeeds: number; jointAt: string; hoodGap: number; hoodAt: string;
   bookFingers: number; bookSleeves: number; bookAt: string; pageAway: number; pageRight: number; pageAt: string;
   grabSide: number; grabAt: string; grabInto: number; grabIntoAt: string; grabFrames: number; padsOff: number; padsAt: string;
@@ -417,6 +424,10 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
   let farthest = 0, farAt = '', tightest = Infinity, tightAt = '', frames = 0;
   let turned = 0, turnedAt = '', headOff = 0, shoeOut = 0, shoeAt = '';
   let cowlInto = 0, cowlGap = 0, cowlAt = '', bookFrames = 0, notBook = '', lastOut = rounds.out, ladderInto = 0, ladderAt = '', furnitureInto = 0, furnitureAt = '';
+  /** him against his table's top while he's sat or half sat, his chair on the floor and clear of what stands by it, and
+   *  his hands on it while it moves (`scholarChair.ts`) */
+  let tableInto = 0, tableAt = '', chairFloor = 0, chairInto = 0, chairAt = '', chairMoved = 0, chairHand = 0, chairHandAt = '', chairOutMost = 0, chairWas = -1;
+  const cases = G.arena.obstacles.filter((o) => o.r === CASE_R);
   const held = G.scene.getObjectByName('library held book') as THREE.Mesh;
   const obstacles = G.arena.obstacles.filter((o) => o !== rounds.body);
   const joints = jointsOf(s), before = joints.map((o) => o.quaternion.clone());
@@ -542,6 +553,21 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
       const into = intoLadder(s);
       if (into > ladderInto) { ladderInto = into; ladderAt = rounds.doing; }
     }
+    // (him against his table's top, sat or half sat, a few frames apart; his chair each frame)
+    if (s.act.sit > 0 && frames % 3 === 0) {
+      const table = intoTable(s);
+      if (table.into > tableInto) { tableInto = table.into; tableAt = `${table.what}, ${rounds.doing} (sat ${s.act.sit.toFixed(2)})`; }
+    }
+    const chair = chairRead(s, cases);
+    chairFloor = Math.max(chairFloor, chair.floor);
+    if (chair.into > chairInto) { chairInto = chair.into; chairAt = `${chair.intoWhat}, ${rounds.doing}`; }
+    chairOutMost = Math.max(chairOutMost, chair.out);
+    if (chairWas >= 0 && Math.abs(chair.out - chairWas) > 1e-4) {
+      chairMoved++;
+      const off = chairHandOff(s);
+      if (off > chairHand) { chairHand = off; chairHandAt = rounds.doing; }
+    }
+    chairWas = chair.out;
     // (his hands and that book against the rest, while he's up and clear of his own table and chair)
     if (s.act.sit <= 0) {
       const furniture = intoFurniture(s, obstacles);
@@ -582,6 +608,7 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
   }
   return { frames, beats, farthest, farAt, tightest, tightAt, gapsAtEnd: rounds.gaps, satAtEnd: s.act.sit, turned, turnedAt, headOff, shoeOut, shoeAt,
     cowlInto, cowlGap, cowlAt, bookFrames, notBook, backInPlace, ladderInto, ladderAt, furnitureInto, furnitureAt,
+    tableInto, tableAt, chairFloor, chairInto, chairAt, chairMoved, chairHand, chairHandAt, chairOutMost, chairOutAtEnd: chairWas,
     hipsSpeeds, hipsAt, jointSpeeds, jointAt, hoodGap: hoodWorst, hoodAt, bookFingers, bookSleeves, bookAt, pageAway, pageRight, pageAt,
     grabSide, grabAt, grabInto, grabIntoAt, grabFrames, padsOff, padsAt };
 }
@@ -609,6 +636,11 @@ function problemsOf(name: string, r: Followed): string[] {
   if (r.hoodGap > HOOD_GAP_MOST) problems.push(`rounds (${name}): the hood's edge ${(r.hoodGap * 100).toFixed(1)} cm off what it lies on, ${r.hoodAt} (at most ${HOOD_GAP_MOST * 100})`);
   if (!r.backInPlace) problems.push(`rounds (${name}): the shelf's book not back in its place as it stood`);
   if (r.ladderInto > LADDER_INTO_MOST) problems.push(`rounds (${name}): he comes ${(r.ladderInto * 100).toFixed(1)} cm inside ${LADDER_MARGIN * 100} cm of the ladder, ${r.ladderAt} (at most ${LADDER_INTO_MOST * 100})`);
+  if (r.tableInto > TABLE_INTO_MOST) problems.push(`rounds (${name}): ${(r.tableInto * 1000).toFixed(0)} mm of him into his table's top, ${r.tableAt} (at most ${TABLE_INTO_MOST * 1000}: "he overlaps the table lots")`);
+  if (r.chairFloor > CHAIR.floor) problems.push(`rounds (${name}): his chair's feet ${(r.chairFloor * 1000).toFixed(0)} mm off the floor or into it (at most ${CHAIR.floor * 1000})`);
+  if (r.chairInto > CHAIR.into) problems.push(`rounds (${name}): his chair ${(r.chairInto * 1000).toFixed(0)} mm into ${r.chairAt} (at most ${CHAIR.into * 1000})`);
+  if (r.chairMoved && r.chairHand > CHAIR.hand) problems.push(`rounds (${name}): his chair moved with ${r.chairHand === Infinity ? 'no hand on it' : `his hand ${(r.chairHand * 100).toFixed(1)} cm off where it holds it`}, ${r.chairHandAt} (at most ${CHAIR.hand * 100})`);
+  if (r.chairOutAtEnd > 0.01) problems.push(`rounds (${name}): his chair left ${(r.chairOutAtEnd * 100).toFixed(0)} cm out from his table at the end ("the chair is left pushed in")`);
   if (r.furnitureInto > FURNITURE_INTO_MOST) problems.push(`rounds (${name}): his hands or book ${(r.furnitureInto * 100).toFixed(1)} cm into the room's furniture, ${r.furnitureAt} (at most ${FURNITURE_INTO_MOST * 100})`);
   if (r.shoeOut > SHOE_OUT_MOST) problems.push(`rounds (${name}): a shoe ${(r.shoeOut * 100).toFixed(1)} cm out through his robe above its hem, ${r.shoeAt} (at most ${SHOE_OUT_MOST * 100})`);
   return problems;
@@ -620,6 +652,7 @@ const lineOf = (name: string, r: Followed) => `his rounds, ${name}: ${r.beats.jo
   + `a shoe at most ${(r.shoeOut * 100).toFixed(1)} cm out through his robe; his cowl at most ${(r.cowlInto * 100).toFixed(1)} cm into his neck `
   + `or head and its top ${(r.cowlGap * 100).toFixed(1)} cm off his neck; the shelf's own book in his hands ${r.bookFrames} frames${r.notBook ? ` (not: ${r.notBook})` : ''}; `
   + `at most ${(r.ladderInto * 100).toFixed(1)} cm inside ${LADDER_MARGIN * 100} cm of the ladder, his hands and book ${(r.furnitureInto * 100).toFixed(1)} cm into the other furniture; `
+  + `${(r.tableInto * 1000).toFixed(0)} mm of him into his table's top at most${r.tableAt ? ` (${r.tableAt})` : ''}; his chair drawn out ${(r.chairOutMost * 100).toFixed(0)} cm (moved ${r.chairMoved} frames, his hand at most ${r.chairMoved ? (r.chairHand * 100).toFixed(1) : '-'} cm off it), its feet ${(r.chairFloor * 1000).toFixed(0)} mm off the floor, ${(r.chairInto * 1000).toFixed(0)} mm into what stands by it; `
   + `${continuity(r)}; his fingers at most ${(r.bookFingers * 1000).toFixed(1)} mm and his sleeves ${(r.bookSleeves * 100).toFixed(1)} cm into the open book; gripping a shut book (${r.grabFrames} frames) his right palm at least ${r.grabFrames ? r.grabSide.toFixed(2) : '-'} of the way to its spine, his fingers ${(r.grabInto * 1000).toFixed(1)} mm into it and his pads at most ${(r.padsOff * 1000).toFixed(1)} mm off it; the hood's edge at most ${(r.hoodGap * 1000).toFixed(1)} mm off what it lies on (${r.hoodAt})`;
 /** how fast his hips' speed and a joint's turning changed, at most */
 const continuity = (r: Followed) => `his hips' speed changing at most ${r.hipsSpeeds.toFixed(1)} m/s a second (${r.hipsAt}), a joint's `
@@ -657,8 +690,10 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
     roundsPlant.underLadder = true;
     roundsPlant.cut = true;
     roundsPlant.ownPath = true;
+    roundsPlant.chairStays = true;
     const planted = await follow(lab, s, rounds, true);
     roundsPlant.ownPath = false;
+    roundsPlant.chairStays = false;
     roundsPlant.underLadder = false;
     roundsPlant.cut = false;
     scholarPlant.noSeatBlend = false;
@@ -688,6 +723,9 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
     const wrongSide = planted.grabFrames > 0 && planted.grabSide < GRAB.spine;
     lines.push(`canary: the book he takes turned round, its spine away ${wrongSide ? 'caught' : 'went unseen'} (his palm ${planted.grabSide.toFixed(2)} of the way to its spine)`);
     if (!wrongSide) problems.push('rounds: the canary\'s book turned round in his hand went unseen');
+    const overlapped = planted.tableInto > TABLE_INTO_MOST;
+    lines.push(`canary: his chair left where it stands as he gets up and sits ${overlapped ? 'caught' : 'went unseen'} (${(planted.tableInto * 1000).toFixed(0)} mm of him into his table's top, ${planted.tableAt})`);
+    if (!overlapped) problems.push('rounds: the canary\'s chair left where it stands went unseen');
     const upsideDown = pageWrong(planted);
     lines.push(`canary: the open book turned half round in his hands ${upsideDown ? 'caught' : 'went unseen'} (its pages' tops ${planted.pageAway.toFixed(2)} along his forward, their lines ${planted.pageRight.toFixed(2)} along his right)`);
     if (!upsideDown) problems.push('rounds: the canary\'s book turned round went unseen');

@@ -103,8 +103,10 @@ const FOREARM = 0.06;
  *  in his arm. (Read as capsules round his arms, 7 cm round the forearm, the quill through the bell's side, spread wide
  *  on the table, read as clear of it) */
 const SLEEVES = /^scholar (sleeve|bell|undersleeve)$/;
-/** the canary's thing on his table: his quill where it stood, in its inkwell under his left forearm (his desk's frame) */
-const OLD_QUILL = { at: [0.32, 0.9, 0.45], turn: [-0.35, 0, -0.3] } as const;
+/** the canary's thing on his table: a quill stood up on it under the middle of his left forearm as it rests (where his
+ *  quill once stood, by his book: fixed there, it went into the wide bell his forearm had, and missed the fitted
+ *  sleeve that took its place), its foot on the table's top (m over the floor) */
+const QUILL_FOOT = 0.76;
 /** the rays out from each point along his forearm, and the points, from past the elbow to the wrist (shares of it) */
 const ROUND = 8;
 const ALONG_ARM = [0.2, 0.35, 0.5, 0.65, 0.8, 0.9, 0.97];
@@ -579,18 +581,22 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
     s.update(0, null, false);
     const bareArms = forearmBare(s, true);
     lines.push(`canary: with no undersleeves his forearms are ${bareArms.every((b) => b !== null) ? 'found bare' : 'found clothed'}`);
-    // (his quill put back where it stood, in its inkwell under his left forearm, as he reads)
-    const planted = new THREE.Mesh(new THREE.ConeGeometry(0.011, 0.24, 6));
-    planted.name = 'scholar desk quill (canary)';
-    planted.position.set(...OLD_QUILL.at);
-    planted.rotation.set(...OLD_QUILL.turn);
-    s.root.parent!.add(planted);
+    // (a quill stood up under his left forearm, as he reads)
     s.loopAt = 5;
+    s.update(0, null, false);
+    const desk = s.root.parent!, forearm = (name: string) => desk.worldToLocal(s.root.getObjectByName(name)!.getWorldPosition(new THREE.Vector3()));
+    const under = forearm('scholar elbowL').lerp(forearm('scholar handL'), 0.5);
+    // (points all up its length, as what's read of it is its points: a cone's are only at its foot and its tip, either
+    // side of a forearm)
+    const planted = new THREE.Mesh(new THREE.ConeGeometry(0.011, 0.24, 6, 24));
+    planted.name = 'scholar desk quill (canary)';
+    planted.position.set(under.x, QUILL_FOOT + 0.12, under.z);
+    desk.add(planted);
     s.update(0, null, false);
     const poked = propsInArms(s);
     planted.removeFromParent();
     planted.geometry.dispose();
-    lines.push(`canary: his quill where it stood goes ${(poked.depth * 100).toFixed(1)} cm into ${poked.what.replace(/.* into /, '')}`);
+    lines.push(`canary: a quill stood under his left forearm goes ${(poked.depth * 100).toFixed(1)} cm into ${poked.what.replace(/.* into /, '')}`);
     return { lines, problems, caught: caught && raised.depth > THROUGH.most && lowered.depth > 0 && drawn.print > SPINE_GAP
       && landedOn > 0 && bareArms.every((b) => b !== null) && poked.depth > 0 };
   }
@@ -749,7 +755,8 @@ export const SLEEVE_TAPER = { upper: 1.12, fore: 1.08 };
 /** His sleeves' widths (m, across the arm and front to back, the larger) along them, each read from its own mesh as it's
  *  built (its joint's frame): the upper sleeve's at the deltoid and over the elbow, the forearm's widest and narrowest. */
 export function sleeveWidths(s: Scholar): { deltoid: number; elbow: number; foreWide: number; foreNarrow: number } {
-  const widthAt = (mesh: THREE.Mesh, y: number, band = 0.012) => {
+  // (read at the rows of their lathes' profiles, which they keep: `dressBells`)
+  const widthAt = (mesh: THREE.Mesh, y: number, band = 0.004) => {
     const pos = mesh.geometry.attributes.position;
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     for (let i = 0; i < pos.count; i++) {
@@ -760,6 +767,6 @@ export function sleeveWidths(s: Scholar): { deltoid: number; elbow: number; fore
   };
   const upper = s.root.getObjectByName('scholar shoulderL')!.children.find((m) => m.name === 'scholar sleeve standing') as THREE.Mesh;
   const fore = s.root.getObjectByName('scholar elbowL')!.children.find((m) => m.name === 'scholar bell standing') as THREE.Mesh;
-  const along = [-0.02, -0.05, -0.08, -0.11, -0.14, -0.17, -0.2].map((y) => widthAt(fore, y));
-  return { deltoid: widthAt(upper, -0.05), elbow: widthAt(upper, -0.3), foreWide: Math.max(...along.slice(0, 3)), foreNarrow: Math.min(...along.slice(3)) };
+  const along = [0.03, -0.02, -0.08, -0.15, -0.2].map((y) => widthAt(fore, y));
+  return { deltoid: widthAt(upper, -0.06), elbow: widthAt(upper, -0.27), foreWide: Math.max(...along.slice(0, 3)), foreNarrow: Math.min(...along.slice(3)) };
 }

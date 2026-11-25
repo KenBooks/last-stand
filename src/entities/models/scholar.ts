@@ -58,6 +58,10 @@ const SLEEVE_FALL = { most: 0.06, tip: 0.3, from: 0, over: 0.25, ease: 6 };
 const FOLLOW = { up: 14, settle: 0.8, most: THREE.MathUtils.degToRad(450), speeds: THREE.MathUtils.degToRad(15000) };
 /** how long a hand is drawn into a hold begun or changed, from where his pose's follow has it (s: from a pinch to flat fingers his thumb turns near half round, and over half a second it turned 10 degrees a frame) */
 const HOLD_IN = 0.9;
+/** how far up and back toward him a sat hand arcs on its way from the table to his chair's seat and back (m) */
+/** a sat hand's way between his book and his chair's seat (`sitWay`): how far through it (a share) it's come across
+ *  to the seat's place, and from where it goes down to the seat's height; how far it lifts off on the way (m) */
+const SIT_WAY = { across: 0.6, down: 0.55, lift: 0.05 };
 /** how far a held finger's joint may turn in a frame of 60 a second (rad: within a man's joint's 450 degrees a second,
  *  and its turning changed no faster than his can change) */
 const HOLD_TURN = THREE.MathUtils.degToRad(5);
@@ -481,8 +485,12 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     seated(dt, heroAt, talking, said);
     // (followed as he settles into his chair; then as his loop has him, which runs smooth of itself and keeps his
     // fingers on the page he turns: followed, the page went 5 mm into his hand)
-    satFor = act.sit >= 1 ? satFor + dt : 0;
-    follow(dt, FOLLOW.up, smooth(clamp(satFor / FOLLOW.settle, 0, 1)));
+    // (and followed while his hands hold anything as he sits, his chair's seat, and let go of it: not, they turned with
+    // their aims as fast as those moved)
+    satFor = act.sit >= 1 && !act.handL && !act.handR ? satFor + dt : 0;
+    // (no faster than a man turns while his hands hold anything sat, as on his feet: unbounded there, his arm's elbow
+    // turning over as his hand went from his book to his chair's seat came through as a joint 22 degrees in a frame)
+    follow(dt, FOLLOW.up, smooth(clamp(satFor / FOLLOW.settle, 0, 1)), act.handL || act.handR ? FOLLOW.most : Infinity);
     cowlFollow();
     sleevesFall(dt, false);
   }
@@ -939,6 +947,15 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     tR.lerp(tmp, reach);
     // (and over the book in an arc, there and back: brought straight back down, his fingers dug 3 cm into the page)
     tR.y += 0.05 * Math.sin(Math.PI * reach) * (pageK > 0 ? 1 : 0.4);
+    // (a hand on what his rounds have it hold as he sits, its reach of the way from his reading: his chair's seat as he
+    // pushes it back from the table and draws it in)
+    const sitHoldL = act.handL ? smooth(clamp(act.reachL, 0, 1)) : 0, sitHoldR = act.handR ? smooth(clamp(act.reachR, 0, 1)) : 0;
+    // (back toward him over the table at its height first, lifted a little off the book, and down only once past its
+    // edge; the other way, up first and then over the table: straight from the book to the seat, his forearms and
+    // sleeves went down through the table's top, and lerped and lifted together, his hand came down short of its edge,
+    // his fingers into it)
+    if (sitHoldL > 0) sitWay(tL, j.root.worldToLocal(tmp.copy(act.handL!.at)), sitHoldL);
+    if (sitHoldR > 0) sitWay(tR, j.root.worldToLocal(tmp.copy(act.handR!.at)), sitHoldR);
     // (each elbow bent towards its rest on the table; out and down as a hand goes to the face, the right's out as it
     // reaches across)
     poleL.copy(chestLocal(restL.clone())).sub(j.shoulderL.position);
@@ -948,6 +965,9 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     // out and down, it went through the table)
     poleL.normalize().lerp(tmp.set(1.2, -0.6, 0.5).normalize(), gesture * 0.4);
     poleR.normalize().lerp(tmp.set(-1.3, -0.4, 0.3).normalize(), reach * 0.5);
+    // (out and back, as a hand down at the seat's side has it)
+    poleL.lerp(tmp.set(1, -0.2, -0.8).normalize(), sitHoldL);
+    poleR.lerp(tmp.set(-1, -0.2, -0.8).normalize(), sitHoldR);
     reachArm(j.shoulderL, j.elbowL, P.upperL, P.foreL, chestLocal(tL.clone()), poleL, 1, 0.08);
     reachArm(j.shoulderR, j.elbowR, P.upperL, P.foreL, chestLocal(tR.clone()), poleR, 1, 0.08);
     j.root.updateMatrixWorld(true);
@@ -956,12 +976,14 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     handTurn(V(-0.35, 0.06, 1), V(0, -1, -0.06), qa);
     handTurn(V(-0.5, 0.75, -0.2), V(0.1, 0, -1), qb); qa.slerp(qb, smooth(beard));
     handTurn(V(-0.2, 0.9, -0.3), V(0.1, 0.2, -1), qb); qa.slerp(qb, smooth(specs));
+    if (sitHoldL > 0) { sitTurn(act.handL!, qb); qa.slerp(qb, sitHoldL); }
     setHand(j.handL, qa.clone());
     handTurn(V(0.45, 0.06, 1), V(0, -1, -0.06), qa);
     // (holding the page: the fingers along it towards the spine, the palm on its face)
     // (the palm half way between the page's face and down: he pinches it from above, and his hand turns half as fast as it
     // lifts)
     handTurn(tmp.copy(inward).addScaledVector(face, 0.12).add(V(0, 0, 0.2)), face.clone().negate().add(V(0, -1, 0)), qb); qa.slerp(qb, reach);
+    if (sitHoldR > 0) { sitTurn(act.handR!, qb); qa.slerp(qb, sitHoldR); }
     setHand(j.handR, qa.clone());
     // (resting, his fingers lie nearly flat on the page: curled as a hand is at rest in the air, their tips dug in)
     poseHand(handL, lerp(lerp(0.14, 1.0, beard), 0.6, specs), 0.15, specs, clock, 0);
@@ -974,6 +996,17 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     if (page.visible) layPage(pageK);
     calm = turning === 0 && beard === 0 && specs === 0 && muse < 0.02 && lean < 0.02 && holding === 0;
   }
+  /** a sat hand's way `h` of the way from where it reads (`at`, moved) to `to` (his root's frame): across first, its
+   *  height after (`SIT_WAY`), lifted a little off what it leaves */
+  const sitWay = (at: THREE.Vector3, to: THREE.Vector3, h: number) => {
+    const across = smooth(clamp(h / SIT_WAY.across, 0, 1)), down = smooth(clamp((h - SIT_WAY.down) / (1 - SIT_WAY.down), 0, 1));
+    at.set(lerp(at.x, to.x, across), lerp(at.y, to.y, down) + SIT_WAY.lift * Math.sin(Math.PI * h), lerp(at.z, to.z, across));
+  };
+  /** a hand's turn for its aim (world) as he sits: its fingers' and palm's ways in his root's frame */
+  const sitTurn = (aim: HandAim, out: THREE.Quaternion) => {
+    const toRoot = j.root.matrixWorld.clone().invert();
+    handTurn(aim.fingers.clone().transformDirection(toRoot), aim.palm.clone().transformDirection(toRoot), out);
+  };
   /** whether his loop is between its beats now (a page not being turned, his hand not at his face): he gets up, or
    *  does anything else, only then */
   let calm = true;

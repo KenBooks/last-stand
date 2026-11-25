@@ -30,6 +30,8 @@ export interface RoundsRoom {
   shelves: { mesh: THREE.InstancedMesh; pages: THREE.InstancedMesh; offset: number; matrices: THREE.Matrix4[]; colours: THREE.Color[] }[];
   /** the stack of books on his table, bottom first, in its frame (each book's box size in its `userData.size`) */
   stack: THREE.Mesh[];
+  /** his chair (in his table's frame, tucked in at its place: he draws it out back along -z) */
+  chair: THREE.Object3D;
   /** a book for his hands, one of the shelves' (its material's map and colour set to the book's), and an open one */
   held: THREE.Mesh;
   openHeld: THREE.Object3D;
@@ -53,6 +55,8 @@ export interface ShelfBookOut { mesh: THREE.InstancedMesh; index: number; pages:
  *  spot under the ladder, the end of his rise cut as he sets off, the book he holds on its own path beside his hand
  *  (`ownPath`); and for a picture, the book by the ladder he may take (`byLadder`) */
 export const roundsPlant = {
+  /** a canary's: his chair left where it stands, tucked in, as he gets up and sits down */
+  chairStays: false,
   otherBook: false, underLadder: false, cut: false, byLadder: false, ownPath: false,
   /** a harness's sweep: the book a browse takes (the spot's, at its lowest or highest), and the browse cut short to
    *  the take, a look and the shelving */
@@ -107,6 +111,19 @@ const OPEN_UNDER = 0.02, PALM_UNDER = 0.027;
 /** as he opens a book: how far through his hands' going round behind it his right hand has slid off its spine (a share),
  *  and how far (m: past a thumb's length) */
 const OPEN_OFF = 0.45, OPEN_SLIDE = 0.08;
+/** his chair: how far he draws it out from the table to sit or get up (m), and how long it takes him each way (s). Risen
+ *  where he sat, tucked in, his lap and his sleeves came up through the table's top, from play: "when he sits, he
+ *  overlaps the table lots, I think he needs to pull the chair, sit and then fix the chair position" */
+const CHAIR_OUT = 0.32, CHAIR_MOVE = 0.9;
+/** how long his hands take from his book to his chair's seat and back as he sits (s): over the table's edge and down,
+ *  eased, as his pose sat isn't followed */
+const SEAT_REACH = 1.2;
+/** how far through his rise from his chair his hands push him off its seat (a share of it) */
+const RISE_PUSH = 0.25;
+/** how far through his rise his pose is no longer his sat one (`scholar.ts` `SEAT_BLEND`, of the way down from sat) */
+const SEAT_LET_GO = 0.45;
+/** his chair's seat's sides and its back's rail, where his hands hold it (its frame, m) */
+const CHAIR_AT = { seatX: 0.25, seatY: 0.455, seatZ: -0.04, railX: 0.2, railY: 1.23, railZ: -0.25 };
 /** how far he leans over to lay a book on his table's stack (as his bend to a low aim, `scholar.ts` `act.lean`) */
 const LAY_LEAN = 0.3;
 /** the open book's turn in the shut one's frame as it opens: its pages (+y) toward him, the shut one's front (-x), its
@@ -207,8 +224,43 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   desk.updateMatrix();
   const deskInv = desk.matrix.clone().invert(), deskYaw = desk.rotation.y;
   const seat = room.sat.clone().applyMatrix4(desk.matrix);
-  // (beside his chair, where he steps out to as he gets up)
-  const exit = new THREE.Vector3(0.72, 0, room.sat.z - 0.02).applyMatrix4(desk.matrix);
+  /** beside his chair `out` m out from the table, where he stands to draw it out and push it in, stepping back and on
+   *  with it as it goes (stood still, the rail went out of his reach as it went, his hand 9 cm off it) */
+  const beside = (out: number) => {
+    const at = new THREE.Vector3(0.6, 0, room.sat.z - 0.08 - out * 0.75).applyMatrix4(desk.matrix);
+    return new THREE.Vector2(at.x, at.z);
+  };
+  // (where he steps out to as he gets up: beside it drawn out)
+  const exit3 = beside(CHAIR_OUT), exit = new THREE.Vector3(exit3.x, 0, exit3.y);
+  /** where he sits with his chair `out` m out from the table (the room's frame) */
+  const seatOut = (out: number) => {
+    const at = room.sat.clone().add(new THREE.Vector3(0, 0, -out)).applyMatrix4(desk.matrix);
+    return new THREE.Vector2(at.x, at.z);
+  };
+  /** his chair set `out` m out from the table */
+  const chairTo = (out: number) => { room.chair.position.z = -out; };
+  /** a place on his chair (its frame) where it is now, in the world */
+  const onChair = (x: number, y: number, z: number) => {
+    room.chair.updateWorldMatrix(true, false);
+    return room.chair.localToWorld(new THREE.Vector3(x, y, z));
+  };
+  /** his hands on his chair's seat at its sides as he sits on it, palms on its edges, fingers down over them */
+  const seatHands = (k: number) => {
+    const inWorld = (d: THREE.Vector3) => d.transformDirection(room.chair.matrixWorld);
+    // (its aims as the world has them: the chair's own frame's ways)
+    act.handL = { at: onChair(CHAIR_AT.seatX + 0.02, CHAIR_AT.seatY + 0.03, CHAIR_AT.seatZ + 0.06), palm: inWorld(new THREE.Vector3(-0.3, -1, 0)).normalize(), fingers: inWorld(new THREE.Vector3(0.25, -0.3, 1)).normalize() };
+    act.handR = { at: onChair(-CHAIR_AT.seatX - 0.02, CHAIR_AT.seatY + 0.03, CHAIR_AT.seatZ + 0.06), palm: inWorld(new THREE.Vector3(0.3, -1, 0)).normalize(), fingers: inWorld(new THREE.Vector3(-0.25, -0.3, 1)).normalize() };
+    act.reachL = act.reachR = k;
+    act.grip = 0.6;
+  };
+  /** his right hand on his chair's back's rail, at its end nearer him, as he stands beside it */
+  const railHand = (k: number) => {
+    const inWorld = (d: THREE.Vector3) => d.transformDirection(room.chair.matrixWorld);
+    act.handR = { at: onChair(CHAIR_AT.railX, CHAIR_AT.railY, CHAIR_AT.railZ), palm: inWorld(new THREE.Vector3(0, -1, 0)), fingers: inWorld(new THREE.Vector3(-1, 0, 0.2)).normalize() };
+    act.handL = null;
+    act.reachR = k; act.reachL = 0;
+    act.grip = 0.7;
+  };
   const body: Obstacle = { x: seat.x, z: seat.z, r: 0, h: 1.8 };
   room.obstacles.push(body);
   const talkAt: [number, number] = [room.talk.at[0], room.talk.at[1]], talkStand: [number, number] = [room.talk.stand[0], room.talk.stand[1]];
@@ -584,31 +636,82 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
 
   function* getUp(): Generator<void, void, void> {
     doing = 'getting up from his table';
-    const from = new THREE.Vector2(seat.x, seat.z), way = new THREE.Vector2(exit.x, exit.z).sub(from);
+    // (his chair pushed back from the table first, his hands on its seat, as he sits on it: risen where he sat, his lap
+    // and sleeves came up through the table's top; the canary leaves it where it is)
+    if (!roundsPlant.chairStays) {
+      yield* over(SEAT_REACH, (k) => seatHands(smooth(k)));
+      yield* over(CHAIR_MOVE, (k) => {
+        chairTo(CHAIR_OUT * smooth(k));
+        me.p.copy(seatOut(-room.chair.position.z));
+        seatHands(1);
+      });
+    }
+    const from = me.p.clone(), way = new THREE.Vector2(exit.x, exit.z).sub(from);
     // (out from between his chair and his table as he rises, as a man gets up from one: risen in his place first, he
     // stood in his chair)
     const out = (k: number) => smooth(clamp(k * 1.2 - 0.1, 0, 1));
+    // (pushing himself up off its seat with his hands, let go of over the first of his rise: let go of at once, his arms
+    // went from the seat to his book in a frame, his pose still his sat one)
+    const held = !roundsPlant.chairStays;
+    // (let go of only once his pose is no longer his sat one, `SEAT_LET_GO`: let go of before, that pose's hands, on his
+    // book from his chair drawn out, were at the table's edge, 3 cm into it)
+    const pushOff = (k: number) => { if (held) seatHands(1 - smooth(clamp((k - SEAT_LET_GO) / RISE_PUSH, 0, 1))); };
     yield* over(BEAT.rise * RISE.setOff, (k) => {
       act.sit = 1 - smooth(k * RISE.setOff);
       me.p.copy(from).addScaledVector(way, out(k * RISE.setOff));
+      pushOff(k * RISE.setOff);
     });
     // (the rest of it as he sets off: added to where his steps take him)
     let k = RISE.setOff, was = out(k);
     // (the canary: the rest of it cut, there in a frame)
     if (roundsPlant.cut) { act.sit = 0; me.p.addScaledVector(way, 1 - was); return; }
-    alongside = () => {
+    if (!held) hands(0);
+    const rising = () => {
       k = Math.min(1, k + dt / BEAT.rise);
       act.sit = 1 - smooth(k);
+      pushOff(k);
       me.p.addScaledVector(way, out(k) - was);
       was = out(k);
       return k < 1;
     };
+    if (roundsPlant.chairStays) { alongside = rising; return; }
+    // (risen and stepped out beside it, then turned to it, his hand on its back's rail, it pushed in to the table again,
+    // as it was: his rise run out here, not alongside his first steps, as he has his chair to see to)
+    while (rising()) yield;
+    act.sit = 0;
+    yield* chairPushed(CHAIR_OUT, 0);
+  }
+  /** His chair moved from `from` m out to `to`, by his right hand on its back's rail, as he stands beside it. */
+  function* chairPushed(from: number, to: number): Generator<void, void, void> {
+    doing = to > from ? 'drawing his chair out' : 'pushing his chair in';
+    const facing = Math.atan2(-Math.sin(deskYaw + Math.PI / 2), -Math.cos(deskYaw + Math.PI / 2));
+    yield* turnTo(facing, () => railHand(0));
+    // (stepping from where he stands, by as far as the chair goes: put where its side is, he stood 2 cm off it after his
+    // walk and was there in a frame)
+    const stood = me.p.clone(), was = beside(from);
+    yield* over(CHAIR_MOVE * 1.25, (k) => {
+      const moved = smooth(clamp((k - 0.4) / 0.5, 0, 1));
+      chairTo(lerp(from, to, moved));
+      me.p.copy(stood).add(beside(-room.chair.position.z).sub(was));
+      act.walk = 0.08 * Math.sin(Math.PI * moved);
+      // (his hand on its rail before it goes: going at once, his hand was 7 cm behind it)
+      railHand(smooth(clamp(k / 0.35, 0, 1)) * (1 - smooth(clamp((k - 0.92) / 0.08, 0, 1)) * 0.8));
+      look(onChair(0, CHAIR_AT.seatY, 0));
+    });
+    act.walk = 0;
+    hands(0);
+    act.handL = act.handR = null;
+    look(null);
   }
   function* sitDown(): Generator<void, void, void> {
     doing = 'going back to his table';
-    yield* walkTo(new THREE.Vector2(exit.x, exit.z));
+    yield* walkTo(roundsPlant.chairStays ? new THREE.Vector2(exit.x, exit.z) : beside(0));
+    // (his chair drawn out from the table by its back's rail, sat on out there, and drawn in under him by its seat)
+    if (!roundsPlant.chairStays) yield* chairPushed(0, CHAIR_OUT);
+    doing = 'going back to his table';
     // (turned to his table as he starts down: his back to his chair, a step or two round with it)
-    const from = me.p.clone(), to = new THREE.Vector2(seat.x, seat.z), yaw = me.yaw, by = angleTo(yaw, deskYaw);
+    const out = -room.chair.position.z;
+    const from = me.p.clone(), to = seatOut(out), yaw = me.yaw, by = angleTo(yaw, deskYaw);
     look(new THREE.Vector3(me.p.x + Math.sin(deskYaw) * LOOK_AHEAD.far, LOOK_AHEAD.high, me.p.y + Math.cos(deskYaw) * LOOK_AHEAD.far));
     yield* over(BEAT.rise, (k) => {
       const turning = clamp(k / RISE.turned, 0, 1);
@@ -616,13 +719,34 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       act.walk = Math.abs(by) > 0.05 ? 0.12 * Math.sin(Math.PI * turning) : 0;
       act.sit = smooth(k);
       me.p.copy(from).lerp(to, smooth(clamp(k * 1.2 - 0.1, 0, 1)));
+      // (his hands down to its seat's sides as he settles on it, to draw it in: sat on it out from the table with his
+      // hands where he reads, they reached for the book from that far back and went into the table's edge)
+      // (taken early in his sitting, before his sat pose takes over: taken late, that pose's hands, on his book from his
+      // chair drawn out, were at the table's edge, 3 cm into it)
+      if (out > 0) seatHands(smooth(clamp((k - 0.1) / 0.45, 0, 1)));
     });
     act.walk = 0;
     act.sit = 1;
     me.p.copy(to);
     me.yaw = deskYaw;
     look(null);
+    if (out <= 0) return;
+    doing = 'drawing his chair in';
+    yield* over(CHAIR_MOVE, (k) => {
+      chairTo(out * (1 - smooth(k)));
+      me.p.copy(seatOut(-room.chair.position.z));
+      seatHands(1);
+    });
+    chairTo(0);
+    me.p.copy(seat2());
+    // (his hands back up to his book, over the table's edge, eased: let go of in a few frames once he's sat, with his
+    // pose no longer followed, his arms turned 48 degrees a frame)
+    yield* over(SEAT_REACH, (k) => seatHands(1 - smooth(k)));
+    act.handL = act.handR = null;
+    act.reachL = act.reachR = 0;
   }
+  /** where he sits, tucked in (the room's frame) */
+  const seat2 = () => new THREE.Vector2(seat.x, seat.z);
 
   /** His eye along a case's shelves: from one end of what he can reach to the other, a row and the next. */
   function* scan(slot: Slot, seconds: number): Generator<void, void, void> {

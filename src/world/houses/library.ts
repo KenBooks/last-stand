@@ -514,7 +514,7 @@ export const scholarTalk = { talking: false, lines: 0 };
  *  reading desk's he took the place of), a stack of books, his inkwell and quill, a scroll. He himself is seated later
  *  (`seat`): his head and hands are the heroes', made in workers as the game loads, after the rooms are built. */
 function scholarDesk(g: THREE.Group, M: Mats, b: Build): {
-  seat: () => Generator<void, Scholar, undefined>; desk: THREE.Group; sat: THREE.Vector3; stack: THREE.Mesh[];
+  seat: () => Generator<void, Scholar, undefined>; desk: THREE.Group; sat: THREE.Vector3; stack: THREE.Mesh[]; chair: THREE.Group;
 } {
   const { x, z, turn } = SCHOLAR_DESK;
   const d = new THREE.Group();
@@ -527,12 +527,17 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): {
   /** his table (in the desk's frame: its middle ahead of the chair, its size, its top's height), and where he sits */
   const TABLE = { z: 0.62, w: 1.2, d: 0.72, top: 0.76 }, SAT = -0.03;
   table(d, M, 0, TABLE.z, TABLE.w, TABLE.d, temp, TABLE.top);
-  // (his chair: a seat, legs, a high back of slats under a carved rail)
-  box(d, 0.48, 0.05, 0.46, 0, 0.41, -0.04, M.oak);
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(d, 0.05, 0.41, 0.05, sx * 0.2, 0, -0.04 + sz * 0.19, M.timber);
-  for (const sx of [-1, 1]) box(d, 0.055, 0.72, 0.05, sx * 0.21, 0.46, -0.25, M.timber);
-  for (let k = -2; k <= 2; k++) box(d, 0.04, 0.5, 0.02, k * 0.07, 0.52, -0.255, M.panel);
-  box(d, 0.5, 0.08, 0.06, 0, 1.12, -0.25, M.oak);
+  // (his chair: a seat, legs, a high back of slats under a carved rail; a group of its own, which he draws out and in
+  // as he sits down and gets up, its z how far out from the table it is, from play: "he needs to pull the chair, sit and
+  // then fix the chair position")
+  const chair = new THREE.Group();
+  chair.name = 'scholar chair';
+  d.add(chair);
+  box(chair, 0.48, 0.05, 0.46, 0, 0.41, -0.04, M.oak).name = 'scholar chair seat';
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(chair, 0.05, 0.41, 0.05, sx * 0.2, 0, -0.04 + sz * 0.19, M.timber).name = 'scholar chair leg';
+  for (const sx of [-1, 1]) box(chair, 0.055, 0.72, 0.05, sx * 0.21, 0.46, -0.25, M.timber);
+  for (let k = -2; k <= 2; k++) box(chair, 0.04, 0.5, 0.02, k * 0.07, 0.52, -0.255, M.panel);
+  box(chair, 0.5, 0.08, 0.06, 0, 1.12, -0.25, M.oak).name = 'scholar chair rail';
   // (his book, open towards him: turned half round, its first page on his left; out on the table a forearm's length
   // from its edge, where his elbows rest)
   const SIZE = 0.44, BOOK = { y: 0.76, z: 0.62 };
@@ -571,7 +576,8 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): {
   d.add(scroll);
   // (its circles where they stand in the room, and his chair's)
   d.updateMatrix();
-  for (const o of [...temp, { x: 0, z: -0.05, r: 0.42, h: 1.2 }]) {
+  // (his chair's circle round it tucked in and drawn out, `CHAIR_OUT` in scholarRounds.ts)
+  for (const o of [...temp, { x: 0, z: -0.2, r: 0.5, h: 1.2 }]) {
     const at = new THREE.Vector3(o.x, 0, o.z).applyMatrix4(d.matrix);
     b.obstacles.push({ x: at.x, z: at.z, r: o.r, h: o.h });
   }
@@ -586,7 +592,7 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): {
     d.add(s.root);
     return s;
   };
-  return { seat, desk: d, sat: new THREE.Vector3(0, 0, SAT), stack };
+  return { seat, desk: d, sat: new THREE.Vector3(0, 0, SAT), stack, chair };
 }
 
 /** The library: built into `group`. */
@@ -777,7 +783,7 @@ export function build(group: THREE.Group): Room {
       if (scholar) return;
       scholar = yield* seat.seat();
       const talk = HOUSE_OBJECTS.find((o) => o.id === 'scholar')!;
-      rounds = scholarRounds(scholar, { g, desk: seat.desk, sat: seat.sat, half: [hx, hz], obstacles: b.obstacles, cases: b.obstacles.filter((o) => o.r === CASE_R), shelves: shelfMeshes, stack: seat.stack, held, openHeld, talk, cloth, puff, globe: theGlobe, openAs, ladder: ladderFoot });
+      rounds = scholarRounds(scholar, { g, desk: seat.desk, sat: seat.sat, half: [hx, hz], obstacles: b.obstacles, cases: b.obstacles.filter((o) => o.r === CASE_R), shelves: shelfMeshes, stack: seat.stack, chair: seat.chair, held, openHeld, talk, cloth, puff, globe: theGlobe, openAs, ladder: ladderFoot });
       // (posed once now: its first frame drawn, a warm-up's, is as he reads)
       scholar.update(0, null, false);
     },
