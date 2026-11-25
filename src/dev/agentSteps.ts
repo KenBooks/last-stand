@@ -16,6 +16,7 @@ import { freeCamOn, placeFreeCam, setFreeCam } from './freeCam';
 import { panelControls, setControl } from './agentControls';
 import { frameCounts } from './frameCounts';
 import { make, makes, unmake } from './agentMakes';
+import { drawnStrokes, paintStrokes } from './agentDraw';
 import { cheats, time } from './index';
 
 /** A step as the agent sends it. */
@@ -90,6 +91,7 @@ export function plain(value: unknown, depth = PLAIN.depth, seen = new Set<object
 
 // --- look ----------------------------------------------------------------------------------------------------------
 const _ray = new THREE.Raycaster(), _centre = new THREE.Vector2(0, 0), _dir = new THREE.Vector3();
+const _point = new THREE.Vector2();
 const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
 
 /** Whether `object` and all above it are drawn. */
@@ -110,7 +112,12 @@ function pathOf(object: THREE.Object3D): string {
 /** What the middle of the view looks at (where the crosshair is in the close views): the nearest drawn mesh along
  *  it, the foe it belongs to if it's one's, and the place hit. */
 function underCrosshair(): unknown {
-  _ray.setFromCamera(_centre, G.camera);
+  return under(_centre);
+}
+
+/** What a point of the view (-1 to 1 across and up) looks at, as `underCrosshair` says the middle's. */
+function under(point: THREE.Vector2): unknown {
+  _ray.setFromCamera(point, G.camera);
   _ray.layers.mask = G.camera.layers.mask;
   const hit = _ray.intersectObjects(G.scene.children, true)
     .find((each) => (each.object as THREE.Mesh).isMesh && shown(each.object));
@@ -126,6 +133,23 @@ function underCrosshair(): unknown {
     instance: hit.instanceId ?? undefined,
     foe: foe ? { type: foe.type, name: foe.name, life: round(foe.life), maxLife: foe.maxLife, at: xyz(foe.obj.position) } : undefined,
   };
+}
+
+/** What the owner drew for the agent (agentDraw.ts), a stroke each: its box on the screen (CSS px: left, top, right,
+ *  bottom) and what of the scene is under its box's middle and under its end, where an arrow points. */
+function drawn(): unknown[] {
+  const at = (x: number, y: number): unknown => under(_point.set(x * 2 - 1, 1 - y * 2));
+  return drawnStrokes().map((stroke) => {
+    const xs = stroke.points.map((point) => point[0]), ys = stroke.points.map((point) => point[1]);
+    const box = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+    const end = stroke.points[stroke.points.length - 1];
+    return {
+      box: [box[0] * innerWidth, box[1] * innerHeight, box[2] * innerWidth, box[3] * innerHeight].map(Math.round),
+      points: stroke.points.length,
+      middle: at((box[0] + box[2]) / 2, (box[1] + box[3]) / 2),
+      end: at(end[0], end[1]),
+    };
+  });
 }
 
 /** The game as it stands: the hero, the camera, what's under the crosshair, the settings, the frame's parts. */
@@ -148,6 +172,7 @@ export function look(): unknown {
       yaw: round(_euler.y), pitch: round(_euler.x), fov: camera.fov,
     },
     crosshair: underCrosshair(),
+    drawn: drawn(),
     time: { frozen: time.frozen, speed: time.scale },
     settings: {
       quality: { setting: qualitySetting(), level: qualityLevel(), resolution: resolutionSetting() },
@@ -257,12 +282,15 @@ export async function picture(args: AgentStep): Promise<unknown> {
     } else apart = cameraAt(place);
   }
   const canvas = await shot(side, apart);
+  // (what the owner drew, over a picture of his own view: it points at what he sees there. `plain` leaves it out)
+  const strokes = apart || args.plain ? 0 : drawnStrokes().length;
+  if (strokes) paintStrokes(canvas.getContext('2d')!, canvas.width, canvas.height, canvas.width / innerWidth);
   const blob = await new Promise<Blob | null>((done) => canvas.toBlob(done, type, 0.9));
   if (!blob) throw new Error('picture: the frame gave no picture');
   const data = await base64Of(blob);
   if (data.length > DATA_MOST) throw new Error(`picture: ${canvas.width}x${canvas.height} is too large to send as ${type}: ask for a smaller side, or a JPEG`);
   _euler.setFromQuaternion(G.camera.quaternion, 'YXZ');
-  return { type, width: canvas.width, height: canvas.height, view: args.camera ? 'placed' : freeCamOn() ? 'free' : viewMode(), data };
+  return { type, width: canvas.width, height: canvas.height, view: args.camera ? 'placed' : freeCamOn() ? 'free' : viewMode(), drawn: strokes, data };
 }
 
 // --- set -----------------------------------------------------------------------------------------------------------

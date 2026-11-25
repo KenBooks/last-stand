@@ -13,6 +13,7 @@ import { serverHttp, serverUp } from '../net/transport';
 import { signedIn } from '../loot/cloud';
 import { initSteps, runStep, stepsFrame, type AgentStep, type StepHooks } from './agentSteps';
 import { madeCount, makesFrame, unmake } from './agentMakes';
+import { clearDrawing, drawingOn, drawnStrokes, endDrawing, initDraw, setDrawing } from './agentDraw';
 
 type Phase = 'off' | 'opening' | 'invited' | 'asking' | 'connected';
 const link = {
@@ -112,6 +113,7 @@ function end(note: string): void {
   link.phase = 'off';
   link.code = '';
   link.note = note;
+  endDrawing();
   if (ws && ws.readyState <= WebSocket.OPEN) ws.close();
   render();
 }
@@ -122,6 +124,9 @@ function accept(): void {
   link.phase = 'connected';
   render();
 }
+
+/** Whether the pointer is the drawing's now: the close views' mouse look lets it go then (index.ts). */
+export const agentDraws = (): boolean => drawingOn();
 
 /** Whether an agent is connected now (a harness's read). */
 export const agentConnected = (): boolean => link.phase === 'connected';
@@ -139,7 +144,7 @@ export function agentFrame(dt: number): void {
 function render(): void {
   if (!section) return;
   const left = link.phase === 'invited' ? Math.max(0, Math.ceil((link.until - Date.now()) / 60_000)) : 0;
-  const state = [link.phase, link.code, link.note, inCoop(), left, signedIn(), madeCount()].join('|');
+  const state = [link.phase, link.code, link.note, inCoop(), left, signedIn(), madeCount(), drawingOn(), drawnStrokes().length].join('|');
   if (state === shown) return;
   shown = state;
   const off = link.phase === 'off';
@@ -162,6 +167,10 @@ function render(): void {
   ask.classList.toggle('hidden', link.phase !== 'asking');
   ask.querySelector('.da-cloud')!.textContent = signedIn() ? CLOUD : '';
   badge.classList.toggle('hidden', link.phase !== 'connected');
+  const draw = badge.querySelector<HTMLElement>('[data-agent=draw]')!;
+  draw.classList.toggle('on', drawingOn());
+  draw.textContent = drawingOn() ? 'Drawing' : 'Draw';
+  badge.querySelector<HTMLElement>('[data-agent=clear]')!.classList.toggle('hidden', drawnStrokes().length === 0);
 }
 
 function onClick(event: MouseEvent): void {
@@ -174,6 +183,8 @@ function onClick(event: MouseEvent): void {
   else if (act === 'refuse') end(ENDS.refused);
   else if (act === 'kick') end(ENDS.kicked);
   else if (act === 'unmake') { unmake(); render(); }
+  else if (act === 'draw') { setDrawing(!drawingOn()); render(); }
+  else if (act === 'clear') { clearDrawing(); render(); }
 }
 
 /** The panel's Agent section, the question and the badge built (the panel is: `initPanel` first). */
@@ -202,7 +213,18 @@ export function initAgent(hooks: StepHooks): void {
   badge = document.createElement('div');
   badge.id = 'dev-agent-badge';
   badge.className = 'hidden';
-  badge.innerHTML = '<span>Agent connected</span><button data-agent="kick" title="Send the agent away">Kick</button>';
+  badge.innerHTML = '<span>Agent connected</span>'
+    + '<button data-agent="draw" title="Draw on the screen for the agent to see (F6): the pointer draws in place of working the game">Draw</button>'
+    + '<button data-agent="clear" class="hidden" title="Wipe what is drawn">Clear</button>'
+    + '<button data-agent="kick" title="Send the agent away">Kick</button>';
+  initDraw();
+  // (F6: drawing on and off without reaching for the badge, in a close view above all, where the mouse looks)
+  addEventListener('keydown', (event) => {
+    if (event.code !== 'F6' || link.phase !== 'connected') return;
+    event.preventDefault();
+    setDrawing(!drawingOn());
+    render();
+  });
   document.body.append(ask, badge);
   for (const piece of [section, ask, badge]) piece.addEventListener('click', onClick);
   // (the code's minutes while the panel is open and no frame is drawn to count them)

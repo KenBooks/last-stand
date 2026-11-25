@@ -7,8 +7,8 @@ export default {
     + 'which shows the code; he then lets it in from the game), and runs the lab\'s steps on that live game: '
     + '`join <code>` holds the link in a process of its own (start it as a background task) until the game ends it, '
     + 'and `join look` (the hero, the camera, what\'s under the crosshair, the settings and the panel\'s controls, '
-    + 'the frame\'s parts), `join picture` (the player\'s view, or from a camera placed with `--at`, in '
-    + '`out/join`), `join set name=value...` (what the developer panel sets; bare, its controls), `join eval '
+    + 'the frame\'s parts, what he drew on the screen), `join picture` (the player\'s view with what he drew on it, or '
+    + 'from a camera placed with `--at`, in `out/join`), `join set name=value...` (what the developer panel sets; bare, its controls), `join eval '
     + '<code>` (run in the game\'s page, `G`, `THREE` and `dev` in scope), `join make <name> --file thing.ts` (a '
     + 'module built into the scene as he watches, and built again in its place each time it is sent; `join makes`, '
     + '`join unmake`), `join status` and `join leave` go through '
@@ -39,6 +39,7 @@ export default {
     },
     side: { kind: 'number', usage: 'px', help: 'picture: its longest side (1280; the frame\'s own if smaller)' },
     png: { kind: 'switch', help: 'picture: a PNG, exact but several times a JPEG\'s size' },
+    plain: { kind: 'switch', help: 'picture: without what the owner drew on the screen (the badge\'s Draw)' },
     file: {
       kind: 'text',
       usage: 'path',

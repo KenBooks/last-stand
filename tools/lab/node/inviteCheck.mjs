@@ -21,6 +21,7 @@ import { joinGame } from './agentLink.mjs';
 import { joinCommandChecked } from './joinCommandCheck.mjs';
 import { picturedBesideTheFrame } from './inviteApart.mjs';
 import { madeInTheScene, removedByThePanel } from './inviteMakes.mjs';
+import { drawingEnded, drawnForTheAgent } from './inviteDraw.mjs';
 import { labError } from './errors.mjs';
 import { OUT } from './paths.mjs';
 
@@ -44,6 +45,7 @@ const CANARY_FAULTS = {
   reuse: 'a used code left good',
   unseen: 'a made thing left undrawn',
   leak: 'the frame of the player drawn from the camera of the agent',
+  plain: 'the drawing of the owner left out of the picture',
 };
 
 /** Calls `fn` of the page module `module` (under tools/lab/page) with `args`; a failure names the call. */
@@ -314,7 +316,9 @@ export async function runInvite(side, { canary = false } = {}) {
     await stepsAnswered(game, found, link, dir);
     await picturedBesideTheFrame(game, found, link);
     await madeInTheScene(game, found, link, dir);
+    await drawnForTheAgent(game, found, link, dir);
     await kicked(game, found, server, link, code, dir);
+    await drawingEnded(game, found);
     await removedByThePanel(game, found);
     await joinCommandChecked(game, found, server, await invited(game, found, server));
     await coopSendsAway(game, found, server);

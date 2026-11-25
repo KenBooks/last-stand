@@ -134,6 +134,7 @@ function threeOf(list, name) {
 export function pictureArgs(options) {
   const args = { format: options.png ? 'png' : 'jpeg' };
   if (options.side !== undefined) args.side = options.side;
+  if (options.plain) args.plain = true;
   if (options.at) {
     args.camera = { at: threeOf(options.at, 'at') };
     if (options.to) args.camera.to = threeOf(options.to, 'to');
@@ -176,7 +177,8 @@ function savePicture(result) {
   const file = join(DIR, `${stamp}.${result.type === 'image/png' ? 'png' : 'jpg'}`);
   mkdirSync(DIR, { recursive: true });
   writeFileSync(file, Buffer.from(result.data, 'base64'));
-  return `${file} (${result.width}x${result.height}, the ${result.view} view)`;
+  const drawn = result.drawn ? `, with what he drew on it: ${result.drawn} stroke${result.drawn === 1 ? '' : 's'}` : '';
+  return `${file} (${result.width}x${result.height}, the ${result.view} view${drawn})`;
 }
 
 /** A step's result as the command prints it. */

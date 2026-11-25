@@ -18,8 +18,8 @@ headless one. `npm run lab -- invite` checks the whole path end to end.
 | Step | What it gives |
 | --- | --- |
 | `join status` | `joined`, or that it waits for the owner's answer |
-| `join look` | JSON: the mode, biome and run; the hero (class, place, facing, life, energy); the camera (view, place, direction, yaw, pitch, fov); what the middle of the view looks at (`crosshair`: the mesh's path of names, its materials, the distance and place hit, the foe if it's one's); the time (frozen, speed); the settings (quality, screen, and `panel`: every control of the developer panel with what it holds and takes); the frame (the engine's draws, triangles, objects and culled, the pipelines made, fps and timings, and its parts, each in or taken out) |
-| `join picture` | The frame as drawn, without the page's UI, kept in `out/join/<time>.jpg` (its path printed: read it). `--at x,y,z` takes it from a camera placed there, looking at `--to x,y,z` or turned by `--yaw`, `--pitch` (rad): the scene from there, whole as the free camera shows it (nothing thinned for the hero, no fog, the grass over all the meadow), drawn beside the owner's frame, which doesn't change (one frame of his takes two draws); `--keep` takes him there instead, flying and frozen as F9 does, and the picture is his frame. `--side px` its longest side (1280), `--png` exact |
+| `join look` | JSON: the mode, biome and run; the hero (class, place, facing, life, energy); the camera (view, place, direction, yaw, pitch, fov); what the middle of the view looks at (`crosshair`: the mesh's path of names, its materials, the distance and place hit, the foe if it's one's); what he drew on the screen (`drawn`, below); the time (frozen, speed); the settings (quality, screen, and `panel`: every control of the developer panel with what it holds and takes); the frame (the engine's draws, triangles, objects and culled, the pipelines made, fps and timings, and its parts, each in or taken out) |
+| `join picture` | The frame as drawn, without the page's UI, kept in `out/join/<time>.jpg` (its path printed: read it). `--at x,y,z` takes it from a camera placed there, looking at `--to x,y,z` or turned by `--yaw`, `--pitch` (rad): the scene from there, whole as the free camera shows it (nothing thinned for the hero, no fog, the grass over all the meadow), drawn beside the owner's frame, which doesn't change (one frame of his takes two draws); `--keep` takes him there instead, flying and frozen as F9 does, and the picture is his frame. `--side px` its longest side (1280), `--png` exact. A picture of his view has what he drew on it (the line says how many strokes); `--plain` leaves it out |
 | `join set name=value ...` | What the panel sets, by its controls' names (`join set`, bare, lists them): a toggle `god=true`, a choice `speed=0.25` `biome=forest` `class=mage`, a field `wave=12`, a part of the frame `"part:the particles=false"`, a button pressed `start=1` `spawn=5` |
 | `join eval <code>` | Code run in the game's page, an expression or statements with a `return`, awaited (`--file path` for code of several lines: through `npm run` on Windows an argument ends at its first newline): `G` (the game's state, `src/state.ts`), `THREE` and `dev` (`time`, `cheats`, `look()`, `frames(n)`, `placeFreeCam`, `setFreeCam`, `panelControls()`, `setControl`, `plain`) in scope. Its value comes back as plain data, cut short where it's deep (5 levels), long or loops |
 | `join make <name> --file thing.ts` | A thing built into the scene as the owner watches (below). `--at x,y,z` where it stands (else on the ground 4 m before the hero), `--turn rad`; `--resend` sends it again each time the file is saved |
@@ -28,6 +28,23 @@ headless one. `npm run lab -- invite` checks the whole path end to end.
 
 A step waits 30 s for its answer (`--timeout s`); a picture needs the game's tab in view, as none is drawn otherwise.
 `npm run lab -- stop` ends a held link too.
+
+## What the owner draws
+
+While an agent is joined the badge has **Draw** (F6 too): on, his pointer draws in red on the screen in place of
+working the game, and **Clear** wipes it (from the owner, pointing at a fault a screenshot and a description hadn't got
+across: "I think we need a feature for me to be able to draw on screen while agent is joined, draw and clear"). What's
+drawn stays up until he clears it or the agent leaves.
+
+- **`join picture` shows it**: laid over a picture of his view (not one from a placed camera, which isn't his view),
+  so a circle or an arrow is where he drew it over the frame. The page's UI isn't in a picture, so a stroke over a
+  panel shows over the scene behind it.
+- **`join look` lists it** (`drawn`, a stroke each, oldest first): its `box` on the screen (css px: left, top, right,
+  bottom), its `points`, and what of the scene lies under the box's `middle` and under its `end`, each as `crosshair`
+  says it (the mesh, the place hit, the foe): the middle of a circle drawn round a thing, the end of an arrow drawn
+  to it.
+
+Ask him to draw when a place is hard to say in words, and read `look` for the place before taking a picture.
 
 ## Making things in the scene
 
