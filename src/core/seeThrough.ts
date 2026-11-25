@@ -964,14 +964,6 @@ export function blendedBuiltFirst(a: Sorted, b: Sorted): number {
   return a.id - b.id;
 }
 
-/** whether a harness has the roofs keep their depth over what's under them, as they did */
-let roofDepthHeld = false;
-
-/** For a harness (tools/lab): the roofs' depth kept when thinned, so the fog reads a roof over what's under it. */
-export function holdRoofDepth(held: boolean): void {
-  roofDepthHeld = held;
-}
-
 /** The roof's pixel says how much of it is roof: its alpha over what's opaque comes to what's left of what's under it,
  *  which the fog alone lies over (`seenColour`'s `under`). With its depth kept, the fog read a roof's whole pixel as the
  *  roof, and the grass and walls seen through it stood bright over what he can't see (from play, "fog of war bugs"); and
@@ -1312,7 +1304,7 @@ export function updateSeeThrough(x: number, y: number, z: number, props: number,
   kinds.roof.whole.value = (roofGhostHeld ?? ROOF_GHOST_ABOVE) * top * props;
   kinds.gable.whole.value = GABLE_GHOST_ABOVE * top * props;
   for (const material of [...(thinningWhole.get('roof') ?? []), ...(thinningWhole.get('gable') ?? [])]) {
-    material.depthWrite = roofDepthHeld || kinds.roof.whole.value < ROOF_LET_GO;
+    material.depthWrite = kinds.roof.whole.value < ROOF_LET_GO;
   }
   // (what's built hiding him alone leaves what stands free whole: a lamp past a cottage stood in dots, a review; and what
   // stands free thins all the way as soon as it hides any of him, never by a share: by the share of him hidden, the

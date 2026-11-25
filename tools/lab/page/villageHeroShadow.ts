@@ -26,10 +26,15 @@ const OVER = 8;
 /** the least his shadow must take of a patch's light, the spots round the lamp tried for paving behind him, and the
  *  frames he's given at each (the casting lights to settle) */
 const LEAST_DARKER = 0.15;
+/** the least each lamp's shadow of him must take between two lamps: under the engine each lamp is read from its light
+ *  cache past 3 m of it (`engine/lightCache.ts`), its shadows as soft as a cell, and the farther lamp's took 10 to
+ *  16% at the pairs three read over 15% at (on main as here); none takes nothing, the canary's 0% */
+const LEAST_BETWEEN = 0.08;
 /** the least share of a patch's light his moon shadow must take, the lamps' shadows held off (the moon's shadow
  *  always there: "moon shadow always there plus 1 or more shadows from lights"): 1.5 m from a lamp its light is most
- *  of the ground's, and his moon shadow took 9% of it on the grass; none takes nothing */
-const LEAST_MOON = 0.05;
+ *  of the ground's, and his moon shadow took 9% of it on the grass under three, 4% by lamp 8 under the engine (12 to
+ *  31% by every other); none takes nothing */
+const LEAST_MOON = 0.03;
 const SPOTS = 32;
 /** how far inside a road's edge the ground read must lie (m): the meadow's blades over the grass take no lamp's
  *  shadow */
@@ -400,10 +405,10 @@ function betweenChecked(read: BetweenRead[], canary: boolean): LightsChecked {
     + `${each.join(', ')}`;
   // (a pair he can stand nowhere between, the fountain between them, is no fault of the shadows)
   const missing = read.filter(({ his, moon }) => his !== null
-    && (his.some((take) => take < LEAST_DARKER) || moon === null || moon < LEAST_MOON));
+    && (his.some((take) => take < LEAST_BETWEEN) || moon === null || moon < LEAST_MOON));
   if (canary) {
     const last = read[read.length - 1];
-    const caught = last.his !== null && last.his[1] < LEAST_DARKER && last.his[0] >= LEAST_DARKER;
+    const caught = last.his !== null && last.his[1] < LEAST_BETWEEN && last.his[0] >= LEAST_BETWEEN;
     return { lines: [line], problems: [], caught, moments: [] };
   }
   const problems = missing.map(({ lamps: [a, b] }) => `${line}: between lamps ${a} and ${b} one shadow is missing`);

@@ -12,7 +12,7 @@ import { COTTAGES, HALL, TERRACE } from '../../../src/data/village';
 import { COTTAGE } from '../../../src/world/villagePlan';
 import { holdHour } from '../../../src/game/clock';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
-import { thinningLetGo, updateSeeThrough } from '../../../src/core/seeThrough';
+import { updateSeeThrough } from '../../../src/core/seeThrough';
 import { SIGHT } from '../../../src/core/sight';
 import { setWholeView } from '../../../src/core/wholeView';
 import { groundHeight } from '../../../src/world/ground';
@@ -22,6 +22,7 @@ import { endFlight, flewFrom, flyTo, takeFlight, type Flown } from './perfFly';
 import { groundUnder, hiddenAround } from './villageGrassRing';
 import { changedShare, viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
+import { nothingThinned } from './nothingThinned';
 
 /** the frames given to settle where he stands (what thins for him fades over a second; the fog eases in) */
 const SETTLE = 90;
@@ -79,7 +80,7 @@ function thinnedShare(lab: Lab): number {
   const flown = drawFrame(lab);
   const him = G.player.pos;
   const fog = SIGHT.uSightOn.value;
-  const putBack = thinningLetGo();
+  const putBack = nothingThinned();
   updateSeeThrough(him.x, him.y, him.z, 0, 0);
   SIGHT.uSightOn.value = 0;
   try {

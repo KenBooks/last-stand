@@ -6,16 +6,22 @@
 // quarter as many and four times as wide, and where one handed over to the next the grass turned to a lighter, coarser
 // carpet in a circle that followed the view (from play, "the circle of changing grass is still there, its about this
 // far out, see where the far curb is, and it keeps moving as I'm moving"); the far rings' blades are cut into strands
-// of the first ring's width now (`meadow.ts`). `canary` draws them whole, as they were.
+// of the first ring's width now (`meadow.ts`), and under the engine the grass is one (`world/meadowOne.ts`): a blade
+// kept by its distance from the camera, whichever ring draws it. Each frame is the engine's steady one (a frame drawn
+// before it, the sun's map drawn every frame: kept between turns, two frames with nothing moved read 36% apart).
+// `canary` thins the far grass in the second frame alone (`thinnedAfter`): the rings' own switches, three's hand-overs,
+// reach nothing the engine draws.
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
 import {
-  focusOf, holdEyeFollowsAbove, holdMeadowFromAbove, meadowCombed, meadowHandOver, moveMeadowFocus,
+  focusOf, holdMeadowFromAbove, moveMeadowFocus,
 } from '../../../src/world/meadow';
+import { ONE_GRASS } from '../../../src/world/meadowOne';
 import { drawFrame, type Canvas } from './light';
+import { RUST } from '../../../src/engine';
 import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
 
@@ -66,20 +72,41 @@ export function hiddenAround(object: THREE.Object3D): THREE.Object3D[] {
   return hidden;
 }
 
+/** how much of the far grass the canary keeps in its second frame (a share of each level's least and reach) */
+const CANARY_KEPT = 0.25;
+
+/** The canary's fault, set for the second frame: the far grass thinned, a circle of it changed as the rings move.
+ *  Returns what puts it back. */
+function thinnedAfter(): () => void {
+  const was = { ...ONE_GRASS };
+  ONE_GRASS.least *= CANARY_KEPT;
+  ONE_GRASS.leastTufts *= CANARY_KEPT;
+  ONE_GRASS.reach *= CANARY_KEPT;
+  return () => Object.assign(ONE_GRASS, was);
+}
+
 /** The frames drawn with the meadow's blades alone, on black: with the rings' middle as the view puts it, then moved
- *  `ahead` (x, z). */
-function bladesAlone(lab: Lab, ahead: THREE.Vector2): [Canvas, Canvas] {
+ *  `ahead` (x, z), each the engine's steady frame; `canary` thins the far grass in the second. */
+function bladesAlone(lab: Lab, ahead: THREE.Vector2, canary: boolean): [Canvas, Canvas] {
   const meadow = G.scene.getObjectByName('meadow');
   if (!meadow) throw new Error('lab: village: no meadow in the scene');
   const hidden = hiddenAround(meadow);
   const background = G.scene.background;
   for (const o of hidden) o.visible = false;
   G.scene.background = null;
+  const turns = RUST.tune.shadowTurns;
+  RUST.tune.shadowTurns = 0;
+  let giveBack = (): void => {};
   try {
+    drawFrame(lab);
     const before = drawFrame(lab);
     moveMeadowFocus(ahead.x, ahead.y);
+    if (canary) giveBack = thinnedAfter();
+    drawFrame(lab);
     return [before, drawFrame(lab)];
   } finally {
+    giveBack();
+    RUST.tune.shadowTurns = turns;
     moveMeadowFocus(0, 0);
     for (const o of hidden) o.visible = true;
     G.scene.background = background;
@@ -162,7 +189,6 @@ function bandChanges(before: Canvas, after: Canvas, focus: THREE.Vector2): [numb
 async function grassAsRingsMove(lab: Lab, canary: boolean): Promise<[number, BandChange][]> {
   const kept = viewMode();
   holdHour(HOUR);
-  if (canary) meadowCombed(false);
   try {
     await viewBy(lab, 'third');
     G.player.walkTo = null;
@@ -174,13 +200,12 @@ async function grassAsRingsMove(lab: Lab, canary: boolean): Promise<[number, Ban
       const focus = focusOf(G.camera, new THREE.Vector2());
       const sight = G.camera.getWorldDirection(new THREE.Vector3());
       const ahead = new THREE.Vector2(sight.x, sight.z).normalize().multiplyScalar(MOVED);
-      return bandChanges(...bladesAlone(lab, ahead), focus);
+      return bandChanges(...bladesAlone(lab, ahead, canary), focus);
     } finally {
       G.player.obj.visible = true;
     }
   } finally {
-    if (canary) meadowCombed(true);
-    holdHour(null);
+      holdHour(null);
     await viewBy(lab, kept);
   }
 }
@@ -217,7 +242,6 @@ function pixelsChanged(before: Canvas, after: Canvas, focus: THREE.Vector2, fewe
 async function changedInAStride(lab: Lab, canary: boolean): Promise<[number, number][]> {
   const kept = viewMode();
   holdHour(HOUR);
-  if (canary) meadowHandOver(false);
   try {
     await viewBy(lab, 'third');
     G.player.walkTo = null;
@@ -229,14 +253,13 @@ async function changedInAStride(lab: Lab, canary: boolean): Promise<[number, num
       const focus = focusOf(G.camera, new THREE.Vector2());
       const sight = G.camera.getWorldDirection(new THREE.Vector3());
       const ahead = new THREE.Vector2(sight.x, sight.z).normalize().multiplyScalar(STRIDE);
-      const [before, after] = bladesAlone(lab, ahead);
+      const [before, after] = bladesAlone(lab, ahead, canary);
       return pixelsChanged(before, after, focus);
     } finally {
       G.player.obj.visible = true;
     }
   } finally {
-    if (canary) meadowHandOver(true);
-    holdHour(null);
+      holdHour(null);
     await viewBy(lab, kept);
   }
 }
@@ -270,7 +293,6 @@ const ABOVE_COVER = 0.2;
 export async function grassStillFromAbove(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const kept = viewMode();
   holdHour(HOUR);
-  holdEyeFollowsAbove(canary);
   let bands: [number, number][];
   try {
     await viewBy(lab, 'top');
@@ -282,12 +304,11 @@ export async function grassStillFromAbove(lab: Lab, canary: boolean): Promise<Li
       const focus = focusOf(G.camera, new THREE.Vector2());
       const sight = G.camera.getWorldDirection(new THREE.Vector3());
       const ahead = new THREE.Vector2(sight.x, sight.z).normalize().multiplyScalar(STRIDE);
-      bands = pixelsChanged(...bladesAlone(lab, ahead), focus, ABOVE_FEWEST, ABOVE_COVER);
+      bands = pixelsChanged(...bladesAlone(lab, ahead, canary), focus, ABOVE_FEWEST, ABOVE_COVER);
     } finally {
       G.player.obj.visible = true;
     }
   } finally {
-    holdEyeFollowsAbove(false);
     holdHour(null);
     await viewBy(lab, kept);
   }

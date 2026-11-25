@@ -14,6 +14,7 @@ import { drawFrame } from './light';
 import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
 import { PIPELINES } from '../../../src/engine/pipelinesAside';
+import { plainMade } from './villageBloomLow';
 
 /** the way he faces where the set-up stands him (the square, lamps all round), and the hour */
 const FACING = Math.PI;
@@ -62,9 +63,11 @@ function lampsPerPoint(): number {
 
 /** The lamps at `level` (`canary`: Low's left as High's). */
 async function readAt(lab: Lab, level: 'high' | 'low', canary: boolean): Promise<LampsRead> {
-  const before = PIPELINES.made;
   useQuality(level);
   if (canary && level === 'low') setLampQuality(1, true);
+  // (Low's plain lit shaders are a set of their own, made aside as the level switches, none of them the lamps')
+  await plainMade(lab);
+  const before = PIPELINES.made;
   await lab.step(SETTLE);
   drawFrame(lab);
   const made = PIPELINES.made - before;

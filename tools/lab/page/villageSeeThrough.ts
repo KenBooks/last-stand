@@ -1,8 +1,8 @@
 // `lab village`'s props' hole (`core/seeThrough.ts`): the frame drawn with it and held shut, the hero beside a cottage
 // over the shoulder, the wall running from the camera to him: nothing of it beside him may come apart (from play, by
-// the terrace's wall and a cottage, "should not see through here, because I'm in the front"); and the hero behind a
-// cottage from above, its roof over him: the hole must open where it hides him. `canary` holds the hole round, as it
-// was, which must take the wall beside him apart.
+// the terrace's wall and a cottage, "should not see through here, because I'm in the front"). A roof over him from
+// above is the engine's house rule's, checked by `lab houserule`. `canary` holds the hole round, as it was, which must
+// take the wall beside him apart.
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
@@ -16,18 +16,15 @@ import { drawFrame, type Canvas } from './light';
 import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
 
-/** how far off the cottage's wall he stands beside it and behind it (m), and the frames he's given to settle */
+/** how far off the cottage's wall he stands beside it (m), and the frames he's given to settle */
 const BESIDE = 0.5;
-const BEHIND = 0.9;
 const SETTLE = 30;
 /** how much wider and taller than his own box on screen the part of the frame his is (a share of each side) */
 const PAD = 0.15;
 /** how far a channel may move and still be the same */
 const SAME = 1.5 / 255;
-/** the most of the frame outside him the hole may change beside the wall, and the least of him it must open behind
- *  the roof */
+/** the most of the frame outside him the hole may change beside the wall */
 const MOST_BESIDE = 0.002;
-const LEAST_BEHIND = 0.05;
 
 /** A box of the canvas in its pixels, from its bottom left. */
 export interface PixelBox { left: number; bottom: number; right: number; top: number }
@@ -75,13 +72,10 @@ export function changedShare(a: Canvas, b: Canvas, box: PixelBox, inside: boolea
   return changed / Math.max(counted, 1);
 }
 
-/** A cottage's way from its middle: across it (its side walls' way out) and along it (its door's). */
-function cottageWays(index: number): { across: THREE.Vector3; along: THREE.Vector3 } {
+/** A cottage's way across it from its middle: its side walls' way out. */
+function cottageAcross(index: number): THREE.Vector3 {
   const facing = COTTAGES[index].facing;
-  return {
-    across: new THREE.Vector3(Math.cos(facing), 0, -Math.sin(facing)),
-    along: new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing)),
-  };
+  return new THREE.Vector3(Math.cos(facing), 0, -Math.sin(facing));
 }
 
 /** The hero stood at `at` facing `facing`, the camera behind him, let settle; whether he stood there. */
@@ -112,7 +106,7 @@ async function withAndWithout(lab: Lab, across: number | null): Promise<{ open: 
  *  wall running from the camera to him; or null where he couldn't stand. */
 async function besideTheWall(lab: Lab, canary: boolean): Promise<number | null> {
   const cottage = COTTAGES[0];
-  const { across } = cottageWays(0);
+  const across = cottageAcross(0);
   const out = (COTTAGE.w / 2) * cottage.size + BESIDE;
   const at = new THREE.Vector3(cottage.x, 0, cottage.z).addScaledVector(across, out);
   await viewBy(lab, 'third');
@@ -121,38 +115,21 @@ async function besideTheWall(lab: Lab, canary: boolean): Promise<number | null> 
   return changedShare(open, shut, heroOnScreen(open), false);
 }
 
-/** The share of him the hole opens, the hero behind cottage 0 from above, its roof between him and the camera; or
- *  null where he couldn't stand. */
-async function behindTheRoof(lab: Lab): Promise<number | null> {
-  const cottage = COTTAGES[0];
-  const { along } = cottageWays(0);
-  const out = (COTTAGE.d / 2) * cottage.size + BEHIND;
-  const at = new THREE.Vector3(cottage.x, 0, cottage.z).addScaledVector(along, -out);
-  await viewBy(lab, 'top');
-  // (facing away from the cottage, the camera behind him over its roof)
-  if (!(await standAt(lab, at, cottage.facing + Math.PI))) return null;
-  const { open, shut } = await withAndWithout(lab, null);
-  return changedShare(open, shut, heroOnScreen(open), true);
-}
-
 /** A share as a percentage, or why there is none. */
 const percent = (share: number | null): string => share === null ? 'no stand' : `${(share * 100).toFixed(2)}%`;
 
-/** The props' hole beside a wall and behind a roof, by night as by day (from play, at night). */
+/** The props' hole beside a wall, by night as by day (from play, at night). */
 export async function propHoleWhereHidden(lab: Lab, canary: boolean): Promise<LightsChecked> {
   holdHour(12);
   const kept = viewMode();
   try {
     const beside = await besideTheWall(lab, canary);
-    const behind = await behindTheRoof(lab);
     const line = `props' hole: beside a cottage's wall over the shoulder, the frame outside him it changes `
-      + `${percent(beside)} (at most ${MOST_BESIDE * 100}%); behind its roof from above, the share of him it opens `
-      + `${percent(behind)} (at least ${LEAST_BEHIND * 100}%)`;
+      + `${percent(beside)} (at most ${MOST_BESIDE * 100}%)`;
     const apart = beside === null || beside > MOST_BESIDE;
     if (canary) return { lines: [line], problems: [], caught: apart, moments: [] };
     const problems: string[] = [];
     if (apart) problems.push(`${line}: the wall beside him came apart`);
-    if (behind === null || behind < LEAST_BEHIND) problems.push(`${line}: the roof over him stayed whole`);
     return { lines: [line], problems, caught: null, moments: [] };
   } finally {
     holdHour(null);

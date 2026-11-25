@@ -4,23 +4,19 @@
 // corner, and over a grid of the ground round him each frame reads how seen each place is: none may leap in a frame,
 // or go back and forth. `canary` shows the rays as they're cast, as they were. `firesStillInFog`: a fire he can't see
 // plays no frame of its flames, one he can does (`canary` holds the fog off). `leavesInFog`: stood by the hall's
-// walls at noon, all but the door's cone unseen, little of the frame is left green (`canary` holds the fog off).
+// walls at noon, all but the door's cone unseen, the fog takes the frame's green (`canary` holds the fog off). The
+// fog under the cottages' roofs and eaves is `villageFogRoofs.ts`.
 import * as THREE from 'three';
-import { rayChunks } from './rayChunks';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
-import { CAMPFIRE, COTTAGES, HALL, TERRACE, type Cottage } from '../../../src/data/village';
-import { COTTAGE } from '../../../src/world/villagePlan';
+import { CAMPFIRE, COTTAGES, HALL, TERRACE } from '../../../src/data/village';
 import { holdHour } from '../../../src/game/clock';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
-import {
-  SIGHT, holdEavesAsWithin, holdRoofAsOne, holdSightOff, holdSightSharp, seenShareAt,
-} from '../../../src/core/sight';
-import { holdRoofDepth, holdRoofGhost } from '../../../src/core/seeThrough';
+import { SIGHT, holdSightOff, holdSightSharp, seenShareAt } from '../../../src/core/sight';
 import type { SightWall } from '../../../src/core/sight';
 import { RUST } from '../../../src/engine';
 import { groundHeight } from '../../../src/world/ground';
-import { drawFrame } from './light';
+import { greenTaken } from './fogGreen';
 import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
 
@@ -41,7 +37,7 @@ const MOST_TURNS = 3;
 const OFF_WALLS = 1;
 
 /** The hero stood at (x, z) facing `facing`, the camera behind him, let settle. */
-async function standAt(lab: Lab, x: number, z: number, facing: number): Promise<void> {
+export async function standAt(lab: Lab, x: number, z: number, facing: number): Promise<void> {
   G.player.walkTo = null;
   G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
   faceCamera(facing);
@@ -186,315 +182,9 @@ export async function firesStillInFog(lab: Lab, canary: boolean): Promise<Lights
   }
 }
 
-/** how much greener than its red and blue a pixel is to count as green, and at least how light; the most of the frame
- *  that may be green with him at the back of the hall */
-const GREENER = 1.3;
-const LEAST_GREEN = 0.12;
-const MOST_GREEN = 0.01;
-
-/** whether a pixel is plainly green, by its channels */
-export function isGreen(red: number, middle: number, blue: number): boolean {
-  return middle > LEAST_GREEN && middle > red * GREENER && middle > blue * GREENER;
-}
-
-/** how far past a cottage's back wall the ground is read (m: seen through the eaves from above it lies metres past
- *  the wall, nearer than that the wall itself is what's drawn there), every how far along it, the frames the fog is
- *  given to ease off, and the least of their light the fog must take from those pixels, across the cottages' middle */
-const PAST_BACK = [1.4, 1.8, 2.2, 2.6, 3];
-const ALONG_BACK = 0.4;
-const FOG_EASES = 40;
-const LEAST_TAKEN = 0.05;
-
-/** The light of `points` on the ground in the frame, the sum of their pixels'. */
-function lightAt(lab: Lab, points: THREE.Vector3[]): number {
-  const canvas = drawFrame(lab);
-  let light = 0;
-  let read = 0;
-  for (const point of points) {
-    const place = point.clone().project(G.camera);
-    const column = Math.floor((place.x + 1) / 2 * canvas.width);
-    const row = Math.floor((place.y + 1) / 2 * canvas.height);
-    if (column < 0 || column >= canvas.width || row < 0 || row >= canvas.height) continue;
-    const pixel = (row * canvas.width + column) * 4;
-    light += canvas.pixels[pixel] + canvas.pixels[pixel + 1] + canvas.pixels[pixel + 2];
-    read++;
-  }
-  if (read === 0) throw new Error('lab: village: no ground past the cottage in the frame');
-  return light;
-}
-
-/** The share of their light the fog takes from the ground past `c`'s back wall, him stood before its front. */
-async function takenPastBack(lab: Lab, c: Cottage): Promise<number> {
-  const halfW = (COTTAGE.w / 2) * c.size;
-  const halfD = (COTTAGE.d / 2) * c.size;
-  const cos = Math.cos(c.facing);
-  const sin = Math.sin(c.facing);
-  const turned = (x: number, z: number): [number, number] => [c.x + x * cos + z * sin, c.z - x * sin + z * cos];
-  const [x, z] = turned(0, halfD + 3);
-  await standAt(lab, x, z, c.facing + Math.PI);
-  const points: THREE.Vector3[] = [];
-  for (let along = -halfW; along <= halfW; along += ALONG_BACK) {
-    for (const past of PAST_BACK) {
-      const [px, pz] = turned(along, -halfD - past);
-      points.push(new THREE.Vector3(px, groundHeight(px, pz) + 0.1, pz));
-    }
-  }
-  const fogged = lightAt(lab, points);
-  holdSightOff(true);
-  await lab.step(FOG_EASES);
-  const clear = lightAt(lab, points);
-  holdSightOff(false);
-  await lab.step(FOG_EASES);
-  return 1 - fogged / clear;
-}
-
-/** From before each cottage, what's past its back wall lies in the fog seen through its ghost of a roof too. */
-export async function fogUnderRoofs(lab: Lab, canary: boolean): Promise<LightsChecked> {
-  const kept = viewMode();
-  holdHour(12);
-  holdRoofDepth(canary);
-  try {
-    await viewBy(lab, 'top');
-    let least = 1;
-    const all: number[] = [];
-    let shot: Awaited<ReturnType<Lab['screen']>> | null = null;
-    for (const cottage of COTTAGES) {
-      all.push(await takenPastBack(lab, cottage));
-      shot ??= canary ? null : await lab.screen('before a cottage, what shows through its roof in the fog', []);
-    }
-    least = [...all].sort((a, b) => a - b)[all.length >> 1];
-    const line = `past a cottage's back wall, seen through its roof: across the cottages the fog takes `
-      + `${(least * 100).toFixed(0)}% of its light (at least ${LEAST_TAKEN * 100}%): `
-      + all.map((share) => (share * 100).toFixed(0)).join(' ');
-    const wrong = least < LEAST_TAKEN;
-    if (canary) return { lines: [line], problems: [], caught: wrong, moments: [] };
-    return { lines: [line], problems: wrong ? [line] : [], caught: null, moments: shot ? [shot] : [] };
-  } finally {
-    holdRoofDepth(false);
-    holdSightOff(false);
-    holdHour(null);
-    // (the view turned back, for the checks after this one to read a side of the hall as they set out to)
-    faceCamera(0);
-    await viewBy(lab, kept);
-  }
-}
-
-/** the most of the ground under an eave he can't see past that may show plainly green */
-const MOST_GREEN_UNDER_EAVES = 0.05;
-
-/** how far round him the ground seen through a roof stays by the rays (m), past which it's read */
-const ROOF_READ_OFF = 2;
-/** the most of its light the fog may take from the ground he sees round a cottage, seen through its roof:
- *  that roof's own grey ghost tints it, so it's read against the same frame with the fog off */
-const MOST_TAKEN_THROUGH_ROOF = 0.05;
-/** how much of a point the rays must see for it to count as seen by him */
-const SEEN_BY_HIM = 0.95;
-/** how far short of a point on the ground its ray stops, so the ground and the grass there aren't met (m) */
-const GROUND_ITSELF = 0.4;
-/** how far round a cottage the ground is read, every how far (m), and the fewest places through its roofs to read */
-const ROUND_COTTAGE = 4;
-const ROUND_STEP = 0.5;
-const LEAST_READ_THROUGH_ROOF = 20;
-
-/** how far the roofs are thinned for what's under them to be read: at the game's, too little shows to tell the rule on
- *  from the rule off */
-const READ_THROUGH_GHOST = 0.62;
-
-/** Half `c`'s width and depth (m). */
-function cottageHalves(c: Cottage): { halfW: number; halfD: number } {
-  return { halfW: (COTTAGE.w / 2) * c.size, halfD: (COTTAGE.d / 2) * c.size };
-}
-
-/** A place in `c`'s own frame (x across it, z along it) turned into the world's. */
-function cottageTurn(c: Cottage): (x: number, z: number) => [number, number] {
-  const cos = Math.cos(c.facing);
-  const sin = Math.sin(c.facing);
-  return (x, z) => [c.x + x * cos + z * sin, c.z - x * sin + z * cos];
-}
-
-/** What of the ground he sees round `c`, him stood at its back corner, the camera sees through its roof alone, and the
- *  share of its light the fog takes there: none, or null where the camera sees none of it so. */
-async function fogThroughRoof(lab: Lab, c: Cottage): Promise<{ taken: number; read: number } | null> {
-  const turned = cottageTurn(c);
-  const { halfW, halfD } = cottageHalves(c);
-  const [x, z] = turned(halfW + 0.35, -halfD - 0.35);
-  await standAt(lab, x, z, c.facing + Math.PI);
-  const points: THREE.Vector3[] = [];
-  for (let across = -halfW - ROUND_COTTAGE; across <= halfW + ROUND_COTTAGE; across += ROUND_STEP) {
-    for (let along = -halfD - ROUND_COTTAGE; along <= halfD + ROUND_COTTAGE; along += ROUND_STEP) {
-      const [px, pz] = turned(across, along);
-      const seen = seenShareAt(px, pz) >= SEEN_BY_HIM;
-      if (seen && Math.hypot(px - x, pz - z) > ROOF_READ_OFF) {
-        points.push(new THREE.Vector3(px, groundHeight(px, pz) + 0.1, pz));
-      }
-    }
-  }
-  const meshes = shownMeshes();
-  const under = points.filter((point) => overRoofAlone(point, meshes));
-  if (under.length === 0) return null;
-  return { taken: fogTakesAt(lab, under), read: under.length };
-}
-
-/** the engine's fog mixed in by next to nothing: none of its darkening, his sight still on */
-const FOG_NONE = 1e-4;
-
-/** The share of their light the fog takes from `points`: the frame drawn again at once with none of the fog mixed in,
- *  as between two frames the camera glides and the grass moves. His sight stays on (`rust.sightFog` next to nothing,
- *  not `uSightOn` 0): a house from above is opened by what he sees, so with his sight off its roofs were drawn
- *  another way, by their kinds' own shares, and the two frames differed by the roofs' ghosts (22% of the light
- *  through a roof read as the fog's, where the fog took none). */
-function fogTakesAt(lab: Lab, points: THREE.Vector3[]): number {
-  const fogged = lightAt(lab, points);
-  const fog = RUST.tune.sightFog;
-  RUST.tune.sightFog = FOG_NONE;
-  try {
-    return 1 - fogged / lightAt(lab, points);
-  } finally {
-    RUST.tune.sightFog = fog;
-  }
-}
-
-/** Every mesh shown (it and everything over it), as chunks for rays (`rayChunks.ts`): sent at the scene whole, the
- *  hidden places' meshes and all, the rays under the roofs took 73 s of this check's 78. */
-function shownMeshes(): THREE.Mesh[] {
-  const meshes: THREE.Mesh[] = [];
-  G.scene.traverseVisible((object) => {
-    if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh);
-  });
-  return rayChunks(meshes);
-}
-
-/** Whether a ray from the eye to `point` meets a roof and nothing else short of it: through a wall's ghost too, the fog
- *  reads that wall, which keeps its depth. */
-function overRoofAlone(point: THREE.Vector3, meshes: THREE.Mesh[]): boolean {
-  const from = G.camera.position;
-  const way = point.clone().sub(from).normalize();
-  const short = point.distanceTo(from) - GROUND_ITSELF;
-  const drawn = new THREE.Raycaster(from, way, 0, short).intersectObjects(meshes, false);
-  const isRoof = (hit: THREE.Intersection): boolean => {
-    const { material } = hit.object as THREE.Mesh;
-    return !Array.isArray(material) && material?.blending === THREE.CustomBlending;
-  };
-  return drawn.some(isRoof) && drawn.every(isRoof);
-}
-
-/** The ground he sees, seen through a roof, shows green as he sees it (the owner's choice: "grass that cannot be seen
- *  by me, but can be seen by player should be green"). `canary` takes all of it as unseen, as it was. */
-export async function roofShowsWhatHeSees(lab: Lab, canary: boolean): Promise<LightsChecked> {
-  const kept = viewMode();
-  holdHour(12);
-  holdRoofAsOne(canary);
-  holdRoofGhost(READ_THROUGH_GHOST);
-  try {
-    await viewBy(lab, 'top');
-    const all: string[] = [];
-    let worst = 0;
-    let read = 0;
-    let shot: Awaited<ReturnType<Lab['screen']>> | null = null;
-    for (const cottage of COTTAGES) {
-      const fog = await fogThroughRoof(lab, cottage);
-      all.push(fog ? `${(fog.taken * 100).toFixed(0)}% of ${fog.read}` : 'none');
-      worst = Math.max(worst, fog?.taken ?? 0);
-      read += fog?.read ?? 0;
-      shot ??= canary ? null : await lab.screen("at a cottage's corner, its roof from the far end", []);
-    }
-    if (read < LEAST_READ_THROUGH_ROOF) {
-      throw new Error(`lab: village: only ${read} places he sees were seen through a roof`);
-    }
-    const line = `round a cottage, him at its back corner, what he sees through its roof: the fog takes `
-      + `${(worst * 100).toFixed(0)}% of its light at most (at most ${MOST_TAKEN_THROUGH_ROOF * 100}%): `
-      + all.join(', ');
-    const wrong = worst > MOST_TAKEN_THROUGH_ROOF;
-    if (canary) return { lines: [line], problems: [], caught: wrong, moments: [] };
-    return { lines: [line], problems: wrong ? [line] : [], caught: null, moments: shot ? [shot] : [] };
-  } finally {
-    holdRoofAsOne(false);
-    holdRoofGhost(null);
-    holdHour(null);
-    faceCamera(0);
-    await viewBy(lab, kept);
-  }
-}
-
-/** The share of `points`' pixels that's plainly green. */
-export function greenAt(lab: Lab, points: THREE.Vector3[]): number {
-  const canvas = drawFrame(lab);
-  let green = 0;
-  let read = 0;
-  for (const point of points) {
-    const place = point.clone().project(G.camera);
-    const column = Math.floor(((place.x + 1) / 2) * canvas.width);
-    const row = Math.floor(((place.y + 1) / 2) * canvas.height);
-    if (column < 0 || column >= canvas.width || row < 0 || row >= canvas.height) continue;
-    const pixel = (row * canvas.width + column) * 4;
-    read++;
-    if (isGreen(canvas.pixels[pixel], canvas.pixels[pixel + 1], canvas.pixels[pixel + 2])) green++;
-  }
-  if (read === 0) throw new Error('lab: village: none of the places read is in the frame');
-  return green / read;
-}
-
-/** The share of the ground under `c`'s eave at its side that shows green, him stood before its front towards that side:
- *  the camera past the wall there, as from before its middle the wall stands over that ground. */
-async function greenUnderEaves(lab: Lab, c: Cottage): Promise<number> {
-  const halfW = (COTTAGE.w / 2) * c.size;
-  const halfD = (COTTAGE.d / 2) * c.size;
-  const cos = Math.cos(c.facing);
-  const sin = Math.sin(c.facing);
-  const turned = (x: number, z: number): [number, number] => [c.x + x * cos + z * sin, c.z - x * sin + z * cos];
-  const [x, z] = turned(halfW * 0.7, halfD + 0.8);
-  await standAt(lab, x, z, c.facing + Math.PI);
-  const points: THREE.Vector3[] = [];
-  for (let across = -halfD * 0.8; across <= -halfD * 0.2; across += ALONG_BACK) {
-    for (const out of [0.5, 0.75, 1]) {
-      const [px, pz] = turned(halfW + out, across);
-      points.push(new THREE.Vector3(px, groundHeight(px, pz) + 0.1, pz));
-    }
-  }
-  return greenAt(lab, points);
-}
-
-/** From before each cottage, the ground under its eaves past its walls lies in the fog as all round it does. */
-export async function fogUnderEaves(lab: Lab, canary: boolean): Promise<LightsChecked> {
-  const kept = viewMode();
-  holdHour(12);
-  holdEavesAsWithin(canary);
-  try {
-    await viewBy(lab, 'top');
-    const all: number[] = [];
-    for (const cottage of COTTAGES) all.push(await greenUnderEaves(lab, cottage));
-    const worst = Math.max(...all);
-    const shares = all.map((share) => (share * 100).toFixed(0)).join(' ');
-    const line = `under a cottage's side eave, past its wall: ${(worst * 100).toFixed(0)}% plainly green: ${shares}`;
-    const wrong = worst > MOST_GREEN_UNDER_EAVES;
-    if (canary) return { lines: [line], problems: [], caught: wrong, moments: [] };
-    // (the greenest cottage pictured, stood before again: the last one's picture showed none of what failed)
-    const at = all.indexOf(worst);
-    await greenUnderEaves(lab, COTTAGES[at]);
-    const shot = await lab.screen(`before cottage ${at + 1}, the ground under its far eaves`, []);
-    return { lines: [line], problems: wrong ? [line] : [], caught: null, moments: [shot] };
-  } finally {
-    holdEavesAsWithin(false);
-    holdSightOff(false);
-    holdHour(null);
-    faceCamera(0);
-    await viewBy(lab, kept);
-  }
-}
-
-/** The share of `canvas` that's plainly green. */
-function greenShare(canvas: { width: number; height: number; pixels: Uint8Array | Float32Array }): number {
-  const scale = canvas.pixels instanceof Uint8Array ? 255 : 1;
-  let green = 0;
-  const count = canvas.width * canvas.height;
-  for (let pixel = 0; pixel < count; pixel++) {
-    const red = canvas.pixels[pixel * 4] / scale;
-    const middle = canvas.pixels[pixel * 4 + 1] / scale;
-    const blue = canvas.pixels[pixel * 4 + 2] / scale;
-    if (isGreen(red, middle, blue)) green++;
-  }
-  return green / count;
-}
+/** the least of the frame's green the fog must take with him by the hall's walls, all but the door's cone unseen
+ *  (softened by #755, the grass and leaves outside still read greener than red or blue: the engine took 59%) */
+const LEAST_GREEN_TAKEN_HALL = 0.4;
 
 /** where he stands before a cottage, for the ground past it (a review: a green band behind one, on WebGPU) */
 const BESIDE_A_COTTAGE: [number, number] = [16.5, -3];
@@ -510,6 +200,19 @@ function standsInTheHall(): [number, number][] {
   ];
 }
 
+/** how far past the hall's side wall the ground beside him is said (m) */
+const PAST_HALL_WALL = 3;
+
+/** What the fog was asked for, him stood at (x, z) in the hall: how far it's on, and how much of the ground past the
+ *  side wall beside him his rays see. */
+function fogBesideHall(x: number, z: number): string {
+  const side = Math.sign(x - TERRACE.x);
+  const pastX = TERRACE.x + side * (HALL.half + PAST_HALL_WALL);
+  const seen = seenShareAt(pastX, z);
+  return `the fog on ${SIGHT.uSightOn.value.toFixed(2)} (the engine's ${RUST.tune.sightFog}), `
+    + `the ground ${PAST_HALL_WALL} m past the wall beside him seen ${seen.toFixed(2)}`;
+}
+
 /** From by the hall's walls, the grass and the trees' crowns outside it are grey. */
 export async function leavesInFog(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const kept = viewMode();
@@ -517,21 +220,23 @@ export async function leavesInFog(lab: Lab, canary: boolean): Promise<LightsChec
   holdSightOff(canary);
   try {
     await viewBy(lab, 'top');
-    let share = 0;
+    let share = 1;
     let shot: Awaited<ReturnType<Lab['screen']>> | null = null;
+    let why = '';
     for (const [x, z] of standsInTheHall()) {
       await standAt(lab, x, z, -Math.PI / 2);
-      const here = greenShare(drawFrame(lab));
-      if (here < share) continue;
+      const here = greenTaken(lab, null).taken;
+      if (here > share) continue;
       share = here;
-      shot = canary ? null : await lab.screen(`in the hall at (${x}, ${z}), the greenest of its stands`, []);
+      why = fogBesideHall(x, z);
+      shot = canary ? null : await lab.screen(`in the hall at (${x}, ${z}), the least fogged of its stands`, []);
     }
     const [besideX, besideZ] = BESIDE_A_COTTAGE;
     await standAt(lab, besideX, besideZ, 0);
     const beside = canary ? null : await lab.screen('before a cottage, the ground past it in the fog', []);
-    const line = `from in the hall at most ${(share * 100).toFixed(2)}% of the frame is green `
-      + `(at most ${MOST_GREEN * 100}%)`;
-    const green = share > MOST_GREEN;
+    const line = `from in the hall the fog takes ${(share * 100).toFixed(0)}% of the frame's green at the least `
+      + `(at least ${LEAST_GREEN_TAKEN_HALL * 100}%): ${why}`;
+    const green = share < LEAST_GREEN_TAKEN_HALL;
     if (canary) return { lines: [line], problems: [], caught: green, moments: [] };
     const moments = [shot, beside].filter((moment) => moment !== null);
     return { lines: [line], problems: green ? [line] : [], caught: null, moments };

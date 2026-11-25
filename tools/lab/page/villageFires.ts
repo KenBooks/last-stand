@@ -34,6 +34,16 @@ const SETTLE = 60;
 /** A spawn's fields read here. */
 interface Spawned { x: number; z: number; size?: number; vy?: number }
 
+/** A shader's uniforms, by name. */
+type Uniforms = Record<string, THREE.IUniform | undefined>;
+
+/** A fire's flames' uniforms, if `mesh` is one: kept on the mesh (`buildFire`), as the node material it's drawn with
+ *  has none of three's `uniforms` (read off it, no fire was found). */
+export function flameUniforms(mesh: THREE.Object3D): Uniforms | undefined {
+  const kept = mesh.userData.flames as Uniforms | undefined;
+  return kept ?? ((mesh as THREE.Mesh).material as THREE.ShaderMaterial | undefined)?.uniforms;
+}
+
 /** Where each fire's flames stand, and how many of their shaders are told elsewhere. */
 function fires(): { at: THREE.Vector3[]; off: number } {
   const at: THREE.Vector3[] = [];
@@ -41,8 +51,7 @@ function fires(): { at: THREE.Vector3[]; off: number } {
   G.scene.updateWorldMatrix(true, true);
   G.scene.traverse((object) => {
     const mesh = object as THREE.Mesh;
-    const material = mesh.material as THREE.ShaderMaterial | undefined;
-    const centre = material?.uniforms?.uCentre?.value as THREE.Vector3 | undefined;
+    const centre = flameUniforms(mesh)?.uCentre?.value as THREE.Vector3 | undefined;
     if (!mesh.isMesh || !centre) return;
     const where = mesh.getWorldPosition(new THREE.Vector3());
     if (where.distanceTo(centre) > SHADER_OFF) off++;

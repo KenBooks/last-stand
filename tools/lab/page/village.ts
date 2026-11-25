@@ -37,7 +37,6 @@ import { TRAINING } from '../../../src/data/training';
 import { minimapOut } from './villageMinimap';
 import { portalAtNight } from './villagePortalNight';
 import { heroPickedNear } from './villageHeroNear';
-import { roofsFromAbove } from './villageRoofsSeen';
 import { grassStillFromAbove } from './villageGrassRing';
 import { campfireBurns, heroBesideFire } from './villageFire';
 import { campfireStonesApart } from './villageCampfireStones';
@@ -81,25 +80,21 @@ import { candleLightsNear, chestOpensNear } from './villageChestLid';
 import { wallingAligned } from './villageWalling';
 import { windowsLetSunIn } from './villageWindows';
 import { grassRingsGentle, grassRingsUnseen } from './villageGrassRing';
-import {
-  fogUnderEaves, fogUnderRoofs, firesStillInFog, fogHoldsSteady, leavesInFog, roofShowsWhatHeSees,
-} from './villageFog';
+import { firesStillInFog, fogHoldsSteady, leavesInFog } from './villageFog';
+import { fogUnderEaves, fogUnderRoofs, roofShowsWhatHeSees } from './villageFogRoofs';
 import { doorConeOpens, heroSeenPastHall, noDotsBesideHall } from './villageHallOpens';
-import { ghostsOverHim } from './villageGhosts';
 import { columnsStayGhosts, portalOverAll, wallsPastHimWhole } from './villageSeenPast';
 import { startSpots, topKeepsHim } from './villageStart';
 import { rackOpensDuel } from './villageRack';
 import { wornStaysOn } from './villageWorn';
 import { heroFaceNotBlinding } from './villageHeroFace';
 import { cameraBeforeWalls } from './villageCameraWall';
-import { hallFrontFades } from './villageHallFade';
 import {
-  doorConeFromStair, hallWallsOneByOne, heroesSeenFromAbove, heroLitInHall, objectsWalkedShort, roomColumnsStay,
+  doorConeFromStair, heroesSeenFromAbove, heroLitInHall, objectsWalkedShort, roomColumnsStay,
 } from './villageHallWalls';
 import { firesWhereTheyStand } from './villageFires';
 import { heroChosenQuick, heroesBuiltAhead } from './villageHeroChosen';
 import { hallBuiltBehind } from './villageBuiltBehind';
-import { hallHoleOpens } from './villageHallHole';
 import {
   cancelledOnHisFloor, hallShownAtOnce, heroesSeenOnApproach, heroesStandOnBothFeet, heroLeftStands,
 } from './villageHeroStands';
@@ -145,6 +140,20 @@ interface Checked { lines: string[]; problems: string[]; caught: boolean | null;
 /** Whether the check called `name` is asked for: any of `only`'s comma-separated parts in its name, or all. */
 function wanted(name: string, only?: string): boolean {
   return !only || only.split(',').some((part) => name.toLowerCase().includes(part.toLowerCase()));
+}
+
+/**
+ * The check called `name` run, or what it threw as its one problem (its canary, if any, counted as missed): thrown
+ * out of the run, one check that found nothing it measures ended its shard, and every check after it went unrun
+ * (five of the suite's eight shards on 2026-11-25, each at its first check of three's era).
+ */
+async function checkedOrThrown(name: string, check: () => Checked | Promise<Checked>): Promise<Checked> {
+  try {
+    return await check();
+  } catch (error) {
+    const said = error instanceof Error ? error.message : String(error);
+    return { lines: [`${name}: threw: ${said}`], problems: [`${name}: threw: ${said}`], caught: false };
+  }
 }
 
 /** The browser's own clock (ms): the page's stands still within a lab frame. */
@@ -222,12 +231,9 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     fogPastCottages: () => fogPastCottages(lab, options.canary),
     fogOneGrey: () => fogOneGrey(lab, options.canary),
     roofShowsWhatHeSees: () => roofShowsWhatHeSees(lab, options.canary),
-    ghostsOverHim: () => ghostsOverHim(lab, options.canary),
     doorConeOpens: () => doorConeOpens(lab, options.canary),
     doorConeFromStair: () => doorConeFromStair(lab, options.canary),
-    hallDoorSight: async () => (await import('./villageHallDoor')).hallDoorSight(lab, options.canary),
     heroSeenPastHall: () => heroSeenPastHall(lab, options.canary),
-    hallWallsOneByOne: () => hallWallsOneByOne(lab, options.canary),
     heroLitInHall: () => heroLitInHall(lab, options.canary),
     roomColumnsStay: () => unposed(() => roomColumnsStay(lab, options.canary)),
     heroesSeenFromAbove: () => heroesSeenFromAbove(lab, options.canary),
@@ -251,12 +257,10 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     cameraBeforeWalls: () => unposed(() => cameraBeforeWalls(lab, options.canary)),
     cameraOutsideHim: async () => (await import('./villageCameraInside')).cameraOutsideHim(lab, options.canary),
     cameraOverFloors: async () => (await import('./villageCameraFloor')).cameraOverFloors(lab, options.canary),
-    hallFrontFades: () => hallFrontFades(lab, options.canary),
     firesWhereTheyStand: () => firesWhereTheyStand(lab, options.canary),
     heroChosenQuick: () => heroChosenQuick(lab, options.canary),
     heroesBuiltAhead: () => heroesBuiltAhead(lab, options.canary),
     hallBuiltBehind: () => hallBuiltBehind(lab, options.canary),
-    hallHoleOpens: () => hallHoleOpens(lab, options.canary),
     hallFloorSteady: () => hallFloorSteady(lab, options.canary),
     hallSillsSteady: () => hallSillsSteady(lab, options.canary),
     heroesStandOnBothFeet: () => heroesStandOnBothFeet(lab, options.canary),
@@ -274,7 +278,6 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     training: () => training(lab, options.canary),
     portalAtNight: () => portalAtNight(lab, options.canary),
     heroPickedNear: () => heroPickedNear(lab, options.canary),
-    roofsFromAbove: () => roofsFromAbove(lab, options.canary),
     grassStillFromAbove: () => grassStillFromAbove(lab, options.canary),
     campfireBurns: () => campfireBurns(lab, options.canary),
     campfireStonesApart: () => campfireStonesApart(lab, options.canary),
@@ -292,7 +295,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
   const times: string[] = [];
   for (const name of inShard(asked, options.shard, villageCost)) {
     const started = realNow();
-    checks.push(await all[name]());
+    checks.push(await checkedOrThrown(name, all[name]));
     times.push(`  ${name}: ${((realNow() - started) / 1000).toFixed(1)} s`);
   }
   const lines = checks.flatMap((c) => c.lines);

@@ -69,8 +69,9 @@ function bloomOn(on: boolean): void {
   RUST.tune.bloom = on ? 1 : 0;
 }
 
-/** Low's plain pipelines, made aside as its level switches in play, waited for on the browser's time. */
-async function plainMade(lab: Lab): Promise<void> {
+/** A level's plain pipelines (or the whole ones again), made aside as its level switches in play, waited for on the
+ *  browser's time. */
+export async function plainMade(lab: Lab): Promise<void> {
   const drawing = lab.drawing;
   // (drawn: the switch begins as a frame tells the engine the level)
   lab.drawing = true;

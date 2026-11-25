@@ -10,13 +10,14 @@ import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
 import { groundHeight } from '../../../src/world/ground';
 import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
-import { fadeWhole, thinningLetGo } from '../../../src/core/seeThrough';
+import { fadeWhole } from '../../../src/core/seeThrough';
 import { aimSight, holdDoorsOff, holdSightOff, holdSightSharp } from '../../../src/core/sight';
 import { HALL, TERRACE } from '../../../src/data/village';
 import { canvasOf, drawRaw, type Canvas, type RawFrame } from './light';
 import { viewBy } from './villageHallCull';
 import { tileOf } from './hallGlow';
 import type { LightsChecked } from './villageLights';
+import { nothingThinned } from './nothingThinned';
 
 /** the walks' lines across the doorway, off its middle (m) */
 const LINES = [-0.8, 0, 0.8];
@@ -162,7 +163,7 @@ function holdCamera(held: HeldCamera): void {
 
 /** The frame drawn now, `held` let go for its draw alone (the game sets the thinning again each frame). */
 function drawnWithout(lab: Lab, held?: Held): RawFrame {
-  const putBack = held === 'thinning' ? thinningLetGo() : null;
+  const putBack = held === 'thinning' ? nothingThinned() : null;
   try {
     return drawRaw(lab);
   } finally {

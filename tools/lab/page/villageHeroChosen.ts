@@ -100,8 +100,14 @@ export async function heroChosenQuick(lab: Lab, canary: boolean): Promise<Lights
   await lab.step(SETTLE);
   await openHall(lab);
   await lab.step(SETTLE);
+  // (it opens on the hero he stood looking at, his own among them: stepped along until it's another's. One step to
+  // the right landed on his own, and Enter chose the one he was)
   await lab.step(1, () => ({ keys: ['arrowright'] }));
   await lab.step(SETTLE);
+  while (document.querySelector('#heroes .hs-choose')?.textContent?.startsWith('Stay')) {
+    await lab.step(1, () => ({ keys: ['arrowright'] }));
+    await lab.step(SETTLE);
+  }
   const { times, compiled } = await framesFrom(lab, canary);
   holdHour(null);
   if (hall.hallOpen()) throw new Error('lab: village: Enter never chose a hero');
