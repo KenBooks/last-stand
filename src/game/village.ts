@@ -14,7 +14,7 @@ import { RUN } from '../data/balance';
 import { VILLAGE_OBJECTS, YARD, worldToYard, type VillageObject } from '../data/village';
 import { HOUSE_OBJECTS } from '../data/houses';
 import { input, isDown, wasPressed, cylinder } from '../core/input';
-import { viewMode } from '../core/renderer';
+import { setLens, viewMode } from '../core/renderer';
 import { groundHeight } from '../world/ground';
 import { anchorLabel, promptArt, textArt } from '../ui/floaters';
 import { ORDER, type Label } from '../ui/overlay/layer';
@@ -374,6 +374,8 @@ export function updateVillage(dt = 0): void {
   for (const hero of G.players) hero.shine = on ? VILLAGE_SHINE : 0;
   wakeByHero(on && !G.arena.room);
   p.armed = !on || armedAnywhere || inYard(p.pos.x, p.pos.z);
+  // (outside the yard the right mouse button casts nothing: held, it zooms the close views' lens, #811)
+  setLens(on && !p.armed && !G.menuOpen, input.mouse.right && !input.touchMode);
   // (the touch skills shown where he can cast alone: on the square they showed and did nothing, from play)
   document.body.classList.toggle('unarmed', !p.armed);
   if (on && inYard(p.pos.x, p.pos.z)) completeStep('yard');
