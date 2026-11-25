@@ -195,17 +195,52 @@ interface Hang { down: THREE.Vector3; droop: (y: number) => number; floor: (y: n
 const HANG_FREE: Hang = { down: V(0, 0, -1), droop: () => 0, floor: () => Infinity };
 /** the sides of a lathe's segments, round */
 const SLEEVE_SIDES = 28;
+/** a sleeve's radius as a share of its round lathe's, at `y` down its joint and round it (`x` across the joint's frame,
+ *  `z` ahead: each a share of the way round) */
+type ArmShape = (y: number, x: number, z: number) => number;
+const gauss = (x: number, at: number, wide: number): number => Math.exp(-(((x - at) / wide) ** 2));
+/** how deep the creases at the bend of the elbow are (a share of the radius), how many down it, and where along the
+ *  upper sleeve they start (its share from the shoulder) */
+const CREASE = { deep: 0.07, rows: 4, from: 0.72 };
+/**
+ * His upper sleeve shaped as the arm in it, the warrior's way (`warrior.ts` `armShape`): `t` down it from the shoulder
+ * joint (0) to the elbow (1), `out` toward the outside of the arm and `fore` ahead (cosines): the deltoid's cap over
+ * the outside, the biceps ahead and the triceps behind, narrowing above the elbow, the elbow's point behind, and the
+ * cloth creased across the inside of the bend. A round tube with even folds read as a sausage, from play: "why his arms
+ * are sausages, we fixed that for the warrior".
+ */
+function upperArm(t: number, out: number, fore: number): number {
+  const delt = 0.09 * gauss(t, 0.18, 0.16) * Math.max(0, out);
+  const biceps = 0.1 * gauss(t, 0.48, 0.18) * Math.max(0, fore) ** 1.5, triceps = 0.08 * gauss(t, 0.4, 0.2) * Math.max(0, -fore) ** 1.5;
+  const above = -0.1 * gauss(t, 0.82, 0.1) * (0.6 + 0.4 * Math.abs(out)), point = 0.08 * gauss(t, 1, 0.06) * Math.max(0, -fore) ** 2;
+  const crease = -CREASE.deep * Math.max(0, fore) * Math.max(0, Math.sin((t - CREASE.from) / (1 - CREASE.from) * Math.PI * CREASE.rows)) * (t > CREASE.from ? 1 : 0);
+  return 1 + delt + biceps + triceps + above + point + crease;
+}
+/** his upper sleeve's lathe from the elbow (its foot, `y` down its shoulder joint) to over the shoulder (m) */
+const UPPER_SLEEVE = { foot: -0.33, top: 0.02 };
+/** His forearm's sleeve shaped as the arm in it: `t` from the elbow (0) to its cuff (1), `out` and `fore` as
+ *  `upperArm`'s: the elbow's point behind, the forearm's muscle swelling over its outside and top below the elbow and
+ *  narrowing to the wrist. (A wide bell from the elbow, a cone to 25 cm across, was the rest of the sausage.) */
+function foreArm(t: number, out: number, fore: number): number {
+  const point = 0.1 * gauss(t, 0.05, 0.08) * Math.max(0, -fore) ** 2;
+  const muscle = 0.08 * gauss(t, 0.3, 0.16) * (0.5 + 0.5 * Math.max(0, out));
+  return 1 + point + muscle;
+}
+/** his forearm's sleeve from its cuff to over the elbow ([radius, y down the elbow joint], m): the forearm's swell,
+ *  narrowing to the wrist, and turned out a little into a cuff over the undersleeve's */
+const FORE_SLEEVE: [number, number][] = [[0.07, -0.25], [0.066, -0.235], [0.058, -0.2], [0.054, -0.15], [0.058, -0.08], [0.062, -0.02],
+  [0.062, 0.03], [0.04, 0.06], [0, 0.068]];
 
 /** A sleeve's piece on a joint (hanging along -y): a lathe through `profile` ([radius, y], bottom to top), folds round
  *  it, dropped by `hang` and laid flat where it would go further down than its floor (a wide bell on a forearm laid on
  *  the table lies along it, spread out at its sides: hung free, it went through the table). Its opening's ring too. */
-function sleeve(profile: [number, number][], hang: Hang, folds: number, seed: number): { geo: THREE.BufferGeometry; rim: THREE.Vector3[] } {
+function sleeve(profile: [number, number][], hang: Hang, folds: number, seed: number, shape?: ArmShape): { geo: THREE.BufferGeometry; rim: THREE.Vector3[] } {
   const rng = mulberry(seed), ph = rng() * 6;
   const g = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), SLEEVE_SIDES);
   const p = g.attributes.position, side = new THREE.Vector3().crossVectors(V(0, 1, 0), hang.down);
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(x, z), r = Math.hypot(x, z);
-    const fold = 1 + folds * Math.sin(a * 5 + ph + y * 9) * clamp(-y / 0.25, 0.25, 1);
+    const fold = (1 + folds * Math.sin(a * 5 + ph + y * 9) * clamp(-y / 0.25, 0.25, 1)) * (shape ? shape(y, r > 1e-6 ? x / r : 0, r > 1e-6 ? z / r : 0) : 1);
     const fx = Math.sin(a) * r * fold, fz = Math.cos(a) * r * fold;
     // (its depth below the arm and its reach to the side, the way it hangs)
     let d = fx * hang.down.x + fz * hang.down.z + hang.droop(y), w = fx * side.x + fz * side.z;
@@ -1315,18 +1350,21 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
  *  more towards the elbow: on the table, where they hung free through it. */
 function dressBells(j: Joints, add: Add, M: BodyMats, upper: { L: THREE.Vector3; R: THREE.Vector3 }, fore: { L: THREE.Vector3; R: THREE.Vector3 },
   onTable = true): void {
-  const bell: [number, number][] = [[0.12, -0.25], [0.112, -0.2], [0.095, -0.13], [0.078, -0.05], [0.07, 0.01], [0.066, 0.04], [0.04, 0.06], [0, 0.068]];
+  const bell = FORE_SLEEVE;
   // (the upper sleeves too: laid flat 6 cm under the arm at the elbow, where it rests on the table, free above it)
   for (const [shoulder, down, s] of [[j.shoulderL, upper.L, 1], [j.shoulderR, upper.R, -1]] as const) {
     // (standing, hung free: flattened as on the table, the upper sleeves stood out from his shoulders as square pads)
     const hang: Hang = onTable ? { down, droop: () => 0, floor: (y) => (y > -0.2 ? Infinity : lerp(0.08, 0.044, smooth(clamp((-y - 0.2) / 0.11, 0, 1)))) } : { ...HANG_FREE };
-    add(sleeve([[0.064, -0.33], [0.07, -0.26], [0.074, -0.14], [0.08, -0.04], [0.078, 0.02], [0.05, 0.06], [0.02, 0.075], [0, 0.08]], hang, 0.05, 5 + s).geo,
+    // (tapered from the shoulder's cap to over the elbow, shaped round as the arm in it, `upperArm`; its even folds
+    // lessened, as the creases at the bend are its own)
+    const shape: ArmShape = (y, x, z) => upperArm(clamp((UPPER_SLEEVE.top - y) / (UPPER_SLEEVE.top - UPPER_SLEEVE.foot), 0, 1), x * s, z);
+    add(sleeve([[0.05, -0.33], [0.053, -0.27], [0.057, -0.17], [0.062, -0.06], [0.064, 0.02], [0.048, 0.06], [0.02, 0.075], [0, 0.08]], hang, 0.025, 5 + s, shape).geo,
       M.habit, shoulder, 'sleeve');
   }
   for (const [elbow, down, s] of [[j.elbowL, fore.L, 1], [j.elbowR, fore.R, -1]] as const) {
     const hang: Hang = onTable ? { down, droop: (y) => 0.03 * smooth(clamp(-y / 0.25, 0, 1)), floor: (y) => lerp(0.055, 0.02, smooth(clamp(-y / 0.24, 0, 1))) }
       : { down: V(0, 0, -1), droop: (y) => 0.02 * smooth(clamp(-y / 0.25, 0, 1)), floor: () => Infinity };
-    const outer = sleeve(bell, hang, 0.06, 9 + s);
+    const outer = sleeve(bell, hang, 0.025, 9 + s, (y, x, z) => foreArm(clamp((0.04 - y) / 0.29, 0, 1), x * s, z));
     add(outer.geo, M.habitD, elbow, 'bell');
     const inner = bell.map(([r, y]) => [r - 0.008, y + 0.004] as [number, number]).filter(([, y]) => y < -0.06);
     add(sleeve(inner, { ...hang, floor: (y) => hang.floor(y) - 0.006 }, 0.05, 9 + s).geo, M.lining, elbow, 'lining', false);
