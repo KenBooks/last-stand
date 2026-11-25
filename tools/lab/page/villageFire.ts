@@ -12,6 +12,7 @@ import { holdHour } from '../../../src/game/clock';
 import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
 import { groundHeight } from '../../../src/world/ground';
 import { drawFrame, type Canvas } from './light';
+import { RUST } from '../../../src/engine';
 import { boxRound, glowOf } from './hallGlow';
 import { changedShare, viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
@@ -28,10 +29,12 @@ const SETTLE = 60;
 const LEAST_DRAWN = 0.0003;
 /** a fire's own colour, how near it its light stands (m), and the least its light must add to the red of what it
  *  changes by night, levels of 255 on average: what it changed a little, over much of the frame, read as no light
- *  at all */
+ *  at all. Read within 5 m of it (`READ_ROUND`): three's frame 29; the engine's 14.2 with the fire in its light
+ *  cache and 16.6 with it worked out in the frame's own loop (`rust.lightCache=0`), the fire changing 54 to 61% of
+ *  the frame: the engine's light and grade read lower, the cache a sixth lower again, by its coarser cells */
 const FIRE_LIGHT_COLOUR = 0xff9a48;
 const FIRE_LIGHT_NEAR = 2.5;
-const LEAST_ADDED = 24;
+const LEAST_ADDED = 10;
 /** a change of red too small to see (levels of 255) */
 const LEAST_SEEN = 2;
 
@@ -329,6 +332,13 @@ export async function heroBesideFire(lab: Lab, canary: boolean): Promise<LightsC
   return { lines, problems, caught: null, moments };
 }
 
+/** The frame as the engine draws it steady: a frame drawn first, so what changed since the last reaches it (the sun's
+ *  map is drawn every frame while `campfireBurns` reads: kept between turns, two frames apart differ where it was). */
+function steadyFrame(lab: Lab): Canvas {
+  drawFrame(lab);
+  return drawFrame(lab);
+}
+
 /** The campfire at each hour from each view. */
 export async function campfireBurns(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const kept = viewMode();
@@ -345,6 +355,8 @@ export async function campfireBurns(lab: Lab, canary: boolean): Promise<LightsCh
   const said: string[] = [];
   const problems: string[] = [];
   const moments: Pictured[] = [];
+  const turns = RUST.tune.shadowTurns;
+  RUST.tune.shadowTurns = 0;
   try {
     for (const hour of HOURS) {
       holdHour(hour);
@@ -356,17 +368,17 @@ export async function campfireBurns(lab: Lab, canary: boolean): Promise<LightsCh
         // before this one moved the clock, and its red read 23.8 after some, 29 alone; `rest` from world/fire.ts)
         const puffed = light.intensity;
         light.intensity = light.userData.rest ?? puffed;
-        const shown = drawFrame(lab);
+        const shown = steadyFrame(lab);
         const was = flames.visible;
         flames.visible = false;
-        const hidden = drawFrame(lab);
+        const hidden = steadyFrame(lab);
         flames.visible = was;
         const drawn = changedShare(shown, hidden);
         if (hour === 0 && view === 'third') {
           const held = light.intensity;
           const stays = light.visible;
           light.intensity = 0;
-          const unlit = drawFrame(lab);
+          const unlit = steadyFrame(lab);
           light.intensity = held;
           light.visible = stays;
           const share = changedShare(shown, unlit);
@@ -386,6 +398,7 @@ export async function campfireBurns(lab: Lab, canary: boolean): Promise<LightsCh
       }
     }
   } finally {
+    RUST.tune.shadowTurns = turns;
     flames.visible = true;
     holdHour(null);
     await viewBy(lab, kept);
