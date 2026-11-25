@@ -67,7 +67,7 @@ const faded = new Float32Array(RAYS).fill(1);
 
 /** Where the roofs are, in a map of the ground: what stands high over what's unseen stays seen on a roof alone. By height
  *  alone a tree's lower crown read as one, bright green over the fog (from play, "and tree leaves should be grey too?"). */
-const ROOFS_TEXELS = 256;
+const ROOFS_TEXELS = 512;
 export const ROOFS_HALF = 64;
 /** how far past its walls a roof reaches (m), and how far it's soft (the eaves) */
 const ROOF_EAVES = 1.1;
@@ -81,6 +81,8 @@ roofTexture.needsUpdate = true;
  *  lay half out of the fog, a strip of green round a house he can't see past (from play, "and here should be all grey,
  *  right ?") */
 const WITHIN_WALLS = 255;
+/** how far either side of a house's walls the map rises from the one to the other (m) */
+const ROOF_RAMP = 1;
 const UNDER_EAVES = 127;
 /** the roofs last painted, and whether a harness has their eaves count as within their walls, as they did */
 let roofsPainted: readonly SightRoof[] = [];
@@ -109,8 +111,15 @@ function paintRoofs(roofs: readonly SightRoof[]): void {
         const alongW = dx * roof.cos - dz * roof.sin;
         const alongD = dx * roof.sin + dz * roof.cos;
         if (Math.abs(alongW) <= roof.halfW + ROOF_EAVES && Math.abs(alongD) <= roof.halfD + ROOF_EAVES) {
-          const within = Math.abs(alongW) <= roof.halfW && Math.abs(alongD) <= roof.halfD;
-          roofMap[row * ROOFS_TEXELS + column] = within || eavesHeld ? WITHIN_WALLS : UNDER_EAVES;
+          // (how far in from the walls, m, under 0 past them: the map rises with it across `ROOF_RAMP` either side
+          // of the walls' line, halfway at the line itself. Read between its texels a ramp is exact, so a line
+          // drawn at one value of it is the wall's own, straight on a house turned any way; as two values with a
+          // step at the walls it was the texels' staircase, from play "wth is this wave", "same jigsaw blade")
+          const inside = Math.min(roof.halfW - Math.abs(alongW), roof.halfD - Math.abs(alongD));
+          const share = 0.5 + 0.5 * Math.max(-1, Math.min(1, inside / ROOF_RAMP));
+          const value = eavesHeld ? WITHIN_WALLS : Math.round(UNDER_EAVES + (WITHIN_WALLS - UNDER_EAVES) * share);
+          const at = row * ROOFS_TEXELS + column;
+          roofMap[at] = Math.max(roofMap[at], value);
         }
       }
     }
@@ -434,6 +443,33 @@ export function seeFrom(x: number, z: number, wanted: boolean, rate: number, dt:
   shut.value += Math.max(-rate, Math.min(rate, (building && !inside ? 1 : 0) - shut.value));
 }
 
+/** how near a door he stands for the wall it's in to open whole (m), and how far for none of that */
+export const DOOR_WHOLE = { within: 3.2, past: 5.2 };
+
+/** How far he stands before the door whose inner sill's middle is (x, z), seeing in through it, 0 to 1: all of
+ *  it on the porch by the door, none from further off (from the hall's stair he sees a wedge of the room, and
+ *  its front wall opens over that alone). Eased by the door's own share (`uSightDoorOn`) and by his walk. The
+ *  wall with that door in it opens whole by this share (`engine/seeKinds.ts`; from play, "he just needs to
+ *  see whole wall behind it"), and its room is drawn whole meanwhile (`world/hallPortal.ts`). */
+export function seesInAt(x: number, z: number, room?: readonly [number, number, number, number]): number {
+  // (and stood aside of the door, by his own rays through it into `room`: at the lectern beside the hall's
+  // door the wall opened over the wedge of floor he saw past the jamb alone, a slanted ghost on one side of
+  // the door, from play "also glitch on right side")
+  const aside = room && seesIntoRoom(room) ? 1 : 0;
+  const cast = SIGHT.uSightDoor.value;
+  const before = Math.hypot(cast.x - x, cast.y - z) > 1.5 ? 0 : SIGHT.uSightDoorOn.value;
+  return Math.max(before, aside) * nearDoorAt(x, z);
+}
+
+/** How near the door whose inner sill's middle is (x, z) he stands, 0 to 1 (`DOOR_WHOLE`), whichever side of it:
+ *  stood in the room by its door he sees out as he saw in, and the wall opens whole the same (from play, "same
+ *  problem but the other way around"). */
+export function nearDoorAt(x: number, z: number): number {
+  const from = SIGHT.uSightFrom.value;
+  const away = Math.hypot(from.x - x, from.y - z);
+  return Math.min(1, Math.max(0, (DOOR_WHOLE.past - away) / (DOOR_WHOLE.past - DOOR_WHOLE.within)));
+}
+
 /** how far the game has the fog on (0 to 1): `uSightOn`, but in a whole view, which draws none */
 let fogAsked = 0;
 onWholeView((whole) => {
@@ -491,6 +527,36 @@ function seenAround(dx: number, dz: number, row: number): number {
   let open = 0;
   for (let tap = -4; tap <= 4; tap++) open += seenAlongRay(across + (aside * tap) / 4, away, row) / 9;
   return open;
+}
+
+/** how far apart a room's floor is tried for whether he sees any of it (m), how far in from its walls (past the
+ *  fog's soft end beyond a wall, `SIGHT_LOOK.wall`, which sees no room), and how far seen a place counts */
+const ROOM_SEEN = { step: 0.7, inset: 0.9, share: 0.5 };
+/** the room last asked of, where he stood and how far the door's rays were on then, and the answer */
+const roomSeen = { key: '', seen: false };
+
+/** Whether he sees any of the floor of `room` (its least x and z, its most) from where he stands, by the rays:
+ *  in it, or through a door or a gap from outside it. A roof over a room he sees into is gone whole (the
+ *  owner's rule: "if player can see inside the home (anything), we will thin whole roof 100%"). Tried again
+ *  only when he or the door's rays have moved. */
+export function seesIntoRoom(room: readonly [number, number, number, number]): boolean {
+  if (SIGHT.uSightOn.value <= 0) return false;
+  const from = SIGHT.uSightFrom.value;
+  const door = SIGHT.uSightDoor.value;
+  const on = SIGHT.uSightDoorOn.value;
+  const key = [room.join(), from.x.toFixed(2), from.y.toFixed(2), door.x.toFixed(2), door.y.toFixed(2), on.toFixed(2)].join();
+  if (key === roomSeen.key) return roomSeen.seen;
+  roomSeen.key = key;
+  roomSeen.seen = false;
+  const { step, inset, share } = ROOM_SEEN;
+  for (let x = room[0] + inset; x <= room[2] - inset && !roomSeen.seen; x += step) {
+    for (let z = room[1] + inset; z <= room[3] - inset; z += step) {
+      if (seenShareAt(x, z) < share) continue;
+      roomSeen.seen = true;
+      break;
+    }
+  }
+  return roomSeen.seen;
 }
 
 /** The frame's camera told to the fog, as it's about to be drawn. */

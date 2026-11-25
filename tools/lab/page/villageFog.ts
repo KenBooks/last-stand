@@ -18,6 +18,7 @@ import {
 } from '../../../src/core/sight';
 import { holdRoofDepth, holdRoofGhost } from '../../../src/core/seeThrough';
 import type { SightWall } from '../../../src/core/sight';
+import { RUST } from '../../../src/engine';
 import { groundHeight } from '../../../src/world/ground';
 import { drawFrame } from './light';
 import { viewBy } from './villageHallCull';
@@ -123,22 +124,26 @@ export async function fogHoldsSteady(lab: Lab, canary: boolean): Promise<LightsC
   }
 }
 
-/** A fire's flames: its uniforms, by the place it burns at. */
-function flamesNear(x: number, z: number): { uFrame: { value: number } } {
-  let found: { uFrame: { value: number } } | null = null;
+/** A fire's flames: the loop's frame they show, and whether they're drawn. */
+interface Flames { uFrame: { value: number }; drawn: () => boolean }
+
+/** A fire's flames, by the place it burns at (`userData.flames` on its volume, world/fire.ts: the material it's
+ *  drawn with shows no uniforms, and read off the material the check found no flames at all). */
+function flamesNear(x: number, z: number): Flames {
+  let found: Flames | null = null;
   let nearest = 3;
   G.scene.traverse((object) => {
-    const uniforms = ((object as THREE.Mesh).material as THREE.ShaderMaterial | undefined)?.uniforms;
+    const uniforms = object.userData.flames as THREE.ShaderMaterial['uniforms'] | undefined;
     const centre = uniforms?.uCentre?.value as THREE.Vector3 | undefined;
     if (!uniforms?.uFrame || !centre) return;
     const away = Math.hypot(centre.x - x, centre.z - z);
     if (away < nearest) {
       nearest = away;
-      found = uniforms as unknown as { uFrame: { value: number } };
+      found = { uFrame: uniforms.uFrame as { value: number }, drawn: () => object.visible };
     }
   });
   if (!found) throw new Error('lab: village: no flames at the campfire');
-  return found as { uFrame: { value: number } };
+  return found as Flames;
 }
 
 /** The campfire's flames stand still from the back of the hall, and burn beside it. */
@@ -153,17 +158,26 @@ export async function firesStillInFog(lab: Lab, canary: boolean): Promise<Lights
     const before = flames.uFrame.value;
     await lab.step(30);
     const inFog = Math.abs(flames.uFrame.value - before);
+    const drawnInFog = flames.drawn();
+    // (held at the frame kept for a fire that stands still, which its `uFrame` reads under 0: left at a frame of
+    // the loop it burns on with the fires he sees, whose two frames on the GPU are every fire's)
+    const held = flames.uFrame.value < 0;
     await standAt(lab, CAMPFIRE[0] + 2.4, CAMPFIRE[1], 0);
     const seenFrom = flames.uFrame.value;
     await lab.step(30);
     const seen = Math.abs(flames.uFrame.value - seenFrom);
-    const line = `the campfire's flames in 30 frames: ${inFog.toFixed(2)} frames of its loop in the fog, `
-      + `${seen.toFixed(2)} beside it`;
-    const moved = inFog > 0.001;
+    const line = `the campfire's flames in 30 frames: ${inFog.toFixed(2)} frames of its loop in the fog`
+      + `${drawnInFog ? ', drawn there' : ', not drawn there'}${held ? ', at its held frame' : ', at a frame of the loop'}, `
+      + `${seen.toFixed(2)} beside it`
+      + `${flames.drawn() ? '' : ', not drawn'}`;
+    // (from play, "why is fire still burning in fog of war")
+    const moved = inFog > 0.001 || !held;
     if (canary) return { lines: [line], problems: [], caught: moved, moments: [] };
     const problems: string[] = [];
     if (moved) problems.push(`${line}: it burns on in the fog`);
-    if (seen < 0.1) problems.push(`${line}: it stands still in sight`);
+    // (from play, "why campfire stopped burning, supposed to be frozen flame in fog of war")
+    if (!drawnInFog) problems.push(`${line}: its flames are gone in the fog`);
+    if (seen < 0.1 || !flames.drawn()) problems.push(`${line}: it stands still in sight, or isn't drawn`);
     return { lines: [line], problems, caught: null, moments: [] };
   } finally {
     holdSightOff(false);
@@ -321,16 +335,22 @@ async function fogThroughRoof(lab: Lab, c: Cottage): Promise<{ taken: number; re
   return { taken: fogTakesAt(lab, under), read: under.length };
 }
 
-/** The share of their light the fog takes from `points`: the frame drawn again at once with the fog off, as between two
- *  frames the camera glides and the grass moves. */
+/** the engine's fog mixed in by next to nothing: none of its darkening, his sight still on */
+const FOG_NONE = 1e-4;
+
+/** The share of their light the fog takes from `points`: the frame drawn again at once with none of the fog mixed in,
+ *  as between two frames the camera glides and the grass moves. His sight stays on (`rust.sightFog` next to nothing,
+ *  not `uSightOn` 0): a house from above is opened by what he sees, so with his sight off its roofs were drawn
+ *  another way, by their kinds' own shares, and the two frames differed by the roofs' ghosts (22% of the light
+ *  through a roof read as the fog's, where the fog took none). */
 function fogTakesAt(lab: Lab, points: THREE.Vector3[]): number {
   const fogged = lightAt(lab, points);
-  const on = SIGHT.uSightOn.value;
-  SIGHT.uSightOn.value = 0;
+  const fog = RUST.tune.sightFog;
+  RUST.tune.sightFog = FOG_NONE;
   try {
     return 1 - fogged / lightAt(lab, points);
   } finally {
-    SIGHT.uSightOn.value = on;
+    RUST.tune.sightFog = fog;
   }
 }
 

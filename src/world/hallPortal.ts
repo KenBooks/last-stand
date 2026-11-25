@@ -6,8 +6,19 @@
 // and the heroes were 128 of the frame's 429 draws, all drawn whatever the doorway showed of them).
 import * as THREE from 'three';
 import { fadedWhole } from '../core/seeThrough';
-import { HALL, TERRACE } from '../data/village';
+import { SIGHT, nearDoorAt, seesIntoRoom } from '../core/sight';
+import { HALL, TERRACE, inHall } from '../data/village';
 import type { Doorway } from './doorways';
+
+/** the hall's room inside its walls (its least x and z, its most): while he sees any of it from outside, its roof
+ *  is gone whole and its front wall may be, and the room is drawn whole */
+const HALL_ROOM = [TERRACE.x - HALL.inHalf, HALL.wall, TERRACE.x + HALL.inHalf, HALL.inFront] as const;
+
+/** Whether he stands in the hall by its door, its front wall opened whole for what he sees out to. */
+function byDoorInside(): boolean {
+  const from = SIGHT.uSightFrom.value;
+  return inHall(from.x, from.y) && nearDoorAt(TERRACE.x, HALL.inFront) > 0;
+}
 
 /** The hall's doorway (`cutaway`: its roof and front wall, cut away when the camera isn't under them). */
 export function hallDoorway(cutaway: readonly THREE.Object3D[]): Doorway {
@@ -33,7 +44,11 @@ export function hallDoorway(cutaway: readonly THREE.Object3D[]): Doorway {
       new THREE.Vector3(TERRACE.x + HALL.inHalf + 0.05, 12, HALL.inFront + 0.05),
     ),
     // (cut away, or thinned to a ghost, what's beyond them shows)
-    whole: () => cutaway.every((part) => part.visible) && !fadedWhole('hallFront') && !fadedWhole('hallRoof'),
+    // (nor while he stands before its door and its front wall is opened whole for it: taken as whole, the
+    // room past the doorway's own view wasn't drawn, and the meadow showed through the thinned wall in the
+    // room's far corners, from play "do you [see the] slanted roof effect")
+    whole: () => cutaway.every((part) => part.visible) && !fadedWhole('hallFront') && !fadedWhole('hallRoof')
+      && !seesIntoRoom(HALL_ROOM) && !byDoorInside(),
     wallsSaid: () => `roof and front shown ${cutaway.every((part) => part.visible)}, `
       + `front thinned ${fadedWhole('hallFront')}, roof thinned ${fadedWhole('hallRoof')}`,
   };

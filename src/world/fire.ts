@@ -16,7 +16,7 @@ import { inTheFog } from '../core/sight';
 import type { Updater } from './props';
 import { runPhase } from './runPhase';
 import { emberNodes, flameMaterial, type EmberLooks, type FlameUniforms } from './fireNodes';
-import { BAKE, decodeFrame, DOMAIN, FLAME_LOOK, FRAME_CELLS, KEPT, KEPT_SIZE, LOOP, TILES, type BakedFlames }
+import { BAKE, decodeFrame, DOMAIN, FLAME_LOOK, FRAME_CELLS, KEPT, KEPT_SIZE, LOOP, STILL, TILES, type BakedFlames }
   from './fireBake';
 
 /** A fire to build: its bed and flames, and the biome's light it flickers. */
@@ -146,7 +146,7 @@ flamesVolume.needsUpdate = true;
 let flamesBaked: Promise<void> = Promise.resolve();
 /** the loop as the worker made it, the frame each slot holds, and a frame's box decoded */
 let loop: BakedFlames | null = null;
-const inSlot = [-1, -1];
+const inSlot = [-1, -1, -1];
 const decoded = new Uint8Array(FRAME_CELLS);
 
 /** The texture holding the frames either side of `moment` (a frame of the loop), each decoded into its slot as it's
@@ -157,8 +157,7 @@ function showMoment(moment: number): void {
   const data = flamesVolume.image.data as Uint8Array;
   const width = KEPT_SIZE.x * TILES.across;
   let changed = false;
-  for (const frame of [first, (first + 1) % LOOP.frames]) {
-    const slot = frame % TILES.across;
+  for (const [frame, slot] of [[first, first % 2], [(first + 1) % LOOP.frames, (first + 1) % 2], [STILL.frame, STILL.slot]]) {
     if (inSlot[slot] === frame) continue;
     decodeFrame(loop, frame, decoded);
     for (let z = 0; z < KEPT_SIZE.z; z++) {
@@ -241,7 +240,7 @@ ${FLAME_LOOK.blackbody.slice(1).map(([at, r, g, b, bright], i) => {
   }
   // the loop at one frame's tile: q's x and y in cells, its z a share of the depth
   float flameTile(vec3 q, float frame) {
-    vec2 tile = vec2(mod(frame, ${glsl(TILES.across)}), mod(floor(frame / ${glsl(TILES.across)}), ${glsl(TILES.down)}));
+    vec2 tile = vec2(frame < 0.0 ? ${glsl(STILL.slot)} : mod(frame, 2.0), 0.0);
     // (the atlas keeps a box of the grid, KEPT: outside it the clamp reads its empty edge)
     vec2 size = vec2(${glsl(KEPT_SIZE.x)}, ${glsl(KEPT_SIZE.y)});
     vec2 inBox = q.xy * vec2(${glsl(BAKE.nx)}, ${glsl(BAKE.ny)}) - vec2(${glsl(KEPT.x[0])}, ${glsl(KEPT.y[0])});
@@ -258,7 +257,7 @@ ${FLAME_LOOK.blackbody.slice(1).map(([at, r, g, b, bright], i) => {
     float next = mod(first + 1.0, ${glsl(LOOP.frames)});
     // (lite, the lower levels': the nearest of the loop's frames alone, and no strands, a third of the reads)
     if (uLite > 0.5) {
-      float life = flameTile(q, mod(floor(uFrame + 0.5), ${glsl(LOOP.frames)}));
+      float life = flameTile(q, uFrame < 0.0 ? uFrame : mod(floor(uFrame + 0.5), ${glsl(LOOP.frames)}));
       if (life <= 0.004) return 0.0;
       life *= 1.0 - ${glsl(FLAME_LOOK.strandsTake * (1 - LITE_STRANDS))};
       float sideFrom = mix(${glsl(FLAME_LOOK.sideFadeFoot)}, ${glsl(FLAME_LOOK.sideFade)}, smoothstep(0.0, ${glsl(FLAME_LOOK.footNarrows)}, q.y));
@@ -418,7 +417,7 @@ ${FLAME_LOOK.blackbody.slice(1).map(([at, r, g, b, bright], i) => {
 /** the numbers the flames' shader is written with, for its WGSL (fireNodes.ts) */
 const FLAME_SHAPE = {
   steps: STEPS, stepsLeast: STEPS_LEAST, spanLeast: SPAN_LEAST, liteStrands: LITE_STRANDS, look: FLAME_LOOK,
-  tiles: TILES, cells: BAKE, kept: KEPT, keptSize: KEPT_SIZE, frames: LOOP.frames,
+  tiles: TILES, stillSlot: STILL.slot, cells: BAKE, kept: KEPT, keptSize: KEPT_SIZE, frames: LOOP.frames,
 };
 
 /** `logs` (in a scene's frame, its world matrix `toWorld`) into the flames' `uLogs`, each end from the bed's middle
@@ -627,6 +626,8 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
   volume.renderOrder = 15;
   // (the lab's handle on it: `lab sit` pictures a hero sat by it from beyond it, it hidden)
   volume.name = 'flames';
+  // (and on its uniforms, which the material it's drawn with doesn't show: `lab village --only firesStillInFog`)
+  volume.userData.flames = flames.uniforms;
   scene.add(volume);
   const lightAt = light.position.clone();
   const due = runPhase({ embers: 0, smoke: 0 });
@@ -634,7 +635,15 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
     emberTime.value = t;
     // (what he can't see plays out nothing, from play, "fire should not animate when in fog of war": its flames held at
     // the moment they had, none of the loop decoded for it, no embers or smoke)
-    if (inTheFog(inWorld.x, inWorld.z)) return;
+    // (and its flames stand still there, at a frame of the loop held for it, `STILL`: left at the moment they had
+    // they burned on with the fires he sees, whose two frames theirs are, "why is fire still burning in fog of
+    // war"; and not drawn at all the campfire was out, "why campfire stopped burning, supposed to be frozen flame
+    // in fog of war")
+    if (inTheFog(inWorld.x, inWorld.z)) {
+      flames.uniforms.uFrame.value = STILL.reads;
+      flames.uniforms.uPuff.value = 1;
+      return;
+    }
     const puff = puffAt(t, seed);
     flames.uniforms.uPuff.value = 1 + (puff - 1) * PUFF_SHOWS;
     // (every fire at one moment of the loop, so the GPU holds two frames of it, each fire turned its own way and puffing

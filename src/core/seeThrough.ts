@@ -28,6 +28,28 @@ interface Kind {
   ramp: { value: number };
   /** whether it thins by blending, not by a pattern of dropped pixels */
   blended?: boolean;
+  /** a part of a house (a wall, a roof, a gable): from above the Rust engine drops it whole where it hides ground he
+   *  sees and leaves it whole elsewhere, by his sight alone (`src/engine/AGENTS.md`, Bulwark's `cover_kept`) */
+  cover?: boolean;
+  /** of `cover`: the floor its house stands on (m; the village's ground 0, the hall's its terrace), whatever floor he
+   *  stands on: read at his own, a cottage's roof opened over ground he saw before it once he stood on the terrace:
+   *  the ground it hides is found at that height, wherever he stands */
+  floor?: number;
+  /** of `floor`: where that floor lies when it's raised over the ground, in up to two boxes (each its least x and z,
+   *  its most): past them the ground is the village's, 0 */
+  floorBoxes?: readonly (readonly [number, number, number, number])[];
+  /** of `cover`, a roof: the room it roofs (its least x and z, its most). While he stands in it all of the roof
+   *  opens, the one exception to the rule: "if the player is inside a building... we will thin whole roof no
+   *  matter what" */
+  roofs?: readonly [number, number, number, number];
+  /** of `cover`, a wall: the room it walls. While he stands in it the wall opens over that room's floor alone, and
+   *  over all of it, seen or not: by what he saw it stood in ragged pieces where a column hid the floor behind it,
+   *  and opened on the ground he saw out of a window ("can see ground in hall of heroes") */
+  walls?: readonly [number, number, number, number];
+  /** of `walls`: the floor past the room's walls he may see out to from in it (a porch through its door), where
+   *  a wall across the room still opens by the rule: "forgot to thin the portico wall that covers visible
+   *  ground". Past both, the meadow, it opens on nothing */
+  porch?: readonly [number, number, number, number];
   /** of `blended`: whether a pale surface of it keeps less of itself than a dark one (`PALE`) */
   pale?: boolean;
   /** of `blended`: its meshes lie in layers (a roof's slabs over its deck over its beams), and the Rust engine draws
@@ -42,6 +64,12 @@ interface Kind {
   /** how far round the line to him what thins whole reaches: from x it comes back, whole by y (m at his depth); all of it
    *  if not given */
   reach?: { value: THREE.Vector2 };
+  /** of a cover with a `reach`: how high it stands over its floor (m). Where it stands between the camera and him
+   *  all of it is a ghost, foot to top, by that height */
+  high?: number;
+  /** of a cover with `walls`: never gone whole. Where its wall would be (he stands in its room, or before its door
+   *  seeing in), all of it is the rule's ghost instead: what keeps him out of where it stands, a door's leaves */
+  stays?: boolean;
   /** the room it thins for (least x, least z, most x, most z): only what has it just past it along the view thins whole;
    *  everywhere if not given */
   room?: { value: THREE.Vector4 };
@@ -148,6 +176,10 @@ const HALL_K = { value: new THREE.Vector4(1.0, 1.8, 0, -1000) };
 /** a hall column's: no hole of its own, as the hall's walls have none: each thins whole. On top of that, a wall's hole cut
  *  a round bite out of the door's jambs and the lintel as he stood in the doorway, and a column's left it clear below and
  *  solid above, a smoke gradient (from play, "still looks broken to me"; a review) */
+/** how high the hall's columns stand over its floor, their capitals' tops (m) */
+const COLUMN_HIGH = 6;
+/** how far the hall's front wall thins whole: its door's leaves' too, a kind of their own */
+const FRONT_WHOLE = { value: 0 };
 const COLUMN_K = { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) };
 /** the share of the floor he sees the hall's columns thin by (`HALL_SIGHT`; their pale surfaces further, `PALE`) */
 const COLUMN_SIGHT = 1.45;
@@ -170,6 +202,18 @@ const BUILT_OPENS = 5;
 const WALL_RAMP = { value: 2 };
 /** how far short of him a ghost comes back (m): over 2 m, as the hall's walls do, a post a stride before him stayed whole */
 const GHOST_RAMP = 0.5;
+/** the raised floor the hall of heroes stands on: its terrace, and its own narrower footing past the terrace's back */
+const HALL_FLOORS = [
+  [TERRACE.x - TERRACE.half, TERRACE.back, TERRACE.x + TERRACE.half, TERRACE.front],
+  // (to its side walls' inner faces: out to their outer ones, a line ending in a wall's own thickness read as
+  // floor he saw, and the roof was a ghost over the wall in a band along it)
+  [TERRACE.x - HALL.inHalf, HALL.wall - 0.6, TERRACE.x + HALL.inHalf, TERRACE.back],
+] as const;
+/** the hall's room, between its walls' inner faces (its least x and z, its most) */
+const HALL_IN = [TERRACE.x - HALL.inHalf, HALL.wall, TERRACE.x + HALL.inHalf, HALL.inFront] as const;
+/** the terrace before the hall's front wall: its porch, seen from in the hall through its door */
+const HALL_PORCH = [TERRACE.x - TERRACE.half, HALL.door, TERRACE.x + TERRACE.half, TERRACE.front] as const;
+
 const kinds = {
   /** canopies: a wide hole in every view, since the tree line can hide the player top-down */
   foliage: { k: { value: new THREE.Vector4(2.5, 5, 0.9, 1) }, minY: { value: -1e9 }, across: { value: 1 }, whole: { value: 0 }, ramp: WALL_RAMP },
@@ -179,7 +223,7 @@ const kinds = {
   /** what's built (a house's walls and roof, the palisade): the same hole from above alone. Over the shoulder the camera
    *  stands on his side of it, and a hole there showed both sides of a wall at once (from play, "I should not able to
    *  see through walls like this") */
-  built: { k: BUILT_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true },
+  built: { k: BUILT_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: 0 },
   /** a fence (the palisade): as `built`, its hole opened by what of him it hides alone */
   fence: { k: FENCE_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true },
   /** a thing's foot on the floor: as `prop`, from the ground up */
@@ -190,27 +234,38 @@ const kinds = {
   // near him thinned where it stood short of him, and one hiding him stayed solid over the last of the way to him, from
   // play, "here we should not try to make transparent the side which doesn't help see the hero", "this wall should be
   // transparent but the one 90 degree to it should not", "here both should be transparent, but only 1 is")
-  hallFront: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true,
-    sight: true, room: HALL_ROOM, door: HALL_DOOR, doorOn: HALL_DOOR_ON },
-  hallBack: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true,
-    sight: true, sightOn: HALL_SIGHT_ASIDE },
-  hallBeam: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true,
-    sight: true, door: HALL_DOOR, doorOn: HALL_DOOR_ON },
-  hallEast: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true,
-    sight: true, sightOn: HALL_SIGHT_ASIDE },
-  hallWest: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true,
-    sight: true, sightOn: HALL_SIGHT_ASIDE },
-  hallRoof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, oneLayer: true },
+  hallFront: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: FRONT_WHOLE, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
+    sight: true, room: HALL_ROOM, door: HALL_DOOR, doorOn: HALL_DOOR_ON, walls: HALL_IN, porch: HALL_PORCH },
+  /** the leaves of the door in that wall, swung in: its wall's own in everything, but never gone whole (`stays`):
+   *  they keep him out of where they stand, and with their wall gone whole round him in its room nothing showed
+   *  what stopped him, from play "can we not completely thin doors? because they are obstacles, players will not
+   *  know why they cannot move" */
+  hallLeaves: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: FRONT_WHOLE, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
+    sight: true, room: HALL_ROOM, door: HALL_DOOR, doorOn: HALL_DOOR_ON, walls: HALL_IN, porch: HALL_PORCH, stays: true },
+  hallBack: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
+    sight: true, sightOn: HALL_SIGHT_ASIDE, walls: HALL_IN, porch: HALL_PORCH },
+  // (the portico's beam goes with the roof it carries, whole (`roofs`): as a wall of his room it opened where it
+  // stood before the room, was a ghost where it hid floor he saw and stood whole past that, one beam in three
+  // pieces, a slab of it left on a column, from play "just odd geometry... we should not make player wondering
+  // what the geometry was before thinning", "like, wth is this")
+  hallBeam: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
+    sight: true, door: HALL_DOOR, doorOn: HALL_DOOR_ON, walls: HALL_IN, porch: HALL_PORCH, roofs: HALL_IN },
+  hallEast: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
+    sight: true, sightOn: HALL_SIGHT_ASIDE, walls: HALL_IN, porch: HALL_PORCH },
+  hallWest: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
+    sight: true, sightOn: HALL_SIGHT_ASIDE, walls: HALL_IN, porch: HALL_PORCH },
+  hallRoof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS, oneLayer: true,
+    roofs: HALL_IN },
   /** the other roofs: as what's built, and a ghost from above (`ROOF_GHOST_ABOVE`) */
-  roof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true },
+  roof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: 0 },
   /** a house's gables from above, fainter than its roof: at the roof's own ghost, plaster that pale read as a strip
    *  standing off the roof's end, edge on (a review; from play, "chimney/gable needs work") */
-  gable: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true },
+  gable: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: 0 },
   /** what stands free in the hall (its columns, its banners), which hides as much of the room as of him */
   // (those near the line to him: a column well aside of it hides nothing of him, and all gone, the portico stood on plinths)
-  hallColumn: { k: COLUMN_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: { value: 0.4 }, blended: true,
+  hallColumn: { k: COLUMN_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: { value: 0.4 }, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
     pale: true, sight: true, sightShare: COLUMN_SIGHT, sightOn: HALL_SIGHT_COLUMNS,
-    reach: { value: new THREE.Vector2(0.8, 1.6) }, room: HALL_ROOM, door: HALL_DOOR },
+    reach: { value: new THREE.Vector2(0.8, 1.6) }, room: HALL_ROOM, door: HALL_DOOR, high: COLUMN_HIGH },
 } satisfies Record<string, Kind>;
 
 /** how far the hall's walls thin where they hide the floor he sees (a share of their pixels, `hallSightCone`): from
@@ -510,10 +565,22 @@ export interface SeeThrough {
   whole: { value: number };
   ramp: { value: number };
   reach?: { value: THREE.Vector2 };
+  /** of a cover with a `reach`: how high it stands over its floor (m). Where it stands between the camera and him
+   *  all of it is a ghost, foot to top, by that height */
+  high?: number;
+  /** of a cover with `walls`: never gone whole. Where its wall would be (he stands in its room, or before its door
+   *  seeing in), all of it is the rule's ghost instead: what keeps him out of where it stands, a door's leaves */
+  stays?: boolean;
   room?: { value: THREE.Vector4 };
   door?: { value: THREE.Vector4 };
   doorOn?: { value: number };
   blended?: boolean;
+  cover?: boolean;
+  floor?: number;
+  floorBoxes?: readonly (readonly [number, number, number, number])[];
+  roofs?: readonly [number, number, number, number];
+  walls?: readonly [number, number, number, number];
+  porch?: readonly [number, number, number, number];
   pale?: boolean;
   oneLayer?: boolean;
   sight?: boolean;
@@ -1148,7 +1215,7 @@ function ghostTwin(mesh: THREE.Mesh, material: THREE.Material): THREE.Mesh {
 }
 
 /** The kinds that thin whole. */
-export type FadesWhole = HallWallKind | 'hallRoof' | 'hallColumn';
+export type FadesWhole = HallWallKind | 'hallRoof' | 'hallColumn' | 'hallLeaves';
 
 /** The hall's walls, each thinning by itself. */
 export const HALL_WALL_KINDS = ['hallFront', 'hallBack', 'hallEast', 'hallWest', 'hallBeam'] as const;
@@ -1272,7 +1339,13 @@ onWholeView(() => {
 });
 
 /** How far a roof thins from above now, where it thins (0: not from above): a house's walls thin by it too, where
- *  they hide ground he sees (the engine's `house_share`). */
+ *  they hide ground he sees. */
+/** How far the engine's rule for a house from above is on, 0 to 1 (`Kind.cover`): all of it from above, coming in
+ *  as the roofs' own ghost does when the view changes. */
+export function coverRuleNow(): number {
+  return Math.min(1, kinds.roof.whole.value / ROOF_GHOST_ABOVE);
+}
+
 export function roofGhostNow(): number {
   return kinds.roof.whole.value;
 }

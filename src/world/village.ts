@@ -87,7 +87,7 @@ const DAIS_LIGHT = { up: 3.0, ahead: 2.2 };
 /** the banners behind the hall's plinths: their tops over the floor, how far off the back wall, their scale (`bannerGeo`
  *  is 0.9 m across) */
 const HALL_BANNER = { top: 4.6, off: 0.25, scale: 1.15 };
-const DOOR = { frame: 0.32, set: 0.22, straps: [0.5, 1.7, 2.9], open: 1.45 };
+const DOOR = { frame: 0.32, set: 0.22, straps: [0.5, 1.7, 2.9], open: 1.45, clear: 0.09 };
 /** the plinth block at the foot of each side of the door's frame: how high (over the plinth course's 0.45), how deep
  *  out from the wall (past the course's 0.35) and how much wider than the frame each way (m) */
 const DOOR_FOOT = { high: 0.52, deep: 0.4, wider: 0.03 };
@@ -479,14 +479,16 @@ function makeMats(): Mats {
     return seeThrough(face, 'prop');
   };
   // (a house's walls and roof, which never open over the shoulder; the rest stands free, opening wide as it hides him)
-  for (const m of [mats.ashlar, mats.coping, mats.plaster, mats.timber, mats.planks, mats.logs, mats.window, mats.skyPane,
+  for (const m of [mats.ashlar, mats.coping, mats.plaster, mats.timber, mats.planks, mats.window, mats.skyPane,
     mats.doorLeaf, mats.doorIron]) {
     seeThrough(m, 'built');
   }
   // (the notice board's roof isn't a house's: no room under it, and a ghost over the lit grass it took the fog of what's
   // seen through a roof, a hard blue plate over the board, a review)
   seeThrough(mats.roof, 'roof');
-  const board = [mats.freeTimber, mats.freePlanks, mats.boardRoof, mats.paper];
+  // (the campfire's logs and the benches' stand free too: of the houses' kind, a house's rule opened them over the
+  // ground he saw under them, a fire burning on bare earth, from play "where are the logs? wth")
+  const board = [mats.freeTimber, mats.freePlanks, mats.boardRoof, mats.paper, mats.logs];
   const lectern = [mats.binding, mats.pagesLeft, mats.pagesRight, mats.pagesEdge, mats.ribbon, mats.wax, mats.freeBrass];
   for (const m of [mats.fireStones, mats.column, mats.iron, mats.steel, mats.rackTimber, mats.rackPlanks, mats.lantern, mats.lanternIron, mats.freeAshlar, mats.freeCoping, ...board,
     ...lectern]) {
@@ -983,7 +985,9 @@ function buildGround(scene: THREE.Object3D, M: Mats, mask: MaskUniforms): void {
   // draw the same)
   scene.add(flatPatch(squareOutline(), M.cobbles, 0.012));
   roadLines.forEach((road, k) => scene.add(roadStrip(road.line, road.width, M.cobbles, k)));
-  scene.add(curbs(M.coping));
+  // (in the stone that stands free, no part of a house: a house's part, a kerb under a roof's ghost was one of its
+  // layers and not the nearest, and went from under it)
+  scene.add(curbs(M.freeCoping));
 }
 
 /** the curbs along the roads' and the square's edges: how wide and how high (m); the grass grows up to them (from play,
@@ -1417,19 +1421,21 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
     const wingX = X + s * (dh + (wing - thick) / 2);
     wall.add(walling(frontWall, wing - thick, eaves, thick, wingX, y0, face - thick / 2, M.ashlar), true, 'wall', true);
     // (its plinth course whole: too low to hide him, and thinned it parted along its top in a dark line, a review)
-    wall.add(block(scene, wing - DOOR.frame, 0.45, 0.35, cx + s * DOOR.frame / 2, y0, face + 0.17, M.coping), true, 'wall', true);
+    // (in the front wall's group, opened whole with it by the door: left whole, from in the hall it lay past the
+    // wall's ghost as a pale bar across it, from play "this white line doesn't belong there")
+    wall.add(block(frontWall, wing - DOOR.frame, 0.45, 0.35, cx + s * DOOR.frame / 2, y0, face + 0.17, M.coping), true, 'wall', true);
     // (a plinth block at the foot of the door's frame, prouder than the course, which ends against it: the course stood
     // 17 cm prouder than the frame and stopped 2 cm short of it, its end a grey wedge beside the chest, from play "also
     // broken near chest (grey triangle)"; a hair wider than the frame each way, so no face of it lies in one of the
     // frame's; whole as the course is: in the front wall's group the door's cone cut a wedge out of its top)
     const footX = X + s * (dh + DOOR.frame / 2 - 0.02);
-    wall.add(block(scene, DOOR.frame + DOOR_FOOT.wider * 2, DOOR_FOOT.high, DOOR_FOOT.deep, footX, y0,
+    wall.add(block(frontWall, DOOR.frame + DOOR_FOOT.wider * 2, DOOR_FOOT.high, DOOR_FOOT.deep, footX, y0,
       face + DOOR_FOOT.deep / 2 - 0.02, M.coping), true, 'wall', true);
   }
   // (the lintel, the frame and the leaves are in the wall: stood in a leaf, he and the camera went through it)
   const inWall = frontWall.children.length;
   walling(frontWall, dh * 2, eaves - high, thick, X, y0 + high, face - thick / 2, M.ashlar);
-  hallDoor(frontWall, M, X, y0, face);
+  const leaves = hallDoor(frontWall, M, X, y0, face);
   for (const part of frontWall.children.slice(inWall)) wall.add(part, false, 'wall', true);
   const ceiling = y0 + eaves - ROOF.ceiling - 0.32;
   const look = torchLook();
@@ -1474,7 +1480,11 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   block(beam, half * 2, COLONNADE.lintel, HALL.beamDeep, X, y0 + HALL.beamFoot, HALL.beamZ, M.coping);
   const roof = hallRoof(scene, M, y0 + eaves, back, front);
   fadesWhole(roof, 'hallRoof');
-  fadesWhole(frontWall, 'hallFront');
+  // (the doorway first, its frame and leaves, a kind of their own that never goes whole: the wall's pass leaves
+  // them be. From play, "completely thinning the wall works for walls without entrance... but if there is a gap...
+  // it needs to be hinted at")
+  for (const leaf of leaves) fadesWhole(leaf, 'hallLeaves');
+  fadesWhole(frontWall, 'hallFront', false, leaves);
   fadesWhole(walls, 'hallBack');
   fadesWhole(beam, 'hallBeam');
   fadesWhole(sideWalls[0], 'hallWest');
@@ -1625,11 +1635,16 @@ const glowTwins: [THREE.MeshStandardMaterial, THREE.MeshStandardMaterial][] = []
 
 /** What's under `group` drawn in materials of its own that thin as `kind` says (`fadeWhole`): the hall's cut away parts,
  *  as a material a hole round the hero alone has is the rest of the village's too. */
-function fadesWhole(group: THREE.Object3D, kind: FadesWhole, inHall = false): void {
+function fadesWhole(group: THREE.Object3D, kind: FadesWhole, inHall = false, but: THREE.Object3D[] = []): void {
   const fading = new Map<THREE.Material, THREE.Material>();
+  const left = new Set<THREE.Object3D>(but.flatMap((part) => {
+    const under: THREE.Object3D[] = [];
+    part.traverse((object) => under.push(object));
+    return under;
+  }));
   group.traverse((object) => {
     const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh) return;
+    if (!mesh.isMesh || left.has(mesh)) return;
     const was = mesh.material as THREE.Material;
     if (!fading.has(was)) {
       const copy = was.clone();
@@ -1681,14 +1696,16 @@ function hallDais(scene: THREE.Object3D, backWall: THREE.Object3D, levels: Level
   const deep = HALL.daisZ - HALL.wall, step = STEP_RUN, rise = HALL.daisHigh / 2;
   block(scene, inHalf * 2, rise, step, X, y0, HALL.daisZ - step / 2, M.granite);
   block(scene, inHalf * 2, HALL.daisHigh, deep - step, X, y0, HALL.wall + (deep - step) / 2, M.granite);
-  block(scene, inHalf * 2, 0.06, 0.12, X, top - 0.06, HALL.daisZ - step + 0.06, M.coping);
+  block(scene, inHalf * 2, 0.06, 0.12, X, top - 0.06, HALL.daisZ - step + 0.06, M.freeCoping);
   levels.paint(X - inHalf, HALL.daisZ - step, X + inHalf, HALL.daisZ, () => y0 + rise);
   levels.paint(X - inHalf, HALL.wall, X + inHalf, HALL.daisZ - step, () => top);
   const { plinthHalf: half, plinthHigh: high, plinthZ: z } = HALL;
   for (const dx of HALL.plinths) {
     const x = X + dx;
     block(scene, half * 2, high - 0.06, half * 2, x, top, z, M.granite);
-    block(scene, half * 2 + 0.08, 0.06, half * 2 + 0.08, x, top + high - 0.06, z, M.coping);
+    // (free stone, as the dais's edge: of a wall's coping, a house's part, a plinth's top was a ghost where it hid
+    // floor he saw and whole behind the hero on it, from play "these half colored pedestals")
+    block(scene, half * 2 + 0.08, 0.06, half * 2 + 0.08, x, top + high - 0.06, z, M.freeCoping);
     levels.paint(x - half, z - half, x + half, z + half, () => top + high);
     obstacles.push({ x, z, r: half * 1.2, h: top + high });
   }
@@ -1712,14 +1729,17 @@ function hallDais(scene: THREE.Object3D, backWall: THREE.Object3D, levels: Level
 
 /** The hall's door in the front wall's face at `face` (z): a frame of dressed stone round it, a lintel stone over it,
  *  and its two leaves of planks set back in it, iron-strapped, an iron ring on each. */
-function hallDoor(scene: THREE.Object3D, M: Mats, X: number, y0: number, face: number): void {
+function hallDoor(scene: THREE.Object3D, M: Mats, X: number, y0: number, face: number): THREE.Object3D[] {
   const { doorHalf: dh, doorHigh: high } = HALL, f = DOOR.frame;
-  for (const s of [-1, 1]) block(scene, f, high, 0.2, X + s * (dh + f / 2 - 0.02), y0, face + 0.08, M.coping);
-  block(scene, dh * 2 + f * 2 + 0.2, f, 0.24, X, y0 + high, face + 0.1, M.coping);
+  // (its frame and its leaves are what's handed back, the doorway: where the wall goes whole they stay, a ghost)
+  const leaves: THREE.Object3D[] = [];
+  for (const s of [-1, 1]) leaves.push(block(scene, f, high, 0.2, X + s * (dh + f / 2 - 0.02), y0, face + 0.08, M.coping));
+  leaves.push(block(scene, dh * 2 + f * 2 + 0.2, f, 0.24, X, y0 + high, face + 0.1, M.coping));
   // (each leaf hung on its side of the frame and swung in, open: the hall is walked into)
   for (const s of [-1, 1]) {
     const leaf = new THREE.Group();
-    leaf.position.set(X + s * dh, y0, face - DOOR.set);
+    leaves.push(leaf);
+    leaf.position.set(X + s * (dh - DOOR.clear), y0, face - DOOR.set);
     leaf.rotation.y = -s * DOOR.open;
     scene.add(leaf);
     const lx = -s * dh / 2;
@@ -1729,6 +1749,7 @@ function hallDoor(scene: THREE.Object3D, M: Mats, X: number, y0: number, face: n
     ring.position.set(-s * (dh - 0.22), 1.3, 0.1);
     leaf.add(ring);
   }
+  return leaves;
 }
 
 /** The hall's ceiling and roof over its walls, from `back` to `front` (z), its eaves at `eaves` (m): a planked
@@ -1756,7 +1777,9 @@ function hallRoof(scene: THREE.Object3D, M: Mats, eaves: number, back: number, f
     slab.position.y = eaves + ROOF.rise - Math.sin(slope) * down + Math.cos(slope) * ROOF.thick / 2;
     slab.rotation.z = -s * slope;
   }
-  block(roof, 0.4, 0.3, length, X, eaves + ROOF.rise + 0.02, mid, M.coping);
+  // (its ridge in the roof's own slate: of pale coping stone, its ghost over the room he stands in was a white bar
+  // down the middle of the floor and over him, the camera level with it, from play "where the vertical white bar end")
+  block(roof, 0.4, 0.3, length, X, eaves + ROOF.rise + 0.02, mid, M.roof);
   // the gables: a triangle of stone over each end's top, from eave to eave and up to the ridge
   const gable = new THREE.Shape();
   gable.moveTo(-half, 0);
@@ -2404,6 +2427,8 @@ function chimneySmoke(): Updater {
 /** The training yard: a fence of posts and rails round a field of trodden grass, a gate on its north side between two
  *  taller posts (from play, a fire on each read as "floating campfires"; their lights stay, of no strength). */
 function buildYard(parent: THREE.Object3D, wall: Wall, M: Mats): void {
+  // (its fence in the wood that stands free, no part of a house: a house's part, the rule that opens a house over
+  // ground he sees made a ghost of all of it, from play "why are you thinning the fence in the training area ?")
   // (laid out in its own frame: its gate side at -z, turned as the plan has it)
   const scene = new THREE.Group();
   scene.position.set(YARD.x, 0, YARD.z);
@@ -2423,11 +2448,11 @@ function buildYard(parent: THREE.Object3D, wall: Wall, M: Mats): void {
       const t = k / n, px = x0 + (x1 - x0) * t, pz = z0 + (z1 - z0) * t, place = `${px.toFixed(2)},${pz.toFixed(2)}`;
       if (posted.has(place)) continue;
       posted.add(place);
-      block(scene, 0.16, 1.25, 0.16, px, 0, pz, M.timber, 0.4);
+      block(scene, 0.16, 1.25, 0.16, px, 0, pz, M.freeTimber, 0.4);
     }
-    for (const y of [0.45, 0.95]) block(scene, len, 0.1, 0.08, mx, y, mz, M.planks, 0.4, turn);
+    for (const y of [0.45, 0.95]) block(scene, len, 0.1, 0.08, mx, y, mz, M.freePlanks, 0.4, turn);
     // (one slab the rails' height for bodies to be kept off: the rails as drawn have a man's gap under them)
-    const keep = block(scene, len, 1.1, 0.12, mx, 0, mz, M.planks, 0.4, turn);
+    const keep = block(scene, len, 1.1, 0.12, mx, 0, mz, M.freePlanks, 0.4, turn);
     keep.visible = false;
     wall.add(keep, false, 'wall', true);
   };
@@ -2440,7 +2465,7 @@ function buildYard(parent: THREE.Object3D, wall: Wall, M: Mats): void {
   side(w0, n1, w0, n0);
   for (const s of [-1, 1]) {
     const px = gateAt + s * gate;
-    block(scene, 0.26, YARD_GATE.up, 0.26, px, 0, n0, M.timber);
+    block(scene, 0.26, YARD_GATE.up, 0.26, px, 0, n0, M.freeTimber);
     const light = new THREE.PointLight(YARD_GATE.color, 0, YARD_GATE.distance, 2);
     light.position.set(px, YARD_GATE.up, n0);
     scene.add(light);

@@ -103,9 +103,40 @@ export const TUNE = tunable('rust', {
   /** whether what's thinned to nothing whole (a roof seen from over it, `SeeKinds.gone`) is left out of the
    *  frame's draws, kept for its shadow; off, drawn and every pixel of it dropped, as it was */
   goneWhole: 1,
-  /** whether a house's walls thin with its roof where they hide ground he sees (0: its roof alone does, and the
-   *  house's own far wall stands in the ground's place behind it) */
-  houseGhost: 1,
+  /** the houses' rule (Bulwark's `cover_kept`, its `lab houses`): from above, a house's wall, roof or gable is
+   *  dropped whole where it hides ground he sees, and stands whole everywhere else, by his sight alone, however
+   *  many of them lie along the line (0: each thinned by the game's own shares, as it was, a check's canary).
+   *  From play: "he needs to see the ground, so we thin"; "he only sees the ground he sees, so if the wall hides
+   *  anything extra, we dont thin it"; "we should thin enough regardless of how many walls between camera and
+   *  ground" */
+  houseRule: 1,
+  /** the share of a house's part left where the rule opens it, as a fine pattern of its pixels: near a third (at an
+   *  eighth its shape didn't read: the porch gone, its columns holding up nothing), the same
+   *  pixels of every part along a line, so three layers leave what one does. With none left the building was gone
+   *  from over ground he saw, from play: "the building geometry should not completely disappear, it should be
+   *  possible to tell what the original building looked like" */
+  houseLeft: 0.3125,
+  /** whether a wall of a room he sees into from outside opens over that room's floor alone, as from in it (0: by
+   *  the floor its terrace gives it, a check's canary: stood at the hall's door its side walls opened on the terrace
+   *  past them he saw out of their windows, from play "can see grass in top right corner") */
+  wallsSeenIn: 1,
+  /** the share of a column left where the rule opens it (a thing that stands as one, its foot always whole): more
+   *  than a roof's, as it is slim and hides little. Left a third, the portico's four seen along their row were
+   *  faint streaks over the paving, from play: "how many columns do you see ? I see one" */
+  columnLeft: 0.625,
+  /** whether a column that stands between the camera and him is a ghost from foot to top, all of it alike (0: by
+   *  its hole round him, a ball, a check's canary: its shaft cut through and its capital left in the air) */
+  columnsWhole: 1,
+  /** whether a door's leaves stay as a ghost where their wall is gone whole (0: gone with it, a check's canary:
+   *  nothing showed what kept him out of where they stand) */
+  leavesStay: 1,
+  /** whether what the rule leaves of a house's part is a smooth ghost, blended, the nearest of its layers alone
+   *  drawn (0: a fine pattern of its pixels dropped, drawn opaque; from play, "whats the deal with dots? we didn't
+   *  have them before... like perforated texture") */
+  houseSmooth: 1,
+  /** a harness's: every part of a house drawn whole, nothing of it thinned by the rule or by the game's shares
+   *  (`lab houserule`'s frame to set the played one against) */
+  housesWhole: 0,
   /** the hole that keeps the hero in sight under what hides him (0: none dropped) */
   see: 1,
   /** a counted draw (the meadow's blades) in the depth drawn first too: shaded once a pixel, placed twice (a

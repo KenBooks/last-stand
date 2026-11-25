@@ -44,6 +44,8 @@ export interface FlameShape {
   liteStrands: number;
   look: typeof FLAME_LOOK;
   tiles: { across: number; down: number };
+  /** the slot the frame held for a fire that stands still is kept in (fireBake.ts's `STILL`) */
+  stillSlot: number;
   cells: { nx: number; ny: number; nz: number };
   kept: typeof KEPT;
   keptSize: typeof KEPT_SIZE;
@@ -255,8 +257,8 @@ function marchFor(shape: FlameShape): N {
   }`));
   // the loop at one frame's tile (as fire.ts's `flameTile`)
   const tile = wgslFn(kept(`fn fireTile(q: vec3f, frame: f32, noise: texture_3d<f32>, noiseAt: sampler) -> f32 {
-    let row = floor(frame / ${f(shape.tiles.across)});
-    let at = vec2f(frame - row * ${f(shape.tiles.across)}, row - floor(row / ${f(shape.tiles.down)}) * ${f(shape.tiles.down)});
+    // (a frame of the loop in the slot of its parity; under 0 the one held for a fire that stands still)
+    let at = vec2f(select(frame - floor(frame / 2.0) * 2.0, ${f(shape.stillSlot)}, frame < 0.0), 0.0);
     let size = vec2f(${f(shape.keptSize.x)}, ${f(shape.keptSize.y)});
     let inBox = q.xy * vec2f(${f(shape.cells.nx)}, ${f(shape.cells.ny)}) - vec2f(${f(shape.kept.x[0])}, ${f(shape.kept.y[0])});
     let cell = (at * size + clamp(inBox, vec2f(0.5), size - 0.5)) / (size * vec2f(${f(shape.tiles.across)}, ${f(shape.tiles.down)}));
@@ -275,7 +277,7 @@ function marchFor(shape: FlameShape): N {
     let next = first + 1.0 - floor((first + 1.0) / ${f(shape.frames)}) * ${f(shape.frames)};
     if (lite > 0.5) {
       let nearest = floor(frame + 0.5) - floor(floor(frame + 0.5) / ${f(shape.frames)}) * ${f(shape.frames)};
-      let alone = fireTile(q, nearest, noise, noiseAt);
+      let alone = fireTile(q, select(nearest, frame, frame < 0.0), noise, noiseAt);
       if (alone <= 0.004) {
         return 0.0;
       }

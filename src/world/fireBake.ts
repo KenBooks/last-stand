@@ -14,9 +14,14 @@ export const LOOP = { frames: 60, stepsEach: 2, faded: 20 };
 export const KEPT = { x: [5, 50], y: [0, 103], z: [7, 53] } as const;
 /** the kept box's size in cells */
 export const KEPT_SIZE = { x: KEPT.x[1] - KEPT.x[0], y: KEPT.y[1] - KEPT.y[0], z: KEPT.z[1] - KEPT.z[0] };
-/** the flames' texture's slots, side by side: the two frames a fire draws now (frame f in slot f mod 2), each its kept
- *  box, its z the texture's depth */
-export const TILES = { across: 2, down: 1 };
+/** the flames' texture's slots, side by side: the two frames a fire draws now (frame f in slot f mod 2) and one held
+ *  for a fire that stands still (`STILL`), each its kept box, its z the texture's depth */
+export const TILES = { across: 3, down: 1 };
+/** a fire that stands still, in the fog of what he can't see: the frame of the loop it's held at, the slot that
+ *  frame is kept in, and what its `uFrame` reads then (under 0: no frame of the loop). The burning fires share one
+ *  moment of the loop in two slots that move on with it, so a fire only left at the frame it had burned on with
+ *  them, from play "why is fire still burning in fog of war", "supposed to be frozen flame in fog of war" */
+export const STILL = { frame: 24, slot: 2, reads: -1 };
 /** the grid's size in the fire it's made for (m): half of it across, and its height; and how high its flames stand */
 export const DOMAIN = { half: 0.667, high: 2.4, flames: 1.4, bed: 0.5 };
 
@@ -505,7 +510,7 @@ export function decodeFrame(baked: BakedFlames, frame: number, out: Uint8Array):
  *  `npm run fire-bake` and `lab:test` hold it to them. */
 export const BUDGET_KB = { kept: 1200, gpu: 640 };
 
-/** The loop's sizes (KB): kept, and its two slots on the GPU. */
+/** The loop's sizes (KB): kept, and its slots on the GPU. */
 export function loopSizesKb(baked: BakedFlames): { kept: number; gpu: number } {
   return {
     kept: (baked.data.length + baked.starts.byteLength) / 1024,
