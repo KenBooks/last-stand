@@ -25,9 +25,13 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
 
 <!-- sorted -->
 - `gpuScripts.mjs`: the page scripts that watch the page's WebGPU devices, each serialized into the page (`PAGE_SCRIPTS`):
-  `shaderCodes` keeps each shader module's code for `programs --cost` (the game keeps none), `gpuUse` the most of each
+  `shaderCodes` keeps each shader module's code for `programs --cost` (the game keeps none), and every module made with
+  the constants each pipeline gave it for `naga`, `gpuUse` the most of each
   limit the devices have used for `programs --limits` (the engine asks its adapter's own limits, so nothing refuses
   past the defaults here). They key an A/B's kept side too (`labCodeOf` adds what `PAGE_SCRIPTS` reaches).
+- `nagaCheck.mjs`: `naga`'s checker (`tools/lab/naga`, Rust) is built by cargo as the command runs, into
+  `out/naga/target`: 36 s the first time, a cargo check of a few hundred ms after. A PC with no cargo is told so, never
+  passed.
 - `side.mjs`: an exported tree's page (an A/B's other side) counts as booted only from the lab's page code as it is
   now (`pageStamp`, `isBooted`): it's copied into that tree as its page boots (`copyLabPage`), and a page `lab:serve`
   booted ahead before a measure was written ran it from the copy before (`lab seals --ab` threw on main's side

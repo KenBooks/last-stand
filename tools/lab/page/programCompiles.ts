@@ -27,7 +27,7 @@ interface Descriptor { vertex?: Stage; fragment?: Stage }
 const HOOKED = /^lit(?: with hooks|, looks joined) (\d+)$/;
 
 /** A module's label with the game's name for its shader, where it has one (a look's, an effect's). */
-function moduleName(label: string, names: ReadonlyMap<number, string>): string {
+export function moduleName(label: string, names: ReadonlyMap<number, string>): string {
   const id = HOOKED.exec(label)?.[1];
   const name = id === undefined ? undefined : names.get(Number(id));
   return name ? `${label} (${name})` : label;
