@@ -82,6 +82,10 @@ const COLUMN_IN = { radius: 0.32 };
 const WINDOWS = { sill: 2.6, high: 2.4, wide: 1.1 };
 /** how far a window's sill stands over the wall's course it lies on (m) */
 const SILL_PROUD = 0.015;
+/** how far a window's sill juts out of the wall (m), and into the room: flush, as the window's lining, under what the
+ *  engine's house rule takes for hung in the room (5 cm) */
+const SILL_LIP = 0.15;
+const SILL_IN = 0.01;
 /** the lights on the heroes on the dais: how high over it, how far before their plinths (m) */
 const DAIS_LIGHT = { up: 3.0, ahead: 2.2 };
 /** the hall's door: its stone frame's width, how far its leaves are set back in the wall, its iron straps' heights */
@@ -1409,8 +1413,13 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
     // greyed as the wall came back, from play, "this border should have no shading at all... its not hiding anything")
     wall.add(block(scene, 0.35, 0.45, sideLen, sideX + s * 0.47, y0, back + sideLen / 2, M.coping), true, 'wall', true);
     // (its top a little over the wall's course under it: at one height, the two flickered from above, "probably z fighting")
+    // (its lip outside alone, flush with the room's face as the window's lining is: 15 cm into the room, the engine's
+    // house rule took it for a thing hung in the room, and from above the wall opened round it, the sills left in the
+    // air, from play "when thinning the wall, window sills left behind"; `lab village --only hallWallsFlush`)
+    const sillDeep = thick + SILL_LIP + SILL_IN;
+    const sillX = sideX + s * (SILL_LIP - SILL_IN) / 2;
     for (const z of windowsAlong()) {
-      block(sideWall, thick + 0.3, 0.1, WINDOWS.wide + 0.3, sideX, y0 + WINDOWS.sill - 0.1 + SILL_PROUD, z, M.coping);
+      block(sideWall, sillDeep, 0.1, WINDOWS.wide + 0.3, sillX, y0 + WINDOWS.sill - 0.1 + SILL_PROUD, z, M.coping);
     }
   }
   placeShelterOpenings([WINDOWS.wide / 2, WINDOWS.high / 2], windows);

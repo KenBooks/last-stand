@@ -78,6 +78,7 @@ import { objectsUsedAgain } from './villageUseAgain';
 import { hallWallsHold } from './villageHallSide';
 import { candleLightsNear, chestOpensNear } from './villageChestLid';
 import { wallingAligned } from './villageWalling';
+import { hallWallsFlush } from './villageWallsFlush';
 import { windowsLetSunIn } from './villageWindows';
 import { windowsLightTheHall } from './villageWindowLight';
 import { grassRingsGentle, grassRingsUnseen } from './villageGrassRing';
@@ -268,6 +269,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     daisOpensCompileNothing: () => daisOpensCompileNothing(lab, options.canary),
     arrowsStickInGround: () => arrowsStickInGround(lab, options.canary),
     wallingAligned: () => wallingAligned(options.canary),
+    hallWallsFlush: () => hallWallsFlush(options.canary),
     windowsLetSunIn: () => windowsLetSunIn(lab, options.canary),
     windowsLightTheHall: () => windowsLightTheHall(lab, options.canary),
     propHoleWhereHidden: () => propHoleWhereHidden(lab, options.canary),

@@ -106,6 +106,7 @@ export const VILLAGE_COSTS: Readonly<Record<string, number>> = {
   daisOpensCompileNothing: 3,
   arrowsStickInGround: 1,
   wallingAligned: 1,
+  hallWallsFlush: 1,
   windowsLetSunIn: 1,
   windowsLightTheHall: 3,
   propHoleWhereHidden: 1,
