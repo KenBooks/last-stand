@@ -51,6 +51,7 @@ export class ClothAndBroom {
   private spun = 0;
   private frame = 0;
   private ragWas: THREE.Quaternion | null = null;
+  private heldBefore = '';
   private handWas: THREE.Quaternion | null = null;
   private inHandWas: THREE.Quaternion | null = null;
   private readonly ray = new THREE.Raycaster();
@@ -87,6 +88,9 @@ export class ClothAndBroom {
   private readRag(keeper: Keeper, doing: string): void {
     const rag = keeper.rag;
     const inHand = rag.visible && rag.parent === keeper.joints.handR;
+    // (where it was the frame before, said with its worst turn: what moved it)
+    const before = this.heldBefore;
+    this.heldBefore = `${rag.parent?.name || rag.parent?.type || '-'}${rag.visible ? '' : ' (hidden)'}${keeper.ragTucked ? ' (tucked)' : ''}`;
     if (!inHand) {
       this.ragWas = null;
       return;
@@ -99,7 +103,7 @@ export class ClothAndBroom {
     if (this.ragWas && this.handWas && this.inHandWas) {
       const turned = this.ragWas.angleTo(now), handTurned = this.handWas.angleTo(hand), inTurned = this.inHandWas.angleTo(inIt);
       const deg = (a: number) => (a * 180 / Math.PI).toFixed(0);
-      this.turn.see(turned, () => `${deg(turned)}° in a frame (his hand ${deg(handTurned)}°, the rag in it ${deg(inTurned)}°), ${doing}`);
+      this.turn.see(turned, () => `${deg(turned)}° in a frame (his hand ${deg(handTurned)}°, the rag in it ${deg(inTurned)}°; the frame before in ${before}), ${doing}`);
     }
     this.ragWas = now;
     this.handWas = hand;

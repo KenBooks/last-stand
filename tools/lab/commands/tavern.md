@@ -85,3 +85,26 @@ The mug put back on the bar as the hero leaves the tavern is forgotten by the wa
 `--looks` adds his bent elbow as he wipes the small table and the tub as he washes, each as the player sees it from
 above and over the shoulder, and the tub close, him and the hero hidden. Still flaky: his feet at a walk's end
 (crossed by up to 10 cm, ankles under 10 cm apart, a different walk each run).
+
+**Round 5** (`page/keeperRound5.ts`, `page/tubSeen.ts`). Every frame: sweeping, his hands at least 33 cm apart along
+the handle at the median and never under 20, the handle at least 20 degrees from upright and across him (his top hand
+and its head 15 cm apart across him), past the hands' blend between holds (0.7 s); carried, the handle within 25
+degrees of upright, his other hand 10 cm off it, never the sweep's hold before his first stroke (the old way); his
+rag spread on a top only with his grip down on it (within 8 cm across and 6 cm over its middle) and never in his fist
+at the same time; wiping the cask, his free hand never over his hips; waiting at the bar, his rag spread under his
+palm at least 60% of the frames. His body against the tables as their tops are drawn (`world/tavernTables.ts`: a round
+top a drum, the long one a box), his thighs against each top's slab: the tables were squares of their `reach` round
+their middles, and he stood in the long table from the hips down unread. Then fixtures: the tub's water from above,
+at least 1.6 times as bright as the wood round it and its suds 5% of it; a mug left at the sides of every table,
+collected with his middle at least 15 cm past the top's edge all the while; a hero putting his mug down (F) by every
+table's sides and the bar, on the nearest top, its edge on his side, a hand's width in; E with a mug in hand and the
+pointer on a bar stool (he sits, nothing drunk), and sat with the pointer off the seats (he drinks), never two E
+prompts in a frame (from above alone: over the shoulder and through the eyes the crosshair is, which the lab doesn't
+turn); his day with a hero stood in each of his narrow ways (the bar's end both sides, between the tables, by the door,
+on each bar stool's spot) and his tasks broken into at seeded random frames, the longest he got no nearer along his way
+on a walk under 3 s, and never put back at his stand. `--canary` adds a plant for each, set for its own part alone:
+the old sweep, the old carry, the rag spread before his hand was down, his free hand on the cask, his rag bunched at
+the bar, a mug collected from inside the table, the mug put back on the counter, E both sat him and drank, the tub's
+water dark, and a wall across his way in behind the bar, which must read as stuck and put him back at his stand once
+(his watch's last resort: `KEEPER_STUCK`). `--looks --round5` pictures round 5's moments alone as the player sees them
+(from above, over the shoulder, and close in the room's light); with `--canary` too, as they were before it.

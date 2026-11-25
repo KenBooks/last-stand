@@ -21,16 +21,18 @@ export const INTO_MOST = 0.02;
 const ON_SURFACE = 0.025, IN_HAND = 0.13;
 
 /** A box his body may not go into: its footprint (room m) and its top. */
-interface Solid { name: string; x0: number; x1: number; z0: number; z1: number; top: number }
+interface Solid { name: string; x0: number; x1: number; z0: number; z1: number; top: number; r?: number; table?: boolean; bottom?: number }
 
-/** the bar, the back counter and the tables, as solids from the floor to their tops (a table's top a square round its
- *  middle) */
+/** the bar, the back counter and the tables, as solids from the floor to their tops, each table its top as drawn (a
+ *  round one a drum, the long one a box: a square of its `reach` round its middle, the long table's 0.76 m in a top
+ *  2.2 m long, he stood in its top from the hips down and nothing read it, Kenneth's round 5) */
 const SOLIDS: readonly Solid[] = [
   { name: 'the bar', x0: BAR.x - BAR.half, x1: BAR.x + BAR.half, z0: BAR.from, z1: BAR.to, top: BAR.top },
   { name: 'the back counter', x0: BACK.front, x1: BACK.wall, z0: BACK.from, z1: BACK.to, top: BACK.top },
-  ...Object.entries(TABLES).map(([name, t]) => ({
-    name: `the ${name}`, x0: t.x - t.reach, x1: t.x + t.reach, z0: t.z - t.reach, z1: t.z + t.reach, top: t.top,
-  })),
+  ...Object.entries(TABLES).map(([name, t]): Solid => {
+    const hx = 'hx' in t ? t.hx : t.r, hz = 'hz' in t ? t.hz : t.r;
+    return { name: `the ${name}`, x0: t.x - hx, x1: t.x + hx, z0: t.z - hz, z1: t.z + hz, top: t.top, table: true, ...('r' in t ? { r: t.r } : {}) };
+  }),
 ];
 
 /** a part of his body as a ball round a joint (m): his trunk, his head and his elbows */
@@ -38,16 +40,39 @@ const PARTS: readonly { joint: 'hips' | 'spine' | 'chest' | 'neck' | 'head' | 'e
   { joint: 'hips', r: 0.12 }, { joint: 'spine', r: 0.11 }, { joint: 'chest', r: 0.12 }, { joint: 'neck', r: 0.06 },
   { joint: 'head', r: 0.1 }, { joint: 'elbowL', r: 0.045 }, { joint: 'elbowR', r: 0.045 },
 ];
+/** a table's top as a slab his thighs meet, its thickness (m), and a thigh's ball's radius there (m): his knees go
+ *  under a top as a man's do, his thighs never through it (he stood in the long table from the hips down, Kenneth's
+ *  round 5, and his trunk alone was read) */
+const TOP_SLAB = 0.06, THIGH_R = 0.08;
 
 /** How far a ball of radius `r` at `c` goes into `solid` (m, 0 clear of it). */
 export function depthInto(c: THREE.Vector3, r: number, solid: Solid): number {
+  if (solid.r !== undefined) return depthIntoDrum(c, r, solid);
+  const bottom = solid.bottom ?? 0;
   const nx = Math.min(Math.max(c.x, solid.x0), solid.x1);
-  const ny = Math.min(Math.max(c.y, 0), solid.top);
+  const ny = Math.min(Math.max(c.y, bottom), solid.top);
   const nz = Math.min(Math.max(c.z, solid.z0), solid.z1);
   const inside = nx === c.x && ny === c.y && nz === c.z;
   if (!inside) return Math.max(0, r - Math.hypot(c.x - nx, c.y - ny, c.z - nz));
-  const out = Math.min(c.x - solid.x0, solid.x1 - c.x, c.z - solid.z0, solid.z1 - c.z, solid.top - c.y);
+  const out = Math.min(c.x - solid.x0, solid.x1 - c.x, c.z - solid.z0, solid.z1 - c.z, solid.top - c.y, c.y - bottom);
   return r + out;
+}
+
+/** How far a ball at `c` of radius `r` goes into a round solid (a drum from the floor to its top). */
+function depthIntoDrum(c: THREE.Vector3, r: number, solid: Solid): number {
+  const mx = (solid.x0 + solid.x1) / 2, mz = (solid.z0 + solid.z1) / 2, across = Math.hypot(c.x - mx, c.z - mz);
+  const bottom = solid.bottom ?? 0;
+  const outward = across - solid.r!, upward = c.y - solid.top, downward = bottom - c.y;
+  if (outward <= 0 && upward <= 0 && downward <= 0) return r + Math.min(-outward, -upward, -downward);
+  return Math.max(0, r - Math.hypot(Math.max(outward, 0), Math.max(upward, downward, 0)));
+}
+
+/** whether `mesh` hangs from one of his hands (a mug taken up at his arm's length: his grip's point further off) */
+function inHandOf(mesh: THREE.Object3D, keeper: Keeper): boolean {
+  for (let o: THREE.Object3D | null = mesh.parent; o; o = o.parent) {
+    if (o === keeper.joints.handL || o === keeper.joints.handR) return true;
+  }
+  return false;
 }
 
 /** The worst of something seen, and where. */
@@ -158,6 +183,18 @@ export class BodyClear {
         this.into.see(depthInto(this.at, part.r, solid), where);
       }
     }
+    // (each thigh at its middle against the tables' tops)
+    for (const [thigh, knee] of [[keeper.joints.thighL, keeper.joints.kneeL], [keeper.joints.thighR, keeper.joints.kneeR]] as const) {
+      room.worldToLocal(thigh.getWorldPosition(this.at));
+      const k = room.worldToLocal(knee.getWorldPosition(new THREE.Vector3()));
+      this.at.lerp(k, 0.5);
+      for (const solid of SOLIDS) {
+        if (!solid.table) continue;
+        const slab = { ...solid, bottom: solid.top - TOP_SLAB };
+        const where = () => `his thigh into ${solid.name}'s top at ${xyz(this.at)}, his root at ${xyz(room.worldToLocal(keeper.root.getWorldPosition(new THREE.Vector3())))}, ${doing}`;
+        this.into.see(depthInto(this.at, THIGH_R, slab), where);
+      }
+    }
   }
 
   problems(): string[] {
@@ -182,9 +219,9 @@ export class MugsHeld {
     const room = keeper.root.parent!;
     keeper.hands(this.hands);
     for (const m of tv.mugs.mugs) {
-      if (m.place.at === 'hero') continue;
+      if (m.place.at === 'hero' || tv.settles(m.id)) continue;
       const world = tv.mugAt(m.id);
-      const held = this.hands.some((hand) => hand.distanceTo(world) < IN_HAND);
+      const held = this.hands.some((hand) => hand.distanceTo(world) < IN_HAND) || inHandOf(tv.mugMesh(m.id), keeper);
       const at = room.worldToLocal(world.clone()), foot = at.y - MUG.foot;
       const onTop = SOLIDS.some((s) => Math.abs(foot - s.top) < ON_SURFACE
         && at.x > s.x0 - 0.02 && at.x < s.x1 + 0.02 && at.z > s.z0 - 0.02 && at.z < s.z1 + 0.02);

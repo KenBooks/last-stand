@@ -1293,7 +1293,9 @@ export class Player {
     const look = lookFacing();
     // (between one attack or cast and the next, the body stays on its aim a moment rather than wheeling round to the way it
     // goes and back: held attacks while backing off or moving sideways would swing the body half round at every blow)
-    const fighting = (this.casting && !this.casting.skill.def.freeMove) || this.channel;
+    // (the tavern's ale isn't fighting: held on his aim through it, he was never free to sit with a mug in hand, and E
+    // on a stool did nothing, Kenneth's round 5)
+    const fighting = (this.casting && !this.casting.skill.def.freeMove && !this.casting.skill.def.ale) || this.channel;
     this.aimHold = fighting ? AIM_HOLD : Math.max(0, this.aimHold - dt);
     this.facesWay = false;
     // (sat, or going down or up: the sit turns him)

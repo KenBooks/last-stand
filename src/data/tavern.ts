@@ -68,6 +68,8 @@ export const POKER_AT = { x: 1.45, z: -3.45 } as const;
 export const TABLES = {
   smallTable: { x: 0.3, z: -0.2, top: 0.76, reach: 0.32, r: 0.45 },
   longTable: { x: -3.8, z: 1.4, top: 0.76, reach: 0.38, hx: 0.45, hz: 1.1 },
+  // (the party's round table by the hearth, its map on it: a mug is set down on it and he collects it from there)
+  partyTable: { x: -3.2, z: -1.6, top: 0.76, reach: 0.6, r: 0.75 },
 } as const;
 /** the floor he sweeps in front of the bar: the way his broom goes (m), out and back */
 export const SWEEP: readonly [number, number][] = [[2.7, 1.6], [2.7, -1.4], [2.1, -2.3], [1.5, -1.0], [1.6, 1.6]];

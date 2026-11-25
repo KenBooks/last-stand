@@ -23,6 +23,8 @@ export class TavernNav {
   private readonly nz: number;
   /** each cell's clearance from what blocks it (m; 0 blocked) */
   private readonly clear: Float32Array;
+  /** the others about he keeps off while a way round them is planned (`pathAround`) */
+  private others: readonly { x: number; z: number; r: number }[] = [];
 
   constructor(private readonly half: Point, private readonly circles: readonly Obstacle[], private readonly boxes: readonly NavBox[]) {
     this.nx = Math.round((half[0] * 2) / CELL);
@@ -47,9 +49,15 @@ export class TavernNav {
     return least;
   }
 
-  /** Whether he fits at (x, z). */
+  /** Whether he fits at (x, z) (and, while a way round them is planned, clear of the others about: `pathAround`). */
   free(x: number, z: number): boolean {
-    return this.room(x, z) > 0;
+    return this.room(x, z) > 0 && !this.byOthers(x, z);
+  }
+
+  /** whether (x, z) is within his body of one of the others about (`pathAround`) */
+  private byOthers(x: number, z: number): boolean {
+    for (const o of this.others) if (Math.hypot(x - o.x, z - o.z) < o.r + BODY_R) return true;
+    return false;
   }
 
   /** The way from `from` to `to`: the points he walks through after `from`, `to` the last (moved to the nearest place
@@ -68,6 +76,20 @@ export class TavernNav {
     if (this.free(to[0], to[1])) points[points.length - 1] = to;
     const way = this.pulled(points);
     return startsFree ? way.slice(1) : way;
+  }
+
+  /** `path`, keeping off `others` too (circles of their own size, his body's grown on them: the heroes about the room,
+   *  where they stand now); the way past them none where they close every way, the way through them then. */
+  pathAround(from: Point, to: Point, others: readonly { x: number; z: number; r: number }[]): Point[] {
+    if (!others.length) return this.path(from, to);
+    this.others = others;
+    try {
+      const way = this.path(from, to);
+      if (way.length) return way;
+    } finally {
+      this.others = [];
+    }
+    return this.path(from, to);
   }
 
   /** whether the straight line a to b keeps him clear all along it */
@@ -93,7 +115,8 @@ export class TavernNav {
 
   /** the free cell nearest `cell` (itself if free), by rings outward; -1 if none within a metre */
   private nearestFree(cell: number): number {
-    if (this.clear[cell] > 0) return cell;
+    const fits = (c: number) => this.clear[c] > 0 && !(this.others.length && this.byOthers(...this.centre(c % this.nx, Math.floor(c / this.nx))));
+    if (fits(cell)) return cell;
     const cx = cell % this.nx, cz = Math.floor(cell / this.nx);
     for (let ring = 1; ring <= 10; ring++) {
       let best = -1, bestD = Infinity;
@@ -103,7 +126,7 @@ export class TavernNav {
           const ix = cx + dx, iz = cz + dz;
           if (ix < 0 || iz < 0 || ix >= this.nx || iz >= this.nz) continue;
           const c = iz * this.nx + ix, d = dx * dx + dz * dz;
-          if (this.clear[c] > 0 && d < bestD) { best = c; bestD = d; }
+          if (fits(c) && d < bestD) { best = c; bestD = d; }
         }
       }
       if (best >= 0) return best;
@@ -131,6 +154,7 @@ export class TavernNav {
         if (ix < 0 || iz < 0 || ix >= this.nx || iz >= this.nz) continue;
         const next = iz * this.nx + ix;
         if (closed[next] || this.clear[next] <= 0) continue;
+        if (this.others.length && this.byOthers(...this.centre(ix, iz))) continue;
         // (a diagonal only where both cells it passes between are free: never across a corner)
         if (dx && dz && (this.clear[cz * this.nx + ix] <= 0 || this.clear[iz * this.nx + cx] <= 0)) continue;
         const near = 1 + (NEAR.cost - 1) * Math.max(0, 1 - this.clear[next] / NEAR.within);

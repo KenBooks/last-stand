@@ -18,10 +18,15 @@ export default {
   options: {
     canary: { kind: 'switch', help: 'the ale made a cast he may walk through, which must be caught' },
     looks: { kind: 'switch', help: 'the keeper pictured from the angles of Kenneth\'s round 3 alone (page/keeperLooks.ts)' },
+    round5: {
+      kind: 'switch',
+      help: 'with --looks: round 5\'s moments alone as the player sees them; with --canary too, as they were before it',
+    },
     ...COMMON_OPTIONS,
   },
   each(side, options) {
-    return side.command('tavern', { canary: Boolean(options.canary), looks: Boolean(options.looks) });
+    const { canary, looks, round5 } = options;
+    return side.command('tavern', { canary: Boolean(canary), looks: Boolean(looks), round5: Boolean(round5) });
   },
   // (its moments written: the keeper's tasks, the talk, the steps of a mug's round, the drink and its first person)
   finish(results, options, session) {

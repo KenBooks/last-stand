@@ -698,12 +698,6 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
     for (const [i, h] of [handL, handR].entries()) easeWrist(h, i, dt);
     // (his rag's turn in his hand eased from the last frame's, never more than `RAG_TURN_MOST` a frame: from the free
     // hand's hold to the wipe's and back it was set at once, a half turn in a frame, `lab tavern`)
-    if (rag.parent === j.handR && ragSeen) {
-      const turned = ragWas.angleTo(rag.quaternion), most = RAG_TURN_MOST * Math.min(1, dt * 60);
-      if (turned > most) rag.quaternion.copy(ragWas.slerp(rag.quaternion, most / turned));
-    }
-    ragSeen = rag.parent === j.handR;
-    ragWas.copy(rag.quaternion);
     // (a thing just taken up eased from where it stood into the fist closing round it, before what each hand holds is
     // stood along its way (laid to the floor from its place eased, it went into the floor as it eased after), after all
     // that moves the hand: seated at once, it jumped the fist's 13 cm off its handle in a frame, `lab tavern`)
@@ -744,6 +738,15 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
         down = clamp(down + low / reach, 0.05, 1);
       }
     }
+    // (his rag's turn in his hand eased from the last frame's, never more than `RAG_TURN_MOST` a frame: from the free
+    // hand's hold to the wipe's and back it was set at once, a half turn in a frame, `lab tavern`; capped after all that
+    // turns it, a rag fetched from his apron and stood in his fist turned 99 degrees in a frame, round 5)
+    if (rag.parent === j.handR && ragSeen) {
+      const turned = ragWas.angleTo(rag.quaternion), most = RAG_TURN_MOST * Math.min(1, dt * 60);
+      if (turned > most) rag.quaternion.copy(ragWas.slerp(rag.quaternion, most / turned));
+    }
+    ragSeen = rag.parent === j.handR;
+    ragWas.copy(rag.quaternion);
     // (everything he holds placed where his hands are now: the leg IK's working leaves world matrices of its own, and
     // read after it his hands stood 13 m under the floor with the mug in them, `lab tavern`)
     j.root.updateMatrixWorld(true);

@@ -9,6 +9,9 @@ import { G } from '../../../state';
 import { screen } from '../../screenKit';
 
 let box: HTMLElement | null = null, shown = false, fortified: HTMLElement | null = null, toldWaiting = false;
+/** each button's offer as last shown (E drinks, F puts it down): a button not on offer is greyed, its key hidden, so
+ *  the screen never shows a second E beside a seat's or a villager's */
+let drinkOn = true, downOn = true;
 
 screen({
   init() {
@@ -34,7 +37,16 @@ screen({
       toldWaiting = waiting;
       fortified.classList.toggle('hidden', !waiting);
     }
-    if (!box || shown === drinkChoice.shown) return;
+    if (!box) return;
+    if (drinkOn !== drinkChoice.eDrinks) {
+      drinkOn = drinkChoice.eDrinks;
+      box.querySelector('[data-pick="drink"]')?.classList.toggle('off', !drinkOn);
+    }
+    if (downOn !== drinkChoice.downable) {
+      downOn = drinkChoice.downable;
+      box.querySelector('[data-pick="down"]')?.classList.toggle('off', !downOn);
+    }
+    if (shown === drinkChoice.shown) return;
     shown = drinkChoice.shown;
     box.classList.toggle('hidden', !shown);
   },

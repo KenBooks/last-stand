@@ -11,6 +11,7 @@ import {
 } from '../rooms';
 import { lengthSeat } from '../seats';
 import { keeperTalk, tavernKeeper } from '../tavernKeeper';
+import { TOP_THINGS } from '../tavernTables';
 import { BAR_STOOL_HIGH, BAR_STOOL_RUNG, BAR_STOOL_X, BAR_STOOLS } from '../../data/tavern';
 
 /** Two axes crossed behind a round shield on a wall (its frame, facing +z), centred at (x, y). */
@@ -173,6 +174,9 @@ export function build(group: THREE.Group): Room {
   candle(g, M, px + 0.45, 0.76, pz - 0.3, 0.18, CANDLE);
   tankard(g, M, px - 0.5, 0.76, pz + 0.2);
   tankard(g, M, px - 0.2, 0.76, pz - 0.5, true);
+  // (what stands on the tables, kept off by a mug a hero puts down: world/tavernTables.ts)
+  TOP_THINGS.length = 0;
+  TOP_THINGS.push({ x: px + 0.45, z: pz - 0.3 }, { x: px - 0.5, z: pz + 0.2 }, { x: px - 0.2, z: pz - 0.5 });
   // --- a long table with benches, west by the front ---
   const [lx, lz] = [-hx + 1.6, 1.4];
   inn(lx, lz, 0.9, 2.2);
@@ -184,6 +188,7 @@ export function build(group: THREE.Group): Room {
   }
   candle(g, M, lx, 0.76, lz - 0.2, 0.2, CANDLE);
   for (const [dx, dz] of [[-0.25, 0.6], [0.2, -0.7], [0.25, 0.3]]) tankard(g, M, lx + dx, 0.76, lz + dz, dz < 0);
+  TOP_THINGS.push({ x: lx, z: lz - 0.2 }, ...[[-0.25, 0.6], [0.2, -0.7], [0.25, 0.3]].map(([dx, dz]) => ({ x: lx + dx, z: lz + dz })));
   // --- a small table in the middle ---
   inn(0.3, -0.2, 0.9, 0.9, true);
   for (const a of [0.6, 2.2, 3.9]) {
@@ -191,6 +196,7 @@ export function build(group: THREE.Group): Room {
     b.seats.push(stoolSeatOf(stool(g, T, sx, sz), sx, sz));
   }
   candle(g, M, 0.3, 0.76, -0.2, 0.16, CANDLE);
+  TOP_THINGS.push({ x: 0.3, z: -0.2 });
   // --- barrels by the door, the party board beside it ---
   barrel(g, M, -hx + 0.5, 0, hz - 0.5);
   barrel(g, M, -hx + 1.15, 0, hz - 0.45);

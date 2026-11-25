@@ -42,6 +42,10 @@ import { drawsSaid, PoseTimes } from './keeperCost';
 import { aleBoost, ALE_STACKS } from '../../../src/game/aleBoost';
 import { throughTheEyes } from './tavernEyes';
 import { keeperLooks } from './keeperLooks';
+import { caskWiped, ePriority, putDowns, Round5Watch, stuckRuns, tablePickups } from './keeperRound5';
+import { tubSeen } from './tubSeen';
+import { KEEPER_TAKE, KEEPER_WAYS5 } from '../../../src/world/tavernKeeper';
+import { tavernLink } from '../../../src/net/tavernLink';
 import { solePoints } from './soles';
 import { talkAnswerable } from '../../../src/ui/screens/talk/talk';
 import { footShape, type FootShape } from '../../../src/entities/models/ik';
@@ -50,6 +54,8 @@ import { footShape, type FootShape } from '../../../src/entities/models/ik';
 export interface TavernOptions {
   canary: boolean;
   looks?: boolean;
+  /** with `looks`: round 5's moments alone, as the player sees them (with `canary`, as they were before it) */
+  round5?: boolean;
 }
 
 /** the frames a stand or a press settles for */
@@ -179,6 +185,7 @@ class Watch {
   readonly gait = new GaitWatch();
   readonly shirt = new ShirtSeams();
   readonly cloth = new ClothAndBroom();
+  readonly round5 = new Round5Watch();
 
   constructor(private readonly tv: TavernKeeper) {}
 
@@ -224,6 +231,7 @@ class Watch {
     this.gait.read(this.tv, keeper, G.arena.rooms!.tavern.seats, now);
     this.shirt.read(keeper, now);
     this.cloth.read(keeper, keeper.root.parent!, this.tv.doing().step, now, this.tv.doing().broom);
+    this.round5.read(this.tv, keeper, keeper.root.parent!, now);
     const planted = keeper.feet(this.feet);
     this.shapes ??= keeper.ankles.map((ankle) => footShape(ankle, keeper.root));
     for (let i = 0; i < 2; i++) {
@@ -273,6 +281,16 @@ const CANARIES: readonly [string, string][] = [
   ['his rag spun in his hand', 'spun in his hand'], ['no mug taken by standing close', 'by E standing close'],
   ['no mug taken by a click', 'taken by a click'], ['the mug kept past the door', 'lost at the door'],
   ['his drinking hand rested sat', 'sat on a bar stool, the rim stood'],
+  ['his broom swept with his fists together', 'swept with his hands together'],
+  ['his broom carried in the sweep\'s hold', 'in the sweep\'s hold before his first stroke'],
+  ['his rag spread before his hand was down', 'lay spread with his hand not on it'],
+  ['his free hand on the cask', 'free hand was held up as he wiped the cask'],
+  ['his rag bunched in his fist at the bar', 'rag wasn\'t seen spread as he waited'],
+  ['a mug collected stood in the table', 'top collecting a mug'],
+  ['the mug put down back on the counter', 'it went on the bar'],
+  ['E both sat him and drank', 'drank his ale too'],
+  ['the tub\'s water dark', 'water reads dark from above'],
+  ['a wall across his way in', 'he was stuck'], ['a wall across his way in, his last resort', 'put back at his stand'],
 ];
 /** each of the canary's plants set (`on`) or taken away */
 function plant(on: boolean): void {
@@ -285,6 +303,11 @@ function plant(on: boolean): void {
   KEEPER_WIPES.offTop = on;
   KEEPER_WIPES.broomDip = on;
   SIT_FREE.drink = !on;
+  KEEPER_WAYS5.sweepTogether = on;
+  KEEPER_WAYS5.carrySweeping = on;
+  KEEPER_WAYS5.padEarly = on;
+  KEEPER_WAYS5.caskSteady = on;
+  KEEPER_WAYS5.attendBunched = on;
 }
 
 export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> {
@@ -298,7 +321,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
   const room = G.arena.rooms!.tavern, tv = room.tavern?.(), keeper = tv?.keeper();
   if (!tv || !keeper) return { text: 'no keeper', problems: ['the tavern has no keeper seated'], moments };
   if (options.looks) {
-    const looks = await keeperLooks(lab, tv, keeper);
+    const looks = await keeperLooks(lab, tv, keeper, !!options.round5, !!options.canary);
     return { text: `looks: ${looks.moments.length} pictured`, problems: looks.problems, moments: looks.moments };
   }
   const before = programs();
@@ -721,6 +744,46 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
   moments.push(...await throughTheEyes(lab, { frames, drinkShare, serve: () => room.serveAle?.(G.player), take: takeAndDrink, tv, keeper: him }, lines, problems));
   watch.forget();
 
+  // --- round 5: the tub's water from above, a mug left at every table's sides, put down by every top, E with a mug in
+  // hand on a stool, and his day with a hero in his way (`keeperRound5.ts`, `tubSeen.ts`); each canary set for its own
+  // part alone ---
+  {
+    const canary = !!options.canary;
+    const forget = () => watch.forget();
+    const roomOf = () => G.arena.rooms!.tavern.group;
+    const myId = tavernLink.self() || 'me';
+    await viewWatched('top');
+    const tub = await tubSeen(lab, tv, watched, canary);
+    lines.push(...tub.lines);
+    problems.push(...tub.problems);
+    moments.push(...tub.moments);
+    watch.forget();
+    // (the hero out of the bar's reach while the keeper works, by the door)
+    await stand(lab, [0.3, 2.9], Math.PI / 2);
+    watch.forget();
+    const cask = await caskWiped(tv, frames, TASK_IN);
+    problems.push(...cask.problems);
+    KEEPER_WAYS5.intoTable = canary;
+    const picked = await tablePickups(tv, frames, forget, CLEAR_IN).finally(() => { KEEPER_WAYS5.intoTable = false; });
+    lines.push(...picked.lines);
+    problems.push(...picked.problems);
+    KEEPER_TAKE.toCounter = canary;
+    const down = await putDowns(tv, watched, frames, forget, roomOf, myId).finally(() => { KEEPER_TAKE.toCounter = false; });
+    lines.push(...down.lines);
+    problems.push(...down.problems);
+    KEEPER_TAKE.bothE = canary;
+    const e = await ePriority(tv, watched, frames, forget, roomOf, myId, drinkShare).finally(() => { KEEPER_TAKE.bothE = false; });
+    lines.push(...e.lines);
+    problems.push(...e.problems);
+    const stuck = await stuckRuns(tv, watched, roomOf, forget, canary);
+    lines.push(...stuck.lines);
+    problems.push(...stuck.problems);
+    // (the canary's round 5 problems said as lines too: a canary run's problems are only its plants caught or missed)
+    if (canary) lines.push(...[tub, cask, picked, down, e, stuck].flatMap((part) => part.problems.map((problem) => `(canary) ${problem}`)));
+    // (settled back at his stand before the ways of taking it: put back after the wall, he was still on his way)
+    await frames(CLEAR_IN, () => tv.doing().job === 'attend' || tv.doing().step === '');
+  }
+
   // --- every way of taking it up, a walk with it and the door (round 4); last, as it leaves the tavern ---
   const taken = await takeWays(lab, tv, watched, frames, !!options.canary, viewWatched, () => watch.forget());
   lines.push(...taken.lines);
@@ -729,8 +792,8 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
   // --- what held every frame ---
   lines.push(`every frame: the mugs ${watch.worstSum ? `didn't add up (${watch.worstSum})` : `added up to ${MUG_COUNT}`}, the most a mug moved in a frame ${(watch.worstJump * 100).toFixed(1)} cm (${watch.jumpAt}), ${watch.unseen} mug-frames unseen, the most a planted foot slid ${(watch.worstSlide * 100).toFixed(1)} cm (${watch.slideAt}), the most his body moved in a frame ${(watch.worstStep * 100).toFixed(1)} cm (${watch.stepAt})`);
   if (watch.worstSum) problems.push(`the mugs didn't add up: ${watch.worstSum}`);
-  lines.push(watch.hands.said(), watch.body.said(), watch.held.said(), watch.limbs.said(), watch.gait.said(), watch.shirt.said(), watch.cloth.said());
-  problems.push(...watch.hands.problems(), ...watch.body.problems(), ...watch.held.problems(), ...watch.limbs.problems(), ...watch.gait.problems(), ...watch.shirt.problems(), ...watch.cloth.problems());
+  lines.push(watch.hands.said(), watch.body.said(), watch.held.said(), watch.limbs.said(), watch.gait.said(), watch.shirt.said(), watch.cloth.said(), watch.round5.said());
+  problems.push(...watch.hands.problems(), ...watch.body.problems(), ...watch.held.problems(), ...watch.limbs.problems(), ...watch.gait.problems(), ...watch.shirt.problems(), ...watch.cloth.problems(), ...watch.round5.problems());
   const ways = plannedWays(tv, room.seats);
   lines.push(...ways.lines);
   problems.push(...ways.problems);
