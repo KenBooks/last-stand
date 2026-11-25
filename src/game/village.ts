@@ -533,6 +533,9 @@ function hallInside(dt: number): void {
       || (roofAway && porticoConeOutsideHeld) ? OUTSIDE_GHOST
       : lobby && view !== 'first' && inside && roomColumnHidesHim() ? ROOM_COLUMN_GHOST : 0;
   columnFade = THREE.MathUtils.damp(columnFade, columnGhost, CUT_AWAY_FADE, dt);
+  // (the porch torches' fires go with their baskets as the front wall opens over him from above inside: shown, they
+  // hung in the air past the room, from play)
+  G.arena.village.porchFires.visible = !(roofAway && inside);
   // (all their depth kept in the hall alone: outside it, the fog read a ghost's place in the hall, unseen, as a slab)
   // (on the portico too: there the fog read a portico column's back, which he can't see, by its depth kept, and stood it
   // black over the floor he sees, thinned or not, from play "black column should partially thin here too, right?")

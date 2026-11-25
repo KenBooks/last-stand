@@ -212,6 +212,9 @@ export interface Village extends Biome {
   hallTorches: readonly THREE.Vector3[];
   /** the torches on the hall's front wall either side of its door, by the pooled lights outside it */
   porchTorches: readonly THREE.Vector3[];
+  /** the porch torches' fires: their baskets go with the front wall as it opens over him inside, and these with them
+   *  (game/village.ts) */
+  porchFires: THREE.Object3D;
   /** each torch's fire's flicker (1 at rest, swelling with its puffs): the hall's columns' in `hallTorches`' order
    *  after its dais's, then the door's */
   torchFlickers: readonly THREE.PointLight[];
@@ -866,6 +869,7 @@ export function* villageSteps(scene: THREE.Group): Generator<void, Village, unde
     hallRoom: looseInHall(scene, hall.cutaway),
     hallTorches: [...hall.dais, ...hall.torches],
     porchTorches: hall.porch,
+    porchFires: hall.porchFires,
     torchFlickers: hall.flickers,
     stillLights: castingLights(scene),
     get night() { return night; },
@@ -1401,7 +1405,7 @@ function cheek(scene: THREE.Object3D, wall: Wall, M: Mats, x: number, z0: number
 function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, obstacles: Obstacle[],
   updaters: Updater[]): {
   cutaway: THREE.Object3D[]; torches: THREE.Vector3[]; dais: THREE.Vector3[]; porch: THREE.Vector3[];
-  flickers: THREE.PointLight[];
+  porchFires: THREE.Object3D; flickers: THREE.PointLight[];
 } {
   const y0 = TERRACE.high, X = TERRACE.x, half = HALL.half, thick = HALL.half - HALL.inHalf;
   const eaves = HALL.wallHigh;
@@ -1498,9 +1502,14 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
     brazier.userData.still = { side: 'inside', full: BRAZIERS.glow };
     obstacles.push({ x, z: BRAZIERS.z, r: 0.75, h: daisTop + 1.8 });
   }
-  // the torches either side of the door, on the front wall's face (cut away with it over the hero inside)
-  const porch = [-1, 1].map((s) => wallTorch(frontWall, M, lit, X + s * PORCH_TORCH.x, y0 + PORCH_TORCH.up, face, 0, 1, true,
-    PORCH_TORCH.out));
+  // the torches either side of the door, on the front wall's face (cut away with it over the hero inside), their fires
+  // in a group of their own the game hides with them: from above in the hall they hung in the air where the wall had
+  // opened, from play
+  const porchFires = new THREE.Group();
+  scene.add(porchFires);
+  const porchLit: TorchLit = { fires: porchFires, updaters, flickers: lit.flickers };
+  const porch = [-1, 1].map((s) => wallTorch(frontWall, M, porchLit, X + s * PORCH_TORCH.x, y0 + PORCH_TORCH.up, face, 0,
+    1, true, PORCH_TORCH.out));
   // the portico: a pair of columns either side, one entablature across the whole front
   const portico = new THREE.Group();
   scene.add(portico);
@@ -1531,7 +1540,7 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   fadesWhole(sideWalls[1], 'hallEast');
   fadesWhole(roomColumns, 'hallColumn', true);
   fadesWhole(portico, 'hallColumn');
-  return { cutaway: [roof, frontWall], torches, dais, porch, flickers: lit.flickers };
+  return { cutaway: [roof, frontWall], torches, dais, porch, porchFires, flickers: lit.flickers };
 }
 
 /** Whether a point of the world lies inside the hall of heroes as it stands: within its walls' feet and under its roof
