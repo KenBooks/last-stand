@@ -43,8 +43,10 @@ export async function grassShaded(lab: Lab): Promise<GrassShaded> {
   } finally {
     lab.drawing = drawing;
   }
-  const kept = RUST.bridge.stats.fieldKept;
-  const counted = RUST.bridge.stats.fieldCounted;
+  const stats = RUST.bridge?.stats;
+  if (!stats) throw new Error('lab: grass: no engine drawing the frame (RUST.bridge)');
+  const kept = stats.fieldKept;
+  const counted = stats.fieldCounted;
   const share = counted > 0 ? kept / counted : 0;
   return { kept, counted, vertices: Math.round(grassVertices() * share) };
 }
