@@ -6,12 +6,12 @@ The rules across the game are the [root AGENTS.md](../AGENTS.md); each directory
 
 ## Who may change `main`
 
-Collaborators (Write: their own branches here, and they request and re-request the owner's review) and fork contributors alike reach `main` only through a PR the owner approved. It is held by a repository ruleset on `main`, not classic branch protection:
+Collaborators (Write: their own branches here, and they request and re-request the owner's review) and fork contributors alike reach `main` only through a PR the owner approved. It is held by two repository rulesets on `main`, not classic branch protection:
 
-- a PR with one approval, which must be a code owner's (`CODEOWNERS`: the owner, for every path); an approval is dropped by a new push, and the last push must be approved by someone other than its pusher;
-- merge commits only; no force push, no deletion;
-- both checks pass: "PR must be linear (no merge commits)" and "Test, type-check and build" (`workflows/`). A check renamed in a workflow must be renamed in the ruleset in the same change, or every PR waits on a check that never comes;
-- the Admin role bypasses it in PR mode only: the owner merges his own PRs, and a collaborator's he pushed to last, without an approval, but nobody pushes to `main` directly.
+- **"main: PRs only, checks pass (everyone)"**, which nobody bypasses, the owner included: a PR, merge commits only, no force push, no deletion, and both checks pass, "PR must be linear (no merge commits)" and "Test, type-check and build" (`workflows/`). A check renamed in a workflow must be renamed in this ruleset in the same change, or every PR waits on a check that never comes; a check that can't run (Actions down) holds every merge until it can, or until the owner edits the ruleset;
+- **"main: owner approves (owner exempt)"**: one approval, which must be a code owner's (`CODEOWNERS`: the owner, for every path); an approval is dropped by a new push (and by "Update branch", or a merge into `main` that changes the PR's diff), and the last push must be approved by someone other than its pusher. The Admin role is `exempt` from it (its rules aren't run for the owner): he merges his own PRs, and a collaborator's, with the plain Merge button, his merge being his approval. A collaborator merges only a PR the owner approved.
+
+The one ruleset before them (the owner bypassing it in PR mode, a "bypass rules" box ticked at each merge) is kept disabled until the split is proven, then deleted.
 
 A second ruleset keeps `gh-pages` from being deleted or force-pushed (the deploy only adds commits to it). A collaborator's push there is overwritten by the next deploy, and the live site is the deploy's upload, not the branch.
 
