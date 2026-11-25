@@ -11,7 +11,7 @@ import { spentStats } from '../../../src/fx/stuckArrows';
 import { particles } from '../../../src/fx/particles';
 import { pooledLights } from '../../../src/fx/lights';
 import { floatersShown } from '../../../src/ui/floaters';
-import { hostRoom, joinRoom, leaveRoom as leaveParty, session } from '../../../src/net/session';
+import { holdPlacesIgnored, hostRoom, joinRoom, leaveRoom as leaveParty, session } from '../../../src/net/session';
 import { houseMarkOf, partnersByHouse } from '../../../src/ui/houseMarks';
 import { groundHeight } from '../../../src/world/ground';
 import { faceCamera, settleCamera, zoomHeldTo } from '../../../src/core/renderer';
@@ -108,8 +108,8 @@ export async function coopPartyJoin(_lab: Lab, { code, tag }: { code: string; ta
   await joinRoom(code, tag);
 }
 
-/** What of the village's training yard this game shows: its projectiles, effects, particles and pooled lights round
- *  the yard, the numbers floating, the spent arrows, and the heroes holding a channel or a cast. */
+/** What of the village's training yard this game shows: its projectiles, effects, particles round the yard, the
+ *  pooled lights lit, the numbers floating, the spent arrows, and the heroes holding a channel or a cast. */
 export interface YardSeen {
   room: RoomId | null;
   projectiles: number;
@@ -142,11 +142,17 @@ export function coopYardSeen(): YardSeen {
     projectiles: G.projectiles.filter((shot) => shot.alive).length,
     effects: effectsGoing(),
     particles: particlesByYard(particles.glow) + particlesByYard(particles.smoke),
-    lights: pooledLights().filter((light) => light.intensity > 0 && byTheYard(light.position.x, light.position.z)).length,
+    // (every pooled light lit: the pool is the effects' alone, a room's own lights are its place's)
+    lights: pooledLights().filter((light) => light.intensity > 0).length,
     numbers: floatersShown(),
     channels: G.players.filter((player) => player.channel || player.casting).length,
     spent: spentStats().all,
   };
+}
+
+/** The canary: partners in another of the village's places taken as here, as if `away` didn't cover a house. */
+export function coopPlacesIgnored(_lab: Lab, { on }: { on: boolean }): void {
+  holdPlacesIgnored(on);
 }
 
 /** The canary: what the village has going kept as a room is shown, as it was. */

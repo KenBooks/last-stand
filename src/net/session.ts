@@ -1033,13 +1033,25 @@ export function partnersInHouses(): { player: Player; room: RoomId }[] {
   return inside;
 }
 
-/** A partner in the other place (the lobby while we're in a run, or the other way round) isn't shown. */
+/** whether a harness has partners in other village places taken as here, as if `away` didn't cover a house */
+let placesIgnored = false;
+
+/** For a harness (tools/lab): partners in another of the village's places taken as here (`lab coop --scenarios
+ *  houses`' canary): each shown, and what he casts played. */
+export function holdPlacesIgnored(on: boolean): void {
+  placesIgnored = on;
+  syncAway();
+}
+
+/** A partner in the other place (the lobby while we're in a run, or the other way round) isn't shown, and nothing he
+ *  does there is played here (`playSession`: his actions are passed over while he's away, a cast begun, held and
+ *  ended among them; what was going as he went away is let go by `game/rooms.ts`'s walk-in). */
 export function syncAway(): void {
   for (const peer of session.peers.values()) {
     const p = peer.player;
     if (!p) continue;
     // (and in the lobby, one in another of the village's places: a house's room or the village outside it)
-    p.away = peer.inRun !== (G.mode === 'run') || (G.mode !== 'run' && peer.room !== roomIndex());
+    p.away = peer.inRun !== (G.mode === 'run') || (G.mode !== 'run' && peer.room !== roomIndex() && !placesIgnored);
     p.show(!p.away && p.out !== 'banked' && peer.placed);
   }
 }

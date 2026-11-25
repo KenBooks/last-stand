@@ -14,6 +14,7 @@ import { isCoop } from '../../../src/net/role';
 import { project } from '../../../src/ui/floaters';
 import * as coopUi from '../../../src/ui/coop';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
+import type { SkillKey } from '../../../src/types';
 import { ABANDON_HOLD_MS, showPause, toggleMenuStowed } from '../../../src/ui/menus';
 import { askForHeroes } from './uiHeroes';
 import { realWait, type Frame, type Lab } from './lab';
@@ -88,6 +89,7 @@ export function coopCastInLobby(_lab: Lab, { on }: { on: boolean }): void {
 
 /** The input of lobby frame `frame` (`coopCastInLobby`), or null when this game's hero isn't casting there. */
 export function lobbyCastInput(frame: number): Frame | null {
+  if (heldKey && G.mode === 'menu') return keyHeldInput(heldKey);
   if (castingEvery && G.mode === 'menu') return everySkillInput(frame);
   if (!castingInLobby || G.mode !== 'menu') return null;
   return { keys: frame % CAST_EVERY === 0 ? [SKILL_KEYS[0]] : [] };
@@ -103,6 +105,28 @@ let castingEvery = false;
 /** This game's hero casts every skill of his in turn, each held a while (on), or stops (off). */
 export function coopCastEveryInLobby(_lab: Lab, { on }: { on: boolean }): void {
   castingEvery = on;
+}
+
+/** the skill key this game's hero holds down in the training yard (`coopHoldInLobby`), or none */
+let heldKey: SkillKey | null = null;
+/** where the held skill is aimed (null: the yard's middle ahead of him) */
+let heldAt: [number, number] | null = null;
+
+/** This game's hero holds skill key `key` down in the yard, aimed ahead of him (null: lets it go). */
+export function coopHoldInLobby(_lab: Lab, { key, at }: { key: SkillKey | null; at?: [number, number] }): void {
+  heldKey = key;
+  heldAt = at ?? null;
+}
+
+/** The input of a frame with `key` held down, aimed at the yard's middle ahead of him. */
+function keyHeldInput(key: SkillKey): Frame {
+  const village = village_ as { yardToWorld?: (x: number, z: number) => [number, number] };
+  const ahead = village.yardToWorld ? village.yardToWorld(0, 2) : [G.player.pos.x, G.player.pos.z + 2];
+  const [x, z] = heldAt ?? ahead;
+  const aim = new THREE.Vector3(x, 0, z);
+  if (key === 'mouse0') return { m0: true, aim };
+  if (key === 'mouse2') return { m2: true, aim };
+  return { keys: [key], aim };
 }
 
 /** The input of frame `frame` as he casts every skill in turn, aimed ahead of him at the yard's middle. */
