@@ -12,7 +12,7 @@ import { G } from '../state';
 import { RUN, COOP, partyScale } from '../data/balance';
 import { WAVES, LOOT } from '../data/waves';
 import { ENEMIES, HERO, SCALING } from '../data/enemies';
-import { BIOMES, bossOfWave } from '../data/biomes';
+import { BIOMES, bossOfWave, isBossWave } from '../data/biomes';
 import { spawnEnemy } from '../entities/spawner';
 import { inObstacle, resolveWorld } from '../world/collision';
 import { clearEnemies, forgetFrustum, RISE_TIME } from '../entities/enemy';
@@ -235,7 +235,7 @@ function buildWave(w: number): SpawnUnit[][] {
   // a party meets more foes (and more life on each: `spawnGroup`)
   let budget = WAVES.budget(w) * partyScale(r.party).foes;
   const units: SpawnUnit[] = [];
-  if (w % WAVES.bossEvery === 0) budget *= 0.55;
+  if (isBossWave(w)) budget *= 0.55;
   while (budget > 0) {
     const type = weighted(pool);
     budget -= ENEMIES[type].cost;

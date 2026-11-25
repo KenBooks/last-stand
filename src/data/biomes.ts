@@ -1,10 +1,17 @@
-// Biomes: each has its own arena (world/), enemy roster and boss. The wave rules
+// Biomes: each has its own arena (world/), enemy roster and ladder of bosses. The wave rules
 // (budget, groups, loot) in waves.ts are shared.
 import { WAVES } from './waves';
 import type { EnemyId } from './enemies';
 import type { TrackId } from './music';
 
 export type BiomeId = 'crypt' | 'forest';
+
+/** A boss on a biome's ladder: who, its short name for the Continue button, and the banner's line on its wave. */
+export interface BossRung {
+  id: EnemyId;
+  short: string;
+  banner: string;
+}
 
 export interface BiomeDef {
   /** short label for the lobby picker */
@@ -13,12 +20,12 @@ export interface BiomeDef {
   title: string;
   /** enemy pool unlocked at wave `w`, as [enemy, weight] */
   pool(w: number): [EnemyId, number][];
-  boss: EnemyId;
-  /** short boss name for the Continue button */
-  bossShort: string;
-  /** banner subtitle on boss waves */
-  bossBanner: string;
-  /** boss waves another boss holds in place of `boss` (`bossOfWave`): from wave `wave` and every `every` after */
+  /** its bosses in the order the boss waves meet them: the first on the first boss wave (`WAVES.bossEvery`) no exception
+   *  holds, the second on the next, and round again from the first when the list runs out (each time harder, by
+   *  `SCALING`) */
+  bosses: BossRung[];
+  /** boss waves another boss holds over the ladder (`bossOfWave`): from wave `wave` and every `every` after; the ladder
+   *  goes on at the next boss wave none holds */
   bossWaves?: BossWave[];
   /** minimap: shape of the boundary and colour of the spawn gates */
   minimap: { wall: 'octagon' | 'circle'; portal: string };
@@ -53,8 +60,10 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
       if (w >= 3) p.push(['brute', 0.6 + w * 0.12]);
       return p;
     },
-    boss: 'colossus', bossShort: 'Colossus', bossBanner: 'A colossal presence approaches…',
-    // (the Ossuary Twins at wave 15, 35, 55...: the Colossus keeps every other boss wave)
+    bosses: [
+      { id: 'colossus', short: 'Colossus', banner: 'A colossal presence approaches…' },
+    ],
+    // (the Ossuary Twins at wave 15, 35, 55...: the ladder holds every other boss wave)
     bossWaves: [{ wave: 15, every: 20, id: 'twinslab', twin: 'twinreliquary', short: 'Ossuary Twins', banner: 'Two rise, bound in bone…' }],
     minimap: { wall: 'octagon', portal: '#b050ff' },
     surface: { floor: 'stone' },
@@ -68,7 +77,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
       if (w >= 3) p.push(['barkhulk', 0.6 + w * 0.12]);
       return p;
     },
-    boss: 'thornheart', bossShort: 'Thornheart', bossBanner: 'The old wood wakes…',
+    bosses: [{ id: 'thornheart', short: 'Thornheart', banner: 'The old wood wakes…' }],
     minimap: { wall: 'circle', portal: '#70ff60' },
     surface: { floor: 'earth' },
     music: { lobby: 'quiet-beginnings', battle: 'sunlit-battle' },
@@ -77,13 +86,33 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
 
 export const BIOME_IDS = Object.keys(BIOMES) as BiomeId[];
 
-/** Wave `w`'s boss in `biome`, or null on a wave that has none: a special boss wave's (`bossWaves`) where one falls on
- *  it, else the biome's own. */
-export function bossOfWave(biome: BiomeId, w: number): WaveBoss | null {
-  if (w % WAVES.bossEvery !== 0) return null;
+/** Whether wave `wave` is a boss wave. */
+export const isBossWave = (wave: number): boolean => wave > 0 && wave % WAVES.bossEvery === 0;
+
+/** The exception of `biome`'s that holds boss wave `wave`, if one does. */
+const exceptionAt = (biome: BiomeId, wave: number): BossWave | undefined =>
+  BIOMES[biome].bossWaves?.find((s) => wave >= s.wave && (wave - s.wave) % s.every === 0);
+
+/**
+ * Wave `wave`'s boss in `biome`, or null on a wave that has none: an exception's where one holds it (`bossWaves`), else
+ * its ladder's next rung, the ladder going on only at the boss waves it holds (round again past its end).
+ */
+export function bossOfWave(biome: BiomeId, wave: number): WaveBoss | null {
+  if (!isBossWave(wave)) return null;
+  const special = exceptionAt(biome, wave);
+  if (special) return { id: special.id, twin: special.twin, short: special.short, banner: special.banner };
+  let held = 0;
+  for (let w = WAVES.bossEvery; w < wave; w += WAVES.bossEvery) if (!exceptionAt(biome, w)) held++;
+  const ladder = BIOMES[biome].bosses;
+  return ladder[held % ladder.length];
+}
+
+/** Every boss a run in `biome` can meet: its ladder's and its exceptions', a twin too, once each. */
+export function bossesOf(biome: BiomeId): EnemyId[] {
   const b = BIOMES[biome];
-  const special = b.bossWaves?.find((s) => w >= s.wave && (w - s.wave) % s.every === 0);
-  return special ? { id: special.id, twin: special.twin, short: special.short, banner: special.banner } : { id: b.boss, short: b.bossShort, banner: b.bossBanner };
+  const ids: EnemyId[] = b.bosses.map((rung) => rung.id);
+  for (const s of b.bossWaves ?? []) ids.push(s.id, ...(s.twin ? [s.twin] : []));
+  return [...new Set(ids)];
 }
 
 /** The boss a fight is counted under (records, trophies): a twin under the boss it rises with. */

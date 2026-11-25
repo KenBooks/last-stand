@@ -4,8 +4,8 @@ import { G } from '../state';
 import { input } from '../core/input';
 import { cameraYaw } from '../core/renderer';
 import { rarityCounts } from '../loot/items';
-import { WAVES } from '../data/waves';
 import { BIOMES, bossOfWave } from '../data/biomes';
+import { WAVES } from '../data/waves';
 import { partnerOf } from '../entities/bossKit';
 import { bindTooltip, skillTooltip } from './tooltip';
 import { on } from '../events';
@@ -222,10 +222,11 @@ export function showDecision(): void {
     // (on its own wave the label names it already)
     box.classList.toggle('staked', !r.training);
     $('.bank-stake', box).textContent = r.training ? '' : isCoop() ? 'Keep yours · the rest fight on' : 'Keep all you carry · the run ends';
+    // (the next boss wave's boss, its rung on the battleground's ladder)
     const boss = Math.ceil(next / WAVES.bossEvery) * WAVES.bossEvery;
     const bossShort = bossOfWave(G.arena.biome, boss)?.short;
     $('.cont-stake', box).textContent = r.training || waiting ? ''
-      : boss !== next && boss - r.wave <= BOSS_NEAR ? `${bossShort} at wave ${boss} · better loot` : 'A harder wave · better loot';
+      : bossShort && boss !== next && boss - r.wave <= BOSS_NEAR ? `${bossShort} at wave ${boss} · better loot` : 'A harder wave · better loot';
   };
   refresh();
   refreshDecision = refresh;

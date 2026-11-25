@@ -21,9 +21,9 @@ export const READYING = {
   boss: (short: string): string => `Readying ${short}`,
 };
 
-/** every boss's short name, each biome's own and those of its boss waves */
+/** every boss's short name, each biome's ladder's and those of its boss waves */
 const bossShorts = (): string[] => BIOME_IDS.flatMap((id) => [
-  BIOMES[id].bossShort,
+  ...BIOMES[id].bosses.map((rung) => rung.short),
   ...(BIOMES[id].bossWaves ?? []).map((wave) => wave.short),
 ]);
 

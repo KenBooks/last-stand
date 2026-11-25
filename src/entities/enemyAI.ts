@@ -42,7 +42,7 @@ export function seek(e: Enemy, dx: number, dz: number, dist: number, speedMul = 
 
 /** Head for the target, around whatever stands between; with no way round left, through the breakable prop in the
  *  way (from the owner: "small mobs supposed to always go around unless they can't (all blocked)"). */
-function chase(e: Enemy, speedMul = 1): void {
+export function chase(e: Enemy, speedMul = 1): void {
   const p = e.target!;
   if (!navTarget(e.pos.x, e.pos.z, e.radius, p.pos.x, p.pos.z, p.slot, _way) && breakThrough(e)) return;
   // the line to the waypoint is already clear: look no further than it
@@ -209,6 +209,11 @@ const CORE_FX = {
   bossPhase(id: number, phase: number) {
     const e = G.enemies.find((x) => x.id === id);
     if (e) phaseBegun(e, phase);
+  },
+  /** boss `id`'s weak-spot window opened for `seconds` */
+  bossWeak(id: number, seconds: number) {
+    const e = G.enemies.find((x) => x.id === id);
+    if (e) e.weak = seconds;
   },
   /** foe `id` getting out of a hero's attack (entities/evade.ts): ducked where it stands (`how` 1) or blinked to (x, z) */
   evade(id: number, how: number, x: number, z: number) {

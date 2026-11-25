@@ -9,6 +9,7 @@ const PARTS = [
   'afk-1: a player away from the game, StateMsg afk (net/afk.ts)',
   'base-41: every message as of PROTOCOL 41, the last number bumped by hand (net/AGENTS.md tells their history)',
   'belt-skulls-1: the Ossuary Twins belt skulls thrown, the enemy fx `beltSkull` (entities/twinSkulls.ts)',
+  'bosses-1: the weak-spot window of a boss, enemy fx bossWeak (entities/bossKit.ts)',
   'colour-wheel-1: a hero colour may be picked on the wheel, said as its #rrggbb (data/heroColours.ts customColourId)',
   'floor-1: a drop on the lobby floor carries its seconds left, GroundDrop left (game/groundItems.ts)',
   'frenzy-1: the Frenzy stacks of a warrior, StateMsg fz (combat/frenzy.ts)',

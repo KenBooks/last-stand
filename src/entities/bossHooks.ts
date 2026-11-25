@@ -5,9 +5,9 @@
 import type { Enemy } from './enemy';
 import type { EnemyId } from '../data/enemies';
 
-/** What a boss does of its own as its phases come and go and its parts break (each optional). */
+/** What a boss does of its own as its phases come and go (each optional). */
 export interface BossHooks {
-  /** phase `phase` begun, where the fight is simulated (its gameplay: the Twins' survivor faster) */
+  /** phase `phase` begun, where the fight is simulated (its gameplay: summons, a stance; the Twins' survivor faster) */
   enter?(e: Enemy, phase: number): void;
   /** phase `phase` over as the next begins, where the fight is simulated */
   exit?(e: Enemy, phase: number): void;
@@ -16,7 +16,8 @@ export interface BossHooks {
   /** a hero's hit of `amount` taken (and not its last), where the fight is simulated */
   hurt?(e: Enemy, amount: number): void;
   /** each frame it lives, on every game: what its look does each frame (the Twins' chain laid between them, its snap
-   *  past its reach where the fight is simulated) */
+   *  past its reach where the fight is simulated), and what it does to this game's own hero, judged as its screen shows
+   *  it (a grip seizing a hero who comes too near) */
   frame?(e: Enemy, dt: number): void;
 }
 

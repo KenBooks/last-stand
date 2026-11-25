@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
-import { BIOMES, BIOME_IDS, rungBoss } from '../../../src/data/biomes';
+import { BIOME_IDS, bossesOf, rungBoss } from '../../../src/data/biomes';
 import { TROPHIES } from '../../../src/data/houses';
 import type { EnemyId } from '../../../src/data/enemies';
 import { chronicleOf } from '../../../src/game/chronicle';
@@ -50,9 +50,9 @@ const STANDS: Record<'wall' | 'cabinet', { at: [number, number]; facing: number 
   cabinet: { at: [1.0, -0.4], facing: 2.09 },
 };
 
-/** Every boss a battleground brings (its own, and its special waves' under the boss they're counted by). */
+/** Every boss a battleground brings (its ladder's, and its special waves' under the boss they're counted by). */
 function bossesOfMain(): EnemyId[] {
-  const all = BIOME_IDS.flatMap((b) => [BIOMES[b].boss, ...(BIOMES[b].bossWaves ?? []).map((s) => s.id)]);
+  const all = BIOME_IDS.flatMap((b) => bossesOf(b));
   return [...new Set(all.map((b) => rungBoss(b)))];
 }
 

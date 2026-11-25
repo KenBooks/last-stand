@@ -52,7 +52,7 @@ function inView(x: number, y: number, z: number, r: number): boolean {
 import { nearestPlayer } from '../net/role';
 import { LookAt } from './models/ik';
 import { joinCrowd, leaveCrowd } from './models/crowd';
-import { bossFrame, bossLook, checkPhase, shareHit, telegraphShare } from './bossKit';
+import { bossFrame, bossLook, checkPhase, shareHit, telegraphShare, weakLooks } from './bossKit';
 
 /** a co-op guest's copy's own evade and the host's word of it, coming back, come within this (s) */
 const OWN_EVADE_ECHO = 1.5;
@@ -108,6 +108,12 @@ export interface EnemyOpts {
 }
 
 let nextId = 1;
+
+/** An angle turned towards `to` by at most `most` (rad), the short way round. */
+function turnAtMost(from: number, to: number, most: number): number {
+  const off = Math.atan2(Math.sin(to - from), Math.cos(to - from));
+  return from + Math.max(-most, Math.min(most, off));
+}
 
 export class Enemy {
   readonly type: EnemyId;
@@ -200,6 +206,10 @@ export class Enemy {
   /** how its kill threw it, and its body from then (entities/corpse.ts) */
   fling: Fling | null = null;
   corpse: Corpse | null = null;
+  /** a boss with a fight in phases (`EnemyDef.bossKit`, entities/bossKit.ts): its phase (0 the first), and the
+   *  seconds left of its weak-spot window */
+  bossPhase = 0;
+  weak = 0;
 
   readonly model: Model;
   /** the head turning to its target (models/ik.ts) */
@@ -224,8 +234,6 @@ export class Enemy {
   private barShown = -1;
   /** training dummies meter damage instead of losing life */
   meter: DamageMeter | null = null;
-  /** a boss with a fight in phases (`EnemyDef.bossKit`, entities/bossKit.ts): its phase (0 the first) */
-  bossPhase = 0;
   /** a boss sharing its life with another (`EnemyDef.shares`): what of the pair's life hits on it took (the host's) */
   taken = 0;
   /** felled with its partner by the blow that killed it: it pays no spoils (the pair pays once) */
@@ -534,6 +542,7 @@ export class Enemy {
     if (dazed) this.dazed = Math.max(0, this.dazed - dt);
     this.ducked = Math.max(0, this.ducked - dt);
     this.forming = Math.max(0, this.forming - dt);
+    this.weak = Math.max(0, this.weak - dt);
 
     this.desired.set(0, 0, 0);
     this.targetFacing = this.facing;
@@ -557,7 +566,7 @@ export class Enemy {
     this.knock.multiplyScalar(Math.exp(-dt * 6));
     this.keepInWorld();
 
-    if (!frozen) this.facing = angleDamp(this.facing, this.targetFacing, this.action ? 6 : 9, dt);
+    if (!frozen) this.facing = this.def.turn ? turnAtMost(this.facing, this.targetFacing, this.def.turn * dt) : angleDamp(this.facing, this.targetFacing, this.action ? 6 : 9, dt);
     const speedK = Math.hypot(this.vel.x, this.vel.z) / this.speed;
     this.stepPhase(dt);
     // frozen enemies hold their pose: animate with the time they were frozen at
@@ -614,6 +623,7 @@ export class Enemy {
     this.paintBar();
     this.meter?.update();
     if (this.aura && this.auraMat) { this.aura.rotation.y += dt; this.auraMat.opacity = 0.5 + Math.sin(t * 4) * 0.2; }
+    weakLooks(this);
     if (this.def.bossKit && dt > 0) bossFrame(this, dt);
     return true;
   }

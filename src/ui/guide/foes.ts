@@ -1,7 +1,7 @@
 // The guide's foes and bosses: every foe a wave brings, its figures from the game's data (data/enemies.ts, its growth
 // by wave, the biome that brings it and from which wave, how it throws, dodges and calls help) and how to fight it
 // (data/guide.ts). Its blow against the hero's own armour and resistance is worked out as the page opens.
-import { BIOMES, BIOME_IDS, type BiomeId } from '../../data/biomes';
+import { BIOMES, BIOME_IDS, bossOfWave, type BiomeId } from '../../data/biomes';
 import { BOSS_AI, ENEMIES, HERO, SCALING, type EnemyId } from '../../data/enemies';
 import { TWINS } from '../../data/foes/twins';
 import { WAVES } from '../../data/waves';
@@ -40,9 +40,8 @@ export function foes(): { common: Foe[]; bosses: Foe[] } {
 /** Where `id` is met first: the first biome whose pool or boss has it, and the first wave there. */
 function metAt(id: EnemyId): { biome: BiomeId; from: number } | null {
   for (const biome of BIOME_IDS) {
-    if (BIOMES[biome].boss === id) return { biome, from: WAVES.bossEvery };
-    const special = BIOMES[biome].bossWaves?.find((s) => s.id === id || s.twin === id);
-    if (special) return { biome, from: special.wave };
+    const first = bossWavesOf(biome, id)[0];
+    if (first) return { biome, from: first };
     for (let w = 1; w <= LAST_LOOKED; w++) if (BIOMES[biome].pool(w).some(([e]) => e === id)) return { biome, from: w };
   }
   return null;
@@ -91,11 +90,25 @@ function figures(foe: Foe): string {
   return tiles(items);
 }
 
-/** When a boss comes: its biome's boss waves, or a special boss wave's (data/biomes.ts `bossWaves`). */
+/** the waves the guide looks through for a boss's first coming and its return */
+const LOOKED_THROUGH = 200;
+
+/** The boss waves of `biome` that `id` holds, first to last within `LOOKED_THROUGH` (its ladder's rung or an exception
+ *  over it, a twin with the boss it rises with: data/biomes.ts `bossOfWave`). */
+function bossWavesOf(biome: BiomeId, id: EnemyId): number[] {
+  const waves: number[] = [];
+  for (let wave = WAVES.bossEvery; wave <= LOOKED_THROUGH; wave += WAVES.bossEvery) {
+    const boss = bossOfWave(biome, wave);
+    if (boss && (boss.id === id || boss.twin === id)) waves.push(wave);
+  }
+  return waves;
+}
+
+/** When a boss comes: its first boss wave, then how often it comes again. */
 function comes(foe: Foe): [string, string] {
-  const special = BIOMES[foe.biome].bossWaves?.find((s) => s.id === foe.id || s.twin === foe.id);
-  if (special) return [`wave ${special.wave}`, `then every ${special.every}th · ${BIOMES[foe.biome].title}`];
-  return [`every ${WAVES.bossEvery}th wave`, BIOMES[foe.biome].title];
+  const [first, next] = bossWavesOf(foe.biome, foe.id);
+  const again = next ? `then every ${next - first} waves` : 'once';
+  return [`wave ${first}`, `${again}· ${BIOMES[foe.biome].title}`];
 }
 
 /** Its attacks, each with its figures. */
