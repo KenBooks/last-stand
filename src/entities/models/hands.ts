@@ -458,6 +458,127 @@ export function poseHand(h: Hand, curl: number, spread: number, point = 0, t = 0
   thumbAcross(h, curl * 0.6 + point * 0.5, spread);
 }
 
+/**
+ * A book (or any board) pinched at its end, its end in the web of the hand `end` m down the hand from the wrist: the
+ * fingers near straight along its far face, `board` m before the palm, and the thumb round its end onto its near face,
+ * `thick` m further (m, the world's), its pad on it: its first two bones round the end, the second ending just past it
+ * at the near face's level, the last laid along that face. As a person takes a book by its spine: the fingers on one
+ * board, the thumb on the other (closed round it as round a handle, the fingers went on round into the book; the thumb
+ * straight from its root to the near face, it cut through the book's corner by its spine, 18 mm into a thick one; each
+ * bone aimed at the corner, the one that reached it went on past it, the tip 42 mm off the face). A book too thick for
+ * its first two bones to reach round (a tome of 75 mm) has them straight at the corner and the last turned down onto the
+ * face, its pad at the top of the near board (laid along the face from there, it stood 18 mm into the book). Each
+ * finger is curled till its own pad lies on the far face (one curl for all, the little finger stood off the board as
+ * the middle one pressed into it).
+ */
+export function pinch(h: Hand, board: number, thick: number, end: number): void {
+  layFlat(h, board);
+  const k = h.vis.scale.x, t = h.thumb, root = t.j[0].position;
+  // (where it goes round: past the end by its own round and a hair, at the near face's level, its pad on it)
+  const z = -(board + thick) / k - t.r, corner = _x.set(root.x, -end / k + t.r + THUMB_OVER, z);
+  // (its middle knuckle where its first bone from the root and its second to the corner meet, bowed away from the end:
+  // the end on the inside of its curl, as round a handle)
+  const [a, b] = t.len, gap = _z.copy(corner).sub(root), d = gap.length();
+  const along = clamp((d * d + a * a - b * b) / (2 * d), -a, a);
+  let off = Math.sqrt(Math.max(0, a * a - along * along));
+  const side = _s.set(0, -gap.z, gap.y).normalize(), spine = _u.set(root.x, -end / k, -(board + thick / 2) / k);
+  const knuckle = _y.copy(root).addScaledVector(gap, along / d);
+  if (_d.copy(knuckle).addScaledVector(side, off).distanceTo(spine) < _d.copy(knuckle).addScaledVector(side, -off).distanceTo(spine)) off *= -1;
+  knuckle.addScaledVector(side, off);
+  const ways = [_fa.copy(knuckle).sub(root), _fb.copy(corner).sub(knuckle), _fc.set(0, -1, 0)], turned = _q.identity();
+  if (d > a + b) {
+    // (short of the corner: the last bone from where the second ends down onto the near face, as far as it reaches)
+    const end2 = _y.copy(root).addScaledVector(gap, (a + b) / d), across = clamp((z - end2.z) / t.len[2], -1, 1);
+    ways[2].set(0, -Math.sqrt(1 - across * across), across);
+  }
+  // (each bone swung the least way from where `poseHand` has it to its way, its roll about its length kept: turned
+  // from straight down the hand, it lost the rest thumb's roll, and from the open book's hold to a pinch it turned
+  // half round about its length, 10 degrees a frame, its nail to the book)
+  ways.forEach((way, n) => {
+    const rest = _q2.copy(turned).multiply(t.j[n].quaternion);
+    const swing = _q3.setFromUnitVectors(_u.set(0, -1, 0).applyQuaternion(rest), way.normalize());
+    const want = swing.multiply(rest);
+    t.j[n].quaternion.copy(turned).invert().multiply(want);
+    turned.copy(want);
+  });
+}
+/** how far a pinching hand's fingers curl (`poseHand`'s): near straight, lying along the board */
+const PINCH_CURL = 0.04;
+/**
+ * The hand's fingers laid on a board `board` m before the palm (the world's): each curled (`curlOnto`) till its own pad
+ * lies on it, for its own length and its knuckle's place. One curl for every finger, the little one stood off a board as
+ * the middle one pressed into it, and fingers given a hand's rest curl went 9 mm into a book held open on them.
+ */
+export function layFlat(h: Hand, board: number): void {
+  poseHand(h, PINCH_CURL, 0.12);
+  const k = h.vis.scale.x;
+  for (const f of h.f) curlOnto(f, _x.set(0, 0, 1), -board / k + f.r);
+}
+
+/** A board's face in the world: a point on it and its normal, out of it toward the hand laid on it. */
+export interface Board { at: THREE.Vector3; normal: THREE.Vector3 }
+
+/**
+ * The hand's fingers laid on `board` wherever the hand is now (its arm posed): each curled till its own pad lies on the
+ * board's face. Laid on a board a fixed way before the palm, as the open book rose to be read and his hands came after
+ * it, the board wasn't where the palm's aim had it and his fingertips went 16 mm into its cover.
+ */
+export function layOn(h: Hand, board: Board): void {
+  poseHand(h, PINCH_CURL, 0.12);
+  h.vis.updateWorldMatrix(true, false);
+  _m.copy(h.vis.matrixWorld).invert();
+  const at = _y.copy(board.at).applyMatrix4(_m), normal = _x.copy(board.normal).transformDirection(_m);
+  for (const f of h.f) curlOnto(f, normal, normal.dot(at) + f.r);
+  thumbOff(h, normal, normal.dot(at));
+}
+
+/**
+ * The thumb turned at its root just far enough off a board (its face `level` along `normal`, in the hand's own frame) that
+ * none of it lies in it: a hand at rest tucks its thumb under the palm, and laid on the open book as it rose, the thumb
+ * went 6.5 mm into its cover.
+ */
+function thumbOff(h: Hand, normal: THREE.Vector3, level: number): void {
+  const t = h.thumb, root = t.j[0], rest = _q.copy(root.quaternion);
+  const into = () => {
+    root.updateMatrixWorld(true);
+    let most = 0;
+    for (let n = 1; n <= t.j.length; n++) {
+      const p = n < t.j.length ? t.j[n].getWorldPosition(_z) : t.j[n - 1].localToWorld(_z.set(0, -t.len[n - 1], 0));
+      most = Math.max(most, level + t.r - normal.dot(p.applyMatrix4(_m)));
+    }
+    return most;
+  };
+  if (into() <= 0) return;
+  // (turned about the way across it and the board's normal, its tip coming up off the board)
+  const tip = t.j[t.j.length - 1].localToWorld(_s.set(0, -t.len[t.len.length - 1], 0)).applyMatrix4(_m).sub(root.position);
+  const axis = _d.crossVectors(tip, normal).normalize(), turned = _q2;
+  let lo = 0, hi = 1.2;
+  for (let n = 0; n < 16; n++) {
+    const a = (lo + hi) / 2;
+    root.quaternion.copy(turned.setFromAxisAngle(axis, a)).multiply(rest);
+    if (into() > 0) lo = a; else hi = a;
+  }
+  root.quaternion.copy(turned.setFromAxisAngle(axis, hi)).multiply(rest);
+}
+/** a finger's joints' shares of its curl, root to tip (`poseHand`'s) */
+const CURL_SHARES = [0.8, 1.1, 0.75];
+
+/** Finger `f` curled (by `poseHand`'s shares, its spread kept) till its tip's middle is `level` along `way` (the hand's
+ *  own frame and units; `way` out of the hand's back, +z, gives how far out of it: before the palm is less), found by
+ *  halving. */
+function curlOnto(f: Digit, way: THREE.Vector3, level: number): void {
+  const tipAt = (c: number) => {
+    const root = f.j[0].position;
+    let y = root.y, z = root.z, phi = 0;
+    for (let n = 0; n < 3; n++) { phi += c * CURL_SHARES[n]; y -= f.len[n] * Math.cos(phi); z -= f.len[n] * Math.sin(phi); }
+    return way.x * root.x + way.y * y + way.z * z;
+  };
+  let lo = -0.2, hi = 0.8;
+  for (let n = 0; n < 24; n++) { const c = (lo + hi) / 2; if (tipAt(c) > level) lo = c; else hi = c; }
+  const c = (lo + hi) / 2;
+  for (let n = 0; n < 3; n++) f.j[n].rotation.x = c * CURL_SHARES[n];
+}
+
 /** The thumb swung across the palm by `tc` as the hand closes, and in from the side (held out at the open hand's 43
  *  degrees, a fist's thumb stood off the fingers, a loop in the air). */
 function thumbAcross(h: Hand, tc: number, spread: number): void {

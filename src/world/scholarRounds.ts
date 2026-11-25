@@ -11,8 +11,9 @@
 import * as THREE from 'three';
 import type { Obstacle } from '../types';
 import type { VillageObject } from '../data/village';
-import { WALK, type HandAim, type Scholar } from '../entities/models/scholar';
+import { WALK, type HandAim, type Pinch, type Scholar } from '../entities/models/scholar';
 import { clamp, lerp, mulberry, smooth } from '../util';
+import { SCHOLAR_DOES } from '../data/houses/library';
 
 /** The room as his rounds need it, every place in the room's frame (`g`'s). */
 export interface RoundsRoom {
@@ -30,6 +31,8 @@ export interface RoundsRoom {
   shelves: { mesh: THREE.InstancedMesh; pages: THREE.InstancedMesh; offset: number; matrices: THREE.Matrix4[]; colours: THREE.Color[] }[];
   /** the stack of books on his table, bottom first, in its frame (each book's box size in its `userData.size`) */
   stack: THREE.Mesh[];
+  /** his chair (in his table's frame, tucked in at its place: he draws it out back along -z) */
+  chair: THREE.Object3D;
   /** a book for his hands, one of the shelves' (its material's map and colour set to the book's), and an open one */
   held: THREE.Mesh;
   openHeld: THREE.Object3D;
@@ -41,7 +44,9 @@ export interface RoundsRoom {
   puff(at: THREE.Vector3): void;
   globe: THREE.Object3D;
   /** the open book made the book he took, opened (its size: thick, tall, deep; its colour) */
-  openAs(size: THREE.Vector3, colour: THREE.Color): void;
+  /** the open book set to the shelf's book `n` (its place among all the shelves' books) he took: its size, its cover's
+   *  colour, and its pages (its chapter mark and lines, the same each time it's opened) */
+  openAs(size: THREE.Vector3, colour: THREE.Color, n: number): void;
   /** where the room's ladder's foot stands: its footprint is among the obstacles (a harness's canary sends him there) */
   ladder: THREE.Vector3;
 }
@@ -50,8 +55,16 @@ export interface RoundsRoom {
 export interface ShelfBookOut { mesh: THREE.InstancedMesh; index: number; pages: THREE.InstancedMesh; page: number; matrix: THREE.Matrix4 }
 
 /** a harness's planted faults (`lab scholar --canary`): the book in his hands another than the one off the shelf, his
- *  spot under the ladder, the end of his rise cut as he sets off; and for a picture, the book by the ladder he may take (`byLadder`) */
-export const roundsPlant = { otherBook: false, underLadder: false, cut: false, byLadder: false };
+ *  spot under the ladder, the end of his rise cut as he sets off, the book he holds on its own path beside his hand
+ *  (`ownPath`); and for a picture, the book by the ladder he may take (`byLadder`) */
+export const roundsPlant = {
+  /** a canary's: his chair left where it stands, tucked in, as he gets up and sits down */
+  chairStays: false,
+  otherBook: false, underLadder: false, cut: false, byLadder: false, ownPath: false,
+  /** a harness's sweep: the book a browse takes (the spot's, at its lowest or highest), and the browse cut short to
+   *  the take, a look and the shelving */
+  takeAt: null as { spot: number; high: boolean } | null, quick: false,
+};
 
 /** what he does when he gets up from his table */
 export type Task = 'browse' | 'keep' | 'restock' | 'dust' | 'tidy' | 'globe';
@@ -73,6 +86,11 @@ export interface Rounds {
   readonly out: ShelfBookOut | null;
   /** a task begun now, whatever he's doing (a harness's) */
   begin(task: Task): void;
+  /** `n` tasks drawn as he'd choose them on getting up, by randomness of `seed` (a harness's: his own is left as it was) */
+  tasks(n: number, seed: number): Task[];
+  /** whether his right hand's pinch has closed on the shut book he holds (from then till he lets go of it, the book is
+   *  placed from his hand: a harness reads his pads on it) */
+  readonly gripped: boolean;
   /** where he stands at the cases (the room's frame): each spot, whether a clear way from his table reaches it, and how
    *  often he's gone to it this visit (a harness's) */
   readonly spots: readonly SpotSeen[];
@@ -92,9 +110,52 @@ const HOLD = { ahead: 0.3, high: 1.24, tilt: 0.55 };
 /** how far back from upright the open book is held to read (rad from horizontal of its pages' facing: 55 degrees,
  *  the book 35 from upright) */
 const READ_TILT = 0.96;
+/** how far under the open book's origin its cover's underside is (m: library.ts builds it 2 cm down), and how far under
+ *  that his palm's aim is (m: half his palm's thickness, and a hair) */
+const OPEN_UNDER = 0.02, PALM_UNDER = 0.027;
+/** as he opens a book: how far through his hands' going round behind it his right hand has slid off its spine (a share),
+ *  and how far (m: past a thumb's length) */
+const OPEN_OFF = 0.45, OPEN_SLIDE = 0.08;
+/** his chair: how far he draws it out from the table to sit or get up (m), and how long it takes him each way (s). Risen
+ *  where he sat, tucked in, his lap and his sleeves came up through the table's top, from play: "when he sits, he
+ *  overlaps the table lots, I think he needs to pull the chair, sit and then fix the chair position" */
+const CHAIR_OUT = 0.32, CHAIR_MOVE = 0.9;
+/** how long his hands take from his book to his chair's seat and back as he sits (s): over the table's edge and down,
+ *  eased, as his pose sat isn't followed */
+const SEAT_REACH = 1.2;
+/** how far through his rise from his chair his hands push him off its seat (a share of it) */
+const RISE_PUSH = 0.25;
+/** how far through his rise his pose is no longer his sat one (`scholar.ts` `SEAT_BLEND`, of the way down from sat) */
+const SEAT_LET_GO = 0.45;
+/** his chair's seat's sides and its back's rail, where his hands hold it (its frame, m) */
+const CHAIR_AT = { seatX: 0.25, seatY: 0.455, seatZ: -0.04, railX: 0.2, railY: 1.23, railZ: -0.25 };
+/** how far he leans over to lay a book on his table's stack (as his bend to a low aim, `scholar.ts` `act.lean`) */
+const LAY_LEAN = 0.3;
+/** the open book's turn in the shut one's frame as it opens: its pages (+y) toward him, the shut one's front (-x), its
+ *  lines (+x) to his right along the shut one's spine (+z), its pages' tops (-z) up the shut one (+y), as `readPose`
+ *  holds it */
+const OPEN_FROM_SHUT = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(
+  new THREE.Vector3(0, 0, 1), new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, -1, 0)));
+/** a pinch of a shut book's end: how far his base knuckles come onto its board (m), how far off it his palm is (m: half
+ *  its thickness), and how far up the book from its middle (a share of its height); where his knuckles are from his
+ *  hand's aim (m along his fingers: an aim places his wrist); and how far his fingers curl (0 open, 1 a fist: barely,
+ *  lying along the board) */
+const PINCH = { on: 0.025, palm: 0.015, up: 0.05 };
+/** his left hand under a book he holds: its wrist this share of the book's depth from its middle toward its fore-edge */
+const UNDER = { from: 0.45 };
+/** a book looked over: turned on his left palm by his right wrist, about its own upright, this far each way at most
+ *  (rad: a forearm turns about 80 degrees each way, less with a book in its hand) */
+const LOOK_TURN = 0.5;
+/** how near its aim his wrist must be (m), and for how many frames, for his pinch to have closed on a book */
+const IN_HAND = { near: 0.01, settle: 3 };
+const KNUCKLES = { out: 0.095 };
+export const GRIP_SHUT = 0.1;
+/** how far back off the open book's board his hands are tipped (a slope: its fingers' rest curl rises about this much
+ *  over their length) */
+const FINGERS_BACK = 0.12;
 /** how long he reads at his table between rounds (s), and how long each beat of a round takes (s) */
 const READ = { least: 10, most: 12, first: 10 };
-const BEAT = { release: 1.4, rise: 2.8, reach: 1.0, tip: 0.5, grasp: 0.8, pull: 0.6, lift: 1.2, inspect: 2.6, scan: [2.5, 4.5], read: [6, 12], open: 0.8, put: 1.3, push: 0.6, cradle: 1.0 };
+const BEAT = { settle: 0.45, release: 1.4, rise: 2.8, reach: 1.0, tip: 0.5, grasp: 0.8, pull: 0.6, lift: 1.2, inspect: 2.6, scan: [2.5, 4.5], read: [6, 12], open: 0.8, put: 1.3, push: 0.6, cradle: 1.0 };
 /** how long a hand's aim takes to go over to a new one that jumped from the last (s): from holding a book before him to
  *  holding it to his chest, the hand turned 21 degrees in a frame */
 const AIM_BLEND = 0.35;
@@ -168,8 +229,43 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   desk.updateMatrix();
   const deskInv = desk.matrix.clone().invert(), deskYaw = desk.rotation.y;
   const seat = room.sat.clone().applyMatrix4(desk.matrix);
-  // (beside his chair, where he steps out to as he gets up)
-  const exit = new THREE.Vector3(0.72, 0, room.sat.z - 0.02).applyMatrix4(desk.matrix);
+  /** beside his chair `out` m out from the table, where he stands to draw it out and push it in, stepping back and on
+   *  with it as it goes (stood still, the rail went out of his reach as it went, his hand 9 cm off it) */
+  const beside = (out: number) => {
+    const at = new THREE.Vector3(0.6, 0, room.sat.z - 0.08 - out * 0.75).applyMatrix4(desk.matrix);
+    return new THREE.Vector2(at.x, at.z);
+  };
+  // (where he steps out to as he gets up: beside it drawn out)
+  const exit3 = beside(CHAIR_OUT), exit = new THREE.Vector3(exit3.x, 0, exit3.y);
+  /** where he sits with his chair `out` m out from the table (the room's frame) */
+  const seatOut = (out: number) => {
+    const at = room.sat.clone().add(new THREE.Vector3(0, 0, -out)).applyMatrix4(desk.matrix);
+    return new THREE.Vector2(at.x, at.z);
+  };
+  /** his chair set `out` m out from the table */
+  const chairTo = (out: number) => { room.chair.position.z = -out; };
+  /** a place on his chair (its frame) where it is now, in the world */
+  const onChair = (x: number, y: number, z: number) => {
+    room.chair.updateWorldMatrix(true, false);
+    return room.chair.localToWorld(new THREE.Vector3(x, y, z));
+  };
+  /** his hands on his chair's seat at its sides as he sits on it, palms on its edges, fingers down over them */
+  const seatHands = (k: number) => {
+    const inWorld = (d: THREE.Vector3) => d.transformDirection(room.chair.matrixWorld);
+    // (its aims as the world has them: the chair's own frame's ways)
+    act.handL = { at: onChair(CHAIR_AT.seatX + 0.02, CHAIR_AT.seatY + 0.03, CHAIR_AT.seatZ + 0.06), palm: inWorld(new THREE.Vector3(-0.3, -1, 0)).normalize(), fingers: inWorld(new THREE.Vector3(0.25, -0.3, 1)).normalize() };
+    act.handR = { at: onChair(-CHAIR_AT.seatX - 0.02, CHAIR_AT.seatY + 0.03, CHAIR_AT.seatZ + 0.06), palm: inWorld(new THREE.Vector3(0.3, -1, 0)).normalize(), fingers: inWorld(new THREE.Vector3(-0.25, -0.3, 1)).normalize() };
+    act.reachL = act.reachR = k;
+    act.grip = 0.6;
+  };
+  /** his right hand on his chair's back's rail, at its end nearer him, as he stands beside it */
+  const railHand = (k: number) => {
+    const inWorld = (d: THREE.Vector3) => d.transformDirection(room.chair.matrixWorld);
+    act.handR = { at: onChair(CHAIR_AT.railX, CHAIR_AT.railY, CHAIR_AT.railZ), palm: inWorld(new THREE.Vector3(0, -1, 0)), fingers: inWorld(new THREE.Vector3(-1, 0, 0.2)).normalize() };
+    act.handL = null;
+    act.reachR = k; act.reachL = 0;
+    act.grip = 0.7;
+  };
   const body: Obstacle = { x: seat.x, z: seat.z, r: 0, h: 1.8 };
   room.obstacles.push(body);
   const talkAt: [number, number] = [room.talk.at[0], room.talk.at[1]], talkStand: [number, number] = [room.talk.stand[0], room.talk.stand[1]];
@@ -340,6 +436,13 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       aim.palm.transformDirection(by);
       aim.fingers.transformDirection(by);
     }
+    // (and the board his fingers lie on, once each though both hands share it: left behind, as he turned to a hero
+    // talking to him his fingers were laid on where the open book had been, 4 mm into it and 7.7 cm off it)
+    for (const board of new Set([act.flatL, act.flatR])) {
+      if (!board) continue;
+      board.at.applyMatrix4(by);
+      board.normal.transformDirection(by);
+    }
   };
   const toWorld = (p: THREE.Vector3) => g.localToWorld(p.clone());
   const dirWorld = (d: THREE.Vector3) => d.clone().transformDirection(g.matrixWorld);
@@ -360,36 +463,98 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     const f = fwd();
     out.at.set(me.p.x, HOLD.high, me.p.y).addScaledVector(f, HOLD.ahead);
     const y = new THREE.Vector3(0, Math.cos(HOLD.tilt), 0).addScaledVector(f, Math.sin(HOLD.tilt)).applyAxisAngle(f, wobble).normalize();
-    const x = f.clone().negate().addScaledVector(y, f.dot(y)).normalize();
+    // (its spine to his right, as he carries it (`cradlePose`), his right hand on it from the shelf on and his left on
+    // its fore-edge: turned the other way, his right hand went from its spine to its fore-edge's bottom corner as he
+    // lifted it off the shelf, from play: "have him grab from other side of book")
+    const x = f.clone().addScaledVector(y, -f.dot(y)).normalize();
     const z = new THREE.Vector3().crossVectors(x, y);
     out.turn.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
     return out;
   };
   /** where the open book is held to read: at his mid-chest, near him, its pages to his face, tilted back from upright
    *  by `READ_TILT` (its spine up and down his front). Held 44 degrees from flat, it read from the front as a plank
-   *  edge-on, from play: "I never seen someone hold a book like that" */
+   *  edge-on, from play: "I never seen someone hold a book like that". Its print's lines run along its +x and its pages'
+   *  tops are its -z (`book.ts` `printGeometry`), so +x is to his right: to his left, he read it upside down (from
+   *  play: "Fix upside down book") */
   const readPose = (out: typeof pose) => {
     const f = fwd(), l = left();
     out.at.set(me.p.x, HOLD.high + 0.03, me.p.y).addScaledVector(f, HOLD.ahead - 0.04);
     const y = f.clone().negate().multiplyScalar(Math.cos(READ_TILT)).add(new THREE.Vector3(0, Math.sin(READ_TILT), 0)).normalize();
-    const x = l.clone();
+    const x = l.clone().negate();
     const z = new THREE.Vector3().crossVectors(x, y);
     out.turn.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
     return out;
   };
-  /** his hands on the book at `p` (its sides, palms in, fingers up its cover; `size` its box) */
-  const handsOn = (p: typeof pose, size: THREE.Vector3, k: number, kL = k) => {
-    const z = new THREE.Vector3(0, 0, 1).applyQuaternion(p.turn), y = new THREE.Vector3(0, 1, 0).applyQuaternion(p.turn);
-    const side = z.dot(left()) > 0 ? 1 : -1;
-    act.handL = aim(p.at.clone().addScaledVector(z, side * size.z / 2).addScaledVector(y, -size.y * 0.15), z.clone().multiplyScalar(-side), y);
-    act.handR = aim(p.at.clone().addScaledVector(z, -side * size.z / 2).addScaledVector(y, -size.y * 0.15), z.clone().multiplyScalar(side), y);
-    act.reachL = kL; act.reachR = k;
-    act.grip = 1;
+  /** his hand flat on a book's board or under it: its wrist at `wrist`, its palm to the book (`toBook`), its fingers
+   *  `fingers`, each tipped back off the book by their own curl (as `readHands`' are: a hand at rest curls a little, and
+   *  laid flat its fingers rose into the book) */
+  const flatOn = (wrist: THREE.Vector3, toBook: THREE.Vector3, fingers: THREE.Vector3) =>
+    aim(wrist, toBook.clone().addScaledVector(fingers, FINGERS_BACK).normalize(), fingers.clone().addScaledVector(toBook, -FINGERS_BACK).normalize());
+  /** his left hand under a shut book held before him, palm up under its bottom by its fore-edge, its fingers along it
+   *  toward the spine: the book stood on it as his right hand turns it. Pinching its fore-edge as his right pinched the
+   *  spine, the book was held out between two pinches, and turned over by them it spun in the air (from play: "rework how
+   *  he holds the book") */
+  const underBottom = (p: typeof pose, size: THREE.Vector3, frame = p.turn) => {
+    const y = new THREE.Vector3(0, 1, 0).applyQuaternion(frame), z = new THREE.Vector3(0, 0, 1).applyQuaternion(frame);
+    // (how far its bottom is under its middle, and its fore-edge before it, however it's turned in `frame`)
+    const reach = (way: THREE.Vector3) => [0, 1, 2].reduce((sum, i) =>
+      sum + Math.abs(new THREE.Vector3().setComponent(i, 1).applyQuaternion(p.turn).dot(way)) * size.getComponent(i) / 2, 0);
+    // (its fingers each laid on its bottom: curled by the hand's grip, they went 4 mm into a thick book's)
+    act.flatL = { at: toWorld(p.at.clone().addScaledVector(y, -reach(y))), normal: dirWorld(y.clone().negate()) };
+    boardsAt.L = tick;
+    return flatOn(p.at.clone().addScaledVector(y, -reach(y) - PALM_UNDER).addScaledVector(z, -2 * reach(z) * UNDER.from), y, z);
   };
+  /** the frame (`tick`) each hand's board was last set by a beat: a board no beat sets is let go of */
+  const boardsAt = { L: -1, R: -1 };
+  let tick = 0;
+  /** his hands on a shut book at `p`: his right pinching its spine, its fingers on the far board and its thumb on the
+   *  near one (`bySpine`), his left under its bottom (`underBottom`), `k` and `kL` of the way there. Each palm on an end,
+   *  its fingers up it and curled, they went 4.5 cm into the book through it (from play: "have him grab from other side
+   *  of book", his right hand at its fore-edge as he lifted it) */
+  const handsOn = (p: typeof pose, size: THREE.Vector3, k: number, kL = k) => {
+    act.handR = bySpine(p, size);
+    act.handL = underBottom(asHeld(p), size);
+    act.pinchR = pinchOf(size);
+    act.pinchL = null;
+    act.reachL = kL; act.reachR = k;
+    act.grip = GRIP_SHUT;
+  };
+  /** where the book at `p` is: once it's in his right hand, where that hand has it (its last frame's), as his right
+   *  wrist turns it short of where it was led at the far end of a turn. Under where it was led, his left palm was 78 mm
+   *  off it there */
+  const asHeld = (p: typeof pose): typeof pose =>
+    (gripped && carried ? { at: carried.position.clone(), turn: carried.quaternion.clone() } : p);
   const putCarried = (p: typeof pose) => {
     if (!carried) return;
     carried.position.copy(p.at);
     carried.quaternion.copy(p.turn);
+  };
+  /** the shut book's place in his right hand (the hand joint's frame) from the moment his pinch has closed on it, and
+   *  for how many frames his wrist has been on its aim */
+  let inHand: THREE.Matrix4 | null = null, settled = 0, gripped = false;
+  /** The shut book a thing in his right hand while he pinches it (`act.pinchR`, his hand there): placed from his hand
+   *  each frame, his pose made, at the place it had in it as his pinch closed; the beats' paths for it steer his hand
+   *  (`bySpine`'s aim), and the book goes where his hand goes. Placed by its own path beside his hand's, the two were
+   *  two animations: turned over, the book turned by itself and his hand came off it, from play ("have him grab from
+   *  other side of book"). Let go of as he lets go of it, or puts it down, or opens it. */
+  const bookInHand = () => {
+    const holding = !!carried && carried === room.held && shown.held && !!act.pinchR && !!act.handR && act.reachR > 0.99;
+    if (!holding) { inHand = null; settled = 0; gripped = false; return; }
+    handR.updateWorldMatrix(true, false);
+    carried!.updateWorldMatrix(true, false);
+    if (!gripped) {
+      // (his pinch closed once his wrist has stayed on its aim: taken as it came, the book sat askew in his hand)
+      // (and once his aim's blend over from the last is done: the blend's own aim was where his wrist already was, and
+      // his hold was taken as his hand changed holds, the book far off his fingers)
+      settled = aims.R.t >= 1 && handR.getWorldPosition(new THREE.Vector3()).distanceTo(act.handR!.at) < IN_HAND.near ? settled + 1 : 0;
+      if (settled < IN_HAND.settle) return;
+      gripped = true;
+      inHand = handR.matrixWorld.clone().invert().multiply(carried!.matrixWorld);
+    }
+    // (the canary's: the book left on its own path, his pinch closed on it all the same)
+    if (roundsPlant.ownPath || !inHand) return;
+    g.updateWorldMatrix(true, false);
+    g.matrixWorld.clone().invert().multiply(handR.matrixWorld).multiply(inHand).decompose(carried!.position, carried!.quaternion, carried!.scale);
   };
 
   // --- his rounds, a beat at a time: each step a generator run a frame a `next` ---
@@ -476,31 +641,82 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
 
   function* getUp(): Generator<void, void, void> {
     doing = 'getting up from his table';
-    const from = new THREE.Vector2(seat.x, seat.z), way = new THREE.Vector2(exit.x, exit.z).sub(from);
+    // (his chair pushed back from the table first, his hands on its seat, as he sits on it: risen where he sat, his lap
+    // and sleeves came up through the table's top; the canary leaves it where it is)
+    if (!roundsPlant.chairStays) {
+      yield* over(SEAT_REACH, (k) => seatHands(smooth(k)));
+      yield* over(CHAIR_MOVE, (k) => {
+        chairTo(CHAIR_OUT * smooth(k));
+        me.p.copy(seatOut(-room.chair.position.z));
+        seatHands(1);
+      });
+    }
+    const from = me.p.clone(), way = new THREE.Vector2(exit.x, exit.z).sub(from);
     // (out from between his chair and his table as he rises, as a man gets up from one: risen in his place first, he
     // stood in his chair)
     const out = (k: number) => smooth(clamp(k * 1.2 - 0.1, 0, 1));
+    // (pushing himself up off its seat with his hands, let go of over the first of his rise: let go of at once, his arms
+    // went from the seat to his book in a frame, his pose still his sat one)
+    const held = !roundsPlant.chairStays;
+    // (let go of only once his pose is no longer his sat one, `SEAT_LET_GO`: let go of before, that pose's hands, on his
+    // book from his chair drawn out, were at the table's edge, 3 cm into it)
+    const pushOff = (k: number) => { if (held) seatHands(1 - smooth(clamp((k - SEAT_LET_GO) / RISE_PUSH, 0, 1))); };
     yield* over(BEAT.rise * RISE.setOff, (k) => {
       act.sit = 1 - smooth(k * RISE.setOff);
       me.p.copy(from).addScaledVector(way, out(k * RISE.setOff));
+      pushOff(k * RISE.setOff);
     });
     // (the rest of it as he sets off: added to where his steps take him)
     let k = RISE.setOff, was = out(k);
     // (the canary: the rest of it cut, there in a frame)
     if (roundsPlant.cut) { act.sit = 0; me.p.addScaledVector(way, 1 - was); return; }
-    alongside = () => {
+    if (!held) hands(0);
+    const rising = () => {
       k = Math.min(1, k + dt / BEAT.rise);
       act.sit = 1 - smooth(k);
+      pushOff(k);
       me.p.addScaledVector(way, out(k) - was);
       was = out(k);
       return k < 1;
     };
+    if (roundsPlant.chairStays) { alongside = rising; return; }
+    // (risen and stepped out beside it, then turned to it, his hand on its back's rail, it pushed in to the table again,
+    // as it was: his rise run out here, not alongside his first steps, as he has his chair to see to)
+    while (rising()) yield;
+    act.sit = 0;
+    yield* chairPushed(CHAIR_OUT, 0);
+  }
+  /** His chair moved from `from` m out to `to`, by his right hand on its back's rail, as he stands beside it. */
+  function* chairPushed(from: number, to: number): Generator<void, void, void> {
+    doing = to > from ? 'drawing his chair out' : 'pushing his chair in';
+    const facing = Math.atan2(-Math.sin(deskYaw + Math.PI / 2), -Math.cos(deskYaw + Math.PI / 2));
+    yield* turnTo(facing, () => railHand(0));
+    // (stepping from where he stands, by as far as the chair goes: put where its side is, he stood 2 cm off it after his
+    // walk and was there in a frame)
+    const stood = me.p.clone(), was = beside(from);
+    yield* over(CHAIR_MOVE * 1.25, (k) => {
+      const moved = smooth(clamp((k - 0.4) / 0.5, 0, 1));
+      chairTo(lerp(from, to, moved));
+      me.p.copy(stood).add(beside(-room.chair.position.z).sub(was));
+      act.walk = 0.08 * Math.sin(Math.PI * moved);
+      // (his hand on its rail before it goes: going at once, his hand was 7 cm behind it)
+      railHand(smooth(clamp(k / 0.35, 0, 1)) * (1 - smooth(clamp((k - 0.92) / 0.08, 0, 1)) * 0.8));
+      look(onChair(0, CHAIR_AT.seatY, 0));
+    });
+    act.walk = 0;
+    hands(0);
+    act.handL = act.handR = null;
+    look(null);
   }
   function* sitDown(): Generator<void, void, void> {
     doing = 'going back to his table';
-    yield* walkTo(new THREE.Vector2(exit.x, exit.z));
+    yield* walkTo(roundsPlant.chairStays ? new THREE.Vector2(exit.x, exit.z) : beside(0));
+    // (his chair drawn out from the table by its back's rail, sat on out there, and drawn in under him by its seat)
+    if (!roundsPlant.chairStays) yield* chairPushed(0, CHAIR_OUT);
+    doing = 'going back to his table';
     // (turned to his table as he starts down: his back to his chair, a step or two round with it)
-    const from = me.p.clone(), to = new THREE.Vector2(seat.x, seat.z), yaw = me.yaw, by = angleTo(yaw, deskYaw);
+    const out = -room.chair.position.z;
+    const from = me.p.clone(), to = seatOut(out), yaw = me.yaw, by = angleTo(yaw, deskYaw);
     look(new THREE.Vector3(me.p.x + Math.sin(deskYaw) * LOOK_AHEAD.far, LOOK_AHEAD.high, me.p.y + Math.cos(deskYaw) * LOOK_AHEAD.far));
     yield* over(BEAT.rise, (k) => {
       const turning = clamp(k / RISE.turned, 0, 1);
@@ -508,13 +724,34 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       act.walk = Math.abs(by) > 0.05 ? 0.12 * Math.sin(Math.PI * turning) : 0;
       act.sit = smooth(k);
       me.p.copy(from).lerp(to, smooth(clamp(k * 1.2 - 0.1, 0, 1)));
+      // (his hands down to its seat's sides as he settles on it, to draw it in: sat on it out from the table with his
+      // hands where he reads, they reached for the book from that far back and went into the table's edge)
+      // (taken early in his sitting, before his sat pose takes over: taken late, that pose's hands, on his book from his
+      // chair drawn out, were at the table's edge, 3 cm into it)
+      if (out > 0) seatHands(smooth(clamp((k - 0.1) / 0.45, 0, 1)));
     });
     act.walk = 0;
     act.sit = 1;
     me.p.copy(to);
     me.yaw = deskYaw;
     look(null);
+    if (out <= 0) return;
+    doing = 'drawing his chair in';
+    yield* over(CHAIR_MOVE, (k) => {
+      chairTo(out * (1 - smooth(k)));
+      me.p.copy(seatOut(-room.chair.position.z));
+      seatHands(1);
+    });
+    chairTo(0);
+    me.p.copy(seat2());
+    // (his hands back up to his book, over the table's edge, eased: let go of in a few frames once he's sat, with his
+    // pose no longer followed, his arms turned 48 degrees a frame)
+    yield* over(SEAT_REACH, (k) => seatHands(1 - smooth(k)));
+    act.handL = act.handR = null;
+    act.reachL = act.reachR = 0;
   }
+  /** where he sits, tucked in (the room's frame) */
+  const seat2 = () => new THREE.Vector2(seat.x, seat.z);
 
   /** His eye along a case's shelves: from one end of what he can reach to the other, a row and the next. */
   function* scan(slot: Slot, seconds: number): Generator<void, void, void> {
@@ -536,19 +773,36 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   /** his right hand's finger hooked over a book's top just behind its spine: his palm down, his fingers into the case */
   const onTop = (p: typeof pose, size: THREE.Vector3) => {
     const { out, up, at } = spineOf(p, size);
-    return aim(at.addScaledVector(up, size.y / 2 + 0.03).addScaledVector(out, 0.05), up.clone().negate(), out.clone().negate().addScaledVector(up, -0.5));
+    // (his fingers over its top, near flat across it: aimed half down as well, they went into its top behind its spine)
+    return aim(at.addScaledVector(up, size.y / 2 + 0.06).addScaledVector(out, 0.05), up.clone().negate(), out.clone().negate().addScaledVector(up, -0.15));
   };
   /** his right hand round a book's spine: his palm on it, his fingers round to its far cover (his left), his thumb on
    *  the near; as a book is held by its spine */
   const bySpine = (p: typeof pose, size: THREE.Vector3) => {
-    const { out, up, at } = spineOf(p, size), l = left();
-    // (his fingers round to the cover on his left; with the spine itself to his left or right, as the book is held
-    // before him, round the book's own way across: there his left left nothing across it, and his hand spun)
-    const across = l.clone().addScaledVector(out, -l.dot(out)).addScaledVector(up, -l.dot(up));
-    const own = new THREE.Vector3().crossVectors(up, out);
-    if (own.dot(l) < 0) own.negate();
-    across.lerp(own.normalize(), 1 - smooth(clamp(across.length() / 0.6, 0, 1))).normalize();
-    return aim(at.addScaledVector(out, 0.03).addScaledVector(across, -0.03).addScaledVector(up, -size.y * 0.05), out.clone().negate(), across);
+    const { out, up, at } = spineOf(p, size), across = acrossOf(out, up);
+    return pinch(at, out, up, across, size);
+  };
+  /** A book held at its end `at` (out of it `out`, up it `up`) between his thumb and his fingers: his palm against the
+   *  board `across` it (half a palm's thickness off it), his fingers flat along that board from the end toward its
+   *  middle, his knuckles `PINCH.on` onto it, his wrist out past the end where that puts them, at `PINCH.up` of the way
+   *  up it from its middle. Solved from the book's own place and size, as a person takes one by its spine: posed by a
+   *  fixed aim beside it, his hand hung off it at some shelves and went into it at others, from play ("have him grab
+   *  from other side of book"); closed round its spine as round a handle, his fingers went on round into the book. */
+  /** his hand's pinch of a book `size` (`Pinch`: where its end lies across his hand), as `pinch` aims it */
+  const pinchOf = (size: THREE.Vector3): Pinch => ({ board: PINCH.palm, thick: size.x, end: KNUCKLES.out - PINCH.on });
+  const pinch = (at: THREE.Vector3, out: THREE.Vector3, up: THREE.Vector3, across: THREE.Vector3, size: THREE.Vector3) => {
+    const wrist = at.clone().addScaledVector(out, KNUCKLES.out - PINCH.on).addScaledVector(across, size.x / 2 + PINCH.palm).addScaledVector(up, size.y * PINCH.up);
+    return aim(wrist, across.clone().negate(), out.clone().negate());
+  };
+  /** the side of a book's end his right hand is on, the book's own way across: at the shelf, the book's right side (his
+   *  palm to its right board, his thumb round onto its left), and so, the book turned in his hand to face him with its
+   *  spine to his right, behind it (his fingers behind, his thumb on its front cover). Always one side of the book
+   *  however it turns, from his right and front: on its left side at the shelf, as the spine came round to his right
+   *  his hand's side was the way across his left left nothing of, and turned over there in a frame, the book upside
+   *  down in it (from play: "rework how he holds the book") */
+  const acrossOf = (out: THREE.Vector3, up: THREE.Vector3) => {
+    const own = new THREE.Vector3().crossVectors(up, out).normalize();
+    return own.dot(fwd().sub(left())) < 0 ? own.negate() : own;
   };
   /** his right hand on a shelf's book's spine, the book a hair out of its gap (`outBy`) */
   const onSpine = (slot: Slot, outBy: number) =>
@@ -560,8 +814,9 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   function* take(slot: Slot): Generator<void, void, void> {
     doing = 'taking a book from the shelf';
     look(spine(slot, 0));
-    act.grip = 0.3;
+    act.grip = 0.15;
     const p = { at: slot.at.clone(), turn: slot.turn.clone() };
+    act.pinchR = null;
     yield* over(BEAT.reach, (k) => { act.handR = onTop(p, slot.size); act.reachR = smooth(k); });
     // (the book itself: its look the shelf's, in his hand where it stood)
     const { mesh, colours } = room.shelves[slot.shelf];
@@ -587,27 +842,35 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     };
     const TIP = 0.32;
     yield* over(BEAT.tip, (k) => { tipped(TIP * smooth(k), 0); act.handR = onTop(p, slot.size); });
-    // (his hand round its spine as it leans out)
-    act.grip = 0.85;
+    // (his hand round its spine as it leans out, closing on it as it gets there: closed as it set off over its top, his
+    // fingers curled into the book on the way)
     yield* over(BEAT.grasp, (k) => {
       tipped(TIP, 0);
-      act.handR = mixAim(onTop(p, slot.size), bySpine(p, slot.size), smooth(k));
+      act.grip = k < 1 ? lerp(0.15, GRIP_SHUT * 0.99, smooth(clamp((k - 0.6) / 0.4, 0, 1))) : GRIP_SHUT;
+      // (turned to its spine first, then brought down to it, kept out off the book on the way: turned as it came, his
+      // fingers pointed into the book half the way)
+      const from = onTop(p, slot.size), to = bySpine(p, slot.size), turned = mixAim(from, to, smooth(clamp(k / 0.5, 0, 1)));
+      const out = new THREE.Vector3(0, 0, 1).applyQuaternion(p.turn);
+      turned.at.copy(from.at).lerp(to.at, smooth(clamp((k - 0.3) / 0.7, 0, 1))).addScaledVector(dirWorld(out), 0.03 * Math.sin(Math.PI * k));
+      act.handR = turned;
+      act.pinchR = k > 0.5 ? pinchOf(slot.size) : null;
     });
     // (drawn out, straightened as it comes)
     yield* over(BEAT.pull, (k) => {
       tipped(TIP * (1 - smooth(k)), smooth(k) * (slot.size.z + 0.06));
       act.handR = bySpine(p, slot.size);
+      act.pinchR = pinchOf(slot.size);
     });
-    act.grip = 1;
+    act.grip = GRIP_SHUT;
     const from = { at: p.at.clone(), turn: p.turn.clone() }, to = { at: new THREE.Vector3(), turn: new THREE.Quaternion() };
     yield* over(BEAT.lift, (k) => {
       holdPose(to);
       p.at.copy(from.at).lerp(to.at, smooth(k));
       p.turn.copy(from.turn).slerp(to.turn, smooth(k));
       putCarried(p);
-      const spineHold = bySpine(p, slot.size);
+      const spineAim = bySpine(p, slot.size);
       handsOn(p, slot.size, 1, smooth(clamp(k * 1.3 - 0.2, 0, 1)));
-      act.handR = mixAim(spineHold, act.handR!, smooth(clamp(k * 2, 0, 1)));
+      act.handR = mixAim(spineAim, act.handR!, smooth(clamp(k * 2, 0, 1)));
       look(p.at);
     });
   }
@@ -624,15 +887,17 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     if (turned) out.turn.multiply(STOOD);
     return out;
   };
-  /** his hands on a book carried against his chest (`size` as `cradlePose` has it) */
+  /** his hands on a book carried against his chest (`size` as `cradlePose` has it): his right still pinching its spine,
+   *  its bottom in his left palm. Its bottom in his right palm, his right hand went from the spine to under it while
+   *  the book was in that hand, and the book followed it down */
   const cradleHands = (p: typeof pose, size: THREE.Vector3, turned = false) => {
     const turn = turned ? p.turn.clone().multiply(STOOD_BACK) : p.turn;
-    const x = new THREE.Vector3(1, 0, 0).applyQuaternion(turn), y = new THREE.Vector3(0, 1, 0).applyQuaternion(turn), l = left();
-    act.handR = aim(p.at.clone().addScaledVector(y, -size.y / 2 - 0.035).addScaledVector(l, -0.02), y, l);
-    act.handL = aim(p.at.clone().addScaledVector(x, size.x / 2 + 0.035).addScaledVector(y, size.y * 0.12).addScaledVector(l, -0.04),
-      x.clone().negate(), y.clone().multiplyScalar(0.5).addScaledVector(l, -0.8).normalize());
+    act.handR = bySpine(p, size);
+    act.pinchR = pinchOf(size);
+    act.pinchL = null;
+    act.handL = underBottom(asHeld(p), size, turn);
     act.reachL = act.reachR = 1;
-    act.grip = 0.7;
+    act.grip = GRIP_SHUT;
   };
   /** each hand's aim taken `t` of the way from `from`'s to the one it has now */
   const blendHands = (from: { L: HandAim; R: HandAim }, t: number) => {
@@ -671,7 +936,14 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     doing = 'looking a book over';
     const p = { at: new THREE.Vector3(), turn: new THREE.Quaternion() };
     yield* over(BEAT.inspect, (k) => {
-      holdPose(p, 0.35 * Math.sin(k * Math.PI * 2));
+      // (turned on his left palm, about its own upright through its bottom where his palm is: his right wrist turns it,
+      // the book in his hand; rocked about his line of sight, it swung his right hand round its middle in the air)
+      holdPose(p);
+      const y = new THREE.Vector3(0, 1, 0).applyQuaternion(p.turn), z = new THREE.Vector3(0, 0, 1).applyQuaternion(p.turn);
+      const pivot = p.at.clone().addScaledVector(y, -slot.size.y / 2).addScaledVector(z, -slot.size.z * UNDER.from / 2);
+      const q = new THREE.Quaternion().setFromAxisAngle(y, LOOK_TURN * Math.sin(k * Math.PI * 2) * smooth(Math.min(1, k * 4)));
+      p.at.sub(pivot).applyQuaternion(q).add(pivot);
+      p.turn.premultiply(q);
       putCarried(p);
       handsOn(p, slot.size, 1);
       look(p.at);
@@ -679,39 +951,83 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     doing = 'opening a book';
     const r = { at: new THREE.Vector3(), turn: new THREE.Quaternion() };
     // (the open book the very book he took, opened, and his hands on it as it's sized)
-    room.openAs(slot.size, room.shelves[slot.shelf].colours[slot.index]);
+    room.openAs(slot.size, room.shelves[slot.shelf].colours[slot.index], room.shelves[slot.shelf].offset + slot.index);
     const open = new THREE.Vector3(0.26, 0.04, 0.2).multiply(room.openHeld.scale);
     /** his hands under the open book at `r`: his left palm behind its spine low down, his right behind its right
-     *  board, his fingers straight up the boards (curled, they came through its pages, from play) */
+     *  board, his fingers flat up the boards (curled, they came through its pages, from play), `behind` the book's
+     *  origin (m: its cover's underside is `OPEN_UNDER` under it; aimed 1.7 cm behind, his palms were in its cover and
+     *  pages, his fingers up through them by the gutter and his forearm's linen lying along it, from play: "fingers go
+     *  through the book") */
     const readHands = (q: typeof r, behind: number) => {
-      const y = new THREE.Vector3(0, 1, 0).applyQuaternion(q.turn), x = new THREE.Vector3(1, 0, 0).applyQuaternion(q.turn);
+      // (`x` to his left: the book's -x, its lines running to his right)
+      const y = new THREE.Vector3(0, 1, 0).applyQuaternion(q.turn), x = new THREE.Vector3(-1, 0, 0).applyQuaternion(q.turn);
       const upPage = new THREE.Vector3(0, 1, 0).addScaledVector(y, -y.y).normalize();
+      // (each hand square to the board, its fingers each laid along its back (`layFlat`): a hand at rest curls a
+      // little, and its fingers rose 2 cm over their length into the pages; tipped back off the board by one rest curl
+      // for all, their tips went up to 9 mm into its cover and stood 4.7 cm off it)
       act.handL = aim(q.at.clone().addScaledVector(x, open.x * 0.05).addScaledVector(upPage, -open.z * 0.42).addScaledVector(y, -behind),
         y, upPage.clone().addScaledVector(x, 0.08));
       act.handR = aim(q.at.clone().addScaledVector(x, -open.x * 0.3).addScaledVector(upPage, -open.z * 0.38).addScaledVector(y, -behind),
         y, upPage.clone().addScaledVector(x, -0.15));
       act.reachL = act.reachR = 1;
-      act.grip = 0.05;
+      act.grip = 0;
+      // (the cover's underside, its face toward his hands)
+      act.flatL = act.flatR = { at: toWorld(q.at.clone().addScaledVector(y, -OPEN_UNDER)), normal: dirWorld(y.clone().negate()) };
+      boardsAt.L = boardsAt.R = tick;
+      // (the open book under his hands: no pinch on the shut one; kept, his hold was taken again as he read)
+      act.pinchL = act.pinchR = null;
     };
     // (opened: his hands round behind the closed book first, then it's open in them and brought up to read)
     const shut = holdPose({ at: new THREE.Vector3(), turn: new THREE.Quaternion() });
-    yield* over(BEAT.open * 0.5, (k) => {
+    /** the open book where the shut one at `shut` opens to: its pages to him, its spine up and down, its cover's
+     *  underside where the shut one's back board is, so his hands round behind the shut book lie on the open one's
+     *  cover as it opens. Opened in the shut one's own turn, its pages faced up, his hands round behind it were laid on
+     *  a plane through the shut book, his fingers 44 mm into it */
+    const opened = (q: typeof pose, out: typeof pose) => {
+      out.turn.copy(q.turn).multiply(OPEN_FROM_SHUT);
+      out.at.copy(q.at).addScaledVector(new THREE.Vector3(1, 0, 0).applyQuaternion(q.turn), slot.size.x / 2 - OPEN_UNDER);
+      return out;
+    };
+    const first = { at: new THREE.Vector3(), turn: new THREE.Quaternion() };
+    // (his hands off its front and round behind it before it opens out over them: opened as they left it, his thumb and
+    // fingers were in its pages a quarter of a second)
+    yield* over(BEAT.open * 1.2, (k) => {
       holdPose(shut);
       putCarried(shut);
-      readHands(shut, 0.03);
-      if (k < 0.3) handsOn(shut, slot.size, 1);
+      readHands(opened(shut, first), OPEN_UNDER + PALM_UNDER + 0.012);
+      // (still holding the shut one, his fingers on it, not on the board behind it: laid on that from under its bottom,
+      // his left fingers curled up into the shut book)
+      if (k < 0.2) { handsOn(shut, slot.size, 1); act.flatR = null; }
+      else if (k < OPEN_OFF) {
+        // (his right hand slid off its spine, its pinch kept, before its thumb comes round behind: let go where it
+        // held it, his thumb swung from the front cover through the book, 33 mm into it. Not quite all the way there,
+        // the book stays where it is as his hand goes, `bookInHand`)
+        const e = smooth((k - 0.2) / (OPEN_OFF - 0.2));
+        act.handR = bySpine(shut, slot.size);
+        act.handR.at.addScaledVector(dirWorld(spineOf(shut, slot.size).out), OPEN_SLIDE * e);
+        act.pinchR = pinchOf(slot.size);
+        act.flatR = null;
+        act.reachR = 0.99;
+        // (and his left from under its bottom back past its back board before it rises behind it: straight from under
+        // it to behind it, its fingers swept through the book's bottom corner, 15 mm into it)
+        act.handL = underBottom(shut, slot.size);
+        act.handL.at.addScaledVector(dirWorld(new THREE.Vector3(1, 0, 0).applyQuaternion(shut.turn)), (slot.size.x + OPEN_SLIDE) * e);
+        act.flatL = null;
+      }
       look(shut.at);
     });
     shown.held = false;
     shown.openHeld = true;
-    const from = { at: shut.at.clone(), turn: shut.turn.clone() };
+    const from = opened(shut, { at: new THREE.Vector3(), turn: new THREE.Quaternion() });
     yield* over(BEAT.open, (k) => {
       readPose(r);
       r.at.lerp(from.at, 1 - smooth(k));
       r.turn.slerp(from.turn, 1 - smooth(k));
       room.openHeld.position.copy(r.at);
       room.openHeld.quaternion.copy(r.turn);
-      readHands(r, lerp(0.03, 0.017, k));
+      // (his hands a little further back till it's up: his arm a few frames behind its pose as it rose, his thumb's
+      // root came 2 mm into its cover)
+      readHands(r, OPEN_UNDER + PALM_UNDER + 0.015 * (1 - k * k * k));
       look(r.at);
     });
     doing = 'reading a book standing';
@@ -719,12 +1035,12 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       readPose(r);
       room.openHeld.position.copy(r.at);
       room.openHeld.quaternion.copy(r.turn);
-      readHands(r, 0.017);
+      readHands(r, OPEN_UNDER + PALM_UNDER);
       look(r.at);
     });
     shown.openHeld = false;
     shown.held = true;
-    act.grip = 1;
+    act.grip = GRIP_SHUT;
   }
 
   /** The book in his hands put back in its gap: brought to it, pushed in, his hand let go of it. */
@@ -733,6 +1049,8 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     const p = holdPose({ at: new THREE.Vector3(), turn: new THREE.Quaternion() }), from = { at: p.at.clone(), turn: p.turn.clone() };
     const front = slot.at.clone().addScaledVector(slot.out, slot.size.z + 0.05);
     look(slot.at);
+    // (his hands closed on it before it goes: shut in his hands, it went off toward the shelf by itself as they came)
+    yield* over(BEAT.settle, () => { putCarried(p); handsOn(p, slot.size, 1); act.reachR = 1; });
     yield* over(BEAT.put, (k) => {
       p.at.copy(from.at).lerp(front, smooth(k));
       p.turn.copy(from.turn).slerp(slot.turn, smooth(k));
@@ -747,6 +1065,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       p.at.copy(front).lerp(slot.at, smooth(k));
       putCarried(p);
       act.handR = bySpine(p, slot.size);
+      act.pinchR = pinchOf(slot.size);
     });
     showSlot(slot, true);
     gaps.splice(gaps.indexOf(slot), 1);
@@ -787,17 +1106,22 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   function* keep(slot: Slot): Generator<void, void, void> {
     doing = 'carrying a book to a stack';
     const held = holdPose({ at: new THREE.Vector3(), turn: new THREE.Quaternion() });
+    // (his hands closed on it before it goes, as `putBack`'s: taken to his chest at once, his right hand was still where
+    // it held the open book, 18 cm off the shut one, and the book went in it there, 7 cm off his fingers all the way)
+    yield* over(BEAT.settle, () => { holdPose(held); putCarried(held); handsOn(held, slot.size, 1); look(held.at); });
     yield* toCradle(held, slot.size);
     carry = () => { cradlePose(held, slot.size); putCarried(held); cradleHands(held, slot.size); };
     yield* walkTo(stackStand());
     yield* turnTo(faceStack());
     carry = null;
     doing = 'laying a book on a stack';
-    // (lying flat on the stack's top, its spine out a little turned)
+    // (lying flat on the stack's top, its spine to him a little turned)
     const size = slot.size, laid = new THREE.Vector3(size.y, size.x, size.z);
     const top = stackTop().add(new THREE.Vector3(0, laid.y / 2, 0));
-    // (across his front, its sides to his hands, a little turned: turned anyhow, one hand reached round to its far side)
-    const flat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), me.yaw + Math.PI / 2 + (rng() - 0.5) * 0.4)
+    // (its spine, in his right hand, toward him, a little turned: its spine to his side, the far end of a book across his
+    // front, it lay 80 cm from his shoulder, past his reach, and the book in his hand stopped 22 cm short of the stack;
+    // turned anyhow, one hand reached round to its far side)
+    const flat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), me.yaw + Math.PI + (rng() - 0.5) * 0.4)
       .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2));
     const p = cradlePose({ at: new THREE.Vector3(), turn: new THREE.Quaternion() }, slot.size), from = { at: p.at.clone(), turn: p.turn.clone() };
     look(top);
@@ -805,6 +1129,8 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       p.at.copy(from.at).lerp(top, smooth(k));
       p.turn.copy(from.turn).slerp(flat, smooth(k));
       putCarried(p);
+      // (leaning over it as it goes down: upright, his hand stopped 5 cm short of the stack's top, the book in it)
+      act.lean = LAY_LEAN * smooth(k);
       // (held to him as it comes off his chest, then by its sides as it goes down)
       cradleHands(p, slot.size);
       const toHim = { L: act.handL!, R: act.handR! };
@@ -828,7 +1154,8 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     shown.held = false;
     carried = null;
     act.grip = 0;
-    yield* over(BEAT.release, (k) => hands(1 - smooth(k)));
+    yield* over(BEAT.release, (k) => { hands(1 - smooth(k)); act.lean = LAY_LEAN * (1 - smooth(k)); });
+    act.lean = 0;
     act.handL = act.handR = null;
   }
 
@@ -865,7 +1192,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     // (in his hands: in the room's frame now, as he carries it)
     g.attach(book);
     carried = book;
-    act.grip = 1;
+    act.grip = GRIP_SHUT;
     // (stood up in his hands: its long side up, as it'll stand on the shelf)
     const from = { at: p.at.clone(), turn: p.turn.clone() };
     const shelfSize = new THREE.Vector3(size.y, size.x, size.z);
@@ -901,6 +1228,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       // (to the shelf as he puts a book back: his right hand on its spine, his left letting go; held by its two ends,
       // the end at the top was out of his reach at a high shelf)
       act.handR = bySpine(p, stood);
+      act.pinchR = pinchOf(stood);
       act.reachR = 1;
       act.reachL = 1 - smooth(k);
     });
@@ -909,6 +1237,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       putCarried(p);
       // (on the spine of the book he carries, stood up: on the shelf's own book's, his hand pushed 13 cm off it)
       act.handR = bySpine(p, stood);
+      act.pinchR = pinchOf(stood);
       act.reachL = 0;
     });
     // (it stands in the gap now: the gap's gone)
@@ -927,7 +1256,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     // (the canary: the book where the ladder leans, its spot under the ladder)
     // (and for a picture, the book nearest it he may take: `byLadder`)
     const nearest = (of: Slot[]) => of.reduce((a, b) => (b.stand.distanceTo(foot) < a.stand.distanceTo(foot) ? b : a));
-    const slot = roundsPlant.underLadder ? nearest(everySlot) : roundsPlant.byLadder ? nearest(slots) : pickSlot();
+    const slot = roundsPlant.takeAt ? slotAt(roundsPlant.takeAt) : roundsPlant.underLadder ? nearest(everySlot) : roundsPlant.byLadder ? nearest(slots) : pickSlot();
     if (!slot) return;
     doing = 'walking to a case';
     yield* walkTo(slot.stand);
@@ -938,13 +1267,13 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
       act.walk = 0;
     }
     yield* turnTo(Math.atan2(-slot.out.x, -slot.out.z));
-    yield* scan(slot, lerp(BEAT.scan[0], BEAT.scan[1], rng()));
+    if (!roundsPlant.quick) yield* scan(slot, lerp(BEAT.scan[0], BEAT.scan[1], rng()));
     yield* take(slot);
     // (turned half round to the room to look it over and read it, as a man steps back from a case with a book; and back
     // to the case to put it away)
     const atCase = me.yaw, side = rng() < 0.5 ? 1 : -1;
     yield* turnHolding(slot, atCase + side * 1.9);
-    yield* inspectAndRead(slot);
+    if (!roundsPlant.quick) yield* inspectAndRead(slot);
     if (kept && stack.length < STACK.most) yield* keep(slot);
     else {
       yield* turnHolding(slot, atCase);
@@ -952,6 +1281,11 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     }
   }
 
+  /** a spot's book at its lowest or highest (a harness's sweep: `roundsPlant.takeAt`) */
+  const slotAt = (at: { spot: number; high: boolean }) => {
+    const books = spots[at.spot].slots.filter((sl) => !gaps.includes(sl));
+    return books.reduce((a, b) => ((at.high ? b.at.y > a.at.y : b.at.y < a.at.y) ? b : a));
+  };
   /** a case faced from where he stands for its book in `slot` */
   function* toCase(slot: Slot): Generator<void, void, void> {
     yield* walkTo(slot.stand);
@@ -1062,11 +1396,13 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   }
 
   let asked: Task | null = null;
-  /** what he does next when he gets up (weights: browsing most) */
-  const nextTask = (): Task => {
-    const can: [Task, number][] = [['browse', 3], ['keep', 1], ['dust', 2], ['tidy', 1.5], ['globe', 1]];
+  /** what he does next when he gets up (weights: browsing most; dusting only while `SCHOLAR_DOES` has it), drawn by
+   *  `draw` (his own randomness, or a harness's) */
+  const nextTask = (draw = rng): Task => {
+    const can: [Task, number][] = [['browse', 3], ['keep', 1], ['tidy', 1.5], ['globe', 1]];
+    if (SCHOLAR_DOES.dust) can.push(['dust', 2]);
     if (gaps.length && stack.length > STACK.fewest) can.push(['restock', 2]);
-    let r = rng() * can.reduce((t, [, w]) => t + w, 0);
+    let r = draw() * can.reduce((t, [, w]) => t + w, 0);
     for (const [task, w] of can) if ((r -= w) <= 0) return task;
     return 'browse';
   };
@@ -1145,10 +1481,17 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     get carried() { return carried; },
     get gaps() { return gaps.length; },
     get out() { return out; },
+    get gripped() { return gripped; },
     get spots() { return spots; },
     begin(task) {
       if (act.sit < 1 || carried) return;
+      // (a task switched off, asked for anyway, isn't done)
+      if (task === 'dust' && !SCHOLAR_DOES.dust) return;
       asked = task;
+    },
+    tasks(n, seed) {
+      const draw = mulberry(seed);
+      return Array.from({ length: n }, () => nextTask(draw));
     },
     update(frameDt, hero, talking, said) {
       dt = frameDt;
@@ -1177,6 +1520,14 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
         if (alongside && !alongside()) alongside = null;
         rounds.next();
       }
+      // (a book's end let go of once no shut book is in his hands)
+      if (!carried || !shown.held) act.pinchL = act.pinchR = null;
+      // (a board his fingers lie on let go of once no beat lays them on it: kept while he's talked to, his beats waiting)
+      if (!talking) {
+        if (boardsAt.L !== tick) act.flatL = null;
+        if (boardsAt.R !== tick) act.flatR = null;
+      }
+      tick++;
       blendAims();
       place();
       room.held.visible = shown.held;
@@ -1196,6 +1547,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
         room.talk.stand[0] = talkStand[0]; room.talk.stand[1] = talkStand[1];
       }
       s.update(frameDt, hero, talking, said);
+      bookInHand();
       // (his cloth in his right hand as his pose has it, under his palm: put where his hand was aimed, it stayed by the
       // spines as his arm fell short of them and as his pose followed, 11 cm off his palm)
       if (shown.cloth) {

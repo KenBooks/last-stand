@@ -31,7 +31,8 @@ import { pageHeight } from '../../../src/entities/models/book';
 import { toVillage } from './village';
 import { DOOR_FRAMES, stand, useByE, viewAs } from './houses';
 import { holdThroughDoor } from './housesDoor';
-import { COWL_GAP_MOST, COWL_INTO_MOST, cowlClearance, roundsChecked } from './scholarRounds';
+import { COWL_GAP_MOST, COWL_INTO_MOST, cowlClearance, gripsSwept, roundsChecked } from './scholarRounds';
+import { INTO_BOOK_MOST, PAGE_FACING, SLEEVES_INTO_BOOK_MOST, bookRead, intoBook, pageFacing, turnedRound } from './bookHold';
 
 export interface ScholarOptions {
   /** the views of the close-ups (`front,left,right,back,above` by default) */
@@ -41,6 +42,8 @@ export interface ScholarOptions {
   canary: boolean;
   /** instead, him pictured close at each beat of each task (page/scholarMoments.ts) */
   moments?: boolean;
+  /** instead, his grip swept over every spot and shelf height (`gripsSwept`) */
+  grips?: boolean;
 }
 
 /** the room's leather (`rooms.ts`): a book drawn in it is a box of the old kind */
@@ -100,8 +103,10 @@ const FOREARM = 0.06;
  *  in his arm. (Read as capsules round his arms, 7 cm round the forearm, the quill through the bell's side, spread wide
  *  on the table, read as clear of it) */
 const SLEEVES = /^scholar (sleeve|bell|undersleeve)$/;
-/** the canary's thing on his table: his quill where it stood, in its inkwell under his left forearm (his desk's frame) */
-const OLD_QUILL = { at: [0.32, 0.9, 0.45], turn: [-0.35, 0, -0.3] } as const;
+/** the canary's thing on his table: a quill stood up on it under the middle of his left forearm as it rests (where his
+ *  quill once stood, by his book: fixed there, it went into the wide bell his forearm had, and missed the fitted
+ *  sleeve that took its place), its foot on the table's top (m over the floor) */
+const QUILL_FOOT = 0.76;
 /** the rays out from each point along his forearm, and the points, from past the elbow to the wrist (shares of it) */
 const ROUND = 8;
 const ALONG_ARM = [0.2, 0.35, 0.5, 0.65, 0.8, 0.9, 0.97];
@@ -408,6 +413,11 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
   const spans: { from: number; to: number; depth: number; mesh: string }[] = [];
   const headTurn = { min: Infinity, max: -Infinity }, handAt = new THREE.Vector3();
   const handFrom = hands.map(() => new THREE.Vector3()), handWent = hands.map(() => 0);
+  /** his fingers and his sleeves against his table's book's solids over the loop (m), and where the deepest */
+  let bookFingers = 0, bookSleeves = 0, bookAt = '';
+  const tableBook = bookRead(s, false);
+  /** his table's book's pages as they read to him (`pageFacing`), at their worst; the canary's: turned half round */
+  let pageAway = Infinity, pageRight = Infinity, plantedAway = Infinity, plantedRight = Infinity;
   const frames = Math.round((SCHOLAR_LOOP + 8) / FRAME);
   hands.forEach((h, i) => h.getWorldPosition(handFrom[i]));
   for (let f = 0; f < frames; f++) {
@@ -428,6 +438,17 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
     const yaw = new THREE.Euler().setFromQuaternion(head.getWorldQuaternion(new THREE.Quaternion()), 'YXZ');
     headTurn.min = Math.min(headTurn.min, yaw.x); headTurn.max = Math.max(headTurn.max, yaw.x);
     hands.forEach((h, i) => { h.getWorldPosition(handAt); handWent[i] = Math.max(handWent[i], handAt.distanceTo(handFrom[i])); });
+    if (tableBook) {
+      const into = intoBook(s, tableBook);
+      if (into.fingers > bookFingers) { bookFingers = into.fingers; bookAt = `${into.fat} at ${t.toFixed(2)} s`; }
+      bookSleeves = Math.max(bookSleeves, into.sleeves);
+      const facing = pageFacing(s, s.book.prints);
+      pageAway = Math.min(pageAway, facing.away); pageRight = Math.min(pageRight, facing.right);
+      if (canary && f === frames >> 2) {
+        const turned = turnedRound(tableBook, () => pageFacing(s, s.book.prints));
+        plantedAway = turned.away; plantedRight = turned.right;
+      }
+    }
     // (the page he turns against the blocks, and his fingertips against what they rest on)
     if (s.page.visible) {
       pageFrames++;
@@ -492,6 +513,21 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
     `his cowl over the loop: at most ${(cowlInto * 100).toFixed(1)} cm into his neck or head, its top at most ${(cowlGap * 100).toFixed(1)} cm off his neck (${cowlAt})`];
   const problems: string[] = [];
   const caught = canary && worst > SNAP;
+  lines.push(`his fingers in his table's book: ${(bookFingers * 1000).toFixed(1)} mm at the deepest${bookAt ? ` (${bookAt})` : ''}, his sleeves ${(bookSleeves * 100).toFixed(1)} cm`);
+  if (bookFingers > INTO_BOOK_MOST) problems.push(`his fingers ${(bookFingers * 1000).toFixed(1)} mm into his table's book, ${bookAt} (at most ${INTO_BOOK_MOST * 1000})`);
+  lines.push(`his table's book's pages: their tops at least ${pageAway.toFixed(2)} along his forward, their lines ${pageRight.toFixed(2)} along his right`);
+  // (his sleeves shaped as the arms in them, standing: the upper narrowing to the elbow, the forearm's to the wrist)
+  const arm = sleeveWidths(s), upperTaper = arm.deltoid / arm.elbow, foreTaper = arm.foreWide / arm.foreNarrow;
+  lines.push(`his sleeves: the upper ${(arm.deltoid * 100).toFixed(1)} cm across at the deltoid to ${(arm.elbow * 100).toFixed(1)} over the elbow (${upperTaper.toFixed(2)}), the forearm's ${(arm.foreWide * 100).toFixed(1)} below the elbow to ${(arm.foreNarrow * 100).toFixed(1)} over the wrist (${foreTaper.toFixed(2)})`);
+  if (upperTaper < SLEEVE_TAPER.upper) problems.push(`his upper sleeve narrows ${upperTaper.toFixed(2)} times to the elbow (at least ${SLEEVE_TAPER.upper}: "his arms are sausages")`);
+  if (foreTaper < SLEEVE_TAPER.fore) problems.push(`his forearm's sleeve narrows ${foreTaper.toFixed(2)} times to the wrist (at least ${SLEEVE_TAPER.fore}: "his arms are sausages")`);
+  if (pageAway < PAGE_FACING.away || pageRight < PAGE_FACING.right) problems.push(`his table's book reads wrong to him: its pages' tops ${pageAway.toFixed(2)} along his forward (at least ${PAGE_FACING.away}), their lines ${pageRight.toFixed(2)} along his right (at least ${PAGE_FACING.right}: "Fix upside down book")`);
+  if (canary) {
+    const caughtRound = plantedAway < PAGE_FACING.away || plantedRight < PAGE_FACING.right;
+    lines.push(`canary: his table's book turned half round ${caughtRound ? 'found' : 'unseen'} (its pages' tops ${plantedAway.toFixed(2)} along his forward)`);
+    if (!caughtRound) problems.push('the canary\'s table book turned round went unseen');
+  }
+  if (bookSleeves > SLEEVES_INTO_BOOK_MOST) problems.push(`his sleeves ${(bookSleeves * 100).toFixed(1)} cm into his table's book (at most ${SLEEVES_INTO_BOOK_MOST * 100})`);
   if (canary) lines.push(`canary: his loop jumped 20 s at once ${caught ? 'found' : 'unseen'} (${worst.toFixed(0)}° in a frame)`);
   if (!canary && worst > SNAP) problems.push(`a snap in his loop: ${worstAt} turned ${worst.toFixed(1)}° in a frame (most ${SNAP})`);
   if (wrap > SNAP) problems.push(`his loop snaps at its wrap: ${wrap.toFixed(1)}° in a frame`);
@@ -545,18 +581,22 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
     s.update(0, null, false);
     const bareArms = forearmBare(s, true);
     lines.push(`canary: with no undersleeves his forearms are ${bareArms.every((b) => b !== null) ? 'found bare' : 'found clothed'}`);
-    // (his quill put back where it stood, in its inkwell under his left forearm, as he reads)
-    const planted = new THREE.Mesh(new THREE.ConeGeometry(0.011, 0.24, 6));
-    planted.name = 'scholar desk quill (canary)';
-    planted.position.set(...OLD_QUILL.at);
-    planted.rotation.set(...OLD_QUILL.turn);
-    s.root.parent!.add(planted);
+    // (a quill stood up under his left forearm, as he reads)
     s.loopAt = 5;
+    s.update(0, null, false);
+    const desk = s.root.parent!, forearm = (name: string) => desk.worldToLocal(s.root.getObjectByName(name)!.getWorldPosition(new THREE.Vector3()));
+    const under = forearm('scholar elbowL').lerp(forearm('scholar handL'), 0.5);
+    // (points all up its length, as what's read of it is its points: a cone's are only at its foot and its tip, either
+    // side of a forearm)
+    const planted = new THREE.Mesh(new THREE.ConeGeometry(0.011, 0.24, 6, 24));
+    planted.name = 'scholar desk quill (canary)';
+    planted.position.set(under.x, QUILL_FOOT + 0.12, under.z);
+    desk.add(planted);
     s.update(0, null, false);
     const poked = propsInArms(s);
     planted.removeFromParent();
     planted.geometry.dispose();
-    lines.push(`canary: his quill where it stood goes ${(poked.depth * 100).toFixed(1)} cm into ${poked.what.replace(/.* into /, '')}`);
+    lines.push(`canary: a quill stood under his left forearm goes ${(poked.depth * 100).toFixed(1)} cm into ${poked.what.replace(/.* into /, '')}`);
     return { lines, problems, caught: caught && raised.depth > THROUGH.most && lowered.depth > 0 && drawn.print > SPINE_GAP
       && landedOn > 0 && bareArms.every((b) => b !== null) && poked.depth > 0 };
   }
@@ -598,6 +638,10 @@ export async function scholar(lab: Lab, options: ScholarOptions): Promise<Report
   const rounds = room.rounds?.();
   if (rounds) rounds.hold = true;
   if (!s) return { text: 'the library has no scholar seated', problems: ['no scholar seated'] };
+  if (options.grips && rounds) {
+    const swept = await gripsSwept(lab, s, rounds);
+    return { text: swept.lines.join('\n'), problems: swept.problems, moments: [] };
+  }
   let triangles = 0;
   s.root.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.visible) triangles += (m.geometry.index?.count ?? m.geometry.attributes.position.count) / 3; });
   lines.push(`Brother Hollis seated, ${Math.round(triangles / 1000)}k triangles`);
@@ -700,4 +744,29 @@ export async function scholar(lab: Lab, options: ScholarOptions): Promise<Report
     moments.push(...done.moments);
   }
   return { text: lines.join('\n'), problems, moments };
+}
+
+/** how his sleeves must narrow (their widths' ratios, at least): his upper sleeve from the deltoid (a fifth of the way
+ *  down from the shoulder joint) to over the elbow, and his forearm's from its widest below the elbow to its narrowest
+ *  above the cuff. From play: "why his arms are sausages, we fixed that for the warrior" (a round tube each, 15 cm
+ *  across all the way down the upper arm and a cone widening to 25 cm from the elbow). */
+export const SLEEVE_TAPER = { upper: 1.12, fore: 1.08 };
+
+/** His sleeves' widths (m, across the arm and front to back, the larger) along them, each read from its own mesh as it's
+ *  built (its joint's frame): the upper sleeve's at the deltoid and over the elbow, the forearm's widest and narrowest. */
+export function sleeveWidths(s: Scholar): { deltoid: number; elbow: number; foreWide: number; foreNarrow: number } {
+  // (read at the rows of their lathes' profiles, which they keep: `dressBells`)
+  const widthAt = (mesh: THREE.Mesh, y: number, band = 0.004) => {
+    const pos = mesh.geometry.attributes.position;
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (let i = 0; i < pos.count; i++) {
+      if (Math.abs(pos.getY(i) - y) > band) continue;
+      x0 = Math.min(x0, pos.getX(i)); x1 = Math.max(x1, pos.getX(i)); z0 = Math.min(z0, pos.getZ(i)); z1 = Math.max(z1, pos.getZ(i));
+    }
+    return Math.max(x1 - x0, z1 - z0);
+  };
+  const upper = s.root.getObjectByName('scholar shoulderL')!.children.find((m) => m.name === 'scholar sleeve standing') as THREE.Mesh;
+  const fore = s.root.getObjectByName('scholar elbowL')!.children.find((m) => m.name === 'scholar bell standing') as THREE.Mesh;
+  const along = [0.03, -0.02, -0.08, -0.15, -0.2].map((y) => widthAt(fore, y));
+  return { deltoid: widthAt(upper, -0.06), elbow: widthAt(upper, -0.27), foreWide: Math.max(...along.slice(0, 3)), foreNarrow: Math.min(...along.slice(3)) };
 }

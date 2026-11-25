@@ -12,6 +12,11 @@ declare module '../houses' {
  *  door. */
 export const SCHOLAR_DESK = { x: -2.9, z: 0.6, turn: 0.5 };
 
+/** which of his rounds Brother Hollis goes on that can be switched off (world/scholarRounds.ts): dusting a case, off for
+ *  now, from play: "Remove dusting for Hollis, just have it disabled for now. Only picking books." Off, he never dusts
+ *  and his cloth isn't built; its code, its lab part and its guide's words are kept for it to come back. */
+export const SCHOLAR_DOES = { dust: false };
+
 /** Brother Hollis at his reading table: talked to across it. */
 function scholar(): Omit<VillageObject, 'room'> {
   const { x, z, turn } = SCHOLAR_DESK, c = Math.cos(turn), s = Math.sin(turn);

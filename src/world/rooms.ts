@@ -659,8 +659,25 @@ export function banner(g: THREE.Object3D, M: Mats, x: number, top: number, base:
   g.add(rod);
 }
 
-/** A page of the Chronicle in a scribe's hand: a red initial on the left page, rows of ink as words, a rule or two. */
-export function inkedPage(cx: CanvasRenderingContext2D, w: number, h: number, initial: boolean, seed: number): void {
+/** a page's chapter mark: its initial, its square's colour and its letter's */
+export interface PageMark { letter: string; ground: string; ink: string }
+/** the chapter marks a book's first page may open with, one a book (from play: "maybe colorize the C letter, or even
+ *  have different letters, so books don't look same"): a deep manuscript colour's square each (red, blue, green,
+ *  ochre, purple), its letter gold or cream. The first is the Chronicle's own. */
+export const PAGE_MARKS: readonly PageMark[] = [
+  { letter: 'C', ground: '#8a1a14', ink: '#e8c070' },
+  { letter: 'A', ground: '#1f3a78', ink: '#e8c070' },
+  { letter: 'D', ground: '#1e5a32', ink: '#f0e2bc' },
+  { letter: 'E', ground: '#8a5a10', ink: '#f6ead0' },
+  { letter: 'M', ground: '#4e1f5e', ink: '#e8c070' },
+  { letter: 'R', ground: '#7a1420', ink: '#f0e2bc' },
+  { letter: 'S', ground: '#183a6a', ink: '#f0e2bc' },
+  { letter: 'H', ground: '#24502e', ink: '#e8c070' },
+];
+
+/** A page of the Chronicle in a scribe's hand: an initial on the left page (`mark`), rows of ink as words, the last
+ *  row of a paragraph short and the next begun a line lower, a rule or two. */
+export function inkedPage(cx: CanvasRenderingContext2D, w: number, h: number, initial: boolean, seed: number, mark = PAGE_MARKS[0]): void {
   const rng = mulberry(seed);
   const ground = cx.createLinearGradient(initial ? w : 0, 0, initial ? 0 : w, 0);
   ground.addColorStop(0, '#d8c498'); ground.addColorStop(0.15, '#efe2c0'); ground.addColorStop(1, '#e8d8b0');
@@ -668,26 +685,72 @@ export function inkedPage(cx: CanvasRenderingContext2D, w: number, h: number, in
   const margin = 26;
   let top = margin + 10;
   if (initial) {
-    cx.fillStyle = '#8a1a14';
+    cx.fillStyle = mark.ground;
     cx.fillRect(margin, top - 6, 46, 50);
-    cx.fillStyle = '#e8c070';
+    cx.fillStyle = mark.ink;
     cx.font = `700 44px ${DISPLAY}`;
     cx.textBaseline = 'top';
-    cx.fillText('C', margin + 8, top - 2);
+    cx.textAlign = 'center';
+    cx.fillText(mark.letter, margin + 23, top - 2);
+    cx.textAlign = 'start';
   }
   cx.fillStyle = 'rgba(40,24,10,0.82)';
+  let indent = 0;
   for (let row = 0; top < h - margin; row++, top += 14) {
-    const from = initial && row < 4 ? margin + 56 : margin;
+    const from = (initial && row < 4 ? margin + 56 : margin) + indent;
+    // (a paragraph's last row short, the next indented a line lower)
+    const last = row > 4 && rng() < 0.11, end = last ? from + (w - margin - from) * (0.25 + rng() * 0.45) : w - margin - 10;
     let x = from;
-    while (x < w - margin - 10) {
+    while (x < end) {
       const word = 8 + rng() * 26;
       cx.fillRect(x, top + 4 + rng(), Math.min(word, w - margin - x), 2.2);
       if (rng() < 0.4) cx.fillRect(x + 2, top + 1, 1.5, 4);
       x += word + 5;
     }
-    if (rng() < 0.08) top += 8;
+    indent = last ? 14 : 0;
+    if (last) top += 8;
   }
 }
+
+/** an open book's page's size on the page atlas (px), and how many across it */
+const PAGE_CELL = { w: 192, h: 256, across: 4 };
+/** every page an open book may show, drawn once into one canvas: each of `PAGE_MARKS`, its first page (the mark's) and
+ *  its facing one, each laid out by its own seed. Made the first time a book asks for a page. */
+let pageAtlas: THREE.CanvasTexture | null = null;
+function pagesAtlas(): THREE.CanvasTexture {
+  if (pageAtlas) return pageAtlas;
+  const { w, h, across } = PAGE_CELL, rows = Math.ceil((PAGE_MARKS.length * 2) / across);
+  const c = canvasOf(w * across, h * rows), cx = ctx2d(c);
+  PAGE_MARKS.forEach((mark, v) => {
+    for (const initial of [true, false]) {
+      const cell = v * 2 + (initial ? 0 : 1);
+      cx.save();
+      cx.translate((cell % across) * w, Math.floor(cell / across) * h);
+      cx.beginPath(); cx.rect(0, 0, w, h); cx.clip();
+      inkedPage(cx, w, h, initial, 1000 + v * 13 + (initial ? 0 : 7), mark);
+      cx.restore();
+    }
+  });
+  pageAtlas = textureFromCanvas(c);
+  pageAtlas.anisotropy = 4;
+  return pageAtlas;
+}
+/** `page` (a clone of the page atlas) set to show book `variant`'s first page (`initial`) or its facing one: the atlas's
+ *  cell picked by the texture's offset and repeat, a uniform, its image one for every book */
+export function showPage(page: THREE.Texture, initial: boolean, variant: number): void {
+  const { across } = PAGE_CELL, rows = Math.ceil((PAGE_MARKS.length * 2) / across);
+  const cell = (((variant % PAGE_MARKS.length) + PAGE_MARKS.length) % PAGE_MARKS.length) * 2 + (initial ? 0 : 1);
+  page.repeat.set(1 / across, 1 / rows);
+  page.offset.set((cell % across) / across, 1 - (Math.floor(cell / across) + 1) / rows);
+}
+/** An open book's page's texture: the page atlas (`pagesAtlas`), its image shared, showing book `variant`'s page. */
+export function pageTexture(initial: boolean, variant: number): THREE.Texture {
+  const page = pagesAtlas().clone();
+  showPage(page, initial, variant);
+  return page;
+}
+/** a book's page variant from a number of its own (a shelf book's place among them all) */
+export const pageVariant = (n: number): number => (Math.imul(n + 1, 0x9e3779b1) >>> 0) % PAGE_MARKS.length;
 
 /** A painted sign hung on a wall (its frame) at (x, y): the house's name in gold on dark boards. */
 export function sign(g: THREE.Object3D, M: Mats, x: number, y: number, words: string, sub: string): void {

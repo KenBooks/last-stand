@@ -17,9 +17,11 @@ import type { Scholar } from '../../../src/entities/models/scholar';
 import { toVillage } from './village';
 import { DOOR_FRAMES, stand, viewAs } from './houses';
 import { holdThroughDoor } from './housesDoor';
+import { SCHOLAR_DOES } from '../../../src/data/houses/library';
 
 /** the tasks pictured, in order */
-const TASKS: Task[] = ['browse', 'keep', 'restock', 'dust', 'tidy', 'globe'];
+// (dusting only while his data has it)
+const TASKS: Task[] = (['browse', 'keep', 'restock', 'dust', 'tidy', 'globe'] as Task[]).filter((t) => t !== 'dust' || SCHOLAR_DOES.dust);
 /** how many frames into a beat he's pictured, and the most frames a task is followed for */
 const AT = 30;
 const TASK_MOST = 6000;
