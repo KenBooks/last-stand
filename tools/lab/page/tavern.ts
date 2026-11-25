@@ -721,6 +721,8 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     await partyTableSat();
 
     // --- every mug out in heroes' hands: none served until one comes back ---
+    // (his own hands empty first: a mug moved out of his hand as he carried it, he took it up again)
+    await frames(CLEAR_IN, () => !tv.mugs.mugs.some((m) => m.place.at === 'keeper'));
     for (const m of tv.mugs.mugs) tv.mugs.move(m.id, { at: 'hero', who: 'elsewhere' }, { full: 1, dirty: false });
     watch.forget();
     room.serveAle?.(G.player);
@@ -738,6 +740,8 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
 
   // --- through the eyes: the talk, the slide, the drink and the set-down as a player in first person sees them
   // (tavernEyes.ts), every mug not in his hand stood back on the shelf first ---
+  // (his hands empty first: washing the mug come back, he served the beer after the case's wait for it)
+  await frames(CLEAR_IN, () => !tv.mugs.mugs.some((m) => m.place.at === 'keeper'));
   for (const m of tv.mugs.mugs) if (m.place.at !== 'keeper') tv.mugs.move(m.id, { at: 'shelf', slot: m.id }, { full: 0, dirty: false });
   await stand(lab, him.stand, Math.atan2(him.at[0] - him.stand[0], him.at[1] - him.stand[1]));
   watch.forget();
@@ -761,7 +765,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     // (the hero out of the bar's reach while the keeper works, by the door)
     await stand(lab, [0.3, 2.9], Math.PI / 2);
     watch.forget();
-    const cask = await caskWiped(tv, frames, TASK_IN);
+    const cask = await caskWiped(tv, frames, CLEAR_IN);
     problems.push(...cask.problems);
     KEEPER_WAYS5.intoTable = canary;
     const picked = await tablePickups(tv, frames, forget, CLEAR_IN).finally(() => { KEEPER_WAYS5.intoTable = false; });

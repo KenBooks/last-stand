@@ -33,6 +33,9 @@ export const PAD_UNDER_HAND = 0.08, PAD_HAND_OVER = 0.06;
  *  `ATTEND_LAY` s there) */
 export const ATTEND_SEEN_LEAST = 0.6;
 const ATTEND_LAY = 0.6;
+/** wiping the cask, the most his free hand may be over his hips (m): hanging, it's about at them; on the cask's hoop,
+ *  as it was, 40 cm over */
+export const CASK_HAND_MOST = 0.15;
 /** a mug collected from a table: his middle at least this far past its top's edge all the while (m) */
 export const STAND_OFF_LEAST = 0.15;
 /** a mug put down: on its top within this of its edge (m), and within this along it of the edge nearest the hero (m) */
@@ -181,7 +184,7 @@ export class Round5Watch {
     if (this.padOff.value > 1) out.push(`round 5: his rag lay spread with his hand not on it: ${this.padOff.at}`);
     if (this.bothShown) out.push(`round 5: his rag in his fist and spread on a top at once (${this.bothShown} frames)`);
     if (!this.caskFrames) out.push('round 5: the cask was never read wiped');
-    if (this.caskHand.value > 0.05) out.push(`round 5: his free hand was held up as he wiped the cask: ${this.caskHand.at}`);
+    if (this.caskHand.value > CASK_HAND_MOST) out.push(`round 5: his free hand was held up as he wiped the cask: ${this.caskHand.at}`);
     const seen = this.attendFrames ? this.attendSpread / this.attendFrames : 0;
     if (!this.attendFrames) out.push('round 5: he was never read waiting at the bar');
     else if (seen < ATTEND_SEEN_LEAST) out.push(`round 5: his rag wasn't seen spread as he waited at the bar (${(seen * 100).toFixed(0)}% of the frames)`);
