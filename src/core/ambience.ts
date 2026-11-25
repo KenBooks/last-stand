@@ -3,9 +3,9 @@
 // crackling louder as the hero nears each, panned to where it is from the camera (no wind, from review: "Wind will be
 // messing with people and not let them enjoy the game", water by the fountain in its place). Made of noise as the
 // spells are (docs/agents/audio.md: no notes over the music): a bird's chirp is a narrow band of noise swept up or
-// down, a cricket's trill a narrower one pulsed. One graph made at the first frame it's wanted and kept, each layer's
-// level eased to what the frame asks (`updateAmbience`); played through the effects' level, so the effects slider
-// sets it.
+// down, a cricket's song a few soft chirps now and then, each a narrower band pulsed. One graph made at the first
+// frame it's wanted and kept, each layer's level eased to what the frame asks (`updateAmbience`); played through the
+// effects' level, so the effects slider sets it.
 import { audioContext, voice } from './audio';
 
 /** What the ambience is asked for this frame (`main.ts`'s `ambienceWanted`). */
@@ -49,6 +49,19 @@ const INDOORS = 0.2;
 const PHRASE_EVERY = 1.6;
 const PHRASE_SPREAD = 4.5;
 const PHRASE_MOST = 5;
+/** a cricket's song: one every `every` s or so (the least, and the spread over it), its chirps and their pulses.
+ *  Three trills looped all night, a 4 kHz buzz that never stopped, were "super annoying" (Victor, on #891): now one
+ *  cricket at a time sings a few soft chirps, then the night is quiet a while */
+const SONG = {
+  every: 4,
+  spread: 7,
+  chirps: [3, 6],
+  apart: 0.45,
+  pulses: [2, 3],
+  pulseEvery: 0.035,
+  pulse: 0.022,
+  hz: [3300, 3900],
+};
 
 /** The ambience's graph: each layer's own level, and the fire's and the water's pans. */
 interface Graph {
@@ -64,6 +77,8 @@ interface Graph {
 let graph: Graph | null = null;
 /** the audio clock the next bird's phrase is due by */
 let nextPhrase = 0;
+/** the audio clock the next cricket's song is due by */
+let nextSong = 0;
 /** each layer's level asked last (a harness reads it: `lab village --only ambienceHeard`) */
 const asked = { leaves: 0, birds: 0, crickets: 0, fire: 0, firePan: 0, water: 0, waterPan: 0 };
 
@@ -100,23 +115,8 @@ function makeGraph(): Graph {
   leafBand.frequency.value = 2600;
   v.crackle(leafBand, 0.5);
   leafBand.connect(rustle).connect(leaves);
-  // the crickets: three, each a narrow band of noise pulsed some 50 times a second in groups (two slow pulses of
-  // its level), apart in pitch, rate and place
+  // the crickets: their channel alone, each song scheduled as it comes (`song`, as the birds' phrases are)
   const crickets = channel();
-  for (const [hz, pulse, group, pan] of [[4300, 24, 1.3, -0.6], [4700, 27, 0.9, 0.5], [3900, 22, 1.7, 0.1]]) {
-    const band = c.createBiquadFilter();
-    band.type = 'bandpass';
-    band.frequency.value = hz;
-    band.Q.value = 16;
-    const trill = c.createGain();
-    trill.gain.value = 0;
-    v.lfo(pulse, 1, trill.gain);
-    const chirp = c.createGain();
-    chirp.gain.value = 0;
-    v.lfo(group, 1, chirp.gain);
-    v.loop(band);
-    band.connect(trill).connect(chirp).connect(v.lane(1, pan, crickets));
-  }
   // the fire: its crackle sparse and mid-bright, a soft roar of noise under it, flickering
   const firePan = c.createStereoPanner();
   firePan.connect(v.out);
@@ -211,6 +211,43 @@ function phrase(g: Graph, at: number): void {
   }
 }
 
+/** One cricket's song from `at` (s, the audio clock), somewhere off to a side: `SONG.chirps` chirps `SONG.apart` s
+ *  apart, each `SONG.pulses` short pulses of a narrow band of noise within `SONG.hz`, the song fading in and out. */
+function song(g: Graph, at: number): void {
+  const v = voice(0, 0.25);
+  v.out.disconnect();
+  v.out.connect(g.crickets);
+  const pan = v.c.createStereoPanner();
+  pan.pan.value = (Math.random() < 0.5 ? -1 : 1) * (0.3 + Math.random() * 0.5);
+  const level = v.c.createGain();
+  level.gain.value = 0.5 + Math.random() * 0.5;
+  pan.connect(level).connect(v.out);
+  const hz = SONG.hz[0] + Math.random() * (SONG.hz[1] - SONG.hz[0]);
+  const chirps = SONG.chirps[0] + Math.floor(Math.random() * (SONG.chirps[1] - SONG.chirps[0] + 1));
+  const pulses = SONG.pulses[0] + Math.floor(Math.random() * (SONG.pulses[1] - SONG.pulses[0] + 1));
+  const band = v.c.createBiquadFilter();
+  band.type = 'bandpass';
+  band.frequency.value = hz;
+  band.Q.value = 12;
+  band.connect(pan);
+  for (let i = 0; i < chirps; i++) {
+    // (softer at the song's ends, as a cricket starts and stops)
+    const swell = Math.sin(((i + 0.5) / chirps) * Math.PI);
+    for (let p = 0; p < pulses; p++) {
+      const t = at + i * SONG.apart + p * SONG.pulseEvery;
+      const env = v.c.createGain();
+      env.gain.setValueAtTime(0.0001, t);
+      env.gain.exponentialRampToValueAtTime(0.3 + 0.7 * swell, t + SONG.pulse * 0.3);
+      env.gain.exponentialRampToValueAtTime(0.0001, t + SONG.pulse);
+      const src = v.c.createBufferSource();
+      src.buffer = noiseSource(v.c);
+      src.connect(env).connect(band);
+      src.start(t, Math.random());
+      src.stop(t + SONG.pulse + 0.02);
+    }
+  }
+}
+
 /** A short buffer of noise for the chirps (made once a context). */
 const noises = new WeakMap<BaseAudioContext, AudioBuffer>();
 function noiseSource(c: BaseAudioContext): AudioBuffer {
@@ -263,6 +300,10 @@ export function updateAmbience(wanted: AmbienceWanted): void {
     if (nextPhrase > 0) phrase(graph, now + 0.05);
     nextPhrase = now + PHRASE_EVERY + Math.random() * PHRASE_SPREAD;
   }
+  if (levels.crickets > 0.001 && now >= nextSong) {
+    if (nextSong > 0) song(graph, now + 0.05);
+    nextSong = now + SONG.every + Math.random() * SONG.spread;
+  }
 }
 
 /** The ambience played at `wanted` into the effects' current context until its stop() (the lab's `lab sound`
@@ -276,6 +317,9 @@ export function playAmbience(wanted: AmbienceWanted, seconds: number): () => voi
   g.waterPan.pan.setValueAtTime(levels.waterPan, now);
   if (levels.birds > 0.001) {
     for (let at = now + 0.3; at < now + seconds; at += PHRASE_EVERY + Math.random() * PHRASE_SPREAD) phrase(g, at);
+  }
+  if (levels.crickets > 0.001) {
+    for (let at = now + 0.3; at < now + seconds; at += SONG.every + Math.random() * SONG.spread) song(g, at);
   }
   return () => {
     const end = g.leaves.context.currentTime;
