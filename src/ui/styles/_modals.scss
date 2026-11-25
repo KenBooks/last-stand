@@ -31,10 +31,14 @@
 .controls-help .k { font-family: var(--font-display); color: var(--accent); text-align: right; }
 .controls-help.diagrams { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 /* keyboard: the left of a real one, staggered rows; lit keys show what they do (ui/menus.ts keyboardDiagram) */
-/* (each row as far as I and M in their places: keys as narrow as I in its place needs, within its
-   column (the pause menu's: a container), 9.5 keys and their gaps to it and the faded edge after; the rows cut by
-   the box there) */
-.kb { --u: min(46px, (100cqw - 58px) / 9.5); display: flex; flex-direction: column; gap: 4px; align-self: stretch; overflow: hidden;
+/* (each row as far as P and M in their places: keys as narrow as P in its place needs, within its
+   column (the pause menu's: a container), 11.5 keys and their 11 gaps to it, 16 px to spare and the faded edge
+   after; the rows cut by the box there. Sized to I, photo mode's P lay under the faded edge, cut off, #741. Its width
+   is those keys and gaps and the 40 px after them, the column at most: where the keys reach their 46 px the box
+   would fit its rows alone (the pause menu's diagrams are `fit-content`), P ending at the box's edge, under the fade:
+   from review, "Nothing fixed", on a 1920 screen) */
+.kb { --u: min(46px, (100cqw - 84px) / 11.5); display: flex; flex-direction: column; gap: 4px; align-self: center;
+  width: calc(var(--u) * 11.5 + 84px); max-width: 100%; overflow: hidden;
   -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
   mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); }
 .kb-row { display: flex; gap: 4px; }

@@ -170,7 +170,7 @@ function keyboardDiagram(): string {
     const sk = skillOn(k);
     used[k] = sk ? { skill: sk.icon, art: sk.art, color: sk.color, cap: sk.name, tip: sk.name, hold: sk.hold } : { cap: '—', tip: 'No skill bound' };
   }
-  // (as far as I and M, in their places, each row on to the diagram's faded edge: from play, I and M set beside Alt
+  // (as far as P and M, in their places, each row on to the diagram's faded edge: from play, I and M set beside Alt
   // were "not a real keyboard layout")
   const keys = (s: string): Cap[] => s.split('').map((k) => ({ k }));
   const rows: Cap[][] = [
