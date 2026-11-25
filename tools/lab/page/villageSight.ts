@@ -16,6 +16,7 @@ import { holdSightOff } from '../../../src/core/sight';
 import { groundHeight } from '../../../src/world/ground';
 import { drawFrame, type Canvas } from './light';
 import { viewBy } from './villageHallCull';
+import { showHouses } from './rustHouseRule';
 import type { LightsChecked } from './villageLights';
 
 /** the frames given to settle (the fog eases in), half the box read (px); the least of its light a seen place keeps,
@@ -180,6 +181,10 @@ export async function sightBlacksOut(lab: Lab, canary: boolean): Promise<LightsC
     await viewBy(lab, 'top');
     // (as the village opens, looking north: a measure before it may have turned it)
     faceCamera(Math.PI);
+    // (the houses' parts hidden in both frames: held off, the fog takes the engine's house rule with it, and a roof
+    // over the place read from above stood whole in one frame and thinned in the other, the back wall's ground
+    // reading 0.19 of its light, seen; what the rule leaves of a house is `lab houserule`'s)
+    showHouses(false);
     for (const reading of readings()) {
       for (const part of hallCutaway) part.visible = !reading.shut;
       const canvas = await drawnFrom(lab, reading.stand);
@@ -200,12 +205,14 @@ export async function sightBlacksOut(lab: Lab, canary: boolean): Promise<LightsC
       if (wrong) problems.push(`${reading.name}: ${wrong}`);
     }
     const behind = readings()[readings().length - 1];
+    showHouses(true);
     await viewBy(lab, 'third');
     const shoulder = await drawnFrom(lab, behind.stand);
     const whole = shoulder.pixels.reduce((sum, value) => sum + value, 0) / shoulder.pixels.length;
     lines.push(`over the shoulder the frame's mean ${whole.toFixed(3)}`);
     if (whole < LEAST_OVER_SHOULDER) problems.push(`over the shoulder the frame is dark: ${whole.toFixed(3)}`);
   } finally {
+    showHouses(true);
     for (const part of hallCutaway) part.visible = true;
     holdSightOff(false);
     holdHour(null);
