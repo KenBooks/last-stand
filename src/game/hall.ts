@@ -358,6 +358,10 @@ let poseTurn = 0;
 /** The heroes standing on the village's hall's dais. */
 export const heroesStanding = (): readonly Player[] => standing;
 
+/** Where each standing hero's merge stands, said (`StillAsOne.said`), for a lab's report. */
+export const stillSaid = (): string[] => standing.map((p) =>
+  `${p.cls.id}: ${p.obj.visible ? 'shown' : 'hidden'}, ${stillOf.get(p)?.said() ?? 'not held still'}`);
+
 /** The class of the hero standing nearest (x, z) in the village's hall, or null. */
 export function standingNear(x: number, z: number): string | null {
   let best: string | null = null, bestD = Infinity;

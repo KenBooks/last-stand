@@ -10,10 +10,10 @@ const MODULES = checksByModule(SOURCE);
 
 test('village --since: the checks are read off the module that lists them', () => {
   assert.ok(NAMES.length > 90, `${NAMES.length} checks`);
-  for (const name of ['heroLitInHall', 'shadowsOnMove', 'fogOneGrey', 'hallBuiltBehind']) {
+  for (const name of ['heroLitInHall', 'bloomOnLow', 'fogOneGrey', 'hallBuiltBehind']) {
     assert.ok(NAMES.includes(name), name);
   }
-  assert.deepEqual(MODULES.get('villageShadowsOnMove'), ['shadowsOnMove']);
+  assert.deepEqual(MODULES.get('villageBloomLow'), ['bloomOnLow']);
   assert.ok(MODULES.get('villageFogPast').includes('fogOneGrey'));
 });
 
@@ -25,13 +25,13 @@ test('village --since: a note or a test runs nothing, the fog its own checks, th
   const fog = checksSince(['src/core/sight.ts'], NAMES, MODULES);
   assert.equal(fog.all, false);
   assert.ok(fog.names.includes('fogHoldsSteady') && fog.names.includes('sightBlacksOut'));
-  assert.ok(!fog.names.includes('shadowsOnMove') && !fog.names.includes('heroChosenQuick'));
+  assert.ok(!fog.names.includes('bloomOnLow') && !fog.names.includes('heroChosenQuick'));
   assert.ok(fog.names.length < NAMES.length / 2, `${fog.names.length} of ${NAMES.length}`);
   // (the sweep runs on every change to the village's source: its budgets and culls hold every stand)
   assert.ok(fog.names.includes('sweepWithinBudgets'));
 
-  const own = checksSince(['tools/lab/page/villageShadowsOnMove.ts'], NAMES, MODULES);
-  assert.deepEqual(own.names, ['shadowsOnMove']);
+  const own = checksSince(['tools/lab/page/villageBloomLow.ts'], NAMES, MODULES);
+  assert.deepEqual(own.names, ['bloomOnLow']);
 
   const whole = checksSince(['src/core/AGENTS.md', 'src/game/village.ts'], NAMES, MODULES);
   assert.equal(whole.all, true);

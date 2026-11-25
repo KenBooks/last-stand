@@ -16,6 +16,7 @@ import { holdHallWallsAllThin } from '../../../src/game/village';
 import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
 import {
   hideHallColumns,
+  seeValue,
   holdBuiltOpenAlways,
   holdColumnsUnderWalls,
   holdThinningReach,
@@ -44,8 +45,16 @@ const SHEET_STRIDE = 3;
 const SHEET_CHANGE = 0.025;
 
 /** A stand of his and what stands past him there; `noColumns`: the hall's columns are taken out of both frames, as they
- *  stand over the walls read. */
-interface Stand { name: string; x: number; z: number; facing: number; past: THREE.Vector3[]; noColumns?: boolean }
+ *  stand over the walls read; `inHall`: its roof is too, which nothing thinned lays over every place read from above. */
+interface Stand {
+  name: string;
+  x: number;
+  z: number;
+  facing: number;
+  past: THREE.Vector3[];
+  noColumns?: boolean;
+  inHall?: boolean;
+}
 
 /** The hero placed at (x, z) facing `facing`, the camera behind him, let settle. */
 async function standAt(lab: Lab, x: number, z: number, facing: number): Promise<void> {
@@ -90,6 +99,7 @@ function stands(): Stand[] {
       z: HALL.daisZ + 3,
       facing: north,
       past: [...backWall, ...backColumns],
+      inHall: true,
     },
     // (well aside of the door: nearer it he sees into the room, and the wall over that floor thins whole for it,
     // the retired `hallWallsOneByOne`)
@@ -108,6 +118,7 @@ function stands(): Stand[] {
       z: HALL.door - 7,
       facing: north,
       noColumns: true,
+      inHall: true,
       // (under the windows, whose panes go with the columns; clear of the front wall's ghost, which lies over the wall
       // nearer the door, no fault of the side wall's)
       past: [-1, 1].flatMap((side) => [HALL.door - 6.5, HALL.door - 9].flatMap((along) => [0.25, 0.45].map((up) =>
@@ -119,10 +130,37 @@ function stands(): Stand[] {
       z: HALL.daisZ + 3,
       facing: north + 0.9,
       past: [...backWall, new THREE.Vector3(x + HALL.plinths[0], floor + 1.5, HALL.wall + 0.02)],
+      inHall: true,
     },
     // (from play, "it shows green where it should not": beside the wall, hiding nothing of him, it stays whole)
     { name: 'at a cottage\'s corner', x: cornerX, z: cornerZ, facing: cottage.facing + Math.PI + 0.7, past: alongWall },
   ];
+}
+
+/** The hall's roof taken out of the frame: every mesh drawn in its kind (`material.seeThrough`, a kind's one value),
+ *  read off the scene, as an A/B's other commit has the same. Returns what shows them again. */
+function hallRoofHidden(): () => void {
+  const roof = seeValue('hallRoof');
+  const hidden: THREE.Object3D[] = [];
+  G.scene.traverse((object) => {
+    const material = (object as THREE.Mesh).material as { seeThrough?: unknown } | undefined;
+    if (!object.visible || material?.seeThrough !== roof) return;
+    object.visible = false;
+    hidden.push(object);
+  });
+  return () => {
+    for (const object of hidden) object.visible = true;
+  };
+}
+
+/** Each part a stand leaves out of both its frames taken out; returns what puts them back. */
+function partsLeftOut(stand: Stand): () => void {
+  if (stand.noColumns) hideHallColumns(true);
+  const roofBack = stand.inHall ? hallRoofHidden() : null;
+  return () => {
+    if (stand.noColumns) hideHallColumns(false);
+    roofBack?.();
+  };
 }
 
 /** The pixel `point` falls on, or null off the frame. */
@@ -137,13 +175,13 @@ function pixelOf(point: THREE.Vector3, width: number, height: number): number | 
 /** How many of a stand's places differ thinned as the game thins from nothing thinned, and how many were in the
  *  frame. */
 function readStand(lab: Lab, stand: Stand): { wrong: number; read: number; worst: number; places: string } {
-  if (stand.noColumns) hideHallColumns(true);
+  const putBack = partsLeftOut(stand);
   const canvas = drawFrame(lab);
   const thinned = canvas.pixels.slice();
   const giveBack = nothingThinned();
   const whole = drawFrame(lab).pixels;
   giveBack();
-  if (stand.noColumns) hideHallColumns(false);
+  putBack();
   let wrong = 0;
   let read = 0;
   let worst = 0;
@@ -164,6 +202,19 @@ function readStand(lab: Lab, stand: Stand): { wrong: number; read: number; worst
     places.push(`${point.x.toFixed(1)},${point.y.toFixed(1)},${point.z.toFixed(1)} ${(share * 100).toFixed(0)}%`);
   }
   return { wrong, read, worst, places: places.join('; ') };
+}
+
+/** The screen at a stand with nothing thinned, the frame its places are held to, pictured beside the game's where
+ *  they disagree. */
+async function wholeScreen(lab: Lab, stand: Stand): Promise<Pictured> {
+  const putBack = partsLeftOut(stand);
+  const giveBack = nothingThinned();
+  try {
+    return await lab.screen(`${stand.name}, nothing thinned`, []);
+  } finally {
+    giveBack();
+    putBack();
+  }
 }
 
 /** From above, what stands past him is drawn whole. */
@@ -189,6 +240,7 @@ export async function wallsPastHimWhole(lab: Lab, canary: boolean): Promise<Ligh
       if (read === 0) problems.push(`${stand.name}: no place past him in the frame`);
       if (wrong > MOST_PLACES_WRONG) problems.push(`${stand.name}: ${wrong} places past him thinned`);
       if (!canary) moments.push(await lab.screen(stand.name, []));
+      if (!canary && wrong > MOST_PLACES_WRONG) moments.push(await wholeScreen(lab, stand));
     }
   } finally {
     holdThinningReach(false);

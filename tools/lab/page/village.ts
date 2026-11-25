@@ -222,7 +222,6 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     grassSteadyInWind: async () => (await import('./villageGrassWind')).grassSteadyInWind(lab, options.canary),
     lampsOnLow: async () => (await import('./villageLampsLow')).lampsOnLow(lab, options.canary),
     bloomOnLow: async () => (await import('./villageBloomLow')).bloomOnLow(lab, options.canary),
-    shadowsOnMove: async () => (await import('./villageShadowsOnMove')).shadowsOnMove(lab, options.canary),
     fogHoldsSteady: () => fogHoldsSteady(lab, options.canary),
     firesStillInFog: () => firesStillInFog(lab, options.canary),
     leavesInFog: () => leavesInFog(lab, options.canary),

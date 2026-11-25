@@ -1553,7 +1553,9 @@ function hallSideWall(scene: THREE.Object3D, wall: Wall, M: Mats, sideX: number,
     for (const [material, off] of [[M.window, 1], [M.skyPane, -1]] as const) {
       const mesh = solid(scene, pane, material);
       mesh.position.set(sideX + s * off * 0.03, y0 + sill + high / 2, z);
-      mesh.castShadow = false;
+      // (glass lets the sun through: casting nothing and taking no shadow, as the engine takes a still mesh that takes
+      // one for a caster, `TUNE.castAll`, and the panes shut every window to the sun)
+      mesh.castShadow = mesh.receiveShadow = false;
     }
   }
 }
