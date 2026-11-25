@@ -8,6 +8,7 @@
 import { describePings } from './coopPings.mjs';
 import { describeChat } from './coopChat.mjs';
 import { describeAfk } from './coopAfk.mjs';
+import { describeStag } from './coopStag.mjs';
 
 /** the longest delay looked for, frames (a second and a quarter) */
 const MOST_DELAY = 75;
@@ -1201,6 +1202,7 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
   if (name === 'rootburrow') add(describeRootBurrow(host, guest));
   if (name === 'rootcage') add(describeRootCage(host, guest));
   if (name === 'rootmother') add(describeRootmother(host, guest));
+  if (name === 'stag') add(describeStag(host, guest));
   if (name === 'dodge') add(describeBlows(guest, frameMs));
   if (name === 'down') add(describeDown(host, guest, frameMs));
   if (name === 'blink') add(describeBlinks(host, guest, frameMs));

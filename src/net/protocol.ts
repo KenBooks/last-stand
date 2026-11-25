@@ -17,11 +17,13 @@ const PARTS = [
   'frenzy-1: the Frenzy stacks of a warrior, StateMsg fz (combat/frenzy.ts)',
   'friends-1: the welcome says the room as its host opened it, kind, name, max and fr (net/friends.ts)',
   'houses-1: a house said by its index in ROOM_IDS, now in the order of its file in data/houses/',
+  'lift-1: a hero held up or thrown says how high he is, StateMsg hl (the Stag of Ash\'s toss, the Bell-Warden\'s ghosts)',
   'lobby-1: a room has no lobby of its own (the village is every game\'s): none in hello, refuse or a room\'s card',
   'party-room-1: welcome carries the host\'s house (rm) so joiners spawn in the same building',
   'rarity-1: the rarity of an item can be Ultimate, a tier above Ascendant (data/items.ts)',
   'rootmother-3: the Rootmother vines, burrow, heart, pods and great pods, thorns, cracks, eruptions, spores, thrown branches and their bramble, root cage and its great root, enemy fx (entities/bosses/rootmother.ts)',
   'sit-1: how far a hero is sat on a seat, StateMsg sw, sh, sf, sb, sa (entities/sitting.ts)',
+  'stag-1: the Stag of Ash lane, run, fire, gore, crash, antler gore, stamp, kick, breath, burning wood, toss and embers, enemy fx (entities/bosses/stag.ts)',
   'tavern-1: the tavern\'s keeper and mugs, ctl tv (the host\'s ledger and keeper) and tv? (a guest\'s asks) (world/tavernKeeper.ts)',
   'ward-1: the Hedgeward rising, struck and breaking, the enemy fx `ward` (combat/skills/hedgeward.ts)',
 ];

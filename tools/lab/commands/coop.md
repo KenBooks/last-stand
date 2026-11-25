@@ -91,7 +91,15 @@ blinking between two spots as foes close on it; `rush`, played only by a hero wi
 the guest charging through three dazed foes once; `strike`, the same but for a Power Strike charged first and the
 charge cast over it 0.35 s from its blow; `throws`: a Cinder Brute 15.5 m off and a Barkhide Hulk 11 m off
 throwing at the guest, which stands, walking only while a vine holds it, the host far off: the Brute's first chunk
-lands in the settling, and from there it throws again before it walks into slamming range), each one's input frame
+lands in the settling, and from there it throws again before it walks into slamming range); `stag`
+(`page/coopStag.ts`, `node/coopStag.mjs`): the Stag of Ash with the guest before its head and a log behind the guest,
+which walks back up to it when thrown or knocked off: the host's game breathes over the log as it begins, takes its
+life under half (its shed, as soon as it's free) and strikes a stake three times a quarter-second apart, a second after
+the stakes stand; both screens must show the stakes in
+one place with one life each, the same wood alight and the thrown guest up in the air (its own game throws it, the
+host's copy lifted by its reports, StateMsg `hl`), no hit landing on it in the air; its canary leaves the guest deaf to
+the stakes' life (stood with the guest behind it, it kicked 15 times and never tossed; three hits in a frame told the
+first alone, `hurtProp`'s 140 ms between words), each one's input frame
 by frame from what its own screen shows. The guest
 practises in its lobby while it waits (stowed, as Space and a phone's Practice stow it, in the village's training yard,
 where alone a hero is armed), as a player does, and readies the run the host starts slowly: its fight's programs kept

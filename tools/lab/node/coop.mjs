@@ -11,6 +11,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { labError } from './errors.mjs';
 import { judgeScenario } from './coopJudge.mjs';
+import { stagCanaryLines } from './coopStag.mjs';
 import { firstRunsEnd, floorInHall, lobbyTurns, watchedRun } from './coopEnd.mjs';
 import { partnerInHouse } from './coopHouses.mjs';
 import { choirTogether } from './coopChoir.mjs';
@@ -862,7 +863,10 @@ export async function runCoop(side, options) {
       const [hostSamples, guestSamples] = await Promise.all([side.page, guest].map(samplesOf));
       const judged = judgeScenario({ name, about: about[name], host: hostSamples, guest: guestSamples, frameMs });
       lines.push(...judged.lines);
-      problems.push(...(canary && name === 'belt' ? beltCanary(judged.problems, lines) : judged.problems));
+      // (a scenario's own canary, which must be caught: the belt's skulls, the Stag's stakes)
+      if (canary && name === 'belt') problems.push(...beltCanary(judged.problems, lines));
+      else if (canary && name === 'stag') problems.push(...stagCanaryLines(judged.problems, lines));
+      else problems.push(...judged.problems);
       if (canary && name === 'afk') {
         await callPage(guest, 'coopAfkQuiet', { quiet: false });
         const missed = problems.some((problem) => problem.includes(AFK_CANARY));

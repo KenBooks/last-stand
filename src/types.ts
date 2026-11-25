@@ -458,7 +458,7 @@ export interface EnemyDef {
   /** hits it takes to fall, whatever each deals (the Rootmother's great seed pod: 5): each hit takes `1 / hits` of its
    *  most life */
   hits?: number;
-  /** a foe a hero's lure never draws (the Rootmother, who moves only to drag herself to a hero her vine holds) */
+  /** a foe a hero's lure never draws (the Rootmother) */
   ignoresLures?: boolean;
 }
 

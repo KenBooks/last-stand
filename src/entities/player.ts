@@ -315,6 +315,12 @@ export class Player {
   private stunGraceUntil = -1;
   /** his shield raised (a block held): what a boss's blow breaks on */
   get shieldRaised(): boolean { return this.gear.shield && !!this.channel?.skill.def.block; }
+  /** thrown through the air by a foe (the Stag of Ash's toss, entities/stag.ts): airborne, and no other hit lands on
+   *  him till he's down (`hurtPlayer`) */
+  flying = false;
+  /** a dash or a leap under way (not its hold), or thrown through the air: what passes over the Ossuary Twins'
+   *  charge (entities/twins.ts) and a ring on the floor */
+  get airborne(): boolean { return this.flying || this.dashRunning(); }
   /** game time the hero was last busy with an action: casting, channelling, dashing or staggered */
   private busyAt = -Infinity;
   lastBlock = -99;
@@ -1130,9 +1136,6 @@ export class Player {
   }
 
   /** Whether a dash is running (not yet into its hold): the body kept on its way, not turned to the aim. */
-  /** a dash or a leap under way (not its hold): what passes over the Ossuary Twins' charge (entities/twins.ts) */
-  get airborne(): boolean { return this.dashRunning(); }
-
   private dashRunning(): boolean {
     return !!this.dash && this.dash.t < this.dash.dur;
   }

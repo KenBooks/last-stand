@@ -14,8 +14,9 @@
 // within `SHOWN_MS` of that compile's end (Victor on #665: "model renders take 5-10sec to appear"; the compile is the
 // browser's own, which the lab's browser at below normal priority on a busy PC takes up to 12 s over, and is
 // reported apart), and every place still waiting for its picture must show its spinner (the same: "a loading
-// indicator for each placeholder that's not supposed to be empty").
-import { realWait, type Lab, type Report } from './lab';
+// indicator for each placeholder that's not supposed to be empty"). `show` names entries to picture as the player sees
+// them once the walk is done (a new foe's or boss's page and its attacks, for the eye: `--show stag`).
+import { realWait, type Lab, type Pictured, type Report } from './lab';
 import { G } from '../../../src/state';
 import * as portraits from '../../../src/ui/guide/portraits';
 import { toLobby } from './hallMoves';
@@ -28,7 +29,12 @@ export interface GuideOptions {
   /** plant a fault the measure must catch: every picture made at once as the guide opens (`stall`), or made behind
    *  the lobby alone, not while the guide is open (`slow`) */
   canary?: 'stall' | 'slow';
+  /** entries to picture once the walk is done, by their id (`stag`, `seedpod`) */
+  show?: string[];
 }
+
+/** the frames an entry is shown before its picture: its page laid out and its foe's picture in place */
+const SHOWN_FRAMES = 10;
 
 /** the longest a frame or a long task may take over the walk (ms): a frame at 60 a second is 17, and a held frame
  *  much past 100 is seen as a hitch */
@@ -251,11 +257,48 @@ export async function guideOpen(lab: Lab, options: GuideOptions): Promise<Report
       return { text: [...lines, 'canary: the pictures made behind the lobby alone, not while the guide is open'].join('\n'), problems: late && lateShown.length ? [] : ['the pictures not made while the guide is open were missed'] };
     }
     const problems = [late ? lines[1] : '', lateShown.length ? lines[2] : '', bare.size || !waitingSeen ? lines[3] : '', slow ? lines[4] : '', linked ? lines[6] : '', left ? lines[0] : ''].filter(Boolean);
-    return { text: lines.join('\n'), problems };
+    const moments = await showEntries(lab, options.show ?? [], problems);
+    return { text: lines.join('\n'), problems, moments };
   } finally {
     perfClock.now = clock;
     observer.disconnect();
     behind.BEHIND.most = most;
     portraits.portraitPlant.notWhileOpen = false;
   }
+}
+
+/** Each entry `ids` names pictured as the player sees it (the guide's panel over the lobby), found in whichever section
+ *  lists it, then scrolled to its attacks; an entry no section lists is a problem. */
+async function showEntries(lab: Lab, ids: string[], problems: string[]): Promise<Pictured[]> {
+  const moments: Pictured[] = [];
+  for (const id of ids) {
+    const section = sectionListing(id);
+    if (!section) {
+      problems.push(`guide: no section lists "${id}"`);
+      continue;
+    }
+    section.click();
+    await lab.step(1);
+    document.querySelector<HTMLElement>(`#guide [data-ge="${id}"]`)!.click();
+    await lab.step(SHOWN_FRAMES);
+    moments.push(await lab.screen(`guide ${id}`, [`the guide's page for ${id}, as the player sees it`]));
+    // (and scrolled to its attacks, which the page's top leaves below the fold)
+    const headings = [...document.querySelectorAll<HTMLElement>('#guide .gd-h')];
+    const attacks = headings.find((h) => /attacks/i.test(h.textContent ?? ''));
+    if (!attacks) continue;
+    attacks.scrollIntoView({ block: 'start' });
+    await lab.step(2);
+    moments.push(await lab.screen(`guide ${id} attacks`, [`the guide's page for ${id}, scrolled to its attacks`]));
+  }
+  return moments;
+}
+
+/** The section button whose entries list `id`, each section opened in turn to look. */
+function sectionListing(id: string): HTMLElement | null {
+  for (const section of ['foes', 'bosses', 'heroes', 'tips']) {
+    const button = document.querySelector<HTMLElement>(`#guide [data-gs="${section}"]`)!;
+    button.click();
+    if (document.querySelector(`#guide [data-ge="${id}"]`)) return button;
+  }
+  return null;
 }

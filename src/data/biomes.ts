@@ -96,6 +96,7 @@ export const BIOMES: Record<BiomeId, BiomeDef> = {
     bosses: [
       { id: 'thornheart', short: 'Thornheart', banner: 'The old wood wakes…' },
       { id: 'rootmother', short: 'Rootmother', banner: 'Something stirs beneath the roots…' },
+      { id: 'stag', short: 'Stag of Ash', banner: 'Embers drift between the trees…' },
     ],
     minimap: { wall: 'circle', portal: '#70ff60' },
     surface: { floor: 'earth' },
