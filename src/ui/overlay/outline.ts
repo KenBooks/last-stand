@@ -364,6 +364,9 @@ export function drawOutline(): void {
 export async function warmOutline(roots: readonly Outlinable[],
   { edge = true, pause, sliceMs = 24 }: { edge?: boolean; pause?: () => Promise<void>; sliceMs?: number } = {}): Promise<void> {
   const gl = G.renderer;
+  // (their pipelines made beside the frames first: made by the draws below, each was built in the GPU's process's
+  // main thread, a first visit's lobby held 133 and 361 ms a second after it showed)
+  await compileOutlineAhead(roots, { edge });
   let target: THREE.WebGLRenderTarget | null = null;
   const targets = roots.map(targetOf);
   let since = performance.now();
@@ -433,5 +436,89 @@ export function compileOutline(roots: readonly Outlinable[], { edge = true } = {
     for (const material of gl.compile(edgeStandIn, passCamera)) compiled.add(material);
   }
   gl.setRenderTarget(prev);
+  void compileOutlineAhead(roots, { edge });
   return compiled;
+}
+
+/** three's renderer as it compiles beside the frames (WebGPU's: `compile` there is a stand-in, `core/webgpu.ts`) */
+interface CompilesAsync {
+  compileAsync(scene: THREE.Object3D, camera: THREE.Camera): Promise<void>;
+  toneMapping: THREE.ToneMapping;
+  outputColorSpace: string;
+}
+
+/** the outline's compiles, one after another: three's `compileAsync` keeps its state on the renderer between its
+ *  steps, and two at once took each other's (`Cannot destructure property 'useFrameBufferTarget'`) */
+let compiling: Promise<void> = Promise.resolve();
+
+/**
+ * The pipelines `drawMask` and the edge's pass draw `roots` with, made beside the frames (three's `compileAsync`,
+ * each asked for as the drawing would, its state set as `drawMask` and `drawOverFrame` set it), after the compiles
+ * asked for before. On WebGPU the draws made them otherwise, a pipeline built whole in the GPU's process's main
+ * thread at the draw: the compositor's frames wait on that thread, so the page froze (`npm run stalls -- --scenario
+ * boot --dawn`: `APICreateRenderPipeline` on `CrGpuMain`, 382 ms in a frame of 361). Done once each is made: `roots`
+ * must be kept till then (a warm-up lets its parts go after it).
+ */
+export function compileOutlineAhead(roots: readonly Outlinable[], { edge = true } = {}): Promise<void> {
+  const gl = G.renderer as unknown as THREE.WebGLRenderer & Partial<CompilesAsync>;
+  if (!gl.compileAsync) return Promise.resolve();
+  const renderer = gl as CompilesAsync & THREE.WebGLRenderer;
+  const targets = roots.map(targetOf);
+  const run = compiling.then(async () => {
+    for (const target of targets) await compileMaskAhead(renderer, target);
+    if (edge) await compileEdgeAhead(renderer);
+  });
+  compiling = run.catch(() => undefined);
+  return run;
+}
+
+/** `target`'s mask compiled as `drawTarget` draws it into the mask's target, its meshes unculled (three's compile
+ *  asks only for what's in view) and the crowd's layer seen. Its state is read as it's asked, so all of it goes back
+ *  before it's done. */
+function compileMaskAhead(gl: CompilesAsync & THREE.WebGLRenderer, target: OutlineTarget): Promise<void> {
+  const prev = gl.getRenderTarget();
+  const crowd = G.camera.layers.isEnabled(CROWD_LAYER);
+  const f = frameRect();
+  canvasSize.set(f.width, f.height);
+  gl.setRenderTarget(maskOfSize(canvasSize.x, canvasSize.y));
+  G.camera.layers.enable(CROWD_LAYER);
+  const culled: THREE.Object3D[] = [];
+  const swapped = target.instance === undefined ? swapIn(target.root) : [];
+  if (target.instance === undefined) {
+    target.root.traverse((object) => {
+      if (!object.frustumCulled) return;
+      object.frustumCulled = false;
+      culled.push(object);
+    });
+  }
+  try {
+    return gl.compileAsync(target.instance === undefined ? target.root : loneOf(target), G.camera);
+  } finally {
+    swapOut(swapped);
+    for (const object of culled) object.frustumCulled = true;
+    if (!crowd) G.camera.layers.disable(CROWD_LAYER);
+    gl.setRenderTarget(prev);
+  }
+}
+
+/** The edge's pass compiled over the canvas, the renderer set as `drawOverFrame` sets it till it's done (its output's
+ *  conversion is built as the compile goes on, after it's asked; `drawOverFrame` sets and puts back its own). */
+async function compileEdgeAhead(gl: CompilesAsync & THREE.WebGLRenderer): Promise<void> {
+  const { toneMapping, outputColorSpace } = gl;
+  const prev = gl.getRenderTarget();
+  gl.toneMapping = THREE.NoToneMapping;
+  gl.outputColorSpace = THREE.ColorManagement.workingColorSpace;
+  gl.setRenderTarget(null);
+  let asked: Promise<void>;
+  try {
+    asked = gl.compileAsync(edgeStandIn, passCamera);
+  } finally {
+    gl.setRenderTarget(prev);
+  }
+  try {
+    await asked;
+  } finally {
+    gl.toneMapping = toneMapping;
+    gl.outputColorSpace = outputColorSpace;
+  }
 }

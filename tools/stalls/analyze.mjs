@@ -499,7 +499,7 @@ function onPage(record, events, mark, sourceOf) {
   const samples = jsSamples(events, toPage, names, sourceOf);
   const dawn = events
     .filter((event) => event.ph === 'W')
-    .map((work) => ({ name: work.name, ms: work.dur / 1000, at: toPage(work.ts) }))
+    .map((work) => ({ name: work.name, ms: work.dur / 1000, at: toPage(work.ts), thread: threadOf(work, names) }))
     .filter((work) => work.at !== null);
   return { stamp, tasks, names, toPage, placed, samples, links, draws, paints, dawn };
 }
@@ -570,6 +570,7 @@ function stallOf(frame, record, traced, links) {
     busy: busyIn(tasks, from, frame.at, toPage, names),
     work: workIn(placed, [[from, frame.at]], 1).slice(0, STALL_WORK_SHOWN),
     js: samples.length ? jsIn(samples, from, frame.at, 1) : null,
+    dawn: dawnThrough(traced.dawn, from, frame.at),
     changes: changesBetween(record.changes ?? [], from - CHANGES_BEFORE_MS, from + 20),
   };
 }
@@ -836,13 +837,48 @@ function gpuCompilesIn(placed, from, to) {
  *  longest first, `WORK_SHOWN` kinds of it. Whether its cache was read (a shader or pipeline's blob) or its
  *  compiles run (Tint's, DXC's). Null where none was traced. */
 function dawnIn(dawn, from, to) {
+  const started = dawn.filter((work) => work.at >= from && work.at < to);
+  return dawnKinds(started, (work) => work.name);
+}
+
+/** Dawn's work running at any time in `[from, to)` (`--dawn`), by its name and thread, the longest first: a stall's,
+ *  whose work may have started before the frame it held (a shader module's Tint pass or a pipeline made on the GPU
+ *  process's main thread holds every frame till it's done). Null where none was traced. */
+function dawnThrough(dawn, from, to) {
+  const running = dawn.filter((work) => work.at < to && work.at + work.ms > from);
+  return dawnKinds(running, (work) => `${work.name} on ${work.thread}`);
+}
+
+/** a render pipeline the GPU process's main thread made in this long or longer was compiled there whole (ms): one
+ *  answered from Dawn's cache takes under one */
+const BUILT_WHOLE_MS = 5;
+/** Dawn's work making a render pipeline, as the trace names it */
+const MAKES_PIPELINE = 'DeviceBase::APICreateRenderPipeline';
+
+/**
+ * The render pipelines the GPU process's main thread compiled whole in the page's `[from, to)` (`--dawn`): how many
+ * and how long in all. A page's `createRenderPipeline` (not its async twin) compiles there, and the compositor's
+ * frames wait on that thread, so the page stands still meanwhile: two in the lobby a first visit opened on held it
+ * 133 and 361 ms (the outline's masks drawn before they were compiled). Each with its time from `from` (s) and its
+ * length. Null where Dawn's work wasn't traced or the lobby never showed.
+ */
+function builtInMainOf(dawn, from, to) {
+  if (from === null || !dawn.length) return null;
+  const built = dawn.filter((work) => work.name === MAKES_PIPELINE && work.thread === GPU_MAIN
+    && work.ms >= BUILT_WHOLE_MS && work.at >= from && work.at < to);
+  const each = built.map((work) => ({ at: (work.at - from) / 1000, ms: work.ms }));
+  return { count: built.length, ms: built.reduce((sum, work) => sum + work.ms, 0), each };
+}
+
+/** `works` grouped by `nameOf`: how many and how long in all, the longest first, `WORK_SHOWN` kinds. Null if none. */
+function dawnKinds(works, nameOf) {
   const byName = new Map();
-  for (const work of dawn) {
-    if (work.at < from || work.at >= to) continue;
-    const kind = byName.get(work.name) ?? { name: work.name, count: 0, ms: 0 };
+  for (const work of works) {
+    const name = nameOf(work);
+    const kind = byName.get(name) ?? { name, count: 0, ms: 0 };
     kind.count++;
     kind.ms += work.ms;
-    byName.set(work.name, kind);
+    byName.set(name, kind);
   }
   if (!byName.size) return null;
   return [...byName.values()].sort((a, b) => b.ms - a.ms).slice(0, WORK_SHOWN);
@@ -936,6 +972,7 @@ export function analyzeBoot(record, events, mark, sourceOf = () => null, listedM
     lobby: refresh === null ? null : lobbyRateOf(record.frames, revealedAt, lobbyEnd, refresh, traced),
     listedMs,
     lobbyStalls: lobbyStallsOf(record, traced, revealedAt, lobbyEnd, listedMs),
+    lobbyBuilt: builtInMainOf(traced.dawn, revealedAt, lobbyEnd),
     runStalls: runStallsOf(record, traced, startedAt, end, listedMs),
     clockFound: traced.stamp !== null,
     steps,

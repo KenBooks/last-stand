@@ -26,6 +26,7 @@ test('fills in the defaults', () => {
     stallBlow: 0,
     stallLobby: 0,
     blinkExit: 0,
+    mostBuilt: 0,
     mostGpuWait: 500,
     plantGpuWait: 0,
     auto: null,

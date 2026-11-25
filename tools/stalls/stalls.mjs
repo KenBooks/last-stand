@@ -22,7 +22,7 @@ import {
   stopRecording, useStyle,
 } from './page.mjs';
 import {
-  bootRoundsText, bootText, gpuWaitProblems, measureText, roundsText, summaryText,
+  bootRoundsText, bootText, builtInMainProblems, gpuWaitProblems, measureText, roundsText, summaryText,
 } from './report.mjs';
 import { pickHero, SCENARIOS } from './scenarios.mjs';
 import { serveTrees, THIS_TREE } from './serve.mjs';
@@ -378,8 +378,13 @@ async function main() {
   const summaries = booting
     ? [bootRoundsText(measures)]
     : [summaryText(measures), ...(options.rounds > 1 ? [roundsText(measures)] : [])];
-  // (a boot's steps over the budget of the main thread's waits on the GPU's process fail the run)
-  const problems = booting ? measures.flatMap((measure) => gpuWaitProblems(measure, options.mostGpuWait)) : [];
+  // (a boot's steps over the budget of the main thread's waits on the GPU's process fail the run, and so does a
+  // lobby whose GPU process compiled pipelines whole in its main thread)
+  const problemsOf = (measure) => [
+    ...gpuWaitProblems(measure, options.mostGpuWait),
+    ...builtInMainProblems(measure, options.mostBuilt),
+  ];
+  const problems = booting ? measures.flatMap(problemsOf) : [];
   const failed = problems.map((problem) => `FAILED: ${problem}`);
   const text = [...sections, ...summaries, ...failed].join('\n\n');
   writeFileSync(join(OUT, 'report.txt'), `${text}\n`);

@@ -638,8 +638,9 @@ async function warmBuilt(built: Built[], { step, progress, patient, linkingMost,
   }
   await step?.();
   // (the outline a held skill draws round a foe: every foe's meshes drawn into its mask; its edge's program is the
-  // lobby's, and behind it, a pass over the whole canvas)
-  warmOutline(built.flatMap((b) => b.outlined), { edge: !step });
+  // lobby's, and behind it, a pass over the whole canvas. Waited for: its pipelines are made beside the frames, of
+  // the parts let go below)
+  await warmOutline(built.flatMap((b) => b.outlined), { edge: !step, pause: step });
   for (const b of built) b.done();
   return took;
 }

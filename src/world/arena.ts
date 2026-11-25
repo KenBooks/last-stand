@@ -14,7 +14,7 @@ import { groundHeight, setRelief } from './ground';
 import { setAdaptScale } from '../core/renderer';
 import { rigMorePointLights, rigPointLights } from '../core/webgpu';
 import { castBreakablesAsOne, type BreakableShadows } from './breakableShadows';
-import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, lampFaceDrawn, lampShadowsAsked, mergeStill, nextLampFace, type Biome, type BiomeBuilder, type BiomeLook } from './props';
+import { bakeStaticShadows, drawStillShadows, envMap, lampFaceDrawn, lampShadowsAsked, mergeStill, nextLampFace, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { countGhosts, depthOfWhatStaysWhole } from '../core/seeThrough';
 import { GHOST_COUNT_LAYER } from '../core/layers';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
@@ -22,9 +22,9 @@ import { packWhileDrawn } from '../core/lightBounds';
 import { holdMoonShadow } from './moonShadow';
 import { hallDoorway } from './hallPortal';
 import { addDoorway, cullByDoorways } from './doorways';
-import { buildCrypt, CRYPT_ENV } from './crypt';
-import { buildForest, FOREST_ENV } from './forest';
-import { villageSteps, VILLAGE_ENV, type Village } from './village';
+import { buildCrypt } from './crypt';
+import { buildForest } from './forest';
+import { villageSteps, type Village } from './village';
 import { builtInSlices } from '../entities/models/steps';
 import { buildHeroHall } from './heroHall';
 import { buildRooms } from './houses';
@@ -59,9 +59,6 @@ function buildSteps(id: BiomeId): { build: number; seal: number; bake: number } 
 }
 
 export type Arena = Awaited<ReturnType<typeof buildArena>>;
-
-/** Every place's environment's programs compiled ahead of the places, linked as they're built (`compileEnvMaps`). */
-export const compileEnvMaps = (renderer: THREE.WebGLRenderer): void => compileEach(renderer, [VILLAGE_ENV, CRYPT_ENV, FOREST_ENV]);
 
 /** how finely the sun's place is read for its kept shadow to be drawn again (a step's 1/n m, of its 60 m off or so) */
 const SUN_STEPS = 8;

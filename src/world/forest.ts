@@ -10,7 +10,7 @@ import { particles, col } from '../fx/particles';
 import { makeFbm, mulberry, rand, TAU } from '../util';
 import { boulderGeo, boxUVs, buildDaySky, boxWithUV, buildGrassTuft, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, asTree, asGrass, asLeaves, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type GatePlace, type Portal, type TuftColours, type Updater } from './props';
 
-/** the forest's environment's colours (compiled ahead: `compileEnvMaps`) */
+/** the forest's environment's colours */
 export const FOREST_ENV: EnvColours = { sky: [0.55, 0.7, 0.8], panel: [1.3, 1.25, 1.1] };
 import { asClutter, cullInCells, eachInstance, gridCell, ringSector, thinLeaves } from './culling';
 import { growTree, REACH_BANDS, type Grow } from './ezTrees';
