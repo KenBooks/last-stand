@@ -163,8 +163,9 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   into.
 - `villageSunStep.ts`, `villageLampHandOver.ts`, `villageHeroShadow.ts`: a frame's draws are the engine's counts
   (`FrameStats.lampFaces`, `moverFaces`, `shadowDraws`, `shadowTriangles`); a map drawn whole is told from the movers
-  over a copy by its triangles, the draws alike as the idling hero is among the movers. The moon's map at midnight is
-  drawn whole every frame, a Bulwark fault (`commands/village.md`). Between two lamps his moon shadow read 0% at every
+  over a copy by its triangles, the draws alike as the idling hero is among the movers. The moon's map at midnight was
+  drawn whole every frame, a lamp's face planned in the engine's frame plan (Bulwark plans it aside now:
+  `commands/village.md`). Between two lamps his moon shadow read 0% at every
   pair, as the by-lamp reading's hold of the shadow's turns (`engineShadowTurns`) was missing there: a frame between
   turns read the map from before he stopped casting. One lamp's shadow of him reads 3 to 14% between four pairs on
   main and here, under the 15% the check asks.

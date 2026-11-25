@@ -98,10 +98,10 @@ still and of the movers, `FrameStats.lampFaces`, `moverFaces`: the step draws th
 381k triangles where the frames beside it draw the movers over a copy, 69 and 72k, and no lamp's map of what stands
 still; then, walked off, the frame as the lamps' maps were left against all drawn again, 0.00% changed; `--canary`
 asks for every lamp's map at the step. Under three it counted its draws round `renderBufferDirect`, which three's
-WebGPU renderer hasn't got. **At midnight it fails**: the moon's map is drawn whole every frame, 221 draws and 372k
-triangles, as the movers' faces by the lamps (`LampShadows.moved`) are planned in the engine's one plan (Bulwark's
-`bake_lamp_face`), which forgets what stood still in the frame before; with `rust.lampShadows=0` it's the movers
-alone again); the hero come to other lamps (`lampHandOverByFaces`, `page/villageLampHandOver.ts`: stood by a lamp at
+WebGPU renderer hasn't got. At midnight the moon's map was drawn whole every frame, 221 draws and 372k triangles: the
+movers' faces by the lamps (`LampShadows.moved`) were planned in the engine's one plan (Bulwark's `bake_lamp_face`),
+which forgot what stood still in the frame before. Bulwark plans them aside now (`Plan::make_aside`, its `sun`
+demo), and the frames beside the moon's step draw 57 and 50k); the hero come to other lamps (`lampHandOverByFaces`, `page/villageLampHandOver.ts`: stood by a lamp at
 midnight, then by the lamp furthest from it: no lamp's map of what stands still drawn again over 90 frames, 540
 faces of his shadow by his new lamps; the frame after it against all drawn again 0.00% changed; `--canary` asks for
 every lamp's map again as he arrives); the hall's heroes let go and wanted
