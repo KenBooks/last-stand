@@ -19,7 +19,7 @@ import { scholarRounds, type Rounds } from '../scholarRounds';
 import { chairSeat } from '../seats';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
-  BODY, CANDLE, CROSS_UNDER, DISPLAY, LANTERN, ROOM_LOOK, againstWall, begin, box, candle, chandelier, drum, finish, framed, hearth, inkedPage, lantern, onWall,
+  BODY, CANDLE, CROSS_UNDER, DISPLAY, LANTERN, ROOM_LOOK, againstWall, begin, box, candle, chandelier, drum, finish, framed, hearth, inkedPage, lantern, onWall, pageTexture, pageVariant, showPage,
   parchment, rug, stool, table, writing, keepApart, type Build, type Furniture, type Mats, type Room,
 } from '../rooms';
 
@@ -341,15 +341,18 @@ function openBook(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, t
     half.rotation.y = sx > 0 ? 0 : Math.PI;
     half.castShadow = half.receiveShadow = true;
     b.add(half);
-    const page = writing(M, 192, 256, 1, 1);
-    page.write((cx, w, h) => inkedPage(cx, w, h, sx < 0, seed * 7 + sx));
+    // (its page one of the page atlas's, by the book's seed: each book its own chapter mark and lines, one image for
+    // them all, `pageTexture`)
     const geo = sx > 0 ? print : print.clone();
     if (sx < 0) { const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, 1 - uv.getX(i), 1 - uv.getY(i)); }
-    page.mesh.geometry.dispose();
-    page.mesh.geometry = geo;
-    half.add(page.mesh);
+    const paper = M.paper.clone();
+    paper.map = pageTexture(sx < 0, seed);
+    const page = new THREE.Mesh(geo, paper);
+    page.receiveShadow = true;
+    page.userData.initial = sx < 0;
+    half.add(page);
     blocks.push(half);
-    prints.push(page.mesh);
+    prints.push(page);
   }
   return { blocks, prints, shape };
 }
@@ -747,9 +750,11 @@ export function build(group: THREE.Group): Room {
   // (the book he took, opened: as wide across as twice its depth, as deep as it's tall, its cover its colour)
   const openCover = (openHeld.children[0] as THREE.Group).children.find((m): m is THREE.Mesh => (m as THREE.Mesh).isMesh)!;
   (openCover.material as THREE.MeshStandardMaterial) = (openCover.material as THREE.MeshStandardMaterial).clone();
-  const openAs = (size: THREE.Vector3, colour: THREE.Color) => {
+  const openAs = (size: THREE.Vector3, colour: THREE.Color, n: number) => {
     openHeld.scale.set((size.z * 2) / OPEN_HELD, 1, size.y / opened.shape.depth);
     (openCover.material as THREE.MeshStandardMaterial).color.copy(colour);
+    // (its pages the very book's: its chapter mark and lines by the book, as every time it's opened)
+    for (const print of opened.prints) showPage((print.material as THREE.MeshStandardMaterial).map!, print.userData.initial, pageVariant(n));
   };
   openHeld.visible = false;
   g.add(openHeld);

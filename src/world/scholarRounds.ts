@@ -43,7 +43,9 @@ export interface RoundsRoom {
   puff(at: THREE.Vector3): void;
   globe: THREE.Object3D;
   /** the open book made the book he took, opened (its size: thick, tall, deep; its colour) */
-  openAs(size: THREE.Vector3, colour: THREE.Color): void;
+  /** the open book set to the shelf's book `n` (its place among all the shelves' books) he took: its size, its cover's
+   *  colour, and its pages (its chapter mark and lines, the same each time it's opened) */
+  openAs(size: THREE.Vector3, colour: THREE.Color, n: number): void;
   /** where the room's ladder's foot stands: its footprint is among the obstacles (a harness's canary sends him there) */
   ladder: THREE.Vector3;
 }
@@ -946,7 +948,7 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     doing = 'opening a book';
     const r = { at: new THREE.Vector3(), turn: new THREE.Quaternion() };
     // (the open book the very book he took, opened, and his hands on it as it's sized)
-    room.openAs(slot.size, room.shelves[slot.shelf].colours[slot.index]);
+    room.openAs(slot.size, room.shelves[slot.shelf].colours[slot.index], room.shelves[slot.shelf].offset + slot.index);
     const open = new THREE.Vector3(0.26, 0.04, 0.2).multiply(room.openHeld.scale);
     /** his hands under the open book at `r`: his left palm behind its spine low down, his right behind its right
      *  board, his fingers flat up the boards (curled, they came through its pages, from play), `behind` the book's
