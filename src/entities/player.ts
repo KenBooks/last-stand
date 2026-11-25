@@ -39,6 +39,9 @@ import type { ActionState, CastAnim, CastHands, ClassDef, DamageType, DerivedSta
 import type { Enemy } from './enemy';
 import { walkPath } from '../world/walkPath';
 
+/** a stun's grace after it ends (s): no boss's stun takes him again within it */
+const STUN = { grace: 1.5 };
+
 /** How many times his speed he walks of himself to a spot (`?walkPace=3`: the stalls' `walks` crosses the village
  *  faster, its freezes the same in fewer seconds; 1 otherwise). */
 const WALK_PACE = typeof location === 'undefined' ? 1
@@ -302,6 +305,8 @@ export class Player {
   seizedUntil = -1;
   lift = 0;
   get seized(): boolean { return this.seizedUntil > G.time; }
+  /** game time until which a boss's stun can't take him again (`stunAfterGrace`: `STUN.grace` past the last one's end) */
+  private stunGraceUntil = -1;
   /** his shield raised (a block held): what a boss's blow breaks on */
   get shieldRaised(): boolean { return this.gear.shield && !!this.channel?.skill.def.block; }
   /** game time the hero was last busy with an action: casting, channelling, dashing or staggered */
@@ -580,7 +585,7 @@ export class Player {
     this.hitT = 0;
     this.blockCd = 0;
     this.guardBroken = -1;
-    this.stunnedUntil = -1;
+    this.stunnedUntil = this.stunGraceUntil = -1;
     this.seizedUntil = -1;
     this.lift = 0;
     this.lastLowEnergy = 0;
@@ -1611,6 +1616,17 @@ export class Player {
     this.dash = null;
     this.vel.set(0, 0, 0);
     actionSink?.({ t: 'held', s: round2(seconds), f: frozen ? 1 : 0 });
+    return true;
+  }
+
+  /** Stunned for `seconds` by a boss (a ring that stuns: the Bell-Warden's toll) as `stun` stuns him, but never again
+   *  within `STUN.grace` of the last such stun's end, so two guards tolling in turn can't hold him stunned for good.
+   *  His own game alone judges it. Returns whether it took him. */
+  stunAfterGrace(seconds: number): boolean {
+    if (!this.active || !this.local || G.time < this.stunGraceUntil) return false;
+    this.stun(seconds);
+    this.vel.set(0, 0, 0);
+    this.stunGraceUntil = this.stunnedUntil + STUN.grace;
     return true;
   }
 

@@ -29,6 +29,8 @@ export interface BossWaveOptions {
 /** Each boss wave met: the wave before it, the wave, its bosses and what the bar says. */
 const WAVES: { before: number; wave: number; bosses: EnemyId[]; label: string }[] = [
   { before: 4, wave: 5, bosses: ['colossus'], label: 'Readying Colossus' },
+  // (an encounter: the Cantor and its two guards, both of its kind risen)
+  { before: 9, wave: 10, bosses: ['cantor', 'bellwarden', 'bellwarden'], label: 'Readying Ossuary Cantor' },
   { before: 14, wave: 15, bosses: ['twinslab', 'twinreliquary'], label: 'Readying Ossuary Twins' },
 ];
 

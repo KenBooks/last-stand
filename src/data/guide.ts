@@ -32,6 +32,8 @@ export const AI_NOTES: Record<string, string> = {
   ranged: 'Keeps its distance and throws from afar, backing off when you close in.',
   slam: 'Slams the ground in front of it once in reach, a ring on the floor marking where first.',
   boss: 'Slams all round itself up close, looses volleys at range, and calls help.',
+  bellWarden: 'Hovers where it rose and tolls from there, a short ring of sound that stuns whoever is close; its ghost dives at whoever comes near, and it raises the dead round it now and then.',
+  cantor: 'Floats at a distance and chants: bone hands rise under you, a dirge of rings marches out, its choir rings the fight in, gravestones rise and stay, its guards ward it.',
 };
 
 /** A weapon way of holding the warrior's gear (or any class whose skills follow its gear): its name, how it plays,

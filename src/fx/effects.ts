@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { initRubble, updateRubble, clearRubble } from './rubble';
 import { G } from '../state';
 import { additive, nearGlow } from '../core/materials';
-import { radialBand, radialDecal, runeCircle } from '../core/textures';
+import { canvasOf, ctx2d, radialBand, radialDecal, runeCircle, textureFromCanvas } from '../core/textures';
 import { rand } from '../util';
 import { groundHeight } from '../world/ground';
 import { tunable } from '../core/tuning';
@@ -18,7 +18,7 @@ const floor = (pos: Pos): number => Math.max(pos.y ?? 0, groundHeight(pos.x, pos
 
 const active: Effect[] = [];
 const GEO = {} as Record<'ring' | 'disc' | 'plane' | 'spike' | 'pillar' | 'crystal', THREE.BufferGeometry>;
-const TEX = {} as Record<'scorch' | 'frost' | 'soft' | 'band' | 'rune' | 'cracks', THREE.Texture>;
+const TEX = {} as Record<'scorch' | 'frost' | 'soft' | 'band' | 'rune' | 'cracks' | 'front' | 'halo' | 'rim' | 'outside', THREE.Texture>;
 
 export function initEffects(): void {
   initRubble();
@@ -32,11 +32,143 @@ export function initEffects(): void {
   TEX.band = radialBand();
   TEX.rune = runeCircle(3, 512);
   TEX.cracks = crackTexture();
+  TEX.front = glowRingTexture(BAND_PEAK, 0.12);
+  TEX.halo = glowRingTexture(HALO_PEAK, 0.3);
+  TEX.rim = glowRingTexture(RIM_PEAK, 0.45);
+  TEX.outside = outsideTexture(OUTSIDE_AT);
   GEO.pillar = new THREE.CylinderGeometry(1, 1, 1, 24, 1, true).translate(0, 0.5, 0);
   GEO.crystal = new THREE.OctahedronGeometry(0.2, 0).scale(0.55, 2.6, 0.55).translate(0, 0.35, 0);
 }
 
 export function addEffect<E extends Effect>(e: E): E { active.push(e); return e; }
+
+// Soft rings of light: a ring drawn as a gradient on one flat quad (`GEO.plane`, 2 m across at scale 1), brightest at
+// its peak's share of the quad's half-width and falling off to nothing either side, in place of a ring mesh's hard
+// edges (from Victor on #684: "Too much geometry in effects, need to think of something, to make it more triple A").
+// Additive with a map, as `groundFlash` is: the same program, so nothing new compiles.
+/** where the narrow band's peak (a ring's front), the wide halo's and a warning's rim lie, as shares of the quad's
+ *  half-width */
+const BAND_PEAK = 0.86, HALO_PEAK = 0.72, RIM_PEAK = 0.8;
+
+/** A ring of light's texture: nothing in the middle, rising to its brightest at `peak` (a share of the radius) over
+ *  `width`, and falling off to nothing at the edge, its falloff eased so no edge reads as a line. */
+function glowRingTexture(peak: number, width: number): THREE.Texture {
+  const size = 256;
+  const c = canvasOf(size);
+  const g = ctx2d(c);
+  const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  const inner = Math.max(0, peak - width);
+  grad.addColorStop(0, 'rgba(255,255,255,0)');
+  grad.addColorStop(inner, 'rgba(255,255,255,0)');
+  grad.addColorStop(inner + (peak - inner) * 0.55, 'rgba(255,255,255,0.28)');
+  grad.addColorStop(peak, 'rgba(255,255,255,1)');
+  grad.addColorStop(peak + (1 - peak) * 0.4, 'rgba(255,255,255,0.3)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, size, size);
+  return textureFromCanvas(c);
+}
+
+/** An additive soft quad of `map` on the floor at `pos` (a ring's or a disc's), with its material. */
+function softQuad(pos: Pos, map: THREE.Texture, color: THREE.ColorRepresentation, intensity: number, opacity: number, lift: number) {
+  const mat = additive(color, intensity, opacity);
+  mat.map = map;
+  const m = new THREE.Mesh(GEO.plane, mat);
+  m.position.set(pos.x, floor(pos) + lift, pos.z);
+  return { m, mat };
+}
+
+/** The soft halo's texture, for a ring of light drawn on a quad of one's own (an encounter's bosses' auras). */
+export const haloMap = (): THREE.Texture => TEX.halo;
+/** where the halo's peak lies on its quad (a share of its half-width) */
+export const HALO_AT = HALO_PEAK;
+
+/** where a ring's edge lies on the quad lighting the ground outside it (a share of its half-width): far enough in that
+ *  the quad, 1 / OUTSIDE_AT times the ring, reaches across the arena */
+const OUTSIDE_AT = 0.4;
+
+/** The ground outside a ring lit: nothing inside its edge, rising just past it to a glow that lies on outward, eased
+ *  to nothing at the quad's own edge (no line anywhere). */
+function outsideTexture(edge: number): THREE.Texture {
+  const size = 256;
+  const c = canvasOf(size);
+  const g = ctx2d(c);
+  const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, 'rgba(255,255,255,0)');
+  grad.addColorStop(edge * 0.97, 'rgba(255,255,255,0)');
+  grad.addColorStop(edge * 1.06, 'rgba(255,255,255,0.75)');
+  grad.addColorStop(edge * 1.3, 'rgba(255,255,255,0.45)');
+  grad.addColorStop(0.85, 'rgba(255,255,255,0.3)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, size, size);
+  return textureFromCanvas(c);
+}
+
+/** A ring set on the floor at `pos` each frame (the Ossuary Cantor's choir's): a bright soft band at its radius and
+ *  the ground outside it lit, both with no hard edge. `set(radius, edge, outside)` places it, each part lit by its
+ *  share (0..1); `dispose` takes it away. */
+export function edgeRing(pos: Pos, color: THREE.ColorRepresentation, intensity = 1.4) {
+  const edge = softQuad(pos, TEX.front, color, intensity * 1.3, 0, 0.1);
+  const out = softQuad(pos, TEX.outside, color, intensity * 0.55, 0, 0.095);
+  const dispose = tracked(edge.m, [edge.mat, out.mat]);
+  G.scene.add(out.m);
+  return {
+    set(radius: number, edgeLight: number, outsideLight: number): void {
+      edge.m.scale.setScalar(radius / BAND_PEAK);
+      out.m.scale.setScalar(radius / OUTSIDE_AT);
+      edge.mat.opacity = edgeLight;
+      out.mat.opacity = outsideLight * 0.8;
+    },
+    dispose(): void {
+      G.scene.remove(out.m);
+      dispose();
+    },
+  };
+}
+
+/** A soft ring of light swelling out from `from` to `to` m and fading (a shockwave's, with no hard edge). */
+export function glowRing(pos: Pos, { color = 0xffffff, intensity = 2, from = 0.3, to = 4, life = 0.5 } = {}) {
+  const { m, mat } = softQuad(pos, TEX.halo, color, intensity, 1, 0.08);
+  const dispose = tracked(m, [mat]);
+  let t = 0;
+  return addEffect({
+    update(dt: number) {
+      t += dt;
+      const k = Math.min(1, t / life);
+      m.scale.setScalar((from + (to - from) * (1 - (1 - k) ** 3)) / HALO_PEAK);
+      mat.opacity = (1 - k) ** 1.6;
+      return k < 1;
+    }, dispose,
+  });
+}
+
+/** A warning of light where an attack lands: a soft band at `radius` breathing slowly (well under 1.5 a second) and a
+ *  soft glow filling in from the middle over `duration`, both with no hard edge. Call cancel() to take it away. */
+export function glowTelegraph(pos: Pos, radius: number, duration: number, color: THREE.ColorRepresentation): Effect & { cancel(): void } {
+  // (its rim wide and falling off inward: a narrow band still read as a drawn line round it)
+  const band = softQuad(pos, TEX.rim, color, 1.25, 0.9, 0.07);
+  const fill = softQuad(pos, TEX.soft, color, 0.9, 0.5, 0.065);
+  band.m.scale.setScalar(radius / RIM_PEAK);
+  const dispose = tracked(band.m, [band.mat, fill.mat]);
+  G.scene.add(fill.m);
+  let t = 0, dead = false;
+  return addEffect<Effect & { cancel(): void }>({
+    cancel() { dead = true; },
+    update(dt: number) {
+      t += dt;
+      const k = Math.min(1, t / duration);
+      fill.m.scale.setScalar(Math.max(0.01, radius * k));
+      band.mat.opacity = 0.7 + 0.25 * Math.sin(t * 7);
+      fill.mat.opacity = 0.25 + 0.35 * k;
+      return !dead && k < 1;
+    },
+    dispose() {
+      G.scene.remove(fill.m);
+      dispose();
+    },
+  });
+}
 
 export function updateEffects(dt: number): void {
   updateRubble(dt);
@@ -93,6 +225,45 @@ export function groundFlash(pos: Pos, { color = 0xffffff, intensity = 2, radius 
   const dispose = tracked(m, [mat]);
   let t = 0;
   return addEffect({ update(dt: number) { t += dt; mat.opacity = Math.max(0, 1 - t / life); return t < life; }, dispose });
+}
+
+/**
+ * A ring of sound rolling out over the floor (the Bell-Warden's toll): its radius grows at `speed` m/s, linear as the
+ * gameplay's front is (a shockwave eases out), from `from` to `reach`, fading as it goes, `thickness` its band's share
+ * of the radius. Dim and one sweep a ring (the root's flash rule: a pattern crossing the view flashes too). `onStep`
+ * is told the radius before and after each frame's growth (the toll judges its hero there).
+ */
+export function soundRing(pos: Pos, { color = 0xd8e4ff, intensity = 1.3, speed = 9, from = 1, reach = 24, delay = 0,
+  onStep = null as ((r0: number, r1: number) => void) | null } = {}) {
+  // (soft rings of light: a band at its front, a wash behind it, neither with a hard edge)
+  const front = softQuad({ x: 0, z: 0, y: 0 }, TEX.front, color, intensity * 1.2, 0, 0);
+  const behind = softQuad({ x: 0, z: 0, y: 0 }, TEX.halo, color, intensity * 0.45, 0, -0.005);
+  const mat = front.mat, inner = behind.mat, m = front.m, wash = behind.m;
+  m.position.set(0, 0, 0);
+  wash.position.set(0, -0.005, 0);
+  const g = new THREE.Group();
+  g.add(m, wash);
+  g.position.set(pos.x, floor(pos) + 0.09, pos.z);
+  g.visible = false;
+  const dispose = tracked(g, [mat, inner]);
+  let t = -delay, r = from;
+  return addEffect({
+    update(dt: number) {
+      t += dt;
+      if (t < 0) return true;
+      const r0 = r;
+      r = from + speed * t;
+      onStep?.(r0, Math.min(r, reach));
+      const k = Math.min(1, (r - from) / (reach - from));
+      g.visible = true;
+      m.scale.setScalar(r / BAND_PEAK);
+      wash.scale.setScalar((r * 0.9) / HALO_PEAK);
+      mat.opacity = (1 - k) ** 1.4;
+      inner.opacity = (1 - k) ** 2 * 0.8;
+      return r < reach;
+    },
+    dispose,
+  });
 }
 
 // Ground decal that fades out (scorch / frost).

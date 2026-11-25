@@ -131,14 +131,15 @@ export const keepWhole = (): Record<string, never> => {
 const twinsOn = (biome: BiomeId, wave: number): boolean =>
   biome === 'crypt' && wave >= FIRST_WAVE && (wave - FIRST_WAVE) % EVERY === 0;
 
-/** What wave `wave` of `biome` should send: the Twins on theirs, else its ladder's next rung, the ladder going on only
- *  at the boss waves the Twins don't hold. */
+/** What wave `wave` of `biome` should send: the Twins on theirs, else its ladder's next rung and that rung's guards (the
+ *  Cantor's two Bell-Wardens), the ladder going on only at the boss waves the Twins don't hold. */
 function wantedOf(biome: BiomeId, wave: number): EnemyId[] {
   if (twinsOn(biome, wave)) return ['twinslab', 'twinreliquary'];
   let held = 0;
   for (let before = WAVES.bossEvery; before < wave; before += WAVES.bossEvery) if (!twinsOn(biome, before)) held++;
-  const ladder = BIOMES[biome].bosses;
-  return [ladder[held % ladder.length].id];
+  const rung = BIOMES[biome].bosses[held % BIOMES[biome].bosses.length];
+  const guards = Array.from({ length: rung.guards?.count ?? 0 }, () => rung.guards!.id);
+  return [rung.id, ...guards];
 }
 
 /** The Continue button's name for what `wanted` sends on `biome`'s boss waves. */

@@ -445,6 +445,9 @@ export interface EnemyDef {
   pair?: string;
   /** the most it turns a second to face its way (rad/s), where it turns slower than a small foe's quick turn */
   turn?: number;
+  /** a boss that may come as another's guard (a ladder's rung's `guards`, data/biomes.ts): its life, damage and size
+   *  then, as shares of its own, and whether it stands where it rises (`stands`: it never walks, and no foe shoves it) */
+  asGuard?: { life: number; damage: number; size: number; stands?: boolean; name?: string };
 }
 
 /** A phase of a boss's fight: the share of its life it begins under (the first's is 1), and the line the banner says
@@ -470,13 +473,18 @@ export interface BossKitDef {
   phases: BossPhaseDef[];
   attacks?: Record<string, TelegraphDef>;
   weak?: { taken: number; edge: number };
+  /** warded while its guards stand (an encounter's main boss, data/biomes.ts `BossRung.guards`): it takes `taken` times
+   *  the damage until the last of them falls, its aura in `edge` meanwhile */
+  ward?: { taken: number; edge: number };
 }
 
-/** What a boss's model is told of its fight each frame (`AnimState.boss`): its phase, and how much of a weak-spot
- *  window is left (s). */
+/** What a boss's model is told of its fight each frame (`AnimState.boss`): its phase, how much of a weak-spot window
+ *  is left (s), and whether its guards ward it. */
 export interface BossLook {
   phase: number;
   weak: number;
+  /** warded by its guards (`BossKitDef.ward`) */
+  warded: boolean;
 }
 
 // ---------------------------------------------------------------------------

@@ -18,7 +18,9 @@
 //   pair's whole life, a hit on either taking it from both (`shareHit`), each counting what it took (`Enemy.taken`); a
 //   killing blow fells both, the second paying no spoils (`Enemy.noSpoils`), so the pair pays once.
 // - **Warned hits kept apart** (`claimBeat`): a fight's warned hits never land together (the Twins' slam and skulls).
-
+// - **Encounters** (data/biomes.ts `BossRung.guards`): a main boss with lesser bosses as its guards (`Enemy.guard`, at
+//   their `EnemyDef.asGuard` life and damage), warded while any stands (`wardWhileGuarded`, `BossKitDef.ward`: it takes
+//   `taken` times the damage, told to every game).
 import { G } from '../state';
 import { fx } from './enemyAI';
 import type { Enemy } from './enemy';
@@ -43,7 +45,8 @@ export function checkPhase(e: Enemy, amount = 0): void {
   if (amount > 0) hooksOf(e.type)?.hurt?.(e, amount);
   // (its hurt may have felled it: the Twins' collapse at half)
   if (!e.alive) return;
-  const to = phaseAt(e, e.life / e.maxLife);
+  // (an encounter's guard keeps its first phase: no banner, no cue, nothing harder of its own)
+  const to = e.guard ? 0 : phaseAt(e, e.life / e.maxLife);
   while (e.bossPhase < to) fx('bossPhase', e.id, e.bossPhase + 1);
 }
 
@@ -89,13 +92,35 @@ export function telegraphed(e: Enemy, name: string, hit: () => void, ring?: Tele
   e.startAction(name, dur, [[share, hit], ...more]);
 }
 
+/** Where the fight is simulated: a weak-spot window opened for `seconds`, told to every game. */
+export function openWeak(e: Enemy, seconds: number): void {
+  if (e.net || !e.def.bossKit?.weak) return;
+  fx('bossWeak', e.id, seconds);
+}
+
+/** How many times its damage a foe takes from a hero's hit now: warded by its guards, the ward's; else its weak-spot
+ *  window's; else 1. */
+export const damageTaken = (e: Enemy): number =>
+  e.warded ? e.def.bossKit?.ward?.taken ?? 1 : e.weak > 0 ? e.def.bossKit?.weak?.taken ?? 1 : 1;
+
+/** Where simulated: an encounter's main boss warded while any of its guards stands, let go as the last falls, told to
+ *  every game (enemyAI's `bossWard` fx). */
+export function wardWhileGuarded(e: Enemy): void {
+  if (e.net || !e.def.bossKit?.ward) return;
+  const guarded = G.enemies.some((x) => x.alive && x.guard);
+  if (guarded !== e.warded) fx('bossWard', e.id, guarded ? 1 : 0);
+}
+
 /** When the fight's warned hits still to come land (G.time, from and to), across every boss in it (`claimBeat`):
- *  every one, not the last alone, as a belt skull's blast is claimed seconds ahead and a volley after it lands first. */
+ *  every one, not the last alone, as a belt skull's blast is claimed seconds ahead and a volley after it lands first;
+ *  and the last taken (the lab's encounter check reads it, `beatTaken`). */
 const beats: { from: number; to: number }[] = [];
+const beat = { from: -Infinity, to: -Infinity };
 
 /**
  * Where simulated: may a boss start a warned attack whose hits land from `hitIn` s on over `span` s, no other boss's
- * landing within `gap` s of them? Taken if so (the next must keep clear of it): the Twins' slam, skulls and belt
+ * landing within `gap` s of them? Taken if so (the next must keep clear of it). An encounter's bosses hit in turn,
+ * never two at once: a toll's stun chained into grave hands no one could step out of; the Twins' slam, skulls and belt
  * skulls never land together.
  */
 export function claimBeat(hitIn: number, gap: number, span = 0): boolean {
@@ -103,25 +128,33 @@ export function claimBeat(hitIn: number, gap: number, span = 0): boolean {
   for (let i = beats.length - 1; i >= 0; i--) if (beats[i].to + gap < G.time) beats.splice(i, 1);
   if (beats.some((b) => from < b.to + gap && to > b.from - gap)) return false;
   beats.push({ from, to });
+  beat.from = from;
+  beat.to = to;
   return true;
 }
 
-/** Where the fight is simulated: a weak-spot window opened for `seconds`, told to every game. */
-export function openWeak(e: Enemy, seconds: number): void {
-  if (e.net || !e.def.bossKit?.weak) return;
-  fx('bossWeak', e.id, seconds);
-}
+/** The fight's warned hits as taken (the lab's encounter check reads them). */
+export const beatTaken = (): Readonly<typeof beat> => beat;
 
-/** How many times its damage a foe takes from a hero's hit now: its weak-spot window's, else 1. */
-export const damageTaken = (e: Enemy): number => (e.weak > 0 ? e.def.bossKit?.weak?.taken ?? 1 : 1);
+/** How much larger `e`'s aura is drawn than a ring for its band to lie where a ring's does (a soft halo's, enemy.ts). */
+const auraReach = (e: Enemy): number => (e.aura?.userData.reach as number | undefined) ?? 1;
 
 /** A boss's aura through its weak-spot window: the window's colour, swelling once a second; its own colour after. */
 export function weakLooks(e: Enemy): void {
   const kit = e.def.bossKit?.weak;
   if (!kit || !e.auraMat || !e.aura) return;
+  // (warded: the ward's colour, steady and close in; it takes little then)
+  if (e.warded && e.def.bossKit?.ward) {
+    // (a soft halo now, its whole width lit: dimmer than the ring it was, or it read as a solid band)
+    e.auraMat.color.setHex(e.def.bossKit.ward.edge).multiplyScalar(0.75);
+    e.aura.scale.setScalar(e.radius * 1.35 * auraReach(e));
+    return;
+  }
   const on = e.weak > 0, beat = on ? 0.5 + 0.5 * Math.sin(G.time * Math.PI * 2) : 0;
-  e.auraMat.color.setHex(on ? kit.edge : e.auraColor ?? 0x9a40ff).multiplyScalar(on ? 1.6 + beat * 1.4 : 1.6);
-  e.aura.scale.setScalar(e.radius * (on ? 1.9 + beat * 0.35 : 1.6));
+  // (an encounter's guard: its ring at rest fainter and tighter, the encounter's boss its main one)
+  const rest = e.guard ? 0.9 : 1.6;
+  e.auraMat.color.setHex(on ? kit.edge : e.auraColor ?? 0x9a40ff).multiplyScalar(on ? 1.6 + beat * 1.4 : rest);
+  e.aura.scale.setScalar(e.radius * (on ? 1.9 + beat * 0.35 : e.guard ? 1.25 : 1.6) * auraReach(e));
 }
 
 /** Each frame a boss lives, on every game: its own `frame` (`BossHooks.frame`). */
@@ -146,5 +179,5 @@ export function shareHit(e: Enemy, amount: number): void {
 
 /** What a boss's model is told of its fight this frame (`AnimState.boss`). */
 export function bossLook(e: Enemy): BossLook | undefined {
-  return e.def.bossKit ? { phase: e.bossPhase, weak: e.weak } : undefined;
+  return e.def.bossKit ? { phase: e.bossPhase, weak: e.weak, warded: e.warded } : undefined;
 }

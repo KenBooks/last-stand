@@ -21,6 +21,8 @@ export interface BarLook {
 const FRAME = 'rgba(160,124,70,.25)';
 export const FOE_BAR: BarLook = { w: 56, h: 5, ring: FRAME, fill: ['#e03030', '#8a0c10'] };
 export const HERO_FOE_BAR: BarLook = { w: 84, h: 7, ring: 'rgba(240,200,96,.6)', fill: ['#ffb040', '#b0400c'] };
+/** an encounter's guard's: wider still, red in a boss's bronze ring (its name over it) */
+export const GUARD_BAR: BarLook = { w: 110, h: 8, ring: 'rgba(230,170,90,.7)', fill: ['#ff4a3a', '#8a0c10'] };
 export const ALLY_BAR: BarLook = { w: 56, h: 5, ring: FRAME, fill: ['#6ab8ff', '#1d4f8a'] };
 export const FOE_NAME: TextStyle = { face: 'display', size: 12, color: '#f5c060', shadows: OUTLINE };
 export const ALLY_NAME: TextStyle = { face: 'display', size: 12, color: '#9ccfff', shadows: OUTLINE };

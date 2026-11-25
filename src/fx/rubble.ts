@@ -117,10 +117,11 @@ export function setRubbleShadows(min: number): void {
   for (const k in pools) pools[k].mesh.castShadow = POOL[k.split(':')[0] as Shape].radius >= min;
 }
 
-export interface RubbleOpts { count: number; color: number; kind?: RubbleKind; /** where the pieces start: a circle round x, z, and a height range */ radius: number; height: number; /** the pieces' size (m) and how hard they fly */ size: number; speed: number }
+export interface RubbleOpts { count: number; color: number; kind?: RubbleKind; /** where the pieces start: a circle round x, z, and a height range */ radius: number; height: number; /** the pieces' size (m) and how hard they fly */ size: number; speed: number;
+  /** how long each lies before it shrinks away (s; `LIFE` and up to 3 s more by default) */ life?: number }
 
 /** A prop's worth of pieces at (x, z) */
-export function rubble(x: number, z: number, { count, color, kind = 'stone', radius, height, size, speed }: RubbleOpts): void {
+export function rubble(x: number, z: number, { count, color, kind = 'stone', radius, height, size, speed, life }: RubbleOpts): void {
   if (!pools['stone:0']) return;
   const parts = RECIPES[kind], total = parts.reduce((a, q) => a + q.w, 0), dirty = new Set<Pool>();
   for (let i = 0; i < count; i++) {
@@ -136,7 +137,7 @@ export function rubble(x: number, z: number, { count, color, kind = 'stone', rad
       vx: Math.cos(a) * speed * rand(0.3, 1), vy: rand(1.5, 4.5) * (speed / 4), vz: Math.sin(a) * speed * rand(0.3, 1),
       rx: rand(0, 6), ry: rand(0, 6), rz: rand(0, 6), wx: rand(-9, 9), wy: rand(-9, 9), wz: rand(-9, 9),
       sx: s * part.sx * rand(0.8, 1.2), sy: s * part.sy * rand(0.8, 1.2), sz: s * part.sz * rand(0.8, 1.2), t: 0,
-      life: BREAKS[kind] ? BREAKS[kind]!.life + rand(0, 1) : LIFE + rand(0, 3), rest: false, tx: 0, tz: 0,
+      life: life ?? (BREAKS[kind] ? BREAKS[kind]!.life + rand(0, 1) : LIFE + rand(0, 3)), rest: false, tx: 0, tz: 0,
     });
     pool.mesh.setColorAt(slot, _c.set(part.color ?? color).multiplyScalar((part.shade ?? 1) * rand(0.75, 1.15)));
     // (placed where it starts at once: drawn before the next update with the pool's unset place, a fresh piece stood

@@ -20,6 +20,7 @@ import { SKILL_KEYS } from '../loot/loadout';
 import { FRENZY } from '../data/balance';
 import { frenzyCap } from '../combat/frenzy';
 import type { Player } from '../entities/player';
+import type { Enemy } from '../entities/enemy';
 import type { Item, SkillDef, SkillKey } from '../types';
 
 /** querySelector that asserts the element exists (HUD markup is static). */
@@ -396,7 +397,9 @@ export function updateHud(): void {
 
 function updateTarget() {
   const box = h('#target');
-  let e = G.enemies.find((x) => x.boss && x.alive);
+  // (an encounter's main boss, never one of its guards: from play, the bar named a guard "The Bell-Warden" at the
+  // Ossuary Cantor's wave; each guard's own bar is over it in the world)
+  let e = G.enemies.find((x) => x.boss && !x.guard && x.alive);
   if (!e) {
     let best = 2.2;
     for (const x of G.enemies) {
@@ -407,13 +410,22 @@ function updateTarget() {
   }
   if (!e) { box.classList.add('hidden'); return; }
   box.classList.remove('hidden');
-  box.classList.toggle('boss', e.boss);
+  // (a guard aimed at is a target as any foe is, named a guard: no boss's bar of its own)
+  box.classList.toggle('boss', e.boss && !e.guard);
   // (a pair sharing one life named as the pair while both stand: data/enemies.ts `pair`)
   setText(h('#target .t-name'), e.def.pair && partnerOf(e) ? e.def.pair : e.name);
-  setText(h('#target .t-sub'), e.boss ? 'Boss' : e.hero ? 'Hero' : '');
+  setText(h('#target .t-sub'), e.guard ? 'Guard' : e.boss ? bossLine(e) : e.hero ? 'Hero' : '');
   const k = pct(e.life / e.maxLife);
   setStyle(h('#target .t-fill'), 'width', k);
   setStyle(h('#target .t-ghost'), 'width', k);
+}
+
+/** A boss's line under its name: warded, and by how many guards still standing, while its guards stand (so the
+ *  player knows why it takes so little and what to strike first). */
+function bossLine(e: Enemy): string {
+  if (!e.warded) return 'Boss';
+  const guards = G.enemies.filter((x) => x.guard && x.alive).length;
+  return guards ? `Boss · Warded while ${guards} ${guards === 1 ? 'guard stands' : 'guards stand'}` : 'Boss · Warded';
 }
 
 /** how many metres across the minimap shows (its canvas's width) */

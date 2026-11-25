@@ -9,6 +9,8 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md).
 
 An effect's material is wrapped in `nearGlow()` and its light held to the budget (Bright effects in `src/core/AGENTS.md`); one that brings its own materials is warmed at boot (`game/warmup.ts`).
 
+**A ring of light is a gradient on one quad, not a ring mesh** (`effects.ts` `glowRing`, `glowTelegraph`, `soundRing`, `edgeRing` (a ring set each frame with the ground outside it lit, the Cantor's choir's), and `haloMap` for an aura of one's own): brightest at its peak, falling off to nothing either side, additive with a map as `groundFlash` is, so it compiles nothing new. Their textures are their own (`glowRingTexture`: `front`, `halo`, `rim`, `outside`), named apart from the ground flash's `band` (#917's `radialBand`, a plain linear rise and fall): theirs ease both ways so no edge reads as a line, and drawn on `radialBand` the dirge's rings would change look. The shared `shockwave` and `telegraph` are rings and discs with hard edges, and the Ossuary Cantor's encounter drawn with them read as geometry (from Victor on #684: "Too much geometry in effects, need to think of something, to make it more triple A"): its warnings, bursts, phase cue, toll rings and auras are the soft ones, the other foes' as main draws them.
+
 ## Gotchas
 
 - **An instanced pool's new piece is placed as it's spawned** (`rubble.ts`): a slot's matrix is the pool's unset one until the next update sets it, the world's middle at full size, so a piece drawn first in between stood there for a frame (a broken prop's rubble, a pale rock a metre across on the dais beside the hero as Thunder Crescent broke the props ahead of him). Find such a pop with `lab cast`'s blinks and `--what`.

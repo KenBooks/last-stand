@@ -13,6 +13,7 @@ import { labError } from './errors.mjs';
 import { judgeScenario } from './coopJudge.mjs';
 import { firstRunsEnd, floorInHall, lobbyTurns, watchedRun } from './coopEnd.mjs';
 import { partnerInHouse } from './coopHouses.mjs';
+import { choirTogether } from './coopChoir.mjs';
 import { partnerOnSeat } from './coopSeats.mjs';
 import { fightDuel } from './coopDuel.mjs';
 import { fightPartyDuel } from './coopDuelParty.mjs';
@@ -742,6 +743,7 @@ export async function runCoop(side, options) {
   if (scenarios?.includes('duel') && scenarios.length !== 1) throw labError('coop: duel runs alone');
   if (scenarios?.includes('houses') && scenarios.length !== 1) throw labError('coop: houses runs alone');
   if (scenarios?.includes('seats') && scenarios.length !== 1) throw labError('coop: seats runs alone');
+  if (scenarios?.includes('choir') && scenarios.length !== 1) throw labError('coop: choir runs alone, in the crypt');
   if (scenarios?.includes('ends') && (scenarios.length !== 1 || party !== 2)) {
     throw labError('coop: ends runs alone, on a pair (no --party)');
   }
@@ -806,6 +808,11 @@ export async function runCoop(side, options) {
       lines.push(`canary: the guest's joining bar hidden ${hidden ? 'caught' : 'went unseen'}`);
       if (!hidden) problems.push('coop: the canary\'s hidden joining bar went unseen');
       else problems.splice(0, problems.length, ...problems.filter((p) => !p.includes(JOIN_CANARY)));
+    }
+    if (scenarios?.length === 1 && scenarios[0] === 'choir') {
+      // (the Cantor's ring and stones, in the crypt: node/coopChoir.mjs)
+      problems.push(...await choirTogether(pair, callPage, lines, { canary }));
+      return { text: lines.join('\n'), problems };
     }
     if (scenarios?.length === 1 && scenarios[0] === 'ends') {
       const late = {

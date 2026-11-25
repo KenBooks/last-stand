@@ -26,13 +26,15 @@ export default {
     scenarios: {
       kind: 'list',
       usage: 'a,b',
-      choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'staffs', 'rush', 'strike', 'throws', 'wave', 'ping', 'chat', 'afk', 'colours', 'ghosts', 'duel', 'ends', 'houses', 'seats', 'trade', 'looks', 'wall', 'belt'],
+      choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'staffs', 'rush', 'strike', 'throws', 'wave', 'ping', 'chat', 'afk', 'colours', 'ghosts', 'duel', 'ends', 'houses', 'seats', 'trade', 'looks', 'wall', 'belt', 'choir'],
       help: 'the scenarios (all the hero can play by default): walk, foes, shoot, evade (a ranger or a mage), dodge, '
         + 'down, blink (a mage), rush and strike (a warrior), throws, belt (the Ossuary Twins\' belt skulls); '
         + 'ends alone: the ways a run ends that left a '
         + 'player apart from the party; houses alone: a partner gone into a village house shown to the host outside '
         + '(a marker over its door, the minimap, the map); seats alone: a log a partner sits on not outlined for the '
-        + 'host to sit on, a free one and the log once he\'s up outlined',
+        + 'host to sit on, a free one and the log once he\'s up outlined; choir alone: the Ossuary Cantor\'s choir\'s '
+        + 'ring and rising graves on both screens alike (the ring\'s place and radius by its age, each stone\'s spot), '
+        + 'in the crypt',
     },
     ping: { kind: 'number', usage: 'ms', help: 'the link\'s least round trip (300 by default)' },
     jitter: { kind: 'number', usage: 'ms', help: 'how much later each way a message may come (60 by default)' },

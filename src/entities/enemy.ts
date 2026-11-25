@@ -14,7 +14,7 @@ import { carrying, flown, HAND_OFF, placeBefore, throwOf, tipOf, tossOf, type Ca
 import { lures, type Lure } from '../combat/lures';
 import { anchorLabel, removeLabel } from '../ui/floaters';
 import { ORDER, type Label } from '../ui/overlay/layer';
-import { barArt, barStep, FOE_BAR, FOE_NAME, HERO_FOE_BAR } from '../ui/overlay/bars';
+import { barArt, barStep, FOE_BAR, FOE_NAME, GUARD_BAR, HERO_FOE_BAR } from '../ui/overlay/bars';
 import { DamageMeter } from '../ui/damageMeter';
 import { inYard } from '../game/village';
 import { burst, debris, smokePuff, col, particles } from '../fx/particles';
@@ -22,6 +22,7 @@ import { flash } from '../fx/lights';
 import { dazedStars } from '../fx/dazed';
 import { burnFlames } from '../combat/burn';
 import { additive } from '../core/materials';
+import { HALO_AT, haloMap } from '../fx/effects';
 import { sfx } from '../core/audio';
 import { emit } from '../events';
 import { angleDamp, damp, hitFlash, pick, rand } from '../util';
@@ -58,6 +59,10 @@ import { bossFrame, bossLook, checkPhase, shareHit, telegraphShare, weakLooks } 
 const OWN_EVADE_ECHO = 1.5;
 
 const auraGeo = new THREE.RingGeometry(0.7, 1, 48).rotateX(-Math.PI / 2);
+/** an encounter's bosses' aura: a soft halo on a flat quad (fx/effects.ts `haloMap`), no ring's hard edges; and the
+ *  middle of the ring's band, where the halo's peak is put */
+const haloGeo = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
+const AURA_BAND = 0.85;
 
 /** how long a spawned foe takes to rise out of the floor (s), invulnerable and still */
 export const RISE_TIME = 0.9;
@@ -100,6 +105,8 @@ export interface EnemyOpts {
   id?: number;
   name?: string;
   maxLife?: number;
+  /** a boss come as another's guard (data/biomes.ts `BossRung.guards`): its `EnemyDef.asGuard` life and damage */
+  guard?: boolean;
   /** a body that stands in for something else (a duel's rival for a hero, entities/rival.ts): its own definition and
    *  a body to be met by, drawn by nothing and in no crowd */
   standIn?: { def: EnemyDef; model: Model; reach: Reach };
@@ -123,6 +130,8 @@ export class Enemy {
   /** stands in for a hero in a duel (entities/rival.ts): no foe of the fight's, never reported as one */
   readonly standIn: boolean;
   readonly boss: boolean;
+  /** come as an encounter's guard (`EnemyOpts.guard`) */
+  readonly guard: boolean;
   readonly name: string;
   readonly maxLife: number;
   life: number;
@@ -210,6 +219,8 @@ export class Enemy {
    *  seconds left of its weak-spot window */
   bossPhase = 0;
   weak = 0;
+  /** an encounter's main boss warded by its guards (`BossKitDef.ward`, told by enemyAI's `bossWard` fx) */
+  warded = false;
 
   readonly model: Model;
   /** the head turning to its target (models/ik.ts) */
@@ -239,7 +250,7 @@ export class Enemy {
   /** felled with its partner by the blow that killed it: it pays no spoils (the pair pays once) */
   noSpoils = false;
 
-  constructor(typeId: EnemyId, { wave = 1, hero = false, training = !!G.run?.training, pos, lifeMult = 1, id, name, maxLife, standIn, facing }: EnemyOpts) {
+  constructor(typeId: EnemyId, { wave = 1, hero = false, training = !!G.run?.training, pos, lifeMult = 1, id, name, maxLife, guard = false, standIn, facing }: EnemyOpts) {
     const def = standIn?.def ?? ENEMIES[typeId];
     this.standIn = !!standIn;
     this.type = typeId;
@@ -247,14 +258,18 @@ export class Enemy {
     this.hero = hero;
     this.training = training;
     this.boss = !!def.boss;
+    this.guard = guard && !!def.asGuard;
+    const asGuard = this.guard ? def.asGuard! : { life: 1, damage: 1, size: 1 };
+    // (a guard is a lesser body of its kind, scaled down whole: its crowd draws its joints' matrices as placed)
+    const size = (hero ? HERO.scale : 1) * asGuard.size;
     this.id = id ?? nextId++;
     this.lifeMult = lifeMult;
-    this.name = name ?? (hero ? `${pick(HERO.prefixes)} ${def.name}` : def.name);
-    this.maxLife = maxLife ?? def.life * SCALING.life(wave) * (hero ? HERO.lifeMult : 1) * lifeMult;
+    this.name = name ?? (hero ? `${pick(HERO.prefixes)} ${def.name}` : this.guard ? def.asGuard!.name ?? def.name : def.name);
+    this.maxLife = maxLife ?? def.life * SCALING.life(wave) * (hero ? HERO.lifeMult : 1) * lifeMult * asGuard.life;
     this.life = this.maxLife;
-    this.damage = training ? 0 : def.damage * SCALING.damage(wave) * (hero ? HERO.damageMult : 1);
+    this.damage = training ? 0 : def.damage * SCALING.damage(wave) * (hero ? HERO.damageMult : 1) * asGuard.damage;
     this.speed = def.speed * SCALING.speed(wave) * rand(0.92, 1.08);
-    this.radius = def.radius * (hero ? HERO.scale : 1);
+    this.radius = def.radius * size;
     this.mass = this.radius * this.radius * (this.boss ? 10 : 1);
     this.score = def.score + (hero ? HERO.score : 0);
 
@@ -267,10 +282,10 @@ export class Enemy {
       this.applyProjection();
       this.model.kit.u.uFrozen.value = 0.35;
     }
-    this.height = this.model.height * (hero ? HERO.scale : 1);
+    this.height = this.model.height * size;
     this.obj.name = typeId;   // names show up in the perf report
     this.obj.add(this.model.root);
-    if (hero) this.model.root.scale.multiplyScalar(HERO.scale);
+    if (size !== 1) this.model.root.scale.multiplyScalar(size);
     this.reach = standIn?.reach ?? reachOf(this.model.root);
     if (!standIn) {
       applyShadowDetail(this.obj);
@@ -278,9 +293,15 @@ export class Enemy {
     }
     if (hero || this.boss) {
       const c = this.boss ? def.accent ?? 0x9a40ff : pick(HERO.auraColors);
-      this.auraMat = additive(c, 1.6, 0.8);
-      this.aura = new THREE.Mesh(auraGeo, this.auraMat);
-      this.aura.scale.setScalar(this.radius * 1.6);
+      // (a guard's ring fainter and tighter: the encounter's boss is its main one)
+      this.auraMat = additive(c, this.guard ? 0.9 : 1.6, 0.8);
+      // (an encounter's bosses, the warded one and its guards: a soft halo, its peak where the ring's band lies, where
+      // the ring's hard edges read as geometry: from Victor on #684, "Too much geometry in effects")
+      const halo = this.guard || !!def.bossKit?.ward;
+      if (halo) this.auraMat.map = haloMap();
+      this.aura = new THREE.Mesh(halo ? haloGeo : auraGeo, this.auraMat);
+      this.aura.userData.reach = halo ? AURA_BAND / HALO_AT : 1;
+      this.aura.scale.setScalar(this.radius * (this.guard ? 1.25 : 1.6) * this.aura.userData.reach);
       this.aura.position.y = 0.05;
       this.obj.add(this.aura);
       this.auraColor = c;
@@ -295,19 +316,22 @@ export class Enemy {
     if (def.dummy) {
       this.meter = new DamageMeter(def.name, () => ({ x: this.pos.x, y: this.obj.position.y + this.height + 0.3, z: this.pos.z }),
         () => G.arena.place !== 'village' || inYard(G.player.pos.x, G.player.pos.z));
-    } else if (!this.boss) this.createBar();
+    } else if (!this.boss || this.guard) this.createBar();
   }
 
   createBar(): void {
-    this.bar = anchorLabel(ORDER.bar, () => (this.alive && !this.spawning && (this.hero || this.life < this.maxLife)
-      ? { x: this.pos.x, y: this.obj.position.y + this.height + 0.35, z: this.pos.z } : null), false, true);
+    // (an encounter's guard's bar shows from its rise, its name over it, and isn't hidden behind props: from play,
+    // "Bells need a health bar", to see from the main boss how close each is to falling)
+    this.bar = anchorLabel(ORDER.bar, () => (this.alive && !this.spawning && (this.hero || this.guard || this.life < this.maxLife)
+      ? { x: this.pos.x, y: this.obj.position.y + this.height + 0.35, z: this.pos.z } : null), false, !this.guard);
     this.barShown = -1;
   }
 
   /** The bar painted again when its fill has moved (a hero foe's gold and wider, with its name over it). */
   protected paintBar(): void {
     if (!this.bar) return;
-    const look = this.hero ? { ...HERO_FOE_BAR, name: this.name, nameStyle: FOE_NAME } : FOE_BAR, share = this.life / this.maxLife;
+    const look = this.guard ? { ...GUARD_BAR, name: this.name, nameStyle: FOE_NAME }
+      : this.hero ? { ...HERO_FOE_BAR, name: this.name, nameStyle: FOE_NAME } : FOE_BAR, share = this.life / this.maxLife;
     const step = barStep(look, share);
     if (step === this.barShown) return;
     this.barShown = step;
@@ -622,7 +646,7 @@ export class Enemy {
     if (this.dazed > 0) dazedStars(this.pos.x, this.obj.position.y + this.overHead + 0.25, this.pos.z, t, this.dazed);
     this.paintBar();
     this.meter?.update();
-    if (this.aura && this.auraMat) { this.aura.rotation.y += dt; this.auraMat.opacity = 0.5 + Math.sin(t * 4) * 0.2; }
+    if (this.aura && this.auraMat) { this.aura.rotation.y += dt; this.auraMat.opacity = (0.5 + Math.sin(t * 4) * 0.2) * (this.guard ? 0.45 : 1); }
     weakLooks(this);
     if (this.def.bossKit && dt > 0) bossFrame(this, dt);
     return true;
@@ -769,7 +793,7 @@ export class Enemy {
     G.scene.remove(this.obj);
     // model geometry is built per enemy; free it (the aura ring is shared)
     // shared geometry (models/shapes.ts Sculpt) belongs to every enemy of the kind
-    this.obj.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g && g !== auraGeo && !g.userData.shared) g.dispose(); });
+    this.obj.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g && g !== auraGeo && g !== haloGeo && !g.userData.shared) g.dispose(); });
     this.obj.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) { m.skeleton.dispose(); (m.material as THREE.Material).dispose(); } });   // (skinned meshes own a copy of their material)
     this.model.dispose();
     this.auraMat?.dispose();

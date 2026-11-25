@@ -5,12 +5,14 @@
 //   the wave sends read off the run (`RunState.boss`) and the banner's line, against its ladder's rung for the wave.
 // - `stand`: the hero walked into a boss: it gives way a hair, and he's held off its body.
 // - `ttk`: the hero's basic attack held on a boss held still, its damage a second, and from it the time each boss
-//   takes at the wave it comes on (the Colossus at 5).
+//   takes at the wave it comes on (the Colossus at 5, the Ossuary Cantor's encounter at 10).
+// - The Cantor's encounter, its guards and their tolls: bossEncounter.ts's parts.
 //
 // `--canary` plants a fault each part must catch: a rung slipped onto the Crypt's ladder, a boss that yields as a
-// small foe does, and an attack that deals nothing.
+// small foe does, and an attack that deals nothing (and bossEncounter.ts's).
 import * as THREE from 'three';
-import type { Fixture, Lab, Report } from './lab';
+import type { Fixture, Lab, Pictured, Report } from './lab';
+import { ENCOUNTER_PARTS, ENCOUNTER_PICTURES, encounterPart, encounterTtk, type EncounterPart } from './bossEncounter';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { BiomeId, BossRung, BossWave } from '../../../src/data/biomes';
 import type { EnemyId } from '../../../src/data/enemies';
@@ -25,8 +27,8 @@ import { inObstacle } from '../../../src/world/collision';
 import { lineClear } from '../../../src/world/navigation';
 
 /** The parts the command runs, in order. */
-export type BossPart = 'ladder' | 'stand' | 'ttk';
-export const BOSS_PARTS: BossPart[] = ['ladder', 'stand', 'ttk'];
+export type BossPart = 'ladder' | 'stand' | 'ttk' | EncounterPart;
+export const BOSS_PARTS: BossPart[] = ['ladder', 'stand', ...ENCOUNTER_PARTS, 'ttk'];
 
 export interface BossOptions {
   fixture: Fixture;
@@ -37,7 +39,7 @@ export interface BossOptions {
 }
 
 /** where the hero stands (m), off the dais and clear of props */
-const SPOT: [number, number] = [12, 12];
+export const SPOT: [number, number] = [12, 12];
 /** how many boss waves of each ladder are set off: twice round the Crypt's */
 const RUNGS = 4;
 /** the most frames a boss takes to rise, and a wave to start */
@@ -64,7 +66,7 @@ const CLEAR_STEP = 0.15;
  * A spot `away` m from the hero, nearest the way to the arena's middle, where a boss of `radius` stands clear of the
  * props with nothing between it and him: an obelisk between them took the mage's bolts, his damage a second 11.
  */
-function clearSpot(away: number, radius: number): THREE.Vector3 {
+export function clearSpot(away: number, radius: number): THREE.Vector3 {
   const hero = G.player.pos;
   const inward0 = inward();
   for (let turn = 0; turn <= CLEAR_MOST; turn += CLEAR_STEP) {
@@ -124,10 +126,15 @@ async function ladder(lab: Lab, options: BossOptions, lines: string[], problems:
         const wave = WAVES.bossEvery * (rung + 1);
         const sent = await bossOfWaveSent(lab, wave);
         const ladderOf = shipped[biome];
-        const wanted: { id: EnemyId; banner: string; short: string } = exceptionOn(biome, wave)
+        const wanted: { id: EnemyId; banner: string; short: string; guards?: BossRung['guards'] } = exceptionOn(biome, wave)
           ?? ladderOf[held++ % ladderOf.length];
         met.push(`wave ${wave} ${sent.boss ?? 'none'}`);
         if (sent.boss !== wanted.id) problems.push(`${biome} wave ${wave}: the run sent ${sent.boss ?? 'no boss'}, its schedule's is ${wanted.id}`);
+        const guards = Array.from({ length: wanted.guards?.count ?? 0 }, () => wanted.guards!.id);
+        if (sent.guards.join() !== guards.join()) {
+          problems.push(`${biome} wave ${wave}: the run sent guards [${sent.guards.join(', ')}], its schedule's are [${guards.join(', ')}]`);
+        }
+        if (guards.length) met[met.length - 1] += ` with ${guards.length} ${guards[0]}`;
         if (!sent.banner.includes(wanted.banner)) problems.push(`${biome} wave ${wave}: the banner said "${sent.banner}", not its boss's line "${wanted.banner}"`);
         const label = bossOfWave(biome, wave)?.short;
         if (label !== wanted.short) problems.push(`${biome} wave ${wave}: the Continue button would name ${label}`);
@@ -141,7 +148,7 @@ async function ladder(lab: Lab, options: BossOptions, lines: string[], problems:
 
 /** Wave `wave` set off from its countdown as the game begins one (`startNextWave`: its banner put up), then let
  *  start: the boss its run holds for it, and the banner's line. */
-async function bossOfWaveSent(lab: Lab, wave: number): Promise<{ boss: EnemyId | undefined; banner: string }> {
+async function bossOfWaveSent(lab: Lab, wave: number): Promise<{ boss: EnemyId | undefined; guards: EnemyId[]; banner: string }> {
   const run = G.run!;
   run.wave = wave;
   startNextWave();
@@ -150,12 +157,13 @@ async function bossOfWaveSent(lab: Lab, wave: number): Promise<{ boss: EnemyId |
   run.timer = 0;
   await lab.until(() => run.phase === 'fighting', WAVE_FRAMES, `wave ${wave} never started`);
   const boss = run.boss?.[0]?.type;
+  const guards = (run.boss ?? []).filter((unit) => unit.guard).map((unit) => unit.type);
   // (the wave stopped before it sends anyone, back to a countdown held for the next)
   run.queue.length = 0;
   run.boss = null;
   run.phase = 'countdown';
   run.timer = 1e4;
-  return { boss, banner };
+  return { boss, guards, banner };
 }
 
 // --- standing its ground -----------------------------------------------------------------------------------
@@ -230,25 +238,31 @@ async function ttk(lab: Lab, options: BossOptions, lines: string[], problems: st
   const colossus = ENEMIES.colossus.life * SCALING.life(5);
   lines.push(`ttk: ${cls}: ${fixed(dps, 0)} damage a second with ${G.player.skillAt('mouse0')!.def.name} and the starting gear`);
   lines.push(`ttk: the Colossus at wave 5 (${fixed(colossus, 0)} life): ${fixed(colossus / dps, 0)} s`);
+  encounterTtk(dps, colossus / dps, lines);
 }
 
 /** `lab boss`: each part asked for, in turn. */
 export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
-  const run: Record<BossPart, typeof ladder> = { ladder, stand, ttk };
+  const run: Record<'ladder' | 'stand' | 'ttk', typeof ladder> = { ladder, stand, ttk };
+  const moments: Pictured[] = [];
   const was = G.arena.biome;
   try {
-    for (const part of options.parts ?? BOSS_PARTS) await run[part](lab, options, lines, problems);
+    for (const part of options.parts ?? BOSS_PARTS) {
+      if (part === 'ladder' || part === 'stand' || part === 'ttk') await run[part](lab, options, lines, problems);
+      else moments.push(...await encounterPart(part, lab, options, lines, problems));
+    }
   } finally {
     if (G.arena.biome !== was) G.arena.setBiome(was);
   }
   if (options.canary) {
     const caught = problems.length;
     lines.push(`canary: ${caught} faults caught`);
-    return { text: lines.join('\n'), problems: canaryMissed(options.parts ?? BOSS_PARTS, problems) };
+    const judged = (options.parts ?? BOSS_PARTS).filter((part) => !ENCOUNTER_PICTURES.includes(part as EncounterPart));
+    return { text: lines.join('\n'), problems: canaryMissed(judged, problems), moments };
   }
-  return { text: lines.join('\n'), problems };
+  return { text: lines.join('\n'), problems, moments };
 }
 
 /** With the canary: the parts whose planted fault went uncaught (each part's problems name it). */

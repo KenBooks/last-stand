@@ -215,6 +215,11 @@ const CORE_FX = {
     const e = G.enemies.find((x) => x.id === id);
     if (e) e.weak = seconds;
   },
+  /** boss `id` warded by its guards (`on` 1) or no longer (0) */
+  bossWard(id: number, on: number) {
+    const e = G.enemies.find((x) => x.id === id);
+    if (e) e.warded = !!on;
+  },
   /** foe `id` getting out of a hero's attack (entities/evade.ts): ducked where it stands (`how` 1) or blinked to (x, z) */
   evade(id: number, how: number, x: number, z: number) {
     G.enemies.find((e) => e.id === id)?.evade(how, x, z);
