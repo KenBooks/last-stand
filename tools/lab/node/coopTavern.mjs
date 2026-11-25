@@ -14,6 +14,57 @@
  *  of 50 s of clearing still in his hand) */
 const STEP = 30, SERVED_IN = 900, BOTH_IN = 2700, CLEARED_IN = 4200;
 
+/** the guest's stand by the small table to put his mug down, the host's a step along it to take it up (room m) */
+const BY_TABLE = { guest: { x: 1.25, z: 0, facing: -Math.PI / 2 }, host: { x: 1.2, z: -0.5, facing: -Math.PI / 2 } };
+
+/**
+ * The guest takes a mug up and puts it down (F) by the small table (Kenneth's round 5: on the nearest top, his side):
+ * both games must agree where it stands, on that table, and the host, come round to it, must take it up. Its problems.
+ */
+async function putDownShared(pair, callPage, host, guest, seen, until, lines) {
+  const found = [];
+  // (back in: he left with his last mug)
+  await callPage(guest, 'coopEnterHouse', { id: 'tavern' });
+  await pair.run(STEP);
+  await callPage(guest, 'coopTavernStand', { side: 0 });
+  await callPage(guest, 'coopTavernAsk');
+  if (await until((h, g) => g.waiting >= 0, SERVED_IN) < 0) return ['the guest\'s mug to put down never waited'];
+  const [, g] = await seen();
+  const id = g.waiting;
+  await callPage(guest, 'coopTavernTake', { id });
+  if (await until((h, g2) => g2.choosing, 240) < 0) return ['the guest never held the mug to put down'];
+  await callPage(guest, 'coopTavernStandAt', BY_TABLE.guest);
+  await pair.run(STEP);
+  await callPage(guest, 'coopTavernPutDown');
+  // (until both games have it on a top, and in one place: the guest's choice closes a ping before the host's word)
+  let at = [];
+  let down = -1;
+  for (let f = 0; f <= 300 && down < 0; f += STEP) {
+    at = [await callPage(host, 'coopTavernMug', { id }), await callPage(guest, 'coopTavernMug', { id })];
+    if (at[0] === at[1] && at[0] !== 'hero') down = f;
+    else await pair.run(STEP);
+  }
+  if (down < 0) {
+    const [h, g2] = await seen();
+    lines.push(`  as each game had it: host "${h.downSaid}" | guest "${g2.downSaid}"`);
+  }
+  lines.push(`put down by the guest: ${down < 0 ? 'NOT agreed' : 'agreed'} (host: ${at[0]} | guest: ${at[1]})`);
+  if (down < 0 || at[0] !== at[1]) found.push(`the guest put his mug down and the games disagreed where (host: ${at[0]} | guest: ${at[1]})`);
+  if (!at[0].startsWith('table')) found.push(`the guest put his mug down by the small table and it went to ${at[0]}`);
+  // (anyone's to take again: the host, come round the table to it, takes it up)
+  await callPage(host, 'coopTavernStandAt', BY_TABLE.host);
+  await pair.run(STEP);
+  await callPage(host, 'coopTavernTake', { id });
+  const taken = await until((h) => h.myMug === id, 240);
+  lines.push(`taken up again by the host: ${taken < 0 ? 'NOT' : 'yes'}`);
+  if (taken < 0) found.push('the mug the guest put down was never taken up by the host');
+  else {
+    await callPage(host, 'coopTavernDrink');
+    await until((h) => h.drinking < 0, 600);
+  }
+  return found;
+}
+
 /**
  * Plays it on `pair` (its room open already). Returns the problems found, its lines added to `lines`.
  */
@@ -128,6 +179,7 @@ export async function drinkTogether(pair, callPage, lines, { canary = false, pic
       lines.push(`left with it: ${back < 0 ? `NOT agreed (host ${h.places} | guest ${g.places})` : 'the mug back off his hand on both games, every mug counted'}`);
       if (back < 0) found.push('the guest left the tavern with a mug, and the games didn\'t agree it was put back');
     } else found.push('the guest\'s mug to carry never waited');
+    found.push(...await putDownShared(pair, callPage, host, guest, seen, until, lines));
   }
   lines.push(`the ledgers: ${disagreed ? `disagreed (${disagreed})` : 'agreed once settled'}, ${badSum ? `didn't add up (${badSum})` : 'added up at every look'}`);
   if (disagreed) found.push(`the two games' mugs disagreed: ${disagreed}`);

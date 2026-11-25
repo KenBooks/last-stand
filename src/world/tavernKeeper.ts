@@ -343,7 +343,7 @@ export interface TavernKeeper {
   /** whether mug `id` is on its way down from a hero's hand to the top he set it on (the lab's mugs in the air) */
   settles(id: number): boolean;
   /** what he's doing (the lab: its step's name, and the job's) */
-  doing(): { job: string; step: string; jumped: string; where: string; offered: string; broom: string; sweepPosed: boolean; walking: boolean; speed: number; goal: [number, number] | null; wayLeft: number };
+  doing(): { job: string; step: string; jumped: string; where: string; offered: string; broom: string; sweepPosed: boolean; walking: boolean; speed: number; goal: [number, number] | null; wayLeft: number; downSaid: string };
   /** what his body was last asked (the lab reads his hands against it) */
   body(): KeeperPose;
   /** where a mug is drawn now (world), and its mesh, for the lab */
@@ -1617,8 +1617,12 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     choosing = false;
     drinkChoice.shown = false;
     if (stand) hero.standDown();
+    said(`mug ${id} put down ${leaving ? 'leaving' : ''} to ${down.x.toFixed(2)}, ${down.z.toFixed(2)} at ${down.y.toFixed(2)}${isGuest() ? ', asked of the host' : ''}`);
     tell({ t: 'tv?', a: 'down', id, ...down, full }, () => ledger.move(id, down.y === BAR.top ? { at: 'bar', x: down.x, z: down.z } : { at: 'table', ...down }, { full, dirty: false, held: false }));
   }
+  /** the last few takes and put-downs on this game, as they went (the lab's co-op tavern reads them) */
+  let downSaid = '';
+  const said = (event: string) => { downSaid = [...downSaid.split(' / ').filter(Boolean).slice(-4), `${clock.toFixed(1)}s ${event}`].join(' / '); };
 
   // --- a full mug waiting on a top: outlined as the pointer is on it within his reach, taken up by E ---
   /** the mug E takes up now (-1: none), the one outlined, and where his hand took it from (world) */
@@ -1793,7 +1797,6 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     const c = heroById(m.place.who)?.casting;
     return !c?.skill.def.ale || c.t / c.dur < TAKEN;
   }
-  /** where an empty mug goes down: on the bar before him if he stands by it, else on the nearest table */
   /** Where `hero` puts a mug down: on the top nearest him (a table, or the bar) within `PUT_DOWN.reach` of his middle,
    *  at the point of its edge nearest him, `PUT_DOWN.inset` in from it, slid along the edge to the nearest spot clear
    *  of the mugs and the candles and tankards on it; none with no top in reach. */
@@ -1824,6 +1827,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     const p = pointerNow();
     return !!p && objectPointed(p.x, p.y);
   }
+  /** where an empty mug goes down: on the bar before him if he stands by it, else on the nearest table */
   function setDownAt(hand: THREE.Vector3, feet: THREE.Vector3): { x: number; z: number; y: number } {
     const fromBar = BAR.x - BAR.half - feet.x;
     if (fromBar < SET_DOWN_WITHIN && feet.z > BAR.from - 0.3 && feet.z < BAR.to + 0.3) {
@@ -1845,9 +1849,13 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     if (m.t === 'tv?' && !isGuest()) {
       const id = Number(m.id);
       if (m.a === 'ale') asked.push(from);
-      else if (m.a === 'took') takeFor(id, from);
+      else if (m.a === 'took') {
+        said(`asked for mug ${id} by ${from}, it was at ${ledger.get(id)?.place.at}`);
+        takeFor(id, from);
+      }
       else if (m.a === 'drink' && ledger.get(id)?.place.at === 'hero') ledger.move(id, ledger.get(id).place, { held: false });
-      else if (m.a === 'down' && ledger.get(id)?.place.at === 'hero') {
+      else if (m.a === 'down') said(`asked to put mug ${id} down, it was at ${ledger.get(id)?.place.at}`);
+      if (m.a === 'down' && ledger.get(id)?.place.at === 'hero') {
         const y = Number(m.y), place = y === BAR.top ? { at: 'bar' as const, x: Number(m.x), z: Number(m.z) } : { at: 'table' as const, x: Number(m.x), z: Number(m.z), y };
         // (put down undrunk: full and clean, for any hero to take up; drunk, empty and the keeper's to clear)
         const full = m.full === undefined ? 0.03 : Number(m.full);
@@ -1978,7 +1986,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     settles: (id) => settling.has(id),
     doing: () => ({
       job, step: step?.name ?? '', jumped, offered: `${offered} (${offerSaid})`, sweepPosed, walking: !!step?.walk, speed: me.speed,
-      goal: step?.walk ? [step.spot.x, step.spot.z] : null, wayLeft: stuck.left,
+      goal: step?.walk ? [step.spot.x, step.spot.z] : null, wayLeft: stuck.left, downSaid,
       broom: `held ${broomGrip.toFixed(2)} m down from its top, his fist ${broom.getWorldPosition(new THREE.Vector3()).y.toFixed(2)} m up`,
       where: `at ${me.x.toFixed(2)}, ${me.z.toFixed(2)} facing ${me.facing.toFixed(2)}, pace ${pace.toFixed(2)}, step to ${step ? `${step.spot.x.toFixed(2)}, ${step.spot.z.toFixed(2)} facing ${step.spot.facing.toFixed(2)}` : '-'}, way ${route.map((p) => p.map((v) => v.toFixed(2)).join(',')).join(' ')} (at ${routeAt})`,
     }),

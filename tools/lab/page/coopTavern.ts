@@ -7,6 +7,7 @@ import { partnersInTavern, selfId } from '../../../src/net/session';
 import { MUG_COUNT } from '../../../src/data/tavern';
 import { leaveRoom } from '../../../src/game/rooms';
 import { choosingAle, pickAle, takeMug, waitingMug } from './takeAle';
+import { drinkChoice } from '../../../src/game/drinkChoice';
 import type { Lab } from './lab';
 
 /** This game's hero stood at the bar's front, `side` m along it from the keeper's stand, facing it. */
@@ -15,6 +16,28 @@ export function coopTavernStand(_lab: Lab, { side }: { side: number }): void {
   const x = him.stand[0], z = him.stand[1] + side;
   G.player.walkTo = null;
   G.player.place(new THREE.Vector3(x, 0, z), Math.PI / 2);
+}
+
+/** This game's hero stood at (x, z) of the tavern's own floor (room m), facing `facing`: by a table to put his mug
+ *  down on it, or to take one up from it. */
+export function coopTavernStandAt(_lab: Lab, { x, z, facing }: { x: number; z: number; facing: number }): void {
+  const room = G.arena.rooms!.tavern.group;
+  G.player.walkTo = null;
+  G.player.place(room.localToWorld(new THREE.Vector3(x, 0, z)), facing);
+}
+
+/** This game's hero puts the mug in his hand down by F, its choice answered (Kenneth's round 5: on the nearest top). */
+export async function coopTavernPutDown(lab: Lab): Promise<void> {
+  await pickAle(lab, 'down');
+}
+
+/** Where mug `id` stands on this game: its place and, on a top, where on it (room m, to a cm). */
+export function coopTavernMug(_lab: Lab, { id }: { id: number }): string {
+  const tv = G.arena.rooms?.tavern?.tavern?.();
+  if (!tv) return 'none';
+  const p = tv.mugs.get(id).place;
+  if (p.at === 'bar' || p.at === 'table') return `${p.at} at ${p.x.toFixed(2)}, ${p.z.toFixed(2)}`;
+  return p.at;
 }
 
 /** This game's hero asks the keeper for ale (as the talk's first reply asks). */
@@ -54,12 +77,16 @@ export interface TavernSeen {
   partnerHolding: boolean;
   /** what the keeper is doing on this game (job: step) */
   doing: string;
+  /** whether this game offers F a top in his reach to put his mug down on, and his hero's place in the room (m) */
+  downable: boolean; at: string;
+  /** the last mug put down as this game had it */
+  downSaid: string;
 }
 
 export function coopTavernSeen(): TavernSeen {
   const tv = G.arena.rooms?.tavern?.tavern?.();
   const c = G.player.casting, drinking = c?.skill.def.ale ? c.t / c.dur : -1;
-  if (!tv) return { places: 'none', clean: 0, sum: 0, count: MUG_COUNT, drinking, myMug: -1, partnerDrinking: false, waiting: -1, choosing: false, partnerHolding: false, doing: '' };
+  if (!tv) return { places: 'none', clean: 0, sum: 0, count: MUG_COUNT, drinking, myMug: -1, partnerDrinking: false, waiting: -1, choosing: false, partnerHolding: false, doing: '', downable: false, at: '', downSaid: '' };
   const me = selfId();
   // (where a mug is, said alike on both games: a hero's hand by whether it's this game's or not, the bar's place to a cm)
   const place = (m: (typeof tv.mugs.mugs)[number]) => {
@@ -73,7 +100,8 @@ export function coopTavernSeen(): TavernSeen {
   const partners = G.players.filter((p) => !p.local);
   return {
     places: tv.mugs.mugs.map(place).join(' '), clean: counts.clean, sum: counts.total, count: MUG_COUNT, drinking,
-    waiting: waitingMug(tv), choosing: choosingAle(),
+    waiting: waitingMug(tv), choosing: choosingAle(), downable: drinkChoice.downable, downSaid: tv.doing().downSaid,
+    at: (() => { const p = G.arena.rooms!.tavern.group.worldToLocal(G.player.pos.clone()); return `${p.x.toFixed(2)}, ${p.z.toFixed(2)}`; })(),
     partnerHolding: tv.mugs.mugs.some((m) => m.place.at === 'hero' && m.place.who !== me && !!m.held),
     doing: `${tv.doing().job}: ${tv.doing().step} at ${tv.keeper()?.root.position.x.toFixed(2)},${tv.keeper()?.root.position.z.toFixed(2)} facing ${tv.keeper()?.root.rotation.y.toFixed(2)}`, myMug: mine?.id ?? -1, partnerDrinking: partners.some((p) => !!p.casting?.skill.def.ale) || partnersInTavern().some((p) => !!p.player.casting?.skill.def.ale),
   };
