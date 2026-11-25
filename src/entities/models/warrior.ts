@@ -8,7 +8,7 @@ import { createKit } from '../../core/materials';
 import { leather as leatherMaps, mail as mailMaps, cloth as clothMaps, steel as steelMaps, fur as furMaps, wood as woodMaps, pbrMaterialMaps } from '../../core/textures';
 import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';
 import { footToFloor, onFloor, restHands, satBy, sitPose, type RestTurn } from './sit';
-import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp, reachArm, groundFeet, runShareOf, disposeGeometries } from './rig';
+import { buildHumanoid, joint, resetPose, walkCycle, idle, heroFall, pulse, ramp, reachArm, groundFeet, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe, fighterWrap } from './shapes';
 import { buildTrousers, type TrouserCut } from './trousers';
 import { ovalTube, wristBent, wristOf } from './wrist';
@@ -3631,7 +3631,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       if (both) holdAcrossLap(true, gripL, floorSit ? SIT_HANDS.kneesL : SIT_HANDS.twoL, satBy(st.sit), from, st.sit, edgeDown);
     }
     body.legs = floorSit ? satBy(st.sit) : 0;
-    if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
+    if (st.dead >= 0) { heroFall(j, st.dead, -1); legs.reset(); }
     else {
       // the legs: planted feet, a pelvis that follows them (ik.ts); then a crouch bends the knees instead of sinking the feet
       if (!fp) legs.captureArms();

@@ -11,7 +11,7 @@ import { createKit } from '../../core/materials';
 import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, bowWood as bowWoodMaps, pbrMaterialMaps } from '../../core/textures';
 import { SKIRT_TUCK, WRIST_INSIDE, floorUnder, onFloor, restHands, satBy, sitPose, type RestTurn } from './sit';
 import { tunable } from '../../core/tuning';
-import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet, disposeGeometries, ramp, updateJoints } from './rig';
+import { buildHumanoid, joint, part, resetPose, walkCycle, idle, heroFall, groundFeet, disposeGeometries, ramp, updateJoints } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { ovalTube, wristBent, wristOf } from './wrist';
 import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, SkirtLimbs, armOffThigh, lod, type JointPoint } from './armor';
@@ -1036,7 +1036,7 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     st.look?.(aim < 0.5 ? 1 : 0);
     restHands(j, st.sit, [0, 1], SIT_HANDS);
     body.legs = floorW;
-    if (st.dead >= 0) { deathFall(j, st.dead); legs.reset(); }
+    if (st.dead >= 0) { heroFall(j, st.dead); legs.reset(); }
     else {
       if (!fp) legs.captureArms();
       // (each foot on its own side of the pelvis's middle as the leg IK sees it: across it, it was moved back out and stepped again, over and over)
