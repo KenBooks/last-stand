@@ -18,6 +18,7 @@ import {
 } from '../../../src/core/sight';
 import { holdRoofDepth, holdRoofGhost } from '../../../src/core/seeThrough';
 import type { SightWall } from '../../../src/core/sight';
+import { RUST } from '../../../src/engine';
 import { groundHeight } from '../../../src/world/ground';
 import { drawFrame } from './light';
 import { viewBy } from './villageHallCull';
@@ -334,16 +335,22 @@ async function fogThroughRoof(lab: Lab, c: Cottage): Promise<{ taken: number; re
   return { taken: fogTakesAt(lab, under), read: under.length };
 }
 
-/** The share of their light the fog takes from `points`: the frame drawn again at once with the fog off, as between two
- *  frames the camera glides and the grass moves. */
+/** the engine's fog mixed in by next to nothing: none of its darkening, his sight still on */
+const FOG_NONE = 1e-4;
+
+/** The share of their light the fog takes from `points`: the frame drawn again at once with none of the fog mixed in,
+ *  as between two frames the camera glides and the grass moves. His sight stays on (`rust.sightFog` next to nothing,
+ *  not `uSightOn` 0): a house from above is opened by what he sees, so with his sight off its roofs were drawn
+ *  another way, by their kinds' own shares, and the two frames differed by the roofs' ghosts (22% of the light
+ *  through a roof read as the fog's, where the fog took none). */
 function fogTakesAt(lab: Lab, points: THREE.Vector3[]): number {
   const fogged = lightAt(lab, points);
-  const on = SIGHT.uSightOn.value;
-  SIGHT.uSightOn.value = 0;
+  const fog = RUST.tune.sightFog;
+  RUST.tune.sightFog = FOG_NONE;
   try {
     return 1 - fogged / lightAt(lab, points);
   } finally {
-    SIGHT.uSightOn.value = on;
+    RUST.tune.sightFog = fog;
   }
 }
 
