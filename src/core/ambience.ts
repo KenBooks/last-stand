@@ -45,9 +45,10 @@ const LOOPS = ['day', 'night', 'water', 'fire'] as const;
 type LoopId = (typeof LOOPS)[number];
 const URLS: Record<LoopId, string> = { day: dayUrl, night: nightUrl, water: waterUrl, fire: fireUrl };
 
-/** each layer's level at full (a share of the effects' master), each loop evened to `LOUDNESS` first: soft under
- *  the music and the spells (`lab sound`'s `ambienceDay`, `ambienceNight`, `ambienceFire`, `ambienceFountain`) */
-const LEVEL: Record<LoopId, number> = { day: 0.45, night: 0.35, water: 0.45, fire: 0.25 };
+/** each layer's level at full (a share of the effects' master), each loop evened to `LOUDNESS` first: well under
+ *  the music at the default volumes (from Kenneth: "Sounds are way too loud, can barely hear the music": the music
+ *  was 4 to 8 dB over them, now 12 to 16, `lab village --only ambienceUnderMusic`) */
+const LEVEL: Record<LoopId, number> = { day: 0.18, night: 0.14, water: 0.18, fire: 0.1 };
 /** each loop's loudness once evened (its RMS, of full scale: about -20 dB) */
 const LOUDNESS = 0.1;
 /** how far it's evened up at most (a quiet recording's noise floor isn't raised past this) */

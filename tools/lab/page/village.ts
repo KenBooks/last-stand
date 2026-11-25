@@ -201,6 +201,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     sitFromEyes: async () => (await import('./villageSitEyes')).sitFromEyes(lab, options.canary),
     ambienceHeard: async () => (await import('./villageAmbience')).ambienceHeard(lab, options.canary),
     ambienceSeams: async () => (await import('./villageAmbienceSeams')).ambienceSeams(lab, options.canary),
+    ambienceUnderMusic: async () => (await import('./villageAmbienceMix')).ambienceUnderMusic(lab, options.canary),
     escClosesHelp: () => escClosesHelp(lab, options.canary),
     wornStaysOn: () => wornStaysOn(lab, options.canary),
     heroFaceNotBlinding: () => heroFaceNotBlinding(lab, options.canary),

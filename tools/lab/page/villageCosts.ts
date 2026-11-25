@@ -54,6 +54,7 @@ export const VILLAGE_COSTS: Readonly<Record<string, number>> = {
   sitFromEyes: 1,
   ambienceHeard: 1,
   ambienceSeams: 1,
+  ambienceUnderMusic: 2,
   escClosesHelp: 1,
   wornStaysOn: 1,
   heroFaceNotBlinding: 2,

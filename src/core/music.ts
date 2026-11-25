@@ -13,7 +13,7 @@ import sunlitBattle from '../audio/music/sunlit-battle.mp3?url';
 import cryptMotif from '../audio/music/crypt-motif.mp3?url';
 
 /** the music's level under the effects' */
-const LEVEL = 0.32;
+export const MUSIC_LEVEL = 0.32;
 const URLS: Record<TrackId, string> = {
   'quiet-beginnings': quietBeginnings, 'shadowed-dusk': shadowedDusk, 'sunlit-battle': sunlitBattle,
   'crypt-motif': cryptMotif,
@@ -101,7 +101,7 @@ class Track {
     if (wanted && !this.source && !document.hidden) this.play(ctx, this.offset);
     const step = dt / (wanted ? this.fade.in : this.fade.out);
     this.level = Math.max(0, Math.min(1, this.level + (wanted ? step : -step)));
-    if (this.gain) this.gain.gain.value = LEVEL * this.level * this.level;
+    if (this.gain) this.gain.gain.value = MUSIC_LEVEL * this.level * this.level;
     if (this.level === 0) this.stop(ctx);
   }
 
