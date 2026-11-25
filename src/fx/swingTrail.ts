@@ -11,7 +11,7 @@ import { G } from '../state';
 import { nearGlow } from '../core/materials';
 import { portShader } from '../core/shaderPorts';
 import { tunable } from '../core/tuning';
-import { effectLook, num } from '../engine/effects';
+import { effectLook, num, effectShader } from '../engine/effects';
 import { armsLayerOf } from '../entities/viewModel';
 import type { Blade, Model } from '../types';
 
@@ -272,3 +272,6 @@ export function swingTrailSamples(): THREE.Object3D[] {
   (g.getAttribute('trail') as THREE.BufferAttribute).set([0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1, 1]);
   return [new THREE.Mesh(g, material)];
 }
+
+// (its effect's shader listed for the engine as this module loads: joined with the other effects')
+effectShader('swing-trail', TRAIL_HOOKS);

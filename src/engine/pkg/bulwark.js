@@ -342,6 +342,19 @@ export class Engine {
         wasm.engine_hold_shadow(this.__wbg_ptr, held);
     }
     /**
+     * Shaders of the page's drawn by one module from now on (joined.rs): their materials made after this draw
+     * with its pipelines, one compile for them all. Those that place their instances are left as they are. The
+     * joined shader's id; 0 if fewer than two could be joined.
+     * @param {Uint32Array | number[]} ids
+     * @returns {number}
+     */
+    join_shaders(ids) {
+        const ptr0 = passArray32ToWasm0(ids, wasm.__wbindgen_export);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.engine_join_shaders(this.__wbg_ptr, ptr0, len0);
+        return ret >>> 0;
+    }
+    /**
      * `count` of the records the page wrote, from the one at `first` on, kept by the engine (kept.rs): what
      * stands still, handed over once and drawn every frame after with no record of the page's. The id of the
      * first, the rest following. Growing what's kept moves this module's memory, as `records` does.
@@ -1223,7 +1236,7 @@ function __wbg_get_imports() {
                     const a = state0.a;
                     state0.a = 0;
                     try {
-                        return __wasm_bindgen_func_elem_1814(a, state0.b, arg0, arg1);
+                        return __wasm_bindgen_func_elem_1825(a, state0.b, arg0, arg1);
                     } finally {
                         state0.a = a;
                     }
@@ -1979,27 +1992,27 @@ function __wbg_get_imports() {
         }, arguments); },
         __wbindgen_generic_0000000000000001: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 97, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_1789);
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_1800);
             return ret;
         },
         __wbindgen_generic_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("GPUDevice")], shim_idx: 36, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_663);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("GPUDevice")], shim_idx: 37, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_674);
             return ret;
         },
         __wbindgen_generic_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("GPUUncapturedErrorEvent")], shim_idx: 40, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_665);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("GPUUncapturedErrorEvent")], shim_idx: 41, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_676);
             return ret;
         },
         __wbindgen_generic_0000000000000004: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("any")], shim_idx: 36, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_663_60);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("any")], shim_idx: 37, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_674_61);
             return ret;
         },
         __wbindgen_generic_0000000000000005: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("undefined")], shim_idx: 36, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_663_61);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("undefined")], shim_idx: 37, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_674_62);
             return ret;
         },
         __wbindgen_generic_0000000000000006: function(arg0) {
@@ -2032,18 +2045,18 @@ function __wbg_get_imports() {
     };
 }
 
-function __wasm_bindgen_func_elem_665(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_665(arg0, arg1, arg2);
+function __wasm_bindgen_func_elem_676(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_676(arg0, arg1, arg2);
 }
 
-function __wasm_bindgen_func_elem_1814(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_1814(arg0, arg1, arg2, arg3);
+function __wasm_bindgen_func_elem_1825(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_1825(arg0, arg1, arg2, arg3);
 }
 
-function __wasm_bindgen_func_elem_1789(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_1800(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16) >>> 0;
-        wasm.__wasm_bindgen_func_elem_1789(retptr, arg0, arg1, arg2);
+        wasm.__wasm_bindgen_func_elem_1800(retptr, arg0, arg1, arg2);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
@@ -2054,10 +2067,10 @@ function __wasm_bindgen_func_elem_1789(arg0, arg1, arg2) {
     }
 }
 
-function __wasm_bindgen_func_elem_663(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_674(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16) >>> 0;
-        wasm.__wasm_bindgen_func_elem_663(retptr, arg0, arg1, arg2);
+        wasm.__wasm_bindgen_func_elem_674(retptr, arg0, arg1, arg2);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
@@ -2068,10 +2081,10 @@ function __wasm_bindgen_func_elem_663(arg0, arg1, arg2) {
     }
 }
 
-function __wasm_bindgen_func_elem_663_60(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_674_61(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16) >>> 0;
-        wasm.__wasm_bindgen_func_elem_663_60(retptr, arg0, arg1, arg2);
+        wasm.__wasm_bindgen_func_elem_674_61(retptr, arg0, arg1, arg2);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
@@ -2082,10 +2095,10 @@ function __wasm_bindgen_func_elem_663_60(arg0, arg1, arg2) {
     }
 }
 
-function __wasm_bindgen_func_elem_663_61(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_674_62(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16) >>> 0;
-        wasm.__wasm_bindgen_func_elem_663_61(retptr, arg0, arg1, arg2);
+        wasm.__wasm_bindgen_func_elem_674_62(retptr, arg0, arg1, arg2);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {

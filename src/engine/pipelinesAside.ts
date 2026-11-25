@@ -8,6 +8,7 @@
 // Only the engine's device, and only the pipelines of its scene (their labels): its post chain's and its maps' are
 // made as it boots and drawn with at once.
 import type * as THREE from 'three';
+import { afterItsFirst } from './compileOnce';
 import { probeDepthOnly } from './depthProbe';
 import { fault, watchDevice } from './said';
 
@@ -103,7 +104,12 @@ export async function engineWorkDone(): Promise<void> {
 /** the labels of the pipelines stood in for (Bulwark's gpu/pipelines.rs) */
 const ASIDE = new Set(['scene', 'shadow', 'sprites']);
 
-interface Stage { entryPoint?: string; module?: { label?: string }; targets?: ({ format?: string } | null)[] }
+interface Stage {
+  entryPoint?: string;
+  module?: { label?: string };
+  targets?: ({ format?: string } | null)[];
+  constants?: Record<string, number>;
+}
 interface Descriptor {
   label?: string;
   vertex?: Stage;
@@ -206,7 +212,8 @@ class StandIn {
       PIPELINES.late++;
       LATE_PIPELINES.push(`a ${this.asked.kind} pipeline: ${this.asked.what}`);
     }
-    device.createRenderPipelineAsync(descriptor).then((real) => {
+    // (after the first pipeline of its fragment stage, which answers it from what it kept: `compileOnce.ts`)
+    afterItsFirst(descriptor.fragment, () => device.createRenderPipelineAsync(descriptor)).then((real) => {
       const ready = (): void => {
         this.real = real;
         compiling.delete(this);

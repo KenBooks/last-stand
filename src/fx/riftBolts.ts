@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { nearGlow } from '../core/materials';
 import { portShader, wgslNoise, type Port, type Tsl } from '../core/shaderPorts';
-import { effectLook, num, rgb, FX_PLAIN_VERTEX } from '../engine/effects';
+import { effectLook, effectShader, num, rgb, FX_PLAIN_VERTEX } from '../engine/effects';
 import { particles, col, burst, smokePuff, debris } from './particles';
 import { shockwave, decal } from './effects';
 import { flashFree } from './lights';
@@ -304,3 +304,6 @@ export function riftBoltImpact(look: Look, pos: THREE.Vector3, color: number, tr
 
 /** Samples for the load-time warm-up (every material kind; the colour is a uniform). */
 export const riftBoltSamples = (): THREE.Mesh[] => [riftBolt('void', 0xc050ff, 0.3), riftBolt('magma', 0xff6a2a, 0.3)];
+
+// (its effects' shaders listed for the engine as this module loads: joined with the other effects')
+for (const [name, hooks] of Object.entries(RIFT_HOOKS)) effectShader(name, hooks);

@@ -410,3 +410,24 @@ not intend to support the old way of rendering".
   17% of that frame, and loses the cottages' gables).
 - [ ] No check of its own holds the rule: `lab village`'s roof checks read three's ghost pass and don't run on the
   engine (the suite's port is on the branch `lab/village-on-engine`, unfinished).
+
+## 2026-11-25: what a boot compiles
+
+From the owner's boots (31 to 134 s on the 4070 Ti; 0362-BGN4: a 13.4 s frame as the lobby showed, 6ZRY-E01Q: the
+GPU's process answering after 33.6 s): the browser compiles each module's entry point whole, its pipelines that
+differ by states alone coming back in a millisecond or two (`lab programs --cost`, both readings). A module a look
+and an effect, and `LAYER_PART` read by the shading: 33 fragment stages, 13.6 s of the GPU's process. The looks
+joined into one module, the effects into another (Bulwark's `join_shaders`), `LAYER_PART` read by the vertex stage:
+13, 4.2 s, 102 pipelines to 72. `lab programs` holds the count to 16 with a canary.
+
+That is the lab's reading, each pipeline compiled alone. In Chrome itself (`npm run stalls -- --scenario boot`) the
+joined looks first made the boot slower: pipelines asked for all at once don't share a stage's compile, so each of a
+module's compiled it whole, and the joined module is the larger (the GPU's process 68 s till the lobby against
+main's 57, the lobby 4 s later). Now a stage's other pipelines are asked for once its first is made
+(`compileOnce.ts`), and Bulwark makes a shader's module only as a pipeline of it is first asked for (the joined looks'
+own were parsed, never drawn with): the GPU's process 20 s till the lobby on a first visit against main's 40, 10 s on
+a return against 30, the lobby shown at the same time or sooner (10.1 s against 10.2, 7.2 against 7.6).
+
+- [ ] Left: the flames, the embers and the meadow's blades a module each (about 1.2 s); the plain levels' set is
+  compiled the same way and not counted here (`--boot verylow`).
+- [ ] The owner's next boot report to read: whether the GPU's process still holds the page.

@@ -89,7 +89,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
 - `practice`: casting in the lobby and the runs it starts (each skill with a cooldown cast twice at once in the village's training yard, the inventory open, put away by I and opened again, on the square, and in runs started at the crypt's portal and begun in practice, a co-op guest's: free where the inventory shows, a run's costs and cooldowns elsewhere, none out of the yard)
 - `probe <module>`: runs a measure of your own on the lab's clock and set-ups
 - `profile`: the game's own profiler, the pause menu's Profile this spot, run where the hero stands (`--biome`, `--view`, `--at`, `--level`, `--device`): each part of the frame taken out in turns by the browser's clock, as a player's device times itself (`--village` stood in the lobby's village), the programs it compiled (over 8 fails; WebGPU's pipelines, over 24), a run cancelled midway, and its result sent and read back as `lab trace` reports it; `--canary` the frame drawn twice
-- `programs`: the engine's scene pipelines and what sets them apart (by kind, by shader, by targets, depth, samples, culling; those never drawn; the performance report's count of those first asked for in play against the engine's); `--cost`: each compiled again alone, its shaders salted so no cache answers, and timed (by kind, by shader, by samples, the longest); `--limits`: what the engine's device uses of WebGPU's limits against what every device gives
+- `programs`: the engine's scene pipelines and what sets them apart (by kind, by shader, by targets, depth, samples, culling; those never drawn; the fragment stages the browser compiles whole, held to a budget; the performance report's count of those first asked for in play against the engine's); `--cost`: each compiled again alone, its shaders salted so no cache answers, and timed (by kind, by shader, by samples, the longest), and again as the game asks, a module's pipelines sharing its compile; `--limits`: what the engine's device uses of WebGPU's limits against what every device gives
 - `pwa`: a deploy as a returning player meets it (main's production build loaded until its offline worker has the page and the fonts, this tree's served in its place and reloaded under the old worker, the new one and offline: the game's fonts on every load, this tree's build on every one after the swap), and the installed app after a PR's previews were visited (opened offline, at a pruned preview build and at a closed PR's: the game every time)
 - `range`: every joint against a body's ranges frame by frame, standing, walking, attacking and turning: each angle past its range and where, the frame's time, the weapon through his body, the arms at their stops (in full in `commands/range.md`)
 - `readme`: the README's pictures, each a moment posed and pictured as the player sees it (the village, the party round its campfire, the hall of heroes, the stash, a fight in each battleground, the choice after a wave, a party of four in a fight and one of them down, a partner raising him; `--shots`, `--class`, `--after`: `docs/screenshots/AGENTS.md`)
@@ -1075,7 +1075,17 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   `node/gpuScripts.mjs`, as the game keeps none), and times it from its shaders made to its pipeline ready: by kind,
   by shader, by samples, the longest. It found the 80 at 21.5 s of the GPU's process's time on this PC, the lit
   shader with hooks' 41 at 13 s; the game compiles them several at once, aside. Its canary is the cache: the
-  costliest compiled again with the same salt must come back in under half its time (519 ms, then 1). `--limits`
+  costliest compiled again with the same salt must come back in under half its time (519 ms, then 1). That reading
+  overstates what the game pays, so `--cost` reads them again as the game asks for them, a module's pipelines
+  sharing one salted copy: what the browser keeps of a module's first compile answers its others that differ by
+  their states alone (culling, the depth's test, blending: 1 to 2 ms), but not another module, entry or override
+  constant (the whole compile again, 0.3 to 0.5 s). Read so, the boot of 2026-11-25 was 13.6 s, a module a look of
+  the game's and its skills' effects and the layers' `LAYER_PART` read by the shading; with the looks joined into
+  one module and the effects into another (Bulwark's `join_shaders`, `Materials.joinLooks`) and `LAYER_PART` read
+  by the vertex stage, 4.2 s. What the browser compiles whole is listed without `--cost` (`page/programCompiles.ts`:
+  each fragment stage by its module, named by the game's shader, its entry and its constants) and held to
+  `FRAGMENTS_MOST` (16; the boot compiles 13, 33 before). `--canary` also hands the engine a box of a look of its
+  own, a shader no list names, whose compile must be counted (13 to 15). `--limits`
   holds what the engine's device used of each of WebGPU's limits to what every device gives (`page/programLimits.ts`:
   the spec's defaults; what was used recorded as it's made by `gpuUse` in `node/gpuScripts.mjs`, the textures', the
   buffers', the bind groups' and their layouts', each pipeline layout's by stage, the vertex buffers'). The engine

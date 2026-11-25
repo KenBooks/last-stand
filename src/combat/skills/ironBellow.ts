@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { nearGlow } from '../../core/materials';
 import { portShader } from '../../core/shaderPorts';
-import { effectLook, num, rgb } from '../../engine/effects';
+import { effectLook, num, rgb, effectShader } from '../../engine/effects';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { addEffect, shockwave, groundFlash, crackDecal } from '../../fx/effects';
@@ -214,3 +214,6 @@ const skill: InstantSkill = {
 };
 
 export default skill;
+
+// (its effect's shader listed for the engine as this module loads: joined with the other effects')
+effectShader('bellow-face', FACE_HOOKS);

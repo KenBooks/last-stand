@@ -8,7 +8,7 @@ import { G } from '../state';
 import { addEffect } from './effects';
 import { sceneRatio, sceneSize } from '../core/renderer';
 import { portShader, type Tsl } from '../core/shaderPorts';
-import { effectLook, num, rgb, type EffectLook } from '../engine/effects';
+import { effectLook, num, rgb, type EffectLook, effectShader } from '../engine/effects';
 
 /** the line's and the dot's width (css px), how bright and opaque, how quickly it eases in and out (s) */
 const WIDTH = 2, DOT = 7, GLOW = 1.6, ALPHA = 0.7, EASE_IN = 0.12, EASE_OUT = 0.18;
@@ -327,3 +327,7 @@ function write(): void {
   dots!.geometry.setDrawRange(0, nd * 6);
   dp.needsUpdate = true;
 }
+
+// (its effect's shaders listed for the engine as this module loads: joined with the other effects')
+effectShader('aim-laser-line', LINE_HOOKS);
+effectShader('aim-laser-dot', DOT_HOOKS);

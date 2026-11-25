@@ -1,7 +1,7 @@
 // The gates' portals under the Rust engine: `world/portalNodes.ts`'s membrane and the light it spills over the
 // floor, their WGSL as it is there. (The membrane fades as the gate round it dissolves: `RustLook.fades`, set where the look is.)
 import type { PortalUniforms } from '../../world/portalNodes';
-import type { RustLook, RustShader } from '../custom';
+import { rustShader, type RustLook, type RustShader } from '../custom';
 
 const NOISE = /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {}
@@ -26,7 +26,7 @@ fn portal_fbm(start: vec2f) -> f32 {
 }
 `;
 
-const MEMBRANE: RustShader = {
+const MEMBRANE: RustShader = rustShader({
   name: 'portal-membrane',
   hooks: NOISE + /* wgsl */ `
 fn portal_membrane(uv: vec2f, time: f32, power: f32, arch: f32, a: vec3f, b: vec3f, core: vec3f) -> vec4f {
@@ -66,9 +66,9 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   return true;
 }
 `,
-};
+});
 
-const SPILL: RustShader = {
+const SPILL: RustShader = rustShader({
   name: 'portal-spill',
   hooks: NOISE + /* wgsl */ `
 fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
@@ -80,7 +80,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   return true;
 }
 `,
-};
+});
 
 function numbers(uniforms: PortalUniforms): RustLook['numbers'] {
   return (out) => {

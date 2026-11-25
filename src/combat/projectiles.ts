@@ -7,7 +7,7 @@ import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
 import { nearGlow } from '../core/materials';
 import { portShader } from '../core/shaderPorts';
-import { effectLook, rgb, FX_PLAIN_VERTEX } from '../engine/effects';
+import { effectLook, rgb, FX_PLAIN_VERTEX, effectShader } from '../engine/effects';
 import { hurtProp, PROP_DAMAGE } from '../world/destructible';
 import type { Obstacle } from '../types';
 import { entry, strikesBody, type Struck } from './strikes';
@@ -430,3 +430,6 @@ export function clearProjectiles(): void {
   for (const p of G.projectiles) if (p.alive) p.kill();
   G.projectiles.length = 0;
 }
+
+// (its effect's shader listed for the engine as this module loads: joined with the other effects')
+effectShader('bolt-orb', ORB_HOOKS);

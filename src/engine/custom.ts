@@ -8,8 +8,23 @@ import type { SeeThrough } from '../core/seeThrough';
 /** how many floats a shader has to itself (`m.c`, 48 vec4s: `CUSTOM_FLOATS` in the engine's gpu.rs) */
 export const LOOK_FLOATS = 192;
 
-/** A shader for the engine's lit one: its name (one module a name) and its hooks' WGSL. */
-export interface RustShader { name: string; hooks: string }
+/** A shader for the engine's lit one: its name (one module a name) and its hooks' WGSL. `group`: which of the
+ *  engine's modules of looks joined draws it (`RUST_SHADERS`), the world's looks by default: the skills' effects
+ *  are joined apart, so their weight is never in the shading of the world's pixels, nor the world's in theirs. */
+export interface RustShader { name: string; hooks: string; group?: 'effects' }
+
+/** Every look's shader the game has, as its module makes it (`rustShader`): handed to the engine as it starts and
+ *  joined into one of its modules (`Materials.joinLooks`, Bulwark's `join_shaders`). A browser compiles each module
+ *  whole: one a look was the engine's whole lit shader compiled again for each, 0.3 to 0.5 s of the GPU's process
+ *  apiece, the most of a first visit's 25 s of compiles (`lab programs --cost`), while the page drew nothing. */
+export const RUST_SHADERS: RustShader[] = [];
+
+/** `shader`, known to the engine ahead of any material drawn by it (`RUST_SHADERS`). A shader made only as a
+ *  material is met is drawn by a module of its own. */
+export function rustShader(shader: RustShader): RustShader {
+  RUST_SHADERS.push(shader);
+  return shader;
+}
 
 export interface RustLook {
   shader: RustShader;

@@ -3,9 +3,9 @@
 // the basin floor's web of light; what it mirrors of the sky by the hour, and how the lights round it see it
 // (`waterLooks`: rougher, a share of their highlights; its glints' most is the material's `litMost`). The falling
 // water mirrors the sky by the hour alone (`fallingLook`).
-import type { RustLook, RustShader } from '../custom';
+import { rustShader, type RustLook, type RustShader } from '../custom';
 
-const WATER: RustShader = {
+const WATER: RustShader = rustShader({
   name: 'fountain-water',
   hooks: /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
@@ -34,9 +34,9 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   return true;
 }
 `,
-};
+});
 
-const FALLING: RustShader = {
+const FALLING: RustShader = rustShader({
   name: 'fountain-falling',
   hooks: /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {}
@@ -46,9 +46,9 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   return true;
 }
 `,
-};
+});
 
-const CAUSTICS: RustShader = {
+const CAUSTICS: RustShader = rustShader({
   name: 'fountain-caustics',
   hooks: /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
@@ -70,7 +70,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   return true;
 }
 `,
-};
+});
 
 /** How the lights round the water see it (`WaterLit` in world/villageNodes.ts). */
 interface Lit { rough: number; shine: number }

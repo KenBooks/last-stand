@@ -8,7 +8,7 @@
 // swelling from nothing as the growth passes it, and withers back (`uWither`).
 import * as THREE from 'three';
 import { portShader, type Port, type Tsl } from '../core/shaderPorts';
-import { effectLook, num, rgb } from '../engine/effects';
+import { effectLook, num, rgb, effectShader } from '../engine/effects';
 import { groundHeight } from '../world/ground';
 
 /** the braid: its middle over the floor, each strand's radius and how far it winds from the middle (m), how fast it
@@ -427,3 +427,6 @@ export function vineSamples(): THREE.Mesh[] {
   vine.update(0);
   return [vine.mesh];
 }
+
+// (its effect's shader listed for the engine as this module loads: joined with the other effects')
+effectShader('vine', VINE_HOOKS);
