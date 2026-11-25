@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import type { Scholar } from '../entities/models/scholar';
 import type { Rounds } from './scholarRounds';
-import { HOUSES, ROOM_IDS, type RoomId } from '../data/houses';
+import { HOUSES, ROOM_IDS, type RoomId, type TrophyKind, type TrophyPlace } from '../data/houses';
 import type { Odo } from '../entities/models/merchant';
 import type { EnemyId } from '../data/enemies';
 import { ashlar, bannerCloth, boards, ctx2d, canvasOf, flagstone, grunge, pbrMaterialMaps, textureFromCanvas, wood } from '../core/textures';
@@ -40,6 +40,12 @@ export interface RecordsShown {
 
 /** A room as built: its look, its wall (the shell a body is kept in and the camera's boom stops at), what stands in it
  *  (circles), its floor, and its frame's step. */
+/** A trophy place of the house of records as it stands (`Room.trophyPlaces`). */
+export interface TrophyPlaceShown {
+  place: TrophyPlace; kind: TrophyKind; boss?: EnemyId; shown: boolean; at: THREE.Vector3; out: THREE.Vector3;
+  trophy?: THREE.Group;
+}
+
 export interface Room {
   id: RoomId;
   group: THREE.Group;
@@ -57,8 +63,11 @@ export interface Room {
   showAll(): void;
   /** the house of records' boards written and its trophies hung (none in the tavern) */
   showRecords?(shown: RecordsShown): void;
-  /** which bosses' trophies hang shown now (the house of records'; tools/lab `houses` reads it) */
-  trophiesShown?(): Partial<Record<EnemyId, boolean>>;
+  /** the house of records' trophy places as they stand: each one's kind, the boss whose trophy takes it (none yet for a
+   *  place waiting), whether that trophy is shown, the place's middle in the world, the way it faces (into
+   *  the room) and the trophy (tools/lab `houses`
+   *  and `trophies` read it) */
+  trophyPlaces?(): TrophyPlaceShown[];
   /** the folk who live in it seated (the library's scholar, the merchant's Odo): built on the heroes' heads and hands, so once their
    *  workers have made them: as the house is first walked into (game/rooms.ts `folkComing`), a piece at a time
    *  (models/steps.ts), a frame painted between slices: built whole at the boot, each was one task of seconds on a

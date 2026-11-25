@@ -6,6 +6,20 @@ declare module '../houses' {
   interface RoomIds { records: true }
 }
 
+/**
+ * The places the house of records shows trophies at (each kind's in the order a trophy takes them where its data names
+ * none; world/houses/records.ts says where each stands): four shields on the back wall, the two by the tapestry first,
+ * then the two outer; six stands in the trophy cabinet against the east wall, two a shelf, its middle shelf first.
+ * Every place is built whether a trophy takes it or not, as a mount or a stand waiting. The bosses to come take theirs
+ * by name (`TrophyDef.place`): the Rootmother `wall-outer-left`, the Stag of Ash `wall-outer-right`, the Bell-Warden
+ * `shelf-middle-right`, the Ossuary Cantor `shelf-top-left`.
+ */
+export const TROPHY_PLACES = {
+  wall: ['wall-inner-left', 'wall-inner-right', 'wall-outer-left', 'wall-outer-right'],
+  cabinet: ['shelf-middle-left', 'shelf-middle-right', 'shelf-top-left', 'shelf-top-right', 'shelf-low-left',
+    'shelf-low-right'],
+} as const;
+
 export const HOUSE: House = {
   // (the cottage nearest the notice board, beside the Thornwood's road: from play, its pick)
   id: 'records', cottage: 0, name: 'House of Records', half: [4.6, 3.6], high: 3.3,

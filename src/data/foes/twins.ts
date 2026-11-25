@@ -38,8 +38,9 @@ export const FOES: FoeFile = {
         ranger: 'Kite him in a circle; side-step the charge\'s ringed line, and keep moving so his bombs land behind you.',
       },
     },
-    // (the Ossuary Twins' link of their chain of bone, its gold light still in it: one trophy for the pair, Slab's)
-    trophy: { name: "The Ossuary Twins' Bone Link", look: 'crest', colour: 0xd2c6a4, trim: 0xffd890 },
+    // (the Ossuary Twins' two skulls bound by a length of their chain of bone, its gold light still in it, on a cushion in
+    // the cabinet: one trophy for the pair, Slab's; world/trophies/twinslab.ts)
+    trophy: { name: "The Ossuary Twins' Skulls", kind: 'cabinet', place: 'shelf-middle-left', colour: 0xd2c6a4, trim: 0xffd890 },
   },
   twinreliquary: {
     def: {

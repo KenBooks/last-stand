@@ -27,7 +27,8 @@ export const FOES: FoeFile = {
         ranger: 'Quarry Mark it: when it dies marked, your cooldowns come back for the next wave.',
       },
     },
-    // (the Hollow Colossus's cracked face, its violet glow gone dim in the eyes)
-    trophy: { name: "The Hollow Colossus's Mask", look: 'mask', colour: 0xd8d0c4, trim: 0xb070ff },
+    // (the Hollow Colossus's head, mounted: its cracked stone, horns and crystal crown, a violet glow left in its eyes;
+    // world/trophies/colossus.ts)
+    trophy: { name: "The Hollow Colossus's Head", kind: 'wall', place: 'wall-inner-left', colour: 0x44444e, trim: 0xb070ff },
   },
 };
