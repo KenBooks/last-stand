@@ -23,7 +23,7 @@ function chainText(heldIn) {
 
 /**
  * One stall's lines: when and how long, the programs built in it and where, the longest tasks through it, its JS by
- * function (`--js`), the page's changes before it.
+ * function (`--js`), Dawn's work through it (`--dawn`), the page's changes before it.
  */
 function stallLines(stall) {
   const lines = [`  stall of ${ms(stall.ms)} at ${stall.at.toFixed(1)} s`];
@@ -36,6 +36,7 @@ function stallLines(stall) {
   if (busy.length) lines.push(`    the longest tasks through it: ${busy.join('; ')}`);
   if (stall.work?.length) lines.push(workLine('the work in it', stall.work));
   if (stall.js?.within.length) lines.push(jsLine('its JS, each function with what it calls', stall.js.within));
+  if (stall.dawn) lines.push(dawnLine(stall.dawn));
   if (stall.changes.length) lines.push(`    the page's changes just before: ${stall.changes.join('; ')}`);
   return lines;
 }
@@ -315,6 +316,25 @@ function gpuWaitsLine(step) {
     + `the longest: ${each.join('; ')}`;
 }
 
+/** The render pipelines the GPU process's main thread compiled whole in the lobby (`analyze.mjs` `builtInMainOf`), as
+ *  a line; none where Dawn's work wasn't traced. */
+function lobbyBuiltLines({ lobbyBuilt }) {
+  if (!lobbyBuilt) return [];
+  const each = lobbyBuilt.each.map((built) => `${ms(built.ms)} at ${built.at.toFixed(2)} s`);
+  const listed = each.length ? ` (${each.join('; ')}, from the reveal)` : '';
+  return [`  pipelines the GPU process's main thread compiled whole in the lobby, every frame waiting: `
+    + `${lobbyBuilt.count}, ${ms(lobbyBuilt.ms)} in all${listed}`];
+}
+
+/** A boot's lobby over the budget of pipelines its GPU process's main thread compiled whole (`most`), as a problem's
+ *  line; none within it or where Dawn's work wasn't traced (`--dawn`). */
+export function builtInMainProblems(measure, most) {
+  const built = measure.findings?.lobbyBuilt;
+  if (!built || built.count <= most) return [];
+  return [`${measure.name}: the GPU process's main thread compiled ${built.count} pipelines whole in the lobby, `
+    + `${ms(built.ms)} (most ${most})`];
+}
+
 /** A boot's steps over the budget of the main thread's waits on the GPU's process (`mostMs`), each as a problem's
  *  line; none within it. */
 export function gpuWaitProblems(measure, mostMs) {
@@ -510,6 +530,7 @@ export function bootText(measure, { links = false } = {}) {
     ...(findings.windFit ? windFitLines(findings.windFit) : []),
     ...(findings.lobby ? lobbyLines(findings.lobby) : []),
     ...lobbyStallLines(findings),
+    ...lobbyBuiltLines(findings),
     ...runStallLines(findings),
     ...findings.steps.flatMap((step) => bootStepLines(step, { links })),
   ];

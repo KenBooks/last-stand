@@ -17,7 +17,7 @@ import { seeThrough, seeThroughFade, seeValue } from '../core/seeThrough';
 import { reliefContext } from '../core/parallax';
 import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, asTree, asGrass, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type GatePlace, type Portal, type Updater } from './props';
 
-/** the crypt's environment's colours (compiled ahead: `compileEnvMaps`) */
+/** the crypt's environment's colours */
 export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05, 1.3] };
 import { PropSet, instanceLook, meshLook, groupLook, type PropLook } from './destructible';
 import { buildFire } from './fire';

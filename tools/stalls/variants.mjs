@@ -84,6 +84,71 @@ function noParallelCompile() {
   }
 }
 
+/**
+ * `count` render pipelines of the page's first WebGPU device made at once (`createRenderPipeline`) as the lobby shows
+ * (its loading screen `done`, or gone), each of a shader no cache holds (its constant this visit's own, its body
+ * long enough to take its compiler milliseconds), compiled whole in the GPU process's main thread as a draw's would
+ * be: the canary of `--most-built`. The page's own requests made at once instead came back from Dawn's cache in under
+ * a millisecond, and every one made so held the boot for over ten minutes.
+ */
+function plantBuilt(count) {
+  const adapter = globalThis.GPUAdapter?.prototype;
+  if (!adapter) return;
+  const requestDevice = adapter.requestDevice;
+  let first = null;
+  adapter.requestDevice = async function (...rest) {
+    const device = await requestDevice.apply(this, rest);
+    first ??= device;
+    return device;
+  };
+  const lines = Array.from({ length: 400 }, (_, i) => `  v = sin(v * 1.0001 + ${i}.5) * cos(v - ${i}.25);`);
+  const plant = (device, seed) => {
+    const code = [
+      '@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {',
+      '  return vec4f(f32(i), 0.0, 0.0, 1.0);',
+      '}',
+      '@fragment fn fs(@builtin(position) p: vec4f) -> @location(0) vec4f {',
+      `  var v = p.x * ${seed};`,
+      ...lines,
+      '  return vec4f(v);',
+      '}',
+    ].join('\n');
+    const module = device.createShaderModule({ code });
+    device.createRenderPipeline({
+      layout: 'auto',
+      vertex: { module, entryPoint: 'vs' },
+      fragment: { module, entryPoint: 'fs', targets: [{ format: 'bgra8unorm' }] },
+    });
+  };
+  const watch = setInterval(() => {
+    const loading = document.getElementById('loading');
+    if (!first || (loading && !loading.classList.contains('done'))) return;
+    clearInterval(watch);
+    for (let i = 0; i < count; i++) plant(first, `${Math.random() + 1}`);
+  }, 100);
+}
+
+/**
+ * Each render pipeline the page makes at once (`createRenderPipeline`, compiled whole in the GPU process's main
+ * thread) once the lobby shows, recorded with its label, its time and the calls that asked for it, read back with
+ * `--read "window.__builtAtOnce"`: the trace's `--most-built` says when one was compiled, this who asked.
+ */
+function builtAtOnceTold() {
+  const device = globalThis.GPUDevice?.prototype;
+  if (!device) return;
+  const told = [];
+  globalThis.__builtAtOnce = told;
+  const make = device.createRenderPipeline;
+  device.createRenderPipeline = function (descriptor) {
+    const loading = document.getElementById('loading');
+    if (!loading || loading.classList.contains('done')) {
+      const stack = String(new Error().stack).split('\n').slice(2, 14).map((line) => line.trim());
+      told.push({ at: Math.round(performance.now()), label: descriptor?.label ?? null, stack });
+    }
+    return make.call(this, descriptor);
+  };
+}
+
 /** every part of the stash's glow that loops: main's the glow and its pseudo-elements, #269's spans within it */
 const GLOW_PARTS = '.slot-glow, .slot-glow *, .slot-glow::before, .slot-glow::after';
 
@@ -141,6 +206,8 @@ export const VARIANTS = {
   qualityLow: { script: quality, arg: 'low' },
   qualityVerylow: { script: quality, arg: 'verylow' },
   noParallelCompile: { script: noParallelCompile },
+  plantBuilt: { script: plantBuilt, arg: 2 },
+  builtAtOnceTold: { script: builtAtOnceTold },
   // (its digits this run's own: a second run finds none of the first's in the driver's cache)
   newShaders: { script: newShaders, arg: String(1000 + (Date.now() % 9000)) },
   tooltipLayer: { script: styled, arg: '#tooltip { will-change: transform; }' },

@@ -100,6 +100,8 @@ const HELP = {
   trips: ['n', `boot, with --resize: how many times the window goes to its size and comes back (${TRIPS} by default)`],
   'most-gpu-wait': ['ms', `boot: the most a step's waits of the main thread on the GPU's process may come to, `
     + `from the game's first step on (${MOST_GPU_WAIT_MS} by default): over it, the run fails`],
+  'most-built': ['n', 'boot, with --dawn: the most render pipelines the GPU process\'s main thread may compile whole '
+    + 'in the lobby (0 by default): over it, the run fails (the variant `plantBuilt` is its canary)'],
   'plant-gpu-wait': ['ms', 'boot: the main thread made to wait on the GPU\'s process this long as the arena\'s '
     + 'step begins, the canary of that budget'],
   'stale-wind': ['', 'boot, with --resize: the exit placed once and never again (each place it sets after its first '
@@ -213,6 +215,7 @@ export function readOptions(argv) {
     blinkExit: Number(written['blink-exit'] ?? 0),
     mostGpuWait: Number(written['most-gpu-wait'] ?? MOST_GPU_WAIT_MS),
     plantGpuWait: Number(written['plant-gpu-wait'] ?? 0),
+    mostBuilt: Number(written['most-built'] ?? 0),
     auto: written.auto ?? null,
     window: sizeOf(written.window ?? '1536x864', 'window'),
     resize: written.resize === undefined ? null : sizeOf(written.resize, 'resize'),

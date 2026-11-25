@@ -4,9 +4,6 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { HERO_SHADOW_LAYER } from '../core/layers';
 import { keepMiddle, seeThroughFade, thinsByMiddle } from '../core/seeThrough';
-import { gpu, pipelinesAtOnce } from '../core/webgpu';
-import { portShader } from '../core/shaderPorts';
-import { effectLook, rgb, effectShader } from '../engine/effects';
 import { membraneMaterial, spillMaterial } from './portalNodes';
 import { daySkyMaterial, nightSkyMaterial } from './skyNodes';
 import { ALL_STILL, inShadowsOnly, type StillDrawn } from './culling';
@@ -665,163 +662,20 @@ export interface GatePlace { x: number; z: number; facing: number }
 
 /** A biome's environment's colours: its sky's, and its one soft panel's. */
 export interface EnvColours { sky: RGB; panel: RGB }
-/** the environments made, by their colours (`envMap`) */
-const envMaps = new Map<string, THREE.Texture>();
-const envKey = ({ sky, panel }: EnvColours): string => `${sky} ${panel}`;
-/** an environment's size, a cube face's side (three's default) */
-const ENV_SIZE = 256;
-/** the blur over the captured scene before it's convolved, in radians */
-const ENV_BLUR = 0.04;
 
-/** What the environments compiled ahead are made with (`compileEnvMaps`): one generator and the scene it captures
- *  for each one's colours. */
-let ahead: { pm: THREE.PMREMGenerator; scenes: Map<string, THREE.Scene> } | undefined;
+/** what stands for a biome's environment in `scene.environment`: the engine reads only that one is set (its sky's
+ *  fill, `engine/globals.ts`), never a map, as it lights by the sky's two halves alone */
+const ENVIRONMENT_SET = new THREE.Texture();
 
 /**
- * Every biome's environment's programs compiled now (`colours`), for the targets they're drawn into: the scene the
- * generator captures, its blur and its convolution. The GPU's threads link them while the arena is built; each map is
- * made as its biome is first shown (`envMap`). Made before the arena, the first waited 0.43 s on the convolution's
- * link, compiled as it was first drawn: three compiles none of its own programs ahead but those it converts a cube or
- * a panorama with, so its private parts are reached for (`compileGenerator`). (The capture's backdrop is the clear
- * colour, a clear: no program.)
+ * The environment of `colours`, as the scene holds it. While three drew the scene, a map baked by its generator (a
+ * sky gradient and a panel captured, blurred and convolved): under the engine nothing read the map, and its bake made
+ * its pipelines in the GPU's process's main thread as a run began (a frame of 118 ms after Start, `npm run stalls --
+ * --scenario boot --dawn`), compiled again with each generator.
  */
-export function compileEnvMaps(renderer: THREE.WebGLRenderer, colours: EnvColours[]): void {
-  const pm = generator(renderer);
-  const scenes = new Map(colours.map((c) => [envKey(c), envScene(c)]));
-  ahead = { pm, scenes };
-  const target = compileGenerator(renderer, pm);
-  if (!target) return;
-  const prev = renderer.getRenderTarget();
-  renderer.setRenderTarget(target);
-  const capture = new THREE.PerspectiveCamera(90, 1, 0.1, 100);
-  for (const scene of scenes.values()) renderer.compile(scene, capture);
-  renderer.setRenderTarget(prev);
-  target.dispose();
+export function envMap(_renderer: THREE.WebGLRenderer, _colours: EnvColours): THREE.Texture {
+  return ENVIRONMENT_SET;
 }
-
-/** An environment's generator: WebGPU's own there (WebGL's draws with shaders WebGPU can't run: its maps were left
- *  dark, the dais's reflection of the sky with them) */
-function generator(renderer: THREE.WebGLRenderer): THREE.PMREMGenerator {
-  return new gpu.PMREMGenerator(renderer as never) as unknown as THREE.PMREMGenerator;
-}
-
-/** three's generator's private parts: what `compileGenerator` reaches for, each checked to be there */
-interface GeneratorInside {
-  _setSize?: (cubeSize: number) => void;
-  _allocateTarget?: () => THREE.WebGLCubeRenderTarget;
-  _getSourceTarget?: (depthBuffer: boolean) => THREE.WebGLCubeRenderTarget;
-  _blur?: (target: THREE.WebGLCubeRenderTarget, sigma: number) => void;
-  _applyPMREM?: (target: THREE.WebGLCubeRenderTarget) => void;
-  _compileMaterial?: (material: THREE.Material) => void;
-  _renderCube?: (target: THREE.WebGLCubeRenderTarget, lod: number, material: THREE.Material) => void;
-}
-
-/**
- * `pm`'s blur and convolution compiled for the maps it makes, sized as `fromScene` sizes them: its own passes run
- * with each draw of a cube's faces (`_renderCube`) swapped for a compile into that target, so it makes its materials
- * as it would and draws nothing. Returns a target of that kind, to compile the capture's programs for, the caller's
- * to dispose. None where three's private parts have changed: nothing compiled ahead then, the maps made as before.
- */
-function compileGenerator(renderer: THREE.WebGLRenderer, pm: THREE.PMREMGenerator): THREE.WebGLRenderTarget | null {
-  const inside = pm as unknown as GeneratorInside;
-  const parts = [inside._setSize, inside._allocateTarget, inside._getSourceTarget, inside._blur, inside._applyPMREM,
-    inside._compileMaterial, inside._renderCube];
-  if (!parts.every((f) => typeof f === 'function')) return null;
-  inside._setSize!(ENV_SIZE);
-  const target = inside._allocateTarget!();
-  inside._getSourceTarget!(true);
-  const prev = renderer.getRenderTarget();
-  inside._renderCube = (into, _lod, material) => {
-    renderer.setRenderTarget(into);
-    inside._compileMaterial!(material);
-  };
-  inside._blur!(target, ENV_BLUR);
-  inside._applyPMREM!(target);
-  delete inside._renderCube;
-  renderer.setRenderTarget(prev);
-  return target;
-}
-
-/**
- * The environment of `colours`, made once: every one compiled ahead made with it, their generator and scenes let go
- * after (the maps are needed together, as the arena shows its first biome), else made alone with a generator of its
- * own.
- */
-export function envMap(renderer: THREE.WebGLRenderer, colours: EnvColours): THREE.Texture {
-  // (drawn once: every pass's pipeline made before it draws, none left out while made beside the frames)
-  return pipelinesAtOnce(() => envMapNow(renderer, colours));
-}
-
-function envMapNow(renderer: THREE.WebGLRenderer, colours: EnvColours): THREE.Texture {
-  const made = envMaps.get(envKey(colours));
-  if (made) return made;
-  if (!ahead) return makeEnvMap(renderer, colours);
-  const { pm, scenes } = ahead;
-  ahead = undefined;
-  for (const [key, scene] of scenes) {
-    envMaps.set(key, pm.fromScene(scene, ENV_BLUR, 0.1, 100, { size: ENV_SIZE }).texture);
-    disposeScene(scene);
-  }
-  pm.dispose();
-  return envMaps.get(envKey(colours)) ?? makeEnvMap(renderer, colours);
-}
-
-/** `colours`' environment made with a generator of its own */
-function makeEnvMap(renderer: THREE.WebGLRenderer, colours: EnvColours): THREE.Texture {
-  const pm = generator(renderer);
-  const scene = envScene(colours);
-  const texture = pm.fromScene(scene, ENV_BLUR, 0.1, 100, { size: ENV_SIZE }).texture;
-  pm.dispose();
-  disposeScene(scene);
-  envMaps.set(envKey(colours), texture);
-  return texture;
-}
-
-function disposeScene(root: THREE.Object3D): void {
-  root.traverse((o) => {
-    const mesh = o as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    mesh.geometry.dispose();
-    (mesh.material as THREE.Material).dispose();
-  });
-}
-
-// Dim environment for subtle reflections on metal / wet surfaces: a sky gradient and one soft panel.
-function envScene({ sky, panel }: EnvColours): THREE.Scene {
-  const envScene = new THREE.Scene();
-  const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), effectLook(portShader(new THREE.ShaderMaterial({
-    side: THREE.BackSide,
-    uniforms: { uSky: { value: new THREE.Vector3(...sky) } },
-    vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-    fragmentShader: `varying vec3 vP; uniform vec3 uSky; void main(){ float y = normalize(vP).y;
-      vec3 c = mix(vec3(0.02,0.02,0.03), uSky, smoothstep(-0.2, 1.0, y));
-      gl_FragColor = vec4(c, 1.0); }`,
-  }), ({ wgslFn, positionGeometry, varying }, u) => ({
-    fragment: wgslFn(`fn envSky(p: vec3f, sky: vec3f) -> vec4f {
-      return vec4f(mix(vec3f(0.02, 0.02, 0.03), sky, smoothstep(-0.2, 1.0, normalize(p).y)), 1.0);
-    }`)({ p: varying(positionGeometry), sky: u.uSky }),
-  })), 'env-sky', ENV_SKY_HOOKS, { numbers(u, out) { rgb(u, 'uSky', out, 0); } }));
-  envScene.add(skyMesh);
-  const panelMesh = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial({ color: new THREE.Color(...panel).multiplyScalar(2), side: THREE.DoubleSide }));
-  panelMesh.position.set(-5, 7, 3); panelMesh.lookAt(0, 0, 0);
-  envScene.add(panelMesh);
-  return envScene;
-}
-
-/** the environment's sky for the Rust engine (src/engine/effects.ts): the port's WGSL above, the vertex's own place
- *  handed on */
-const ENV_SKY_HOOKS = /* wgsl */ `
-fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
-  (*v).c0 = vec4f((*v).position, 0.0);
-}
-
-fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
-  let sky = m.c[0].rgb;
-  (*s).base = vec4f(mix(vec3f(0.02, 0.02, 0.03), sky, smoothstep(-0.2, 1.0, normalize(in.c0.xyz).y)), 1.0);
-  (*s).fog = 0.0;
-  return true;
-}
-`;
 
 /**
  * A biome's shadow casters never move, but each one cost a draw call in the shadow pass
@@ -1044,5 +898,3 @@ export function taperedTube(curve: THREE.Curve<THREE.Vector3>, r0: number, r1: n
   return g;
 }
 
-// (its effect's shader listed for the engine as this module loads: joined with the other effects')
-effectShader('env-sky', ENV_SKY_HOOKS);

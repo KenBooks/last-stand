@@ -57,6 +57,7 @@ export async function makeWebGPURenderer(hdrAllowed: boolean): Promise<THREE.Web
   await renderer.init();
   uploader = renderer;
   pipelinesBeside(renderer);
+  warmMipmaps(renderer);
   stillWhereStill(renderer);
   bundlesBeforeTransparents(renderer);
   if (new URLSearchParams(location.search).has('builds')) recordNodeBuilds(renderer);
@@ -71,6 +72,22 @@ export async function makeWebGPURenderer(hdrAllowed: boolean): Promise<THREE.Web
   stand('capabilities', { getMaxAnisotropy: () => renderer.getMaxAnisotropy(), isWebGL2: true, maxTextureSize });
   Object.defineProperty(renderer.info, 'programs', { value: [], writable: true });
   return renderer as unknown as THREE.WebGLRenderer;
+}
+
+/**
+ * three's mipmap pipeline for an sRGB array texture made now, under the loading screen: three makes one for each
+ * kind of texture as it first makes a texture's mipmaps, at once, and this kind's first was an outline mask's map,
+ * uploaded at its first draw in the lobby, compiled whole in the GPU process's main thread, 11 ms of a first visit's
+ * frame (`npm run stalls -- --scenario boot --dawn`, `--variants builtAtOnceTold` naming who asked).
+ */
+function warmMipmaps(renderer: WebGPURenderer): void {
+  const texture = new THREE.DataArrayTexture(new Uint8Array(2 * 2 * 4), 2, 2, 1);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.generateMipmaps = true;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.needsUpdate = true;
+  renderer.initTexture(texture);
+  texture.dispose();
 }
 
 /** what of three's WebGPU backend a canvas's copy into a texture reads: the device, and each texture's own */
