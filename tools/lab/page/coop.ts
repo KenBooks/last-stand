@@ -7,6 +7,7 @@
 // screen counted on the host, and whether a blow the guest dodged on its screen hurt it.
 import * as THREE from 'three';
 import { G } from '../../../src/state';
+import { BRANCHES } from '../../../src/entities/rootmother';
 import { input } from '../../../src/core/input';
 import { cameraYaw } from '../../../src/core/renderer';
 import { hostRoom, joinRoom, session } from '../../../src/net/session';
@@ -154,6 +155,9 @@ export interface Sample {
    *  that came down this frame landed, the vines sent this frame, its own hero held by one and its partner's copy
    *  shown in a vine's coils */
   thrown: { landed: XZ[]; vines: number; held: boolean; coiled: boolean };
+  /** the Rootmother's branches that came down this frame as this game shows them (entities/rootmother.ts
+   *  `BRANCHES`), where each landed */
+  branched: XZ[];
   /** in `ping`: its own party slot, every ping it shows (page/coopPing.ts) and what its finger went down on over
    *  the minimap; the first sample also carries the pings the scenario means */
   slot?: number;
@@ -166,6 +170,8 @@ export interface Sample {
   wall?: import('./coopWall').WallSample | null;
   /** in `belt`: the Twins' belt skulls as this game shows them (page/coopBelt.ts) */
   belt?: import('./coopBelt').BeltSample;
+  /** in `rootcage`: the Rootmother's root cage as this game shows it (page/coopRootCage.ts) */
+  cage?: import('./coopRootCage').CageSample;
   /** in `chat`: the chat as this game's page shows it (page/coopChat.ts); the first sample also carries what the
    *  scenario says and when it presses Esc */
   chat?: ChatSample;
@@ -451,6 +457,7 @@ function wallInput(frame: number): Frame {
 /** The wall each game shows, read as `wall` starts (none in another scenario) */
 let wallNow: (() => import('./coopWall').WallSample | null) | null = null;
 let belt: typeof import('./coopBelt') | null = null;
+let rootCage: typeof import('./coopRootCage') | null = null;
 
 /** The guest in `blink`: every so often it holds the blink aimed at its other spot and lets go, its cooldown and
  *  energy made ready first (a blink every few seconds, where its own cooldown would allow one in seven). */
@@ -673,6 +680,32 @@ const SCENARIOS: Record<string, Scenario> = {
       G.player.life = G.player.stats.maxLife;
       return {};
     },
+  },
+  rootcage: {
+    about: 'the Rootmother cages the guest standing still off her, the host comes up beside the cage and strikes the '
+      + 'root nearest it till it breaks, and the guest walks out through its gap: the cage, its roots and their lives '
+      + 'alike on both screens, the guest out before her blow',
+    frames: 1500,
+    host: [15, 16],
+    guest: [11, 12],
+    foes: [{ type: 'rootmother', at: [0, 0] }],
+    hostInput: (frame) => rootCage?.hostInput(frame) ?? {},
+    guestInput: () => rootCage?.guestInput() ?? {},
+  },
+  rootmother: {
+    about: 'the Rootmother in the arena\'s middle throws her branches and sends her vines at the guest standing far '
+      + 'off, the host standing further off: each branch landing in one place on both screens, the guest hurt by its '
+      + 'own game alone',
+    frames: 900,
+    host: [-17, -15],
+    guest: [11, 12],
+    foes: [{ type: 'rootmother', at: [0, 0] }],
+    // (her root cage held off: both heroes stand still here, and it's `rootcage`'s)
+    hostInput: () => {
+      for (const foe of G.enemies) if (foe.def.ai === 'rootmother') foe.brain.cageT = Infinity;
+      return {};
+    },
+    guestInput: () => ({}),
   },
   wall: {
     about: 'the guest, a ranger, raises its Hedgeward between it and a Sporecaller shooting at it, the host standing '
@@ -904,6 +937,8 @@ const play = {
   samples: [] as Sample[],
   /** arrows seen in flight, so a new one is counted as loosed once */
   seen: new WeakSet<Projectile>(),
+  /** the Rootmother's branches counted as come down */
+  branches: new WeakSet<object>(),
   /** where this frame's friendly arrows ended */
   ended: [] as XZ[],
   /** each foe's shown attack and how far through it was last frame */
@@ -1205,6 +1240,9 @@ export async function coopScenario(lab: Lab, { name, canary }: { name: string; c
   // (the wall's module loaded only for its scenario: a tree without the wall still plays the others)
   wallNow = name === 'wall' ? (await import('./coopWall')).wallNow : null;
   belt = name === 'belt' ? await import('./coopBelt') : null;
+  rootCage = name === 'rootcage' ? await import('./coopRootCage') : null;
+  // (the canary's: the guest's roots never told their life by the host)
+  rootCage?.deafOnThisGame(Boolean(canary) && play.role === 'guest');
   // (the canary's: the guest's game never shows a skull lying where it landed)
   belt?.unlayOnThisGame(Boolean(canary) && play.role === 'guest');
   play.scenario = name;
@@ -1312,6 +1350,7 @@ function sampleNow(): Sample {
     loosed: loosedArrows(),
     acts: { self: actOf(self), partner: partner ? actOf(partner) : null },
     thrown: thrownNow(self, partner),
+    branched: branchedNow(),
   };
   if (play.scenario === 'ping') {
     Object.assign(sample, { slot: self.slot, ...pingsNow() });
@@ -1319,6 +1358,7 @@ function sampleNow(): Sample {
   }
   if (play.scenario === 'wall' && wallNow) sample.wall = wallNow();
   if (play.scenario === 'belt' && belt) sample.belt = belt.beltNow();
+  if (play.scenario === 'rootcage' && rootCage) sample.cage = rootCage.cageNow();
   if (play.scenario === 'afk') {
     sample.afk = afkNow();
     if (!play.samples.length) Object.assign(sample, { afkHiddenAt: AFK_HIDDEN_AT, afkShownAt: AFK_SHOWN_AT });
@@ -1354,6 +1394,17 @@ function thrownNow(self: Player, partner: Player | undefined): Sample['thrown'] 
   play.chunks = chunks;
   const held = Boolean((self as { rooted?: boolean }).rooted);
   return { landed, vines, held, coiled };
+}
+
+/** The Rootmother's branches come down this frame on this game (each once), where each landed. */
+function branchedNow(): XZ[] {
+  const landed: XZ[] = [];
+  for (const b of BRANCHES) {
+    if (!b.landed || play.branches.has(b)) continue;
+    play.branches.add(b);
+    landed.push([b.landed.x, b.landed.z]);
+  }
+  return landed;
 }
 
 function foeSample(foe: Enemy, hero: Player): FoeSample {

@@ -5,8 +5,11 @@
 //   the wave sends read off the run (`RunState.boss`) and the banner's line, against its ladder's rung for the wave.
 // - `stand`: the hero walked into a boss: it gives way a hair, and he's held off its body.
 // - `ttk`: the hero's basic attack held on a boss held still, its damage a second, and from it the time each boss
-//   takes at the wave it comes on (the Colossus at 5, the Ossuary Cantor's encounter at 10).
+//   takes at the wave it comes on (the Colossus at 5, the Ossuary Cantor's encounter and the Rootmother at 10).
 // - The Cantor's encounter, its guards and their tolls: bossEncounter.ts's parts.
+// - the Rootmother's parts (`page/bossRootmother.ts`, `bossRootWalk.ts`, `bossRootBranches.ts`, `bossRootCage.ts`):
+//   `rootPhases`, `vines`, `pods`, `heart`, `rootWalk`, `branches`, `rootCage`; `compiles`, every effect of her fight
+//   drawn and no pipeline made; `threat` (`bossThreat.ts`) and her pictures and costs by name.
 //
 // `--canary` plants a fault each part must catch: a rung slipped onto the Crypt's ladder, a boss that yields as a
 // small foe does, and an attack that deals nothing (and bossEncounter.ts's).
@@ -25,10 +28,26 @@ import { pressing } from './cast';
 import { ARENA } from '../../../src/data/balance';
 import { inObstacle } from '../../../src/world/collision';
 import { lineClear } from '../../../src/world/navigation';
+import { heart, pods, rootCompiles, rootLook, rootPhases, rootPictures, rootTtkLines, vines } from './bossRootmother';
+import { rootWalk, rootWalkPictures } from './bossRootWalk';
+import { threat } from './bossThreat';
+import { branchPictures, branches, rootCost } from './bossRootBranches';
+import { rootCage, rootCagePictures } from './bossRootCage';
 
 /** The parts the command runs, in order. */
-export type BossPart = 'ladder' | 'stand' | 'ttk' | EncounterPart;
-export const BOSS_PARTS: BossPart[] = ['ladder', 'stand', ...ENCOUNTER_PARTS, 'ttk'];
+/** the Rootmother's parts that are judged */
+type RootPart = 'rootPhases' | 'vines' | 'pods' | 'heart' | 'rootWalk' | 'branches' | 'rootCage' | 'threat';
+/** the parts that picture moments for the eye alone, asked for by name */
+type PicturePart = 'rootPictures' | 'rootLook' | 'rootWalkPictures' | 'branchPictures' | 'rootCost' | 'rootCagePictures';
+export type BossPart = 'ladder' | 'stand' | 'ttk' | EncounterPart | RootPart | PicturePart;
+// (`compiles` is one part for every boss: the encounter's and the Rootmother's, after both)
+export const BOSS_PARTS: BossPart[] = [
+  'ladder', 'stand', ...ENCOUNTER_PARTS.filter((part) => part !== 'compiles'),
+  'rootPhases', 'vines', 'pods', 'heart', 'rootWalk', 'branches', 'rootCage', 'compiles', 'ttk',
+];
+const PICTURE_PARTS: BossPart[] = [
+  'rootPictures', 'rootLook', 'rootWalkPictures', 'branchPictures', 'rootCost', 'rootCagePictures',
+];
 
 export interface BossOptions {
   fixture: Fixture;
@@ -239,19 +258,55 @@ async function ttk(lab: Lab, options: BossOptions, lines: string[], problems: st
   lines.push(`ttk: ${cls}: ${fixed(dps, 0)} damage a second with ${G.player.skillAt('mouse0')!.def.name} and the starting gear`);
   lines.push(`ttk: the Colossus at wave 5 (${fixed(colossus, 0)} life): ${fixed(colossus / dps, 0)} s`);
   encounterTtk(dps, colossus / dps, lines);
+  lines.push(...rootTtkLines(dps));
+}
+
+/** Every effect of the Cantor's encounter and of the Rootmother's fight drawn: no pipeline made. */
+async function compiles(lab: Lab, options: BossOptions, lines: string[], problems: string[]): Promise<void> {
+  await encounterPart('compiles', lab, options, lines, problems);
+  const rooted = await rootCompiles(lab, options);
+  lines.push(`compiles: ${rooted} pipelines made drawing the Rootmother's vine, pods, thorns, cracks, eruption, `
+    + 'spores, heart, canopy and root cage');
+  if (rooted > 0) problems.push(`compiles: ${rooted} pipelines made in the Rootmother's fight`);
+}
+
+/** The `compiles` canary's plant: a mesh drawn a few frames at `at` in a blending, side and depth no other material has
+ *  together (the engine's pipelines are set apart by those: a flat-shaded Phong of its own made none, `twins.ts`). */
+export async function drawOdd(lab: Lab, at: THREE.Vector3): Promise<void> {
+  const material = new THREE.MeshBasicMaterial({
+    color: 0x123456,
+    blending: THREE.AdditiveBlending,
+    side: THREE.BackSide,
+    depthWrite: true,
+  });
+  const odd = new THREE.Mesh(new THREE.TorusKnotGeometry(0.3, 0.1), material);
+  odd.position.copy(at).setY(2);
+  G.scene.add(odd);
+  await lab.step(4);
+  G.scene.remove(odd);
+  odd.geometry.dispose();
+  material.dispose();
 }
 
 /** `lab boss`: each part asked for, in turn. */
 export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
-  const run: Record<'ladder' | 'stand' | 'ttk', typeof ladder> = { ladder, stand, ttk };
+  const run: Record<'ladder' | 'stand' | 'ttk' | 'compiles' | RootPart, typeof ladder> = {
+    ladder, stand, rootPhases, vines, pods, heart, rootWalk, branches, rootCage, compiles, ttk, threat,
+  };
   const moments: Pictured[] = [];
   const was = G.arena.biome;
   try {
     for (const part of options.parts ?? BOSS_PARTS) {
-      if (part === 'ladder' || part === 'stand' || part === 'ttk') await run[part](lab, options, lines, problems);
-      else moments.push(...await encounterPart(part, lab, options, lines, problems));
+      if (part === 'rootPictures') moments.push(...await rootPictures(lab, options, lines));
+      else if (part === 'rootLook') moments.push(...await rootLook(lab, options, lines, problems));
+      else if (part === 'rootWalkPictures') moments.push(...await rootWalkPictures(lab, options, lines));
+      else if (part === 'branchPictures') moments.push(...await branchPictures(lab, options, lines));
+      else if (part === 'rootCost') await rootCost(lab, options, lines);
+      else if (part === 'rootCagePictures') moments.push(...await rootCagePictures(lab, options, lines));
+      else if (part in run) await run[part as keyof typeof run](lab, options, lines, problems);
+      else moments.push(...await encounterPart(part as EncounterPart, lab, options, lines, problems));
     }
   } finally {
     if (G.arena.biome !== was) G.arena.setBiome(was);
@@ -259,7 +314,8 @@ export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
   if (options.canary) {
     const caught = problems.length;
     lines.push(`canary: ${caught} faults caught`);
-    const judged = (options.parts ?? BOSS_PARTS).filter((part) => !ENCOUNTER_PICTURES.includes(part as EncounterPart));
+    const judged = (options.parts ?? BOSS_PARTS)
+      .filter((part) => !PICTURE_PARTS.includes(part) && !ENCOUNTER_PICTURES.includes(part as EncounterPart));
     return { text: lines.join('\n'), problems: canaryMissed(judged, problems), moments };
   }
   return { text: lines.join('\n'), problems, moments };

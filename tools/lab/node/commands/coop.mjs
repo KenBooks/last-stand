@@ -26,10 +26,11 @@ export default {
     scenarios: {
       kind: 'list',
       usage: 'a,b',
-      choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'staffs', 'rush', 'strike', 'throws', 'wave', 'ping', 'chat', 'afk', 'colours', 'ghosts', 'duel', 'ends', 'houses', 'seats', 'trade', 'looks', 'wall', 'belt', 'choir'],
+      choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'staffs', 'rush', 'strike', 'throws', 'wave', 'ping', 'chat', 'afk', 'colours', 'ghosts', 'duel', 'ends', 'houses', 'seats', 'trade', 'looks', 'wall', 'belt', 'choir', 'rootmother', 'rootcage'],
       help: 'the scenarios (all the hero can play by default): walk, foes, shoot, evade (a ranger or a mage), dodge, '
-        + 'down, blink (a mage), rush and strike (a warrior), throws, belt (the Ossuary Twins\' belt skulls); '
-        + 'ends alone: the ways a run ends that left a '
+        + 'down, blink (a mage), rush and strike (a warrior), throws, rootmother (her branches and vines at the '
+        + 'guest), rootcage (her root cage at the guest, the host breaking a root of it), belt (the Ossuary Twins\' '
+        + 'belt skulls); ends alone: the ways a run ends that left a '
         + 'player apart from the party; houses alone: a partner gone into a village house shown to the host outside '
         + '(a marker over its door, the minimap, the map); seats alone: a log a partner sits on not outlined for the '
         + 'host to sit on, a free one and the log once he\'s up outlined; choir alone: the Ossuary Cantor\'s choir\'s '

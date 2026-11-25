@@ -448,6 +448,11 @@ export interface EnemyDef {
   /** a boss that may come as another's guard (a ladder's rung's `guards`, data/biomes.ts): its life, damage and size
    *  then, as shares of its own, and whether it stands where it rises (`stands`: it never walks, and no foe shoves it) */
   asGuard?: { life: number; damage: number; size: number; stands?: boolean; name?: string };
+  /** a thing a boss brings into its fight (the Rootmother's seed pods), not a foe of any roster: warmed with its boss
+   *  (game/bossReady.ts), worth no score, kill or loot */
+  broughtBy?: string;
+  /** a foe a hero's lure never draws (the Rootmother, who moves only to drag herself to a hero her vine holds) */
+  ignoresLures?: boolean;
 }
 
 /** A phase of a boss's fight: the share of its life it begins under (the first's is 1), and the line the banner says
@@ -472,10 +477,25 @@ export interface TelegraphDef {
 export interface BossKitDef {
   phases: BossPhaseDef[];
   attacks?: Record<string, TelegraphDef>;
-  weak?: { taken: number; edge: number };
+  weak?: { taken: number; edge: number; spot?: WeakSpotDef };
   /** warded while its guards stand (an encounter's main boss, data/biomes.ts `BossRung.guards`): it takes `taken` times
    *  the damage until the last of them falls, its aura in `edge` meanwhile */
   ward?: { taken: number; edge: number };
+  /** where it comes on: 'middle', grown up out of the arena's middle (the Rootmother, rooted there), not by a
+   *  gate (game/run.ts) */
+  comes?: 'middle';
+}
+
+/**
+ * A weak spot on a boss's front (the Rootmother's heart): through its weak-spot window, a hit struck there (`HitOpts.at`:
+ * an arrow, a bolt, where it met the body) within `wide` m of its middle across and `high` m of its height `y` over the
+ * floor takes `taken` times the damage. A blow with no point of its own (a sword's) never strikes it.
+ */
+export interface WeakSpotDef {
+  y: number;
+  wide: number;
+  high: number;
+  taken: number;
 }
 
 /** What a boss's model is told of its fight each frame (`AnimState.boss`): its phase, how much of a weak-spot window

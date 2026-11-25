@@ -117,6 +117,12 @@ export function wardWhileGuarded(e: Enemy): void {
 const beats: { from: number; to: number }[] = [];
 const beat = { from: -Infinity, to: -Infinity };
 
+/** Every warned hit still to come forgotten: the clock turned back (the lab's set-ups), where they'd hold off a new
+ *  fight's for as long as the old one had left. */
+export function forgetBeats(): void {
+  beats.length = 0;
+}
+
 /**
  * Where simulated: may a boss start a warned attack whose hits land from `hitIn` s on over `span` s, no other boss's
  * landing within `gap` s of them? Taken if so (the next must keep clear of it). An encounter's bosses hit in turn,
@@ -138,6 +144,18 @@ export const beatTaken = (): Readonly<typeof beat> => beat;
 
 /** How much larger `e`'s aura is drawn than a ring for its band to lie where a ring's does (a soft halo's, enemy.ts). */
 const auraReach = (e: Enemy): number => (e.aura?.userData.reach as number | undefined) ?? 1;
+
+/** How many times its damage a hit struck at `at` (an arrow's or a bolt's point, none for a blow) takes from its weak
+ *  spot (`WeakSpotDef`): its `taken` through its window where it struck the spot on the boss's front, else 1. */
+export function spotTaken(e: Enemy, at?: { x: number; y: number; z: number }): number {
+  const spot = e.def.bossKit?.weak?.spot;
+  if (!spot || !at || e.weak <= 0) return 1;
+  const dx = at.x - e.pos.x, dz = at.z - e.pos.z;
+  // (in the boss's own frame: ahead along its facing, across it, and its height over its feet)
+  const ahead = dx * Math.sin(e.facing) + dz * Math.cos(e.facing), across = dx * Math.cos(e.facing) - dz * Math.sin(e.facing);
+  const up = at.y - e.obj.position.y;
+  return ahead > 0 && Math.abs(across) <= spot.wide && Math.abs(up - spot.y) <= spot.high ? spot.taken : 1;
+}
 
 /** A boss's aura through its weak-spot window: the window's colour, swelling once a second; its own colour after. */
 export function weakLooks(e: Enemy): void {

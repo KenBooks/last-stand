@@ -34,6 +34,8 @@ export const AI_NOTES: Record<string, string> = {
   boss: 'Slams all round itself up close, looses volleys at range, and calls help.',
   bellWarden: 'Hovers where it rose and tolls from there, a short ring of sound that stuns whoever is close; its ghost dives at whoever comes near, and it raises the dead round it now and then.',
   cantor: 'Floats at a distance and chants: bone hands rise under you, a dirge of rings marches out, its choir rings the fight in, gravestones rise and stay, its guards ward it.',
+  rootmother: 'Rooted in the middle of the arena: sends creeping vines, flings seed pods, raises thorns round her trunk, and walks on her roots to a hero her vine holds.',
+  seedpod: 'Lies where it lands and hatches into Thornlings unless popped.',
 };
 
 /** A weapon way of holding the warrior's gear (or any class whose skills follow its gear): its name, how it plays,

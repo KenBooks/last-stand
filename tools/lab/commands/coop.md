@@ -269,6 +269,16 @@ the garbage collected), and every part of a hero's update runs about 45% slower 
 there as in a run (`poses --lobby`: his update 1.05 ms a frame against 1.13, measured 300 frames after the lobby
 came; 1.51 measured as it came).
 
+- `rootcage` (`page/coopRootCage.ts`; `src/entities/rootCage.ts`): the Rootmother cages the guest standing still,
+  the host pacing off so she cages the guest and never it; once the guest's cage stands, the host comes up 3 m
+  outside the root nearest it and strikes it till it breaks, its aim on the root's foot all the while (aimed at
+  nothing as it walked, the host's aim fell back on her); the guest walks out through the first gap its own screen
+  shows. The cage must shut in one place on both screens with its roots where they stand, each root's life on the
+  guest's screen the host's now or 30 frames before, the root the host broke broken on both, the guest caged on its
+  own screen, out as her blow lands on it and unhurt by it, her blow landing on both screens (`describeRootCage` in
+  `node/coopJudge.mjs`). Its canary has the guest's roots deaf to the host's word of their life (`cageRoot`), and
+  must read them apart and the guest held. It found that the roots' meshes kept their matrices from the page's last
+  draw on a page that draws nothing, every arrow passing through them (`placePooled` makes them now).
 - `staffs` (`--class mage`, #402): the guest holds a fire staff and casts at three dazed foes, every orb setting
   what it strikes alight (its chance made sure), then a healing staff, its beam held on the host, hurt to 300 of
   800 Health as the guest takes it up. The foes alight on the guest's screen must show alight on the host's
