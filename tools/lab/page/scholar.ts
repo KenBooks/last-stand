@@ -31,7 +31,8 @@ import { pageHeight } from '../../../src/entities/models/book';
 import { toVillage } from './village';
 import { DOOR_FRAMES, stand, useByE, viewAs } from './houses';
 import { holdThroughDoor } from './housesDoor';
-import { COWL_GAP_MOST, COWL_INTO_MOST, cowlClearance, roundsChecked } from './scholarRounds';
+import { COWL_GAP_MOST, COWL_INTO_MOST, cowlClearance, gripsSwept, roundsChecked } from './scholarRounds';
+import { INTO_BOOK_MOST, SLEEVES_INTO_BOOK_MOST, bookRead, intoBook } from './bookHold';
 
 export interface ScholarOptions {
   /** the views of the close-ups (`front,left,right,back,above` by default) */
@@ -41,6 +42,8 @@ export interface ScholarOptions {
   canary: boolean;
   /** instead, him pictured close at each beat of each task (page/scholarMoments.ts) */
   moments?: boolean;
+  /** instead, his grip swept over every spot and shelf height (`gripsSwept`) */
+  grips?: boolean;
 }
 
 /** the room's leather (`rooms.ts`): a book drawn in it is a box of the old kind */
@@ -408,6 +411,9 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
   const spans: { from: number; to: number; depth: number; mesh: string }[] = [];
   const headTurn = { min: Infinity, max: -Infinity }, handAt = new THREE.Vector3();
   const handFrom = hands.map(() => new THREE.Vector3()), handWent = hands.map(() => 0);
+  /** his fingers and his sleeves against his table's book's solids over the loop (m), and where the deepest */
+  let bookFingers = 0, bookSleeves = 0, bookAt = '';
+  const tableBook = bookRead(s, false);
   const frames = Math.round((SCHOLAR_LOOP + 8) / FRAME);
   hands.forEach((h, i) => h.getWorldPosition(handFrom[i]));
   for (let f = 0; f < frames; f++) {
@@ -428,6 +434,11 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
     const yaw = new THREE.Euler().setFromQuaternion(head.getWorldQuaternion(new THREE.Quaternion()), 'YXZ');
     headTurn.min = Math.min(headTurn.min, yaw.x); headTurn.max = Math.max(headTurn.max, yaw.x);
     hands.forEach((h, i) => { h.getWorldPosition(handAt); handWent[i] = Math.max(handWent[i], handAt.distanceTo(handFrom[i])); });
+    if (tableBook) {
+      const into = intoBook(s, tableBook);
+      if (into.fingers > bookFingers) { bookFingers = into.fingers; bookAt = `${into.fat} at ${t.toFixed(2)} s`; }
+      bookSleeves = Math.max(bookSleeves, into.sleeves);
+    }
     // (the page he turns against the blocks, and his fingertips against what they rest on)
     if (s.page.visible) {
       pageFrames++;
@@ -492,6 +503,9 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
     `his cowl over the loop: at most ${(cowlInto * 100).toFixed(1)} cm into his neck or head, its top at most ${(cowlGap * 100).toFixed(1)} cm off his neck (${cowlAt})`];
   const problems: string[] = [];
   const caught = canary && worst > SNAP;
+  lines.push(`his fingers in his table's book: ${(bookFingers * 1000).toFixed(1)} mm at the deepest${bookAt ? ` (${bookAt})` : ''}, his sleeves ${(bookSleeves * 100).toFixed(1)} cm`);
+  if (bookFingers > INTO_BOOK_MOST) problems.push(`his fingers ${(bookFingers * 1000).toFixed(1)} mm into his table's book, ${bookAt} (at most ${INTO_BOOK_MOST * 1000})`);
+  if (bookSleeves > SLEEVES_INTO_BOOK_MOST) problems.push(`his sleeves ${(bookSleeves * 100).toFixed(1)} cm into his table's book (at most ${SLEEVES_INTO_BOOK_MOST * 100})`);
   if (canary) lines.push(`canary: his loop jumped 20 s at once ${caught ? 'found' : 'unseen'} (${worst.toFixed(0)}° in a frame)`);
   if (!canary && worst > SNAP) problems.push(`a snap in his loop: ${worstAt} turned ${worst.toFixed(1)}° in a frame (most ${SNAP})`);
   if (wrap > SNAP) problems.push(`his loop snaps at its wrap: ${wrap.toFixed(1)}° in a frame`);
@@ -598,6 +612,10 @@ export async function scholar(lab: Lab, options: ScholarOptions): Promise<Report
   const rounds = room.rounds?.();
   if (rounds) rounds.hold = true;
   if (!s) return { text: 'the library has no scholar seated', problems: ['no scholar seated'] };
+  if (options.grips && rounds) {
+    const swept = await gripsSwept(lab, s, rounds);
+    return { text: swept.lines.join('\n'), problems: swept.problems, moments: [] };
+  }
   let triangles = 0;
   s.root.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.visible) triangles += (m.geometry.index?.count ?? m.geometry.attributes.position.count) / 3; });
   lines.push(`Brother Hollis seated, ${Math.round(triangles / 1000)}k triangles`);

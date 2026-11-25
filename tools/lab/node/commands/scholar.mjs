@@ -30,11 +30,12 @@ export default {
     at: { kind: 'numbers', usage: 's,s', help: 'the points of his loop pictured (s), in place of its beats' },
     film: { kind: 'switch', help: 'a picture for each moment in order (film-N.png), not one sheet: the frames of a clip' },
     canary: { kind: 'switch', help: 'jump his loop on 20 s mid-way and raise the table 8 cm, both of which must be found' },
+    grips: { kind: 'switch', help: 'instead, his grip on a book swept over every spot he can walk to, at its lowest and highest book: the take, a look and the shelving, his pads on the book he holds every frame' },
     moments: { kind: 'switch', help: 'instead, him pictured close (through the eyes of a hero stood by him) at each beat of each of his tasks: a browse, a keep, a restock, a dusting, a row squared, the globe turned; and mid-way as he gets up and sits down' },
     ...COMMON_OPTIONS,
   },
   each(side, options) {
-    return side.command('scholar', { canary: Boolean(options.canary), views: options.views, at: options.at, moments: Boolean(options.moments) });
+    return side.command('scholar', { canary: Boolean(options.canary), views: options.views, at: options.at, moments: Boolean(options.moments), grips: Boolean(options.grips) });
   },
   // (its moments written: him at each beat of his loop close up, the talk, as the player sees him; with --film a
   // picture each, in order, for a clip of his loop)

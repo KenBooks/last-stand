@@ -20,9 +20,10 @@ import type { Scholar } from '../../../src/entities/models/scholar';
 import type { Rounds } from '../../../src/world/scholarRounds';
 import { jointsOf, offHero } from './scholar';
 import { HOOD, scholarPlant } from '../../../src/entities/models/scholar';
-import { roundsPlant } from '../../../src/world/scholarRounds';
+import { GRIP_SHUT, roundsPlant } from '../../../src/world/scholarRounds';
 import { CASE_R, type LadderPart } from '../../../src/world/houses/library';
 import type { Obstacle } from '../../../src/types';
+import { GRAB, INTO_BOOK_MOST, PADS_MOST, SLEEVES_INTO_BOOK_MOST, bookRead, fingerPoints, grabRead, intoBook, padsRead } from './bookHold';
 
 /** the most frames a round may take (a minute and a half at 60 a second), how far a book may be from his nearer hand
  *  (m), how near what stands in the room his middle may come (m past its circle), how far off the hero his face must
@@ -302,9 +303,8 @@ async function frameCost(lab: Lab): Promise<number> {
 const READ_TILT = { least: 25, most: 42 };
 const PAGES_OFF = 40;
 const PAST_BOARDS = 0.03;
-/** how far his fingertips are down the hand from its joint (m), and how far past the book's edges they may reach (m):
- *  over its pages' edges a thumb's length, no more (up past its edges, his fingers stood up like claws) */
-const FINGERTIP = 0.17;
+/** how far past the book's edges his fingertips may reach (m): over its pages' edges a thumb's length, no more (up past
+ *  its edges, his fingers stood up like claws) */
 const TIPS_PAST = 0.025;
 /** how far behind the boards his fingertips may stand (m): fingers lying along them, a little curled */
 const TIPS_OFF = 0.04;
@@ -331,8 +331,10 @@ function readHold(s: Scholar): { tilt: number; off: number; palms: number[]; tip
   });
   // (each hand's fingertips, out past the book's outline in its own plane)
   let tips = 0, tipsOff = 0;
-  for (const n of ['scholar handL', 'scholar handR']) {
-    const tip = book.worldToLocal(s.root.getObjectByName(n)!.localToWorld(new THREE.Vector3(0, -FINGERTIP, 0)));
+  // (each fingertip itself: read as a point a fixed way down the hand, a hand tipped back off the boards moved it)
+  for (const p of fingerPoints(s)) {
+    if (!p.what.endsWith("'s tip") || p.what.includes('thumb')) continue;
+    const tip = book.worldToLocal(p.at.clone());
     tips = Math.max(tips, Math.abs(tip.x) - half.x, Math.abs(tip.z) - half.z);
     // (and out behind its boards: fingers standing up off them, as claws, not lying along them)
     tipsOff = Math.max(tipsOff, -tip.y);
@@ -348,6 +350,8 @@ interface Followed {
   cowlInto: number; cowlGap: number; cowlAt: string; bookFrames: number; notBook: string; backInPlace: boolean;
   ladderInto: number; ladderAt: string; furnitureInto: number; furnitureAt: string;
   hipsSpeeds: number; hipsAt: string; jointSpeeds: number; jointAt: string; hoodGap: number; hoodAt: string;
+  bookFingers: number; bookSleeves: number; bookAt: string;
+  grabSide: number; grabAt: string; grabInto: number; grabIntoAt: string; grabFrames: number; padsOff: number; padsAt: string;
 }
 
 /** A part of him by name, or by its parents' where it has none. */
@@ -416,6 +420,8 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
   const at = s.root.getWorldPosition(new THREE.Vector3()), was = at.clone(), way = new THREE.Vector3();
   // (his hips' speed and each joint's turning speed, frame to frame; the frames of `dts`' lengths, where given)
   let hipsSpeeds = 0, hipsAt = '', jointSpeeds = 0, jointAt = '', dt = 1 / 60, dtWas = dt, fresh = 0, hoodWorst = 0, hoodAt = '';
+  let bookFingers = 0, bookSleeves = 0, bookAt = '';
+  let grabSide = Infinity, grabAt = '', grabInto = 0, grabIntoAt = '', grabFrames = 0, padsOff = 0, padsAt = '';
   const hipsJoint = s.root.getObjectByName('scholar hips')!, hips = hipsJoint.getWorldPosition(new THREE.Vector3()), hipsWas = hips.clone();
   const speed = new THREE.Vector3(), speedWas = new THREE.Vector3(), turn = new THREE.Quaternion();
   const spins = joints.map(() => new THREE.Vector3()), spinsWas = joints.map(() => new THREE.Vector3());
@@ -491,6 +497,32 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
     if (rounds.out) lastOut = rounds.out;
     // (the hood's edge on what it lies on, every so often: it rides his chest with it, and the cowl's foot under its top
     // doesn't follow his neck)
+    // (his fingers and sleeves against the open book in his hands, as he opens it and reads; the canary's: the book
+    // pushed 3 cm down onto his hands, a frame as he reads)
+    const open = bookRead(s, true);
+    if (open) {
+      const pushed = canary && rounds.doing === 'reading a book standing';
+      const back = open.position.clone();
+      if (pushed) { open.position.add(new THREE.Vector3(0, -0.03, 0).applyQuaternion(open.quaternion)); open.updateMatrixWorld(true); }
+      const into = intoBook(s, open);
+      if (pushed) { open.position.copy(back); open.updateMatrixWorld(true); }
+      if (into.fingers > bookFingers) { bookFingers = into.fingers; bookAt = `${into.fat}, ${rounds.doing}`; }
+      bookSleeves = Math.max(bookSleeves, into.sleeves);
+    }
+    // (his right hand on the shut book as he takes it off the shelf and puts it back: round its spine, his fingers on
+    // its boards; the canary's: the book turned round, its spine away, a frame as he draws it out)
+    const shut = G.scene.getObjectByName('library held book');
+    if (shut?.visible && rounds.gripped) {
+      const turned = canary && rounds.doing.startsWith('taking a book');
+      if (turned) { shut.rotateY(Math.PI); shut.updateMatrixWorld(true); }
+      const grab = grabRead(s, shut);
+      if (turned) { shut.rotateY(Math.PI); shut.updateMatrixWorld(true); }
+      grabFrames++;
+      const pads = padsRead(s, shut);
+      if (pads.off > padsOff) { padsOff = pads.off; padsAt = `${pads.at}, ${rounds.doing}`; }
+      if (grab.side < grabSide) { grabSide = grab.side; grabAt = rounds.doing; }
+      if (grab.into > grabInto) { grabInto = grab.into; grabIntoAt = `${grab.at}, ${rounds.doing}`; }
+    }
     if (frames % HOOD_EVERY === 0) {
       const hood = hoodGap(s);
       if (hood.gap > hoodWorst) { hoodWorst = hood.gap; hoodAt = `${hood.at}, ${rounds.doing}`; }
@@ -512,7 +544,7 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
       if (canary) carried.position.y += 0.5;
       carried.updateMatrixWorld(true);
       const near = Math.min(...hands(s).map((h) => fromBook(carried as THREE.Mesh, h)));
-      if (s.act.grip >= 1 && near > farthest) {
+      if (s.act.grip === GRIP_SHUT && near > farthest) {
         farthest = near;
         // (and where: the book's height, and how far it is from his shoulder, his reach)
         const book = carried.getWorldPosition(new THREE.Vector3()), shoulder = s.root.getObjectByName('scholar shoulderR')!.getWorldPosition(new THREE.Vector3());
@@ -540,7 +572,8 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
   }
   return { frames, beats, farthest, farAt, tightest, tightAt, gapsAtEnd: rounds.gaps, satAtEnd: s.act.sit, turned, turnedAt, headOff, shoeOut, shoeAt,
     cowlInto, cowlGap, cowlAt, bookFrames, notBook, backInPlace, ladderInto, ladderAt, furnitureInto, furnitureAt,
-    hipsSpeeds, hipsAt, jointSpeeds, jointAt, hoodGap: hoodWorst, hoodAt };
+    hipsSpeeds, hipsAt, jointSpeeds, jointAt, hoodGap: hoodWorst, hoodAt, bookFingers, bookSleeves, bookAt,
+    grabSide, grabAt, grabInto, grabIntoAt, grabFrames, padsOff, padsAt };
 }
 
 /** What's wrong with a round. */
@@ -557,6 +590,11 @@ function problemsOf(name: string, r: Followed): string[] {
   if (r.cowlGap > COWL_GAP_MOST) problems.push(`rounds (${name}): his cowl's top ${(r.cowlGap * 100).toFixed(1)} cm off his neck, ${r.cowlAt} (at most ${COWL_GAP_MOST * 100}: his neck and back seen down inside it)`);
   if (r.notBook) problems.push(`rounds (${name}): the book in his hands isn't the shelf's: ${r.notBook}`);
   problems.push(...jumpsOf(name, r));
+  if (r.bookFingers > INTO_BOOK_MOST) problems.push(`rounds (${name}): his fingers ${(r.bookFingers * 1000).toFixed(1)} mm into the open book, ${r.bookAt} (at most ${INTO_BOOK_MOST * 1000}: "fingers go through the book")`);
+  if (r.bookSleeves > SLEEVES_INTO_BOOK_MOST) problems.push(`rounds (${name}): his sleeves ${(r.bookSleeves * 100).toFixed(1)} cm into the open book (at most ${SLEEVES_INTO_BOOK_MOST * 100})`);
+  if (r.grabFrames && r.grabSide < GRAB.spine) problems.push(`rounds (${name}): his right hand ${r.grabSide.toFixed(2)} of the way to the spine of the book he grips, ${r.grabAt} (at least ${GRAB.spine}: "have him grab from other side of book")`);
+  if (r.padsOff > PADS_MOST) problems.push(`rounds (${name}): his pad ${(r.padsOff * 1000).toFixed(1)} mm off the book he holds, ${r.padsAt} (at most ${PADS_MOST * 1000}: the book a thing in his hand)`);
+  if (r.grabInto > GRAB.into) problems.push(`rounds (${name}): his fingers ${(r.grabInto * 1000).toFixed(1)} mm into the book he grips, ${r.grabIntoAt} (at most ${GRAB.into * 1000})`);
   if (r.hoodGap > HOOD_GAP_MOST) problems.push(`rounds (${name}): the hood's edge ${(r.hoodGap * 100).toFixed(1)} cm off what it lies on, ${r.hoodAt} (at most ${HOOD_GAP_MOST * 100})`);
   if (!r.backInPlace) problems.push(`rounds (${name}): the shelf's book not back in its place as it stood`);
   if (r.ladderInto > LADDER_INTO_MOST) problems.push(`rounds (${name}): he comes ${(r.ladderInto * 100).toFixed(1)} cm inside ${LADDER_MARGIN * 100} cm of the ladder, ${r.ladderAt} (at most ${LADDER_INTO_MOST * 100})`);
@@ -571,7 +609,7 @@ const lineOf = (name: string, r: Followed) => `his rounds, ${name}: ${r.beats.jo
   + `a shoe at most ${(r.shoeOut * 100).toFixed(1)} cm out through his robe; his cowl at most ${(r.cowlInto * 100).toFixed(1)} cm into his neck `
   + `or head and its top ${(r.cowlGap * 100).toFixed(1)} cm off his neck; the shelf's own book in his hands ${r.bookFrames} frames${r.notBook ? ` (not: ${r.notBook})` : ''}; `
   + `at most ${(r.ladderInto * 100).toFixed(1)} cm inside ${LADDER_MARGIN * 100} cm of the ladder, his hands and book ${(r.furnitureInto * 100).toFixed(1)} cm into the other furniture; `
-  + `${continuity(r)}; the hood's edge at most ${(r.hoodGap * 1000).toFixed(1)} mm off what it lies on (${r.hoodAt})`;
+  + `${continuity(r)}; his fingers at most ${(r.bookFingers * 1000).toFixed(1)} mm and his sleeves ${(r.bookSleeves * 100).toFixed(1)} cm into the open book; gripping a shut book (${r.grabFrames} frames) his right palm at least ${r.grabFrames ? r.grabSide.toFixed(2) : '-'} of the way to its spine, his fingers ${(r.grabInto * 1000).toFixed(1)} mm into it and his pads at most ${(r.padsOff * 1000).toFixed(1)} mm off it; the hood's edge at most ${(r.hoodGap * 1000).toFixed(1)} mm off what it lies on (${r.hoodAt})`;
 /** how fast his hips' speed and a joint's turning changed, at most */
 const continuity = (r: Followed) => `his hips' speed changing at most ${r.hipsSpeeds.toFixed(1)} m/s a second (${r.hipsAt}), a joint's `
   + `turning ${Math.round(r.jointSpeeds)}°/s a second (${r.jointAt})`;
@@ -607,7 +645,9 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
     roundsPlant.otherBook = true;
     roundsPlant.underLadder = true;
     roundsPlant.cut = true;
+    roundsPlant.ownPath = true;
     const planted = await follow(lab, s, rounds, true);
+    roundsPlant.ownPath = false;
     roundsPlant.underLadder = false;
     roundsPlant.cut = false;
     scholarPlant.noSeatBlend = false;
@@ -631,6 +671,15 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
     const stand = planted.furnitureInto > FURNITURE_INTO_MOST;
     lines.push(`canary: a stand where the shelf's book stood, his hands on it ${stand ? 'caught' : 'went unseen'} (${(planted.furnitureInto * 100).toFixed(1)} cm into it, ${planted.furnitureAt})`);
     if (!stand) problems.push('rounds: the canary\'s stand by the shelf went unseen');
+    const offHand = planted.padsOff > PADS_MOST;
+    lines.push(`canary: the book he holds on its own path beside his hand ${offHand ? 'caught' : 'went unseen'} (his pads ${(planted.padsOff * 1000).toFixed(1)} mm off it, ${planted.padsAt})`);
+    if (!offHand) problems.push('rounds: the canary\'s book on its own path went unseen');
+    const wrongSide = planted.grabFrames > 0 && planted.grabSide < GRAB.spine;
+    lines.push(`canary: the book he takes turned round, its spine away ${wrongSide ? 'caught' : 'went unseen'} (his palm ${planted.grabSide.toFixed(2)} of the way to its spine)`);
+    if (!wrongSide) problems.push('rounds: the canary\'s book turned round in his hand went unseen');
+    const pushedIn = planted.bookFingers > INTO_BOOK_MOST;
+    lines.push(`canary: the open book pushed 3 cm onto his hands ${pushedIn ? 'caught' : 'went unseen'} (${(planted.bookFingers * 1000).toFixed(1)} mm, ${planted.bookAt})`);
+    if (!pushedIn) problems.push('rounds: the canary\'s open book on his hands went unseen');
     // (the hood lifted off his back, as it hung before)
     const hood = s.root.getObjectByName('scholar hood')!;
     hood.position.set(0, 0.02, -0.03);
@@ -849,4 +898,43 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
   rounds.hold = true;
   lab.drawing = drawing;
   return { lines, problems, moments };
+}
+
+/**
+ * His grip swept over every spot at the cases he can walk to, at its lowest book and its highest (`roundsPlant.takeAt`,
+ * the browse cut short to the take, a look and the shelving): each followed a frame at a time as his rounds are, his pads
+ * on the book he holds, his fingers out of it and his palm at its spine. From play: "have him grab from other side of
+ * book" (at some shelves his hand hung off the book, at others it went into it).
+ */
+export async function gripsSwept(lab: Lab, s: Scholar, rounds: Rounds): Promise<{ lines: string[]; problems: string[] }> {
+  const lines: string[] = [], problems: string[] = [];
+  const reachable = rounds.spots.map((sp, i) => ({ sp, i })).filter(({ sp }) => sp.reachable);
+  let takes = 0, pads = 0, padsAt = '', into = 0, intoAt = '', side = Infinity, sideAt = '', missed = 0;
+  roundsPlant.quick = true;
+  try {
+    for (const { i } of reachable) {
+      for (const high of [false, true]) {
+        roundsPlant.takeAt = { spot: i, high };
+        rounds.hold = false;
+        rounds.begin('browse');
+        const r = await follow(lab, s, rounds, false);
+        const where = `spot ${i} ${high ? 'high' : 'low'}`;
+        takes++;
+        if (!r.grabFrames) { missed++; problems.push(`grips: at ${where} his pinch never closed on the book`); continue; }
+        if (r.padsOff > pads) { pads = r.padsOff; padsAt = `${where}: ${r.padsAt}`; }
+        if (r.grabInto > into) { into = r.grabInto; intoAt = `${where}: ${r.grabIntoAt}`; }
+        if (r.grabSide < side) { side = r.grabSide; sideAt = `${where}: ${r.grabAt}`; }
+      }
+    }
+  } finally {
+    roundsPlant.quick = false;
+    roundsPlant.takeAt = null;
+  }
+  lines.push(`grips swept: ${takes} takes at ${reachable.length} spots, each at its lowest and highest book; his pads at most `
+    + `${(pads * 1000).toFixed(1)} mm off the book he holds (${padsAt}), his fingers ${(into * 1000).toFixed(1)} mm into it (${intoAt}), `
+    + `his palm at least ${side.toFixed(2)} of the way to its spine (${sideAt})${missed ? `; his pinch never closed at ${missed}` : ''}`);
+  if (pads > PADS_MOST) problems.push(`grips: his pad ${(pads * 1000).toFixed(1)} mm off the book he holds at ${padsAt} (at most ${PADS_MOST * 1000})`);
+  if (into > GRAB.into) problems.push(`grips: his fingers ${(into * 1000).toFixed(1)} mm into the book he holds at ${intoAt} (at most ${GRAB.into * 1000})`);
+  if (side < GRAB.spine) problems.push(`grips: his palm ${side.toFixed(2)} of the way to the spine at ${sideAt} (at least ${GRAB.spine})`);
+  return { lines, problems };
 }

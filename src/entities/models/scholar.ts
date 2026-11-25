@@ -14,7 +14,7 @@ import { buildHumanoid, reachArm, resetPose, walkCycle, type Joints } from './ri
 import { stripRig } from './shapes';
 import { buildNeck, hairCard, handSkin, headSteps, toGroup, HEAD_MM, HERO_HEADS, type Head } from './head';
 import { origin } from './face';
-import { buildHand, bare, poseHand, type Hand } from './hands';
+import { buildHand, bare, layOn, pinch, poseHand, type Board, type Hand } from './hands';
 import { turnedPage, type BookShape } from './book';
 import { built } from './steps';
 import { clamp, damp, lerp, mulberry, smooth } from '../../util';
@@ -51,7 +51,16 @@ export const scholarPlant = { noSeatBlend: false, cowlLoose: false };
  *  kept close); how long after he sits it's let go of (s); and the fastest a joint of him turns on his feet (rad/s:
  *  where one hold handed on to another, a hand turned 12 to 37 degrees in a frame). Set straight to it, each new beat
  *  of his rounds began with a jump: from play, "lagged, not smooth continuation" */
+/** how far his bells fall back down his forearms at most (m, toward his elbows) and tip down from them (rad: a wide
+ *  sleeve hangs, its rim down off the wrist, not round it), from how raised a forearm (its way's rise, 0 level) and
+ *  over how much more, and how quickly they go (per s) */
+const SLEEVE_FALL = { most: 0.06, tip: 0.3, from: 0, over: 0.25, ease: 6 };
 const FOLLOW = { up: 14, settle: 0.8, most: THREE.MathUtils.degToRad(450), speeds: THREE.MathUtils.degToRad(15000) };
+/** how long a hand is drawn into a hold begun or changed, from where his pose's follow has it (s: from a pinch to flat fingers his thumb turns near half round, and over half a second it turned 10 degrees a frame) */
+const HOLD_IN = 0.9;
+/** how far a held finger's joint may turn in a frame of 60 a second (rad: within a man's joint's 450 degrees a second,
+ *  and its turning changed no faster than his can change) */
+const HOLD_TURN = THREE.MathUtils.degToRad(5);
 /** how far forward he bends on his feet (rad: his spine, his chest): bent 15 degrees, he slouched, from play */
 const STOOP = { spine: 0.05, chest: 0.03 };
 /** how low a hand's aim is (m over his feet) before he bends to it, and how much lower he's bent all the way */
@@ -90,7 +99,18 @@ export interface ScholarAct {
   reachL: number;
   reachR: number;
   grip: number;
+  /** a shut book pinched at its end by his left or right hand (`hands.ts` `pinch`): how far before his palm its far
+   *  board is (m), how thick it is (m), and how far down his hand from the wrist its end is (m) */
+  /** how far he leans over to reach out (0 to 1, as his bend to a low aim: the larger of the two) */
+  lean?: number;
+  pinchL?: Pinch | null;
+  pinchR?: Pinch | null;
+  /** a board his left or right hand's fingers are laid on wherever the hand is (world: `hands.ts` `layOn`), as the open
+   *  book's cover under his hands as he opens and reads it */
+  flatL?: Board | null;
+  flatR?: Board | null;
 }
+export interface Pinch { board: number; thick: number; end: number }
 
 export interface Scholar {
   /** his root: stand it on the chair's seat, facing the table (+z) */
@@ -412,8 +432,10 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     if (act.sit < 1) {
       standing(dt, heroAt, talking, said);
       follow(dt, scholarPlant.noSeatBlend ? 0 : FOLLOW.up, 0, scholarPlant.noSeatBlend ? Infinity : FOLLOW.most);
+      holdAsDrawn(dt);
       robeFollow();
       cowlFollow();
+      sleevesFall(dt, true);
       satFor = 0;
       return;
     }
@@ -427,8 +449,39 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     satFor = act.sit >= 1 ? satFor + dt : 0;
     follow(dt, FOLLOW.up, smooth(clamp(satFor / FOLLOW.settle, 0, 1)));
     cowlFollow();
+    sleevesFall(dt, false);
   }
   let satFor = 0;
+  /** his bells (each with its lining and its cuff's cord) on each forearm, and how far each has fallen back: found
+   *  as he's first posed dressed (his sleeves are made after his pose is) */
+  let bellsOn: { elbow: THREE.Object3D; meshes: THREE.Mesh[]; fallen: number }[] | null = null;
+  const forearm = new THREE.Vector3(), down = new THREE.Vector3(), wristWay = new THREE.Vector3(), tipped = new THREE.Vector3();
+  const sleeveInv = new THREE.Matrix4(), hangs = new THREE.Quaternion();
+  /** His wide sleeves fallen back down his forearms as he raises them (toward his elbows, eased): rigid round his
+   *  wrists, a bell's rim and its gold cord stood through the open book he held up to read, a tube across its pages,
+   *  from play ("fingers go through the book"). */
+  function sleevesFall(dt: number, up: boolean): void {
+    if (!bellsOn || bellsOn.some((b) => !b.meshes.length)) {
+      bellsOn = [j.elbowL, j.elbowR].map((elbow) => ({
+        elbow, meshes: parts.filter((m) => m.parent === elbow && /^scholar (bell|lining|trim cuff)( standing)?$/.test(m.name)), fallen: 0,
+      }));
+    }
+    j.root.updateMatrixWorld(true);
+    for (const b of bellsOn) {
+      // (how far his hand is above his elbow: its forearm's way, up)
+      const raised = forearm.set(0, -1, 0).transformDirection(b.elbow.matrixWorld).y;
+      // (only while he's up: sat, they lie on his table, and his hand to his beard tipped them down through it)
+      const want = up ? SLEEVE_FALL.most * smooth(clamp((raised - SLEEVE_FALL.from) / SLEEVE_FALL.over, 0, 1)) : 0;
+      b.fallen = dt > 0 ? damp(b.fallen, want, SLEEVE_FALL.ease, dt) : want;
+      // (its wrist's end tipped toward the floor, in the forearm's frame)
+      const share = b.fallen / SLEEVE_FALL.most, tip = SLEEVE_FALL.tip * share;
+      down.set(0, -1, 0).transformDirection(sleeveInv.copy(b.elbow.matrixWorld).invert());
+      down.y = 0;
+      if (down.lengthSq() > 1e-6) down.normalize();
+      hangs.setFromUnitVectors(wristWay.set(0, -1, 0), tipped.set(0, -Math.cos(tip), 0).addScaledVector(down, Math.sin(tip)));
+      for (const m of b.meshes) { m.position.y = b.fallen; m.quaternion.copy(hangs); }
+    }
+  }
 
   // --- his pose followed: each joint (his fingers' too) turned a share of the way to where this frame set it ---
   const followed: THREE.Object3D[] = [];
@@ -469,6 +522,71 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     }
     j.body.position.copy(bodyWas.lerp(j.body.position, k));
     following = dt > 0;
+  }
+
+  /** each hand's joints below the wrist (its fingers' and thumb's), and how far into its hold each hand is drawn (0 to
+   *  1 over `HOLD_IN`, from where it's begun or changed: a pinch, a board) */
+  const fingersOf = [j.handL, j.handR].map((hand) => {
+    const joints: THREE.Object3D[] = [];
+    hand.traverse((o) => { if (o !== hand && followed.includes(o)) joints.push(o); });
+    return joints;
+  });
+  const holdIn = [{ kind: '', w: 0 }, { kind: '', w: 0 }];
+  /** each held joint as last drawn (its hold's turn a frame is capped from it) */
+  const heldWas = new Map<THREE.Object3D, THREE.Quaternion>();
+  const heldTurn = new THREE.Quaternion();
+  /**
+   * His fingers and thumb on what they hold solved again on his arms as drawn, after his pose is followed (his arm a few
+   * frames behind its pose as the open book rose, fingers laid on the board from the pose went 11 to 16 mm into its
+   * cover), drawn into that from where the follow has them over `HOLD_IN` as a hold begins or changes (taken whole, they
+   * turned 120 degrees in a frame; turned toward it a few degrees a frame on top of the follow, they still turned 10).
+   */
+  function holdAsDrawn(dt: number): void {
+    const kinds = [act.pinchL ? 'pinch' : act.flatL ? 'flat' : '', act.pinchR ? 'pinch' : act.flatR ? 'flat' : ''];
+    const followedNow = fingersOf.map((joints) => joints.map((o) => o.quaternion.clone()));
+    if (!holdWhatTheyHold()) { for (const h of holdIn) { h.kind = ''; h.w = 0; } heldWas.clear(); return; }
+    fingersOf.forEach((joints, side) => {
+      const h = holdIn[side];
+      if (kinds[side] !== h.kind) { h.kind = kinds[side]; h.w = 0; }
+      if (!h.kind) { joints.forEach((o, i) => o.quaternion.copy(followedNow[side][i])); return; }
+      h.w = Math.min(1, h.w + dt / HOLD_IN);
+      const e = smooth(h.w);
+      // (and no faster than `HOLD_TURN` a frame from as last drawn: as the open book rose, his hand behind it, the
+      // board's place in his hand moved quickly and his thumb, kept off it, turned 11 degrees a frame)
+      joints.forEach((o, i) => {
+        o.quaternion.copy(followedNow[side][i].slerp(o.quaternion, e));
+        const last = heldWas.get(o);
+        if (last) {
+          o.quaternion.copy(heldTurn.copy(last).rotateTowards(o.quaternion, HOLD_TURN * dt * 60));
+          // (its turning as drawn kept for the follow, as the follow's own is: left as the follow had it, the follow
+          // took the finger back from its hold at a turning it never had, a cut)
+          const spin = spins.get(o);
+          if (spin && dt > 0) {
+            heldTurn.copy(last).invert().multiply(o.quaternion);
+            if (heldTurn.w < 0) heldTurn.set(-heldTurn.x, -heldTurn.y, -heldTurn.z, -heldTurn.w);
+            const angle = 2 * Math.acos(Math.min(1, heldTurn.w)), sin = Math.sqrt(Math.max(0, 1 - heldTurn.w * heldTurn.w));
+            spin.set(heldTurn.x, heldTurn.y, heldTurn.z).multiplyScalar(sin > 1e-6 ? angle / sin / dt : 0);
+          }
+        }
+        heldWas.set(o, o.quaternion.clone());
+        was.get(o)?.copy(o.quaternion);
+      });
+    });
+  }
+  /** each hand's fingers and thumb on what it holds (`act.pinchL`/`R`: a shut book's end; `act.flatL`/`R`: a board),
+   *  once it's most of the way there; whether either holds anything */
+  function holdWhatTheyHold(): boolean {
+    let any = false;
+    for (const [hand, aimed, reach, held, board] of [
+      [handL, act.handL, act.reachL, act.pinchL, act.flatL], [handR, act.handR, act.reachR, act.pinchR, act.flatR],
+    ] as const) {
+      if (!aimed || reach <= 0.5) continue;
+      if (held) pinch(hand, held.board, held.thick, held.end);
+      else if (board) layOn(hand, board);
+      else continue;
+      any = true;
+    }
+    return any;
   }
 
   /** where his look and his glances at the hero are: the hero's place in his frame, and whether he's near */
@@ -534,7 +652,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     for (const [aim, reach] of [[act.handL, act.reachL], [act.handR, act.reachR]] as const) {
       if (aim && reach > 0) low = Math.min(low, lerp(1.2, j.root.worldToLocal(tmp.copy(aim.at)).y, smooth(clamp(reach, 0, 1))));
     }
-    const bend = smooth(clamp((BEND.from - low) / BEND.over, 0, 1)) * (1 - sit);
+    const bend = Math.max(smooth(clamp((BEND.from - low) / BEND.over, 0, 1)), act.lean ?? 0) * (1 - sit);
     // (bent over at the waist, as an old man is, his knees bent a little: bent at the waist alone, his hands stopped
     // 30 cm short of a book on a stack; crouched, his knees came out through his robe, which hangs stiff from his hips)
     for (const [thigh, knee, ankle] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
@@ -628,6 +746,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     grip = damp(grip, act.grip, 8, dt);
     poseHand(handL, lerp(0.25, 0.75, grip * smooth(clamp(act.reachL, 0, 1))), 0.15, 0, clock, 0);
     poseHand(handR, lerp(0.25, 0.75, grip * smooth(clamp(act.reachR, 0, 1))), 0.15, 0, clock, 0);
+    holdWhatTheyHold();
     page.visible = false;
     // (as he begins to get up, and as he settles, his sat pose the one this rises from and sinks to: his arms on the
     // table, his loop's pose, given way over the first third of the rise. From play, "like he teleports a bit into

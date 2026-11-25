@@ -329,12 +329,14 @@ function openBook(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, t
   b.rotation.y = turn;
   g.add(b);
   const cover = new THREE.MeshStandardMaterial({ color: [0x5a1814, 0x1e3a24, 0x23304e][seed % 3], roughness: 0.6 });
-  box(b, size * 1.02, COVER, size * 0.7, 0, 0, 0, cover);
+  // (its parts named: a harness reads his fingers against them)
+  box(b, size * 1.02, COVER, size * 0.7, 0, 0, 0, cover).name = 'open book cover';
   const shape = bookShape(size), block = blockGeometry(shape), print = printGeometry(shape);
   const blocks: THREE.Mesh[] = [], prints: THREE.Mesh[] = [];
   for (const sx of [1, -1]) {
     // (the -x half is the +x half turned round the spine: its print's uv turned round with it, so it reads the same way)
     const half = new THREE.Mesh(block, M.paper);
+    half.name = 'open book half';
     half.position.y = COVER;
     half.rotation.y = sx > 0 ? 0 : Math.PI;
     half.castShadow = half.receiveShadow = true;
