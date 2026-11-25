@@ -11,6 +11,7 @@ import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
 import { groundHeight } from '../../../src/world/ground';
 import { lampShadowsOn, setLampShadows } from '../../../src/core/lamps';
+import { RUST } from '../../../src/engine';
 import { HALL, TERRACE } from '../../../src/data/village';
 import { drawFrame, topLight, type Canvas } from './light';
 import type { LightsChecked } from './villageLights';
@@ -32,8 +33,13 @@ const LEAST_SHADOWED = 0.01;
 /** where in the hall the hero stands: 7 m in from its door */
 const IN_HALL = 7;
 
-/** Every lamp's shadows held off (`off`) or as the game has them: the shadows' map and each casting light's. */
+/** Every lamp's shadows held off (`off`) or as the game has them: the engine's (its lamps' maps within 3 m of each,
+ *  `rust.lampShadows`, and its light cache's past that, `rust.cacheShadows`, baked again at the next frame's head),
+ *  the shadows' map's flag and each casting light's. Held off by the list's flag alone, which the engine never
+ *  reads, every lamp read 0.0% shadowed. */
 function shadowsOff(off: boolean, kept: Map<THREE.PointLight, number>, mapOn: boolean): void {
+  RUST.tune.lampShadows = off ? 0 : 1;
+  RUST.tune.cacheShadows = off ? 0 : 1;
   setLampShadows(!off && mapOn);
   G.scene.traverse((object) => {
     const light = object as THREE.PointLight;

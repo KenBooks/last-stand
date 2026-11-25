@@ -516,6 +516,8 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
   // (it hides what's behind the gate, the hero too: it fades as the gate round it dissolves)
   seeThroughFade(mat, 'prop');
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W, 4.4), membraneMaterial(uniforms));
+  // (the lab's handle on its uniforms, which the node material it's drawn with doesn't show: `lab village`)
+  mesh.userData.portal = uniforms;
   mesh.position.set(0, 2.2, 0.1);
   parent.add(mesh);
   // light spilling across the floor in front of the gate

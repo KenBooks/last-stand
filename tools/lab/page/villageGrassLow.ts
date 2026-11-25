@@ -18,6 +18,7 @@ import { viewBy } from './villageHallCull';
 import { grassVertices } from './grassCount';
 import type { LightsChecked } from './villageLights';
 import { PIPELINES } from '../../../src/engine/pipelinesAside';
+import { plainMade } from './villageBloomLow';
 
 /** where he stands and the way he faces: open meadow ahead, the cottages off to the side */
 const STAND = new THREE.Vector3(10, 0, 4);
@@ -38,11 +39,14 @@ type Level = 'high' | 'low' | 'verylow';
 /** A share as a whole percentage. */
 const percent = (share: number): string => `${(share * 100).toFixed(0)}%`;
 
-/** The frame drawn at `level`: the vertices the grass shaded, and the programs compiled for it. */
+/** The frame drawn at `level`: the vertices the grass shaded, and the pipelines compiled for it once the level's own
+ *  set was made (the plain levels' lit shaders are a set of their own, made aside as the level switches: counted from
+ *  the switch, they were 66, none of them the grass's). */
 async function drawnAt(lab: Lab, level: Level, canary: boolean): Promise<{ vertices: number; made: number }> {
-  const before = PIPELINES.made;
   useQuality(level);
   if (canary && level !== 'high') setGrassSpread(1);
+  await plainMade(lab);
+  const before = PIPELINES.made;
   await lab.step(SETTLE);
   drawFrame(lab);
   return { vertices: grassVertices(), made: PIPELINES.made - before };

@@ -147,6 +147,20 @@ function wanted(name: string, only?: string): boolean {
   return !only || only.split(',').some((part) => name.toLowerCase().includes(part.toLowerCase()));
 }
 
+/**
+ * The check called `name` run, or what it threw as its one problem (its canary, if any, counted as missed): thrown
+ * out of the run, one check that found nothing it measures ended its shard, and every check after it went unrun
+ * (five of the suite's eight shards on 2026-11-25, each at its first check of three's era).
+ */
+async function checkedOrThrown(name: string, check: () => Checked | Promise<Checked>): Promise<Checked> {
+  try {
+    return await check();
+  } catch (error) {
+    const said = error instanceof Error ? error.message : String(error);
+    return { lines: [`${name}: threw: ${said}`], problems: [`${name}: threw: ${said}`], caught: false };
+  }
+}
+
 /** The browser's own clock (ms): the page's stands still within a lab frame. */
 const realNow = (): number => window.__labClock.realNow();
 
@@ -292,7 +306,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
   const times: string[] = [];
   for (const name of inShard(asked, options.shard, villageCost)) {
     const started = realNow();
-    checks.push(await all[name]());
+    checks.push(await checkedOrThrown(name, all[name]));
     times.push(`  ${name}: ${((realNow() - started) / 1000).toFixed(1)} s`);
   }
   const lines = checks.flatMap((c) => c.lines);

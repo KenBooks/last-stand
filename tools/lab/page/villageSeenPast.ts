@@ -4,7 +4,8 @@
 // each wall and on the hall's floor, places on what stands past him are read drawn as the game thins and with nothing
 // thinned; they must agree. `canary` has what thins reach past him. `portalOverAll` (from play: "some kinda glitch at
 // the portal, only under some angles"): round the crypt's portal, how much of its inner sheet the frame shows unchanged
-// with the sheet hidden: what draws over it. `canary` sorts what thins by blending among the glows, as it was.
+// with the sheet hidden: what draws over it from past it, what stands before it set aside. `canary` stands a plate
+// just before the sheet.
 import * as THREE from 'three';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
@@ -14,7 +15,6 @@ import { holdHour } from '../../../src/game/clock';
 import { holdHallWallsAllThin } from '../../../src/game/village';
 import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
 import {
-  holdBlendedAmongGlows,
   hideHallColumns,
   holdBuiltOpenAlways,
   holdColumnsUnderWalls,
@@ -379,7 +379,8 @@ function cryptSheet(): THREE.Mesh {
   let nearestOff = Infinity;
   G.scene.traverseVisible((object) => {
     const mesh = object as THREE.Mesh;
-    const uniforms = (mesh.material as { uniforms?: Record<string, unknown> } | undefined)?.uniforms;
+    // (its uniforms kept on the mesh, `portalMembrane`: the node material it's drawn with has none of three's)
+    const uniforms = mesh.userData.portal as Record<string, unknown> | undefined;
     if (!mesh.isMesh || !uniforms?.uArch || !uniforms.uPower) return;
     const at = mesh.getWorldPosition(new THREE.Vector3());
     const off = Math.hypot(at.x - place.x, at.z - place.z);
@@ -413,13 +414,50 @@ function sheetPixels(sheet: THREE.Mesh, width: number, height: number): number[]
   return [...pixels];
 }
 
-/** The share of the sheet's middle the frame shows the same with the sheet hidden: what's drawn over it. */
+/** the rays a side sent from the camera at the sheet's middle, for what stands before it */
+const BEFORE_RAYS = 9;
+
+/** Whether `object` and everything it's under are shown (three's rays meet hidden places too). */
+function shownInWorld(object: THREE.Object3D): boolean {
+  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (!at.visible) return false;
+  return true;
+}
+
+/** What stands between the camera and the sheet's middle, shown: met by a ray from the camera before the sheet. A
+ *  street lamp's post before the gate hid 7.8% of it, as it should: the check is of what's past it. */
+function beforeTheSheet(sheet: THREE.Mesh): THREE.Object3D[] {
+  const corners = sheet.geometry.getAttribute('position') as THREE.BufferAttribute;
+  const size = new THREE.Box3().setFromBufferAttribute(corners);
+  const eye = G.camera.getWorldPosition(new THREE.Vector3());
+  const ray = new THREE.Raycaster();
+  const before = new Set<THREE.Object3D>();
+  for (let a = 0; a < BEFORE_RAYS; a++) {
+    for (let b = 0; b < BEFORE_RAYS; b++) {
+      const across = (a / (BEFORE_RAYS - 1) * 2 - 1) * size.max.x * SHEET_READ.across;
+      const up = (b / (BEFORE_RAYS - 1) * 2 - 1) * size.max.y * SHEET_READ.up;
+      const point = sheet.localToWorld(new THREE.Vector3(across, up, 0));
+      const reach = eye.distanceTo(point);
+      ray.set(eye, point.clone().sub(eye).normalize());
+      ray.far = reach - 0.05;
+      for (const hit of ray.intersectObject(G.scene, true)) {
+        if (shownInWorld(hit.object)) before.add(hit.object);
+      }
+    }
+  }
+  return [...before].filter((object) => object !== sheet);
+}
+
+/** The share of the sheet's middle the frame shows the same with the sheet hidden: what's drawn over it from past it,
+ *  what stands before it hidden. */
 function overTheSheet(lab: Lab, sheet: THREE.Mesh): number {
+  const before = beforeTheSheet(sheet);
+  for (const object of before) object.visible = false;
   const canvas = drawFrame(lab);
   const shown = canvas.pixels.slice();
   sheet.visible = false;
   const hidden = drawFrame(lab).pixels;
   sheet.visible = true;
+  for (const object of before) object.visible = true;
   const pixels = sheetPixels(sheet, canvas.width, canvas.height);
   if (pixels.length === 0) return 0;
   let same = 0;
@@ -441,11 +479,45 @@ const PORTAL_STANDS: readonly { out: number; aside: number; view: ViewMode }[] =
   { out: 9, aside: 0, view: 'top' },
 ];
 
+/** how far before the sheet the canary's plate stands (m): nearer than a ray's end, so not set aside as before it */
+const PLATE_BEFORE = 0.03;
+
+/** An opaque material the scene draws already beside the sheet (the gate's own): a plate in it compiles nothing. */
+function gateMaterial(sheet: THREE.Mesh): THREE.Material {
+  let found: THREE.Material | null = null;
+  sheet.parent?.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    const material = mesh.material as THREE.Material | undefined;
+    if (!found && mesh.isMesh && mesh !== sheet && material && !Array.isArray(material) && !material.transparent) {
+      found = material;
+    }
+  });
+  if (!found) throw new Error('lab: village: no opaque part of the crypt\'s gate for the canary\'s plate');
+  return found;
+}
+
+/** The canary's plant: a plate of the sheet's size `PLATE_BEFORE` before it on the camera's side, as a part
+ *  drawn over it would be (the engine reads no `renderOrder` and sorts what blends itself: three's order of what
+ *  blends among the glows, the plant before, reached nothing). Returns its taking away. */
+function plantPlate(sheet: THREE.Mesh): () => void {
+  const plate = new THREE.Mesh(sheet.geometry, gateMaterial(sheet));
+  const normal = new THREE.Vector3(0, 0, 1).transformDirection(sheet.matrixWorld);
+  const toCamera = G.camera.getWorldPosition(new THREE.Vector3()).sub(sheet.getWorldPosition(new THREE.Vector3()));
+  const side = Math.sign(normal.dot(toCamera)) || 1;
+  plate.position.copy(sheet.position).addScaledVector(new THREE.Vector3(0, 0, 1), side * PLATE_BEFORE);
+  plate.quaternion.copy(sheet.quaternion);
+  plate.scale.copy(sheet.scale);
+  sheet.parent!.add(plate);
+  plate.updateMatrixWorld(true);
+  return () => {
+    plate.removeFromParent();
+  };
+}
+
 /** Round the portal, nothing past it draws over its sheet. */
 export async function portalOverAll(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const kept = viewMode();
   holdHour(12);
-  holdBlendedAmongGlows(canary);
   const place = portalPlace('crypt');
   const outX = Math.sin(place.facing);
   const outZ = Math.cos(place.facing);
@@ -460,8 +532,14 @@ export async function portalOverAll(lab: Lab, canary: boolean): Promise<LightsCh
       await standAt(lab, x, z, place.facing + Math.PI);
       const sheet = cryptSheet();
       G.player.obj.visible = false;
-      const share = overTheSheet(lab, sheet);
-      G.player.obj.visible = true;
+      const unplant = canary ? plantPlate(sheet) : null;
+      let share: number;
+      try {
+        share = overTheSheet(lab, sheet);
+      } finally {
+        unplant?.();
+        G.player.obj.visible = true;
+      }
       worst = Math.max(worst, share);
       const over = (share * 100).toFixed(1);
       lines.push(`${stand.view}, ${stand.out} m out, ${stand.aside} aside: ${over}% drawn over the sheet`);
@@ -471,7 +549,6 @@ export async function portalOverAll(lab: Lab, canary: boolean): Promise<LightsCh
       }
     }
   } finally {
-    holdBlendedAmongGlows(false);
     holdHour(null);
     faceCamera(0);
     await viewBy(lab, kept);

@@ -10,6 +10,7 @@ import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
 import { groundHeight } from '../../../src/world/ground';
 import { lampShadowLights } from '../../../src/world/props';
+import { LAMPS_MOST, lampList } from '../../../src/core/lamps';
 import { goTo } from '../../../src/game/village';
 import { drawFrame, topLight, type Canvas } from './light';
 import type { LightsChecked } from './villageLights';
@@ -77,26 +78,43 @@ function readRound(lab: Lab, lamp: THREE.Vector3): number[] {
   }
 }
 
-/** The lit shaders' list (`core/lamps.ts`), reached through three's own uniforms it's shared from. */
-function lampList(): Float32Array {
-  const list = THREE.ShaderLib.standard.uniforms.lamps?.value as Float32Array | undefined;
-  if (!list) throw new Error('lab: village: no lamps\' list in this tree');
-  return list;
+/** how near a lantern a lamp's place in the list must be to be its (m) */
+const IN_LIST = 0.5;
+
+/** The list's entry of the lamp at lantern `index`, found by its place (the list's order is `placeLamps`', not the
+ *  lanterns'): reached through three's own uniforms and taken as the lanterns' order, putting one out changed
+ *  nothing the engine draws, and every lamp read 0% given. */
+function entryOf(index: number): number {
+  const lantern = G.arena.village.lanterns[index];
+  for (let entry = 0; entry < LAMPS_MOST; entry++) {
+    const place = (1 + entry * 2) * 4;
+    const off = Math.hypot(lampList[place] - lantern.x, lampList[place + 2] - lantern.z);
+    if (off < IN_LIST) return entry;
+  }
+  throw new Error(`lab: village: lantern ${index} isn't in the lamps' list`);
 }
 
 /** Lamp `index` put out (its list entry and the casting lights at it) until the returned function lights it again;
- *  nothing runs a frame meanwhile, so the game doesn't light it again itself. */
+ *  nothing runs a frame meanwhile, so the game doesn't light it again itself. Its reach goes too: the engine's light
+ *  cache bakes the street lamps at one strength, its share of their fullest (engine/lightCache.ts `tell`), and a lamp
+ *  out in the list alone still lit the ground round its foot from it (1 patch of 8 changed); with no reach it's left
+ *  out of the cache, baked again at the next frame's head, and baked again with it as it's lit. */
 function putOut(index: number): () => void {
-  const list = lampList();
-  const side = (2 + index * 2) * 4 + 3;
+  const list = lampList;
+  const place = (1 + entryOf(index) * 2) * 4;
+  const reach = place + 3;
+  const side = place + 4 + 3;
   const wasSide = list[side];
+  const wasReach = list[reach];
   const lamp = G.arena.village.lanterns[index];
   const atLamp = [...lampShadowLights()].filter((light) => light.position.distanceTo(lamp) < AT_LAMP);
   const was = atLamp.map((light) => light.intensity);
   list[side] = 0;
+  list[reach] = 0;
   for (const light of atLamp) light.intensity = 0;
   return () => {
     list[side] = wasSide;
+    list[reach] = wasReach;
     atLamp.forEach((light, k) => {
       light.intensity = was[k];
     });

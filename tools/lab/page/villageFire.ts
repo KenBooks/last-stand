@@ -15,6 +15,7 @@ import { drawFrame, type Canvas } from './light';
 import { boxRound, glowOf } from './hallGlow';
 import { changedShare, viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
+import { flameUniforms } from './villageFires';
 
 /** the hours and views read, how far before it he stands (m), the frames given to settle */
 const HOURS = [0, 12];
@@ -34,12 +35,12 @@ const LEAST_ADDED = 24;
 /** a change of red too small to see (levels of 255) */
 const LEAST_SEEN = 2;
 
-/** The flames over the campfire: the shader with a box over its place. */
+/** The flames over the campfire: the shader with a box over its place, found by its uniforms (`flameUniforms`). */
 function campfireFlames(): THREE.Mesh {
   let found: THREE.Mesh | null = null;
   G.scene.traverse((object) => {
     const mesh = object as THREE.Mesh;
-    const uniforms = (mesh.material as THREE.ShaderMaterial | undefined)?.uniforms;
+    const uniforms = flameUniforms(mesh);
     if (!uniforms?.uPuff || !uniforms.uCentre) return;
     const centre = uniforms.uCentre.value as THREE.Vector3;
     if (Math.hypot(centre.x - CAMPFIRE[0], centre.z - CAMPFIRE[1]) < 0.5) found = mesh;
@@ -48,16 +49,50 @@ function campfireFlames(): THREE.Mesh {
   return found;
 }
 
-/** What `lit` adds over `unlit` to the red of the pixels it changes, in levels of 255 on average. */
+/** how far round the campfire its light is read (m): past 3 m the engine bakes it into its light cache, which reads
+ *  every light lit by its own strength at their mean (engine/lightCache.ts `tell`), so the fire put out dimmed the
+ *  portals' glows a little too, over 61% of the frame, and the red it added read 13.3 where round the fire it's its
+ *  own; the points round it that bound the box read */
+const READ_ROUND = 5;
+const ROUND_POINTS = 16;
+
+/** The box on `canvas` (its pixels' columns and rows, from the bottom) the ground within `READ_ROUND` of the campfire
+ *  takes. */
+function roundTheFire(canvas: Canvas): { left: number; right: number; bottom: number; top: number } {
+  const box = { left: canvas.width, right: 0, bottom: canvas.height, top: 0 };
+  for (let i = 0; i < ROUND_POINTS; i++) {
+    const angle = (i / ROUND_POINTS) * Math.PI * 2;
+    const x = CAMPFIRE[0] + Math.cos(angle) * READ_ROUND;
+    const z = CAMPFIRE[1] + Math.sin(angle) * READ_ROUND;
+    const at = new THREE.Vector3(x, groundHeight(x, z), z).project(G.camera);
+    const column = (at.x + 1) / 2 * canvas.width;
+    const row = (at.y + 1) / 2 * canvas.height;
+    box.left = Math.min(box.left, Math.floor(column));
+    box.right = Math.max(box.right, Math.ceil(column));
+    box.bottom = Math.min(box.bottom, Math.floor(row));
+    box.top = Math.max(box.top, Math.ceil(row));
+  }
+  box.left = Math.max(0, box.left);
+  box.bottom = Math.max(0, box.bottom);
+  box.right = Math.min(canvas.width, box.right);
+  box.top = Math.min(canvas.height, box.top);
+  return box;
+}
+
+/** What `lit` adds over `unlit` to the red of the pixels it changes round the campfire, in levels of 255 on average. */
 function redAdded(lit: Canvas, unlit: Canvas): number {
+  const box = roundTheFire(lit);
   let added = 0;
   let changed = 0;
-  for (let at = 0; at < lit.pixels.length; at += 4) {
-    // (a canvas's pixels run from 0 to 1)
-    const red = (lit.pixels[at] - unlit.pixels[at]) * 255;
-    if (red <= LEAST_SEEN) continue;
-    added += red;
-    changed++;
+  for (let row = box.bottom; row < box.top; row++) {
+    for (let column = box.left; column < box.right; column++) {
+      const at = (row * lit.width + column) * 4;
+      // (a canvas's pixels run from 0 to 1)
+      const red = (lit.pixels[at] - unlit.pixels[at]) * 255;
+      if (red <= LEAST_SEEN) continue;
+      added += red;
+      changed++;
+    }
   }
   return changed ? added / changed : 0;
 }
@@ -197,8 +232,7 @@ const HIS_FEWEST = 200;
 export function theFlames(): THREE.Object3D[] {
   const flames: THREE.Object3D[] = [];
   G.scene.traverse((object) => {
-    const uniforms = ((object as THREE.Mesh).material as THREE.ShaderMaterial | undefined)?.uniforms;
-    if (uniforms?.uFrame && object.visible) flames.push(object);
+    if (flameUniforms(object)?.uFrame && object.visible) flames.push(object);
   });
   return flames;
 }
