@@ -9,8 +9,9 @@ import { rustSwitching } from './engine';
 import { pipelinesAtOnceFromNow } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
 import { CAMERA, COOP } from './data/balance';
-import { CAMPFIRE, START_SPOTS, YARD_DUMMIES, YARD_DUMMY_FACING, biomeOfHour, inHall, type VillageObject } from './data/village';
-import { updateAmbience, type AmbienceWanted } from './core/ambience';
+import { START_SPOTS, YARD_DUMMIES, YARD_DUMMY_FACING, biomeOfHour, inHall, type VillageObject } from './data/village';
+import { FIRE_VOICES, updateAmbience, type AmbienceWanted } from './core/ambience';
+import { firesHeard } from './world/firesHeard';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, escapeSpentOnLock, releaseInput } from './core/input';
 import { initAudio, sfx } from './core/audio';
 import { InputDelivery } from './core/inputDelivery';
@@ -1336,27 +1337,26 @@ function musicWanted(): MusicWanted {
   return { track: music.lobby, fade: FADES.lobby, ready };
 }
 
-/** where the campfire is from the camera, a frame's scratch */
-const fireSeen = new THREE.Vector3();
 /** where the fountain is from the camera, a frame's scratch (it stands at the square's middle) */
 const waterSeen = new THREE.Vector3();
 
-/** The village's ambience now (#745, `core/ambience.ts`): heard in the village's lobby while the page is shown, by its
- *  hour, muffled in a house's room or the hall of heroes, the campfire by its distance from the hero and its way from
- *  where the camera looks. */
+/** The ambience now (#745, `core/ambience.ts`), while the page is shown: the village's forest by its hour and its
+ *  fountain in its lobby, muffled in a house's room or the hall of heroes; and the nearest fires shown anywhere (a
+ *  battleground's in its runs, a house's hearth, the hall's torches), each by its distance from the hero (from the
+ *  camera in the hall, where he isn't) and its way from where the camera looks. */
 function ambienceWanted(): AmbienceWanted {
-  const on = revealed && !document.hidden && G.mode === 'menu' && G.arena.place === 'village';
+  const on = revealed && !document.hidden;
   const p = G.player.pos;
-  fireSeen.set(CAMPFIRE[0], p.y, CAMPFIRE[1]).applyMatrix4(G.camera.matrixWorldInverse);
   waterSeen.set(0, p.y, 0).applyMatrix4(G.camera.matrixWorldInverse);
+  const listener = G.arena.hallShown ? G.camera.position : p;
   return {
     on,
+    village: G.mode === 'menu' && G.arena.place === 'village',
     hour: hourNow(),
     indoors: !!G.arena.room || G.arena.hallShown,
-    fireAt: Math.hypot(CAMPFIRE[0] - p.x, CAMPFIRE[1] - p.z),
-    fireWay: Math.atan2(fireSeen.x, -fireSeen.z),
     waterAt: Math.hypot(p.x, p.z),
     waterWay: Math.atan2(waterSeen.x, -waterSeen.z),
+    fires: on ? firesHeard(listener, G.camera, FIRE_VOICES) : [],
   };
 }
 

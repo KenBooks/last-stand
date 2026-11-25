@@ -35,13 +35,18 @@ export function pwa(): Plugin {
         // (three's WebGPU build among them: the engine draws on WebGPU alone, and left out as a renderer no player
         // chose, a page of an older build asked for its chunk where no cache held it and the host had it no more,
         // #856: "Failed to fetch dynamically imported module: .../assets/three-webgpu-Dq2KBQmG.js")
-        .filter((f) => !f.endsWith('.map') && f !== NOT_FOUND && f !== VERSION && !f.startsWith('assets/portrait-')).sort();
+        .filter((f) => !f.endsWith('.map') && f !== NOT_FOUND && f !== VERSION && !onDemand(f)).sort();
       const html = bundle['index.html'];
       const version = createHash('sha256').update(files.join('\n')).update(html && 'source' in html ? html.source : '').digest('hex').slice(0, 12);
       this.emitFile({ type: 'asset', fileName: 'sw.js', source: serviceWorker(version, files) });
     },
   };
 }
+
+/** Built files fetched only once the game wants them, never with the install: the optional portraits and the
+ *  ambience's recordings (2.3 MB, against the rest of the game's 3), each cached once fetched (`ON_DEMAND`). */
+const ON_DEMAND = ['assets/portrait-', 'assets/ambience-'];
+const onDemand = (file: string): boolean => ON_DEMAND.some((start) => file.startsWith(start));
 
 function serviceWorker(version: string, files: string[]): string {
   return `// Last Stand service worker, generated at build time by scripts/pwa.ts.
@@ -114,8 +119,10 @@ async function file(req) {
   const hit = await caches.match(req, { ignoreSearch: true, ignoreVary: true });
   if (hit) return hit;
   const response = await fetch(req);
-  // Optional portraits stay out of install downloads, but remain available offline once requested.
-  if (response.ok && new URL(req.url).pathname.includes('/assets/portrait-')) {
+  // Optional portraits and the ambience's recordings stay out of install downloads, but remain available offline
+  // once requested.
+  const path = new URL(req.url).pathname;
+  if (response.ok && ${JSON.stringify(ON_DEMAND)}.some((start) => path.includes('/' + start))) {
     const cache = await caches.open(CACHE);
     await cache.put(req, response.clone());
   }

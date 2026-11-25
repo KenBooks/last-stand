@@ -37,6 +37,7 @@ import { knowsLogs, logsFound, logsUnknown, readOverLogs, type LogsReading } fro
 import { fadeFound, readFade, type FadeFrames } from './fireFade';
 import { seeHoleEnd } from '../../../src/core/seeThrough';
 import { drawLookOf, partAt, readyLook } from './looks';
+import { ambienceModule } from './ambienceModule';
 
 export interface FireOptions {
   biome: BiomeId;
@@ -76,6 +77,8 @@ const FIRE_REACH = 1.5;
 const HERO_OFF = 4.5;
 /** the frames stood before the fire is read, once the hero is set up: its particles risen and fallen */
 const SETTLE_FRAMES = 120;
+/** the nearest fire's level the ambience asks for where he stands, past which it's heard (`core/ambience.ts`) */
+const FIRE_HEARD = 0.001;
 /** the fire is read this often (s) */
 const SAMPLE_S = 1 / 30;
 /** the close-ups' field of view (degrees), as the lab's own */
@@ -793,6 +796,13 @@ async function viewsOf(lab: Lab, biome: BiomeId, fire: Fire, at: THREE.Vector2, 
 }
 
 /** `lab fire` in one biome: its first fire read and pictured; its faults and the canaries missed are problems. */
+/** The nearest fire's level the ambience asks for now (from Kenneth: "include all the fire sounds for all fire
+ *  objects in the game, in rounds"), or null where this tree's ambience has no fires. */
+async function fireHeard(): Promise<number | null> {
+  const fires = (await ambienceModule())?.ambienceNow?.().fires;
+  return fires ? fires[0] ?? 0 : null;
+}
+
 export async function fire(lab: Lab, options: FireOptions): Promise<Report> {
   const { biome, seconds, canary } = options;
   if (G.arena.biome !== biome) G.arena.setBiome(biome);
@@ -834,6 +844,11 @@ export async function fire(lab: Lab, options: FireOptions): Promise<Report> {
     `  the top-down view flashed at most ${flashes} times in a second`,
   ];
   const problems = faultsOf(reading).map((fault) => `${biome}: ${fault}`);
+  const heard = await fireHeard();
+  if (heard !== null) {
+    lines.push(`  heard where he stands, ${HERO_OFF} m off: its sound at ${heard.toFixed(3)} of the ambience's`);
+    if (heard < FIRE_HEARD) problems.push(`${biome}: the fire isn't heard ${HERO_OFF} m off it`);
+  }
   if (flashes >= FLASHES_MOST) problems.push(`${biome}: the screen flashed ${flashes} times in a second by the fire`);
   if (turnsWithCamera(turned.turning)) {
     problems.push(`${biome}: the fire turns with the camera (seen from behind, its detail `

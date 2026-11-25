@@ -19,6 +19,17 @@ import { emberNodes, flameMaterial, type EmberLooks, type FlameUniforms } from '
 import { BAKE, decodeFrame, DOMAIN, FLAME_LOOK, FRAME_CELLS, KEPT, KEPT_SIZE, LOOP, TILES, type BakedFlames }
   from './fireBake';
 
+/** A fire built, for its sound (`core/ambience.ts`, `firesHeard` in `main.ts`): its bed's middle in the frame of
+ *  what it was built into, and that (heard only while it's shown: a battleground's braziers in its runs, a house's
+ *  hearth inside it, the hall's torches in the hall). */
+export interface FireBuilt {
+  at: THREE.Vector3;
+  of: THREE.Object3D;
+}
+
+/** every fire built: the battlegrounds', the village's campfire, the houses' hearths, the hall of heroes' torches */
+export const FIRES: FireBuilt[] = [];
+
 /** A fire to build: its bed and flames, and the biome's light it flickers. */
 export interface FireSpec {
   /** the middle of its bed (world, m) */
@@ -600,6 +611,7 @@ function streamAt(at: THREE.Vector3): () => number {
 /** Builds the fire `spec` into `scene`: its bed, its flames, and the updater that burns them. */
 export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updater[]): void {
   const { at, radius, height, light } = spec;
+  FIRES.push({ at: at.clone(), of: scene });
   const rng = streamAt(at);
   const bed = emberMat(at, radius, BED_HEAT);
   const coals = new THREE.Mesh(coalsGeo(radius, spec.dish, rng), bed);

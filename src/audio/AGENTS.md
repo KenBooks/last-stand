@@ -1,6 +1,6 @@
 # `src/audio`
 
-The one kind of audio the game doesn't make as it plays: the music (`music/`). The sound effects are synthesized with WebAudio (`core/audio.ts`), and no other audio file may be added.
+The two kinds of audio the game doesn't make as it plays: the music (`music/`) and the ambience's recordings (`ambience/`: the village's forest, its fountain, every fire). The sound effects are synthesized with WebAudio (`core/audio.ts`), and no other audio file may be added.
 
 The music plays through a volume of its own and the master's (`musicOutput` in `core/audio.ts`, the pause menu's Music and Master sliders, #408), not straight to the speakers.
 

@@ -200,6 +200,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     campfireUsedSat: async () => (await import('./villageSatUse')).campfireUsedSat(lab, options.canary),
     sitFromEyes: async () => (await import('./villageSitEyes')).sitFromEyes(lab, options.canary),
     ambienceHeard: async () => (await import('./villageAmbience')).ambienceHeard(lab, options.canary),
+    ambienceSeams: async () => (await import('./villageAmbienceSeams')).ambienceSeams(lab, options.canary),
     escClosesHelp: () => escClosesHelp(lab, options.canary),
     wornStaysOn: () => wornStaysOn(lab, options.canary),
     heroFaceNotBlinding: () => heroFaceNotBlinding(lab, options.canary),

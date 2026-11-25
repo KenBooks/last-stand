@@ -1,89 +1,122 @@
-// The village's ambience (#745, "Add Day and Night Ambient Sound Effects (Birds, Crickets, Rustling Leaves, Fire
-// Crackling)"): leaves rustling always, birds by day, crickets by night, the fountain's water flowing and the campfire
-// crackling louder as the hero nears each, panned to where it is from the camera (no wind, from review: "Wind will be
-// messing with people and not let them enjoy the game", water by the fountain in its place). Made of noise as the
-// spells are (docs/agents/audio.md: no notes over the music): a bird's chirp is a narrow band of noise swept up or
-// down, a cricket's song a few soft chirps now and then, each a narrower band pulsed. One graph made at the first
-// frame it's wanted and kept, each layer's level eased to what the frame asks (`updateAmbience`); played through the
-// effects' level, so the effects slider sets it.
+// The world's ambience (#745, "Add Day and Night Ambient Sound Effects (Birds, Crickets, Rustling Leaves, Fire
+// Crackling)"): the village's forest by day and by night, the fountain's water louder as the hero nears it, and every
+// fire's burning (the battlegrounds' braziers and bonfires in their runs, the village's campfire, the houses' hearths,
+// the hall of heroes' torches) by its distance, each panned to where it is from the camera. No wind (from review:
+// "Wind will be messing with people and not let them enjoy the game").
+//
+// These are recordings, an exception to the game's sounds made in code as the music is (the root AGENTS.md's
+// Product rules): made of noise, from review "the water does not sound like water, and the crackling does not sound
+// like crackling", and the crickets were "super annoying". Each is fetched and decoded the first time it's wanted
+// (never with the game: `scripts/pwa.ts` keeps them out of the install), and made into a seamless loop as it's
+// decoded (`seamless`: its last seconds blended into its start, so its end runs on into its start with nothing heard
+// at the seam: "you should not hear anything when the audio restarts"), then looped by a buffer source, sample-exact.
+// Each layer's level is eased to what the frame asks (`updateAmbience`); played through the effects' level.
 import { audioContext, voice } from './audio';
+import dayUrl from '../audio/ambience/ambience-day.mp3?url';
+import nightUrl from '../audio/ambience/ambience-night.mp3?url';
+import waterUrl from '../audio/ambience/ambience-water.mp3?url';
+import fireUrl from '../audio/ambience/ambience-fire.mp3?url';
+
+/** A fire heard: its distance from the hero (m), and the way to it from where the camera looks (rad, 0 ahead). */
+export interface FireHeard {
+  at: number;
+  way: number;
+}
 
 /** What the ambience is asked for this frame (`main.ts`'s `ambienceWanted`). */
 export interface AmbienceWanted {
-  /** heard at all (the village shown, the page visible) */
+  /** heard at all (the game shown, the page visible) */
   on: boolean;
+  /** the village's own ambience heard: its forest by day and night, its fountain (the village shown) */
+  village: boolean;
   /** the village's hour (0 to 24) */
   hour: number;
-  /** inside a house: the outside's layers muffled */
+  /** inside a house or the hall: the outside's layers muffled */
   indoors: boolean;
-  /** the campfire's distance from the hero (m), and the way to it from where the camera looks (rad, 0 ahead) */
-  fireAt: number;
-  fireWay: number;
-  /** the fountain's, likewise */
+  /** the fountain's distance from the hero (m), and the way to it from where the camera looks (rad, 0 ahead) */
   waterAt: number;
   waterWay: number;
+  /** the nearest fires shown, nearest first (`FIRE_VOICES` of them are heard) */
+  fires: readonly FireHeard[];
 }
 
-/** the layers looped and eased (the birds' channel among them) */
-const LAYERS = ['leaves', 'birds', 'crickets', 'fire', 'water'] as const;
+/** the recordings, each looped */
+const LOOPS = ['day', 'night', 'water', 'fire'] as const;
+type LoopId = (typeof LOOPS)[number];
+const URLS: Record<LoopId, string> = { day: dayUrl, night: nightUrl, water: waterUrl, fire: fireUrl };
 
-/** Each layer's level at full (a share of the effects' master): soft under the music and the spells (`lab sound`'s
- *  `ambienceDay`, `ambienceNight`, `ambienceFire`: their loudest half second -35 to -38 dB, a swing's -26, a
- *  shot's -32; a narrow band carries a small share of the noise, so the birds and crickets need the most to stand
- *  out). */
-const LEVEL = { leaves: 0.02, birds: 0.9, crickets: 0.45, fire: 0.3, water: 0.17 };
-/** how fast a layer's level eases to the asked (s, a time constant) */
+/** each layer's level at full (a share of the effects' master), each loop evened to `LOUDNESS` first: soft under
+ *  the music and the spells (`lab sound`'s `ambienceDay`, `ambienceNight`, `ambienceFire`, `ambienceFountain`) */
+const LEVEL: Record<LoopId, number> = { day: 0.45, night: 0.35, water: 0.45, fire: 0.25 };
+/** each loop's loudness once evened (its RMS, of full scale: about -20 dB) */
+const LOUDNESS = 0.1;
+/** how far it's evened up at most (a quiet recording's noise floor isn't raised past this) */
+const MOST_GAIN = 8;
+/** the blend at a loop's seam (s), and what's cut off each end first (s: a decoder's padding, a fade at its ends) */
+const SEAM = 1.5;
+const TRIM = 0.05;
+/** a faded end is read in windows of this (s), and cut off up to `FADE_MOST` s an end (`fadedEnds`) */
+const FADE_WINDOW = 0.05;
+const FADE_MOST = 3;
+/** how fast a layer's level eases to the asked (s, a time constant), and a pan */
 const EASE = 0.8;
-/** the hours the birds sing and the crickets trill, each easing in and out over `DUSK` hours either side */
+const PAN_EASE = 0.1;
+/** the hours of the day's forest and the night's, each easing in and out over `DUSK` hours either side */
 const DAY = { from: 6.5, to: 19 };
 const DUSK = 1.5;
-/** the campfire heard from this far (m), and at full within `FIRE_NEAR` */
+/** a fire heard from this far (m), and at full within `FIRE_NEAR` */
 const FIRE_FAR = 14;
 const FIRE_NEAR = 2.5;
+/** how many fires are heard at once, the nearest */
+export const FIRE_VOICES = 3;
 /** the fountain heard from this far (m, from its middle), and at full within `WATER_NEAR` (its basin 2.2 m across) */
 const WATER_FAR = 16;
 const WATER_NEAR = 3;
 /** indoors, the outside's share */
 const INDOORS = 0.2;
-/** a bird's phrase every this many seconds or so (the least, and the spread over it), and its chirps (the most) */
-const PHRASE_EVERY = 1.6;
-const PHRASE_SPREAD = 4.5;
-const PHRASE_MOST = 5;
-/** a cricket's song: one every `every` s or so (the least, and the spread over it), its chirps and their pulses.
- *  Three trills looped all night, a 4 kHz buzz that never stopped, were "super annoying" (Victor, on #891): now one
- *  cricket at a time sings a few soft chirps, then the night is quiet a while */
-const SONG = {
-  every: 4,
-  spread: 7,
-  chirps: [3, 6],
-  apart: 0.45,
-  pulses: [2, 3],
-  pulseEvery: 0.035,
-  pulse: 0.022,
-  hz: [3300, 3900],
-};
 
-/** The ambience's graph: each layer's own level, and the fire's and the water's pans. */
+/** A layer of the graph: its level and pan, and its loop's source once its recording is decoded. */
+interface Bed {
+  id: LoopId;
+  gain: GainNode;
+  pan: StereoPannerNode | null;
+  source: AudioBufferSourceNode | null;
+  /** where in its loop it starts (s): the fires' voices apart, so two never play the same moment */
+  offset: number;
+}
+
+/** The ambience's graph: the forest's two, the water and the fires' voices. */
 interface Graph {
-  leaves: GainNode;
-  birds: GainNode;
-  crickets: GainNode;
-  fire: GainNode;
-  firePan: StereoPannerNode;
-  water: GainNode;
-  waterPan: StereoPannerNode;
+  day: Bed;
+  night: Bed;
+  water: Bed;
+  fires: Bed[];
 }
 
 let graph: Graph | null = null;
-/** the audio clock the next bird's phrase is due by */
-let nextPhrase = 0;
-/** the audio clock the next cricket's song is due by */
-let nextSong = 0;
-/** each layer's level asked last (a harness reads it: `lab village --only ambienceHeard`) */
-const asked = { leaves: 0, birds: 0, crickets: 0, fire: 0, firePan: 0, water: 0, waterPan: 0 };
+/** each recording decoded and made a seamless loop, and those on their way */
+const loops: Partial<Record<LoopId, AudioBuffer>> = {};
+const loading = new Map<LoopId, Promise<void>>();
 
-/** The levels the ambience asks its layers for now (0 to their full level), and the fire's and water's pans. */
-export const ambienceNow = (): Readonly<typeof asked> => asked;
+/** What the ambience asks of its layers. */
+interface Levels {
+  day: number;
+  night: number;
+  water: number;
+  waterPan: number;
+  /** each fire voice's level and pan, the nearest fire first */
+  fires: number[];
+  firePans: number[];
+}
+
+const silent = (): Levels => ({
+  day: 0, night: 0, water: 0, waterPan: 0, fires: Array(FIRE_VOICES).fill(0), firePans: Array(FIRE_VOICES).fill(0),
+});
+/** each layer's level asked last (a harness reads it: `lab village --only ambienceHeard`) */
+let asked: Levels = silent();
+
+/** The levels the ambience asks its layers for now (0 to their full level), and the water's and fires' pans. */
+export const ambienceNow = (): Readonly<Levels> => asked;
 
 /** A share rising from 0 to 1 over `span` from `a`, and falling back over `span` to `b`. */
 function within(x: number, a: number, b: number, span: number): number {
@@ -95,234 +128,201 @@ function within(x: number, a: number, b: number, span: number): number {
 /** How much of the day it is at `hour`: 1 by day, 0 by night, easing between at dawn and dusk. */
 export const dayShare = (hour: number): number => within(hour, DAY.from, DAY.to, DUSK);
 
-/** The graph made in the effects' context: leaves, crickets, the fire and the water looped, the birds' channel. */
-function makeGraph(): Graph {
-  const v = voice(0, 0.12);
-  const c = v.c;
-  const channel = (to: AudioNode = v.out): GainNode => {
-    const g = c.createGain();
-    g.gain.value = 0;
-    g.connect(to);
-    return g;
-  };
-  // the leaves: the crackle slowed and kept high, a rustle that swells and fades slowly
-  const leaves = channel();
-  const rustle = c.createGain();
-  rustle.gain.value = 0.5;
-  v.lfo(0.07, 0.35, rustle.gain);
-  const leafBand = c.createBiquadFilter();
-  leafBand.type = 'highpass';
-  leafBand.frequency.value = 2600;
-  v.crackle(leafBand, 0.5);
-  leafBand.connect(rustle).connect(leaves);
-  // the crickets: their channel alone, each song scheduled as it comes (`song`, as the birds' phrases are)
-  const crickets = channel();
-  // the fire: its crackle sparse and mid-bright, a soft roar of noise under it, flickering
-  const firePan = c.createStereoPanner();
-  firePan.connect(v.out);
-  const fire = channel(firePan);
-  const crackBand = c.createBiquadFilter();
-  crackBand.type = 'bandpass';
-  crackBand.frequency.value = 1400;
-  crackBand.Q.value = 0.7;
-  const spit = c.createGain();
-  spit.gain.value = 1.4;
-  v.crackle(crackBand, 0.32);
-  crackBand.connect(spit).connect(fire);
-  const roarBand = c.createBiquadFilter();
-  roarBand.type = 'bandpass';
-  roarBand.frequency.value = 450;
-  roarBand.Q.value = 0.8;
-  const flicker = c.createGain();
-  flicker.gain.value = 0.5;
-  v.lfo(0.6, 0.15, flicker.gain);
-  v.lfo(1.7, 0.08, flicker.gain);
-  v.loop(roarBand);
-  roarBand.connect(flicker).connect(fire);
-  // the water: the fountain's flow a band of noise whose middle wanders quickly (three fast swings of it, so it babbles
-  // and never settles to a tone), drops falling in it as slowed crackle, and its splash on the basin a soft low band
-  const waterPan = c.createStereoPanner();
-  waterPan.connect(v.out);
-  const water = channel(waterPan);
-  const flowBand = c.createBiquadFilter();
-  flowBand.type = 'bandpass';
-  flowBand.frequency.value = 1100;
-  flowBand.Q.value = 1.4;
-  v.lfo(2.3, 260, flowBand.frequency);
-  v.lfo(3.7, 180, flowBand.frequency);
-  v.lfo(5.9, 120, flowBand.frequency);
-  v.loop(flowBand);
-  flowBand.connect(water);
-  const dropBand = c.createBiquadFilter();
-  dropBand.type = 'bandpass';
-  dropBand.frequency.value = 2400;
-  dropBand.Q.value = 2.5;
-  const drops = c.createGain();
-  drops.gain.value = 1.6;
-  v.crackle(dropBand, 0.22);
-  dropBand.connect(drops).connect(water);
-  const splashBand = c.createBiquadFilter();
-  splashBand.type = 'bandpass';
-  splashBand.frequency.value = 420;
-  splashBand.Q.value = 0.9;
-  const splash = c.createGain();
-  splash.gain.value = 0.45;
-  v.loop(splashBand);
-  splashBand.connect(splash).connect(water);
-  // the birds: a channel each phrase's chirps are played into
-  const birds = channel();
-  v.start();
-  return { leaves, birds, crickets, fire, firePan, water, waterPan };
-}
-
-/** One bird's phrase of 2 to `PHRASE_MOST` chirps from `at` (s, the audio clock), at a place of its own: each a
- *  narrow band of noise swept up or down within 2.4 to 5.5 kHz in a twentieth to a tenth of a second. */
-function phrase(g: Graph, at: number): void {
-  const v = voice(0, 0.25);
-  v.out.disconnect();
-  v.out.connect(g.birds);
-  const pan = v.c.createStereoPanner();
-  pan.pan.value = Math.random() * 1.6 - 0.8;
-  const level = v.c.createGain();
-  level.gain.value = 0.4 + Math.random() * 0.6;
-  pan.connect(level).connect(v.out);
-  const low = 2400 + Math.random() * 1800;
-  const chirps = 2 + Math.floor(Math.random() * (PHRASE_MOST - 1));
-  let t = at;
-  for (let i = 0; i < chirps; i++) {
-    const dur = 0.05 + Math.random() * 0.06;
-    const up = Math.random() < 0.6;
-    const from = up ? low : low * 1.3, to = up ? low * 1.3 : low;
-    const band = v.c.createBiquadFilter();
-    band.type = 'bandpass';
-    band.Q.value = 16;
-    band.frequency.setValueAtTime(from, t);
-    band.frequency.exponentialRampToValueAtTime(to, t + dur);
-    const env = v.c.createGain();
-    env.gain.setValueAtTime(0.0001, t);
-    env.gain.exponentialRampToValueAtTime(1, t + dur * 0.3);
-    env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    const src = v.c.createBufferSource();
-    src.buffer = noiseSource(v.c);
-    src.connect(band).connect(env).connect(pan);
-    src.start(t, Math.random());
-    src.stop(t + dur + 0.02);
-    t += dur + 0.03 + Math.random() * 0.08;
-  }
-}
-
-/** One cricket's song from `at` (s, the audio clock), somewhere off to a side: `SONG.chirps` chirps `SONG.apart` s
- *  apart, each `SONG.pulses` short pulses of a narrow band of noise within `SONG.hz`, the song fading in and out. */
-function song(g: Graph, at: number): void {
-  const v = voice(0, 0.25);
-  v.out.disconnect();
-  v.out.connect(g.crickets);
-  const pan = v.c.createStereoPanner();
-  pan.pan.value = (Math.random() < 0.5 ? -1 : 1) * (0.3 + Math.random() * 0.5);
-  const level = v.c.createGain();
-  level.gain.value = 0.5 + Math.random() * 0.5;
-  pan.connect(level).connect(v.out);
-  const hz = SONG.hz[0] + Math.random() * (SONG.hz[1] - SONG.hz[0]);
-  const chirps = SONG.chirps[0] + Math.floor(Math.random() * (SONG.chirps[1] - SONG.chirps[0] + 1));
-  const pulses = SONG.pulses[0] + Math.floor(Math.random() * (SONG.pulses[1] - SONG.pulses[0] + 1));
-  const band = v.c.createBiquadFilter();
-  band.type = 'bandpass';
-  band.frequency.value = hz;
-  band.Q.value = 12;
-  band.connect(pan);
-  for (let i = 0; i < chirps; i++) {
-    // (softer at the song's ends, as a cricket starts and stops)
-    const swell = Math.sin(((i + 0.5) / chirps) * Math.PI);
-    for (let p = 0; p < pulses; p++) {
-      const t = at + i * SONG.apart + p * SONG.pulseEvery;
-      const env = v.c.createGain();
-      env.gain.setValueAtTime(0.0001, t);
-      env.gain.exponentialRampToValueAtTime(0.3 + 0.7 * swell, t + SONG.pulse * 0.3);
-      env.gain.exponentialRampToValueAtTime(0.0001, t + SONG.pulse);
-      const src = v.c.createBufferSource();
-      src.buffer = noiseSource(v.c);
-      src.connect(env).connect(band);
-      src.start(t, Math.random());
-      src.stop(t + SONG.pulse + 0.02);
-    }
-  }
-}
-
-/** A short buffer of noise for the chirps (made once a context). */
-const noises = new WeakMap<BaseAudioContext, AudioBuffer>();
-function noiseSource(c: BaseAudioContext): AudioBuffer {
-  let buffer = noises.get(c);
-  if (!buffer) {
-    buffer = c.createBuffer(1, Math.floor(c.sampleRate * 1.2), c.sampleRate);
-    const d = buffer.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    noises.set(c, buffer);
-  }
-  return buffer;
-}
-
 /** How near a sound's place is: 1 within `near` m, 0 past `far`, easing as the square of the share between. */
 function nearness(at: number, near: number, far: number): number {
   const share = Math.min(1, Math.max(0, (far - at) / (far - near)));
   return share * share;
 }
 
-/** The levels `wanted` asks of each layer (0 to its full level), and the fire's and the water's pans. */
-export function levelsFor(wanted: AmbienceWanted): typeof asked {
-  if (!wanted.on) return { leaves: 0, birds: 0, crickets: 0, fire: 0, firePan: 0, water: 0, waterPan: 0 };
-  const day = dayShare(wanted.hour);
-  const out = wanted.indoors ? INDOORS : 1;
-  return {
-    leaves: LEVEL.leaves * out * (0.6 + 0.4 * day),
-    birds: LEVEL.birds * out * day,
-    crickets: LEVEL.crickets * out * (1 - day),
-    fire: wanted.indoors ? 0 : LEVEL.fire * nearness(wanted.fireAt, FIRE_NEAR, FIRE_FAR),
-    firePan: Math.sin(wanted.fireWay),
-    water: wanted.indoors ? 0 : LEVEL.water * nearness(wanted.waterAt, WATER_NEAR, WATER_FAR),
-    waterPan: Math.sin(wanted.waterWay),
-  };
+/** The levels `wanted` asks of each layer (0 to its full level), and the water's and the fires' pans. */
+export function levelsFor(wanted: AmbienceWanted): Levels {
+  const levels = silent();
+  if (!wanted.on) return levels;
+  if (wanted.village) {
+    const day = dayShare(wanted.hour);
+    const out = wanted.indoors ? INDOORS : 1;
+    levels.day = LEVEL.day * out * day;
+    levels.night = LEVEL.night * out * (1 - day);
+    levels.water = wanted.indoors ? 0 : LEVEL.water * nearness(wanted.waterAt, WATER_NEAR, WATER_FAR);
+    levels.waterPan = Math.sin(wanted.waterWay);
+  }
+  for (let i = 0; i < FIRE_VOICES; i++) {
+    const fire = wanted.fires[i];
+    if (!fire) continue;
+    levels.fires[i] = LEVEL.fire * nearness(fire.at, FIRE_NEAR, FIRE_FAR);
+    levels.firePans[i] = Math.sin(fire.way);
+  }
+  return levels;
 }
 
-/** A frame of the ambience: each layer eased to what `wanted` asks, a bird's phrase now and then by day. */
+/**
+ * `source` made a loop that runs on from its end into its start with nothing heard at the seam, evened to
+ * `LOUDNESS`: `trim` s cut off each end (a decoder's padding, a fade at the recording's ends), then its last `fade` s
+ * blended into its first at equal power and left off its end. So its last sample is followed by the one that
+ * followed it in the recording, as the blend starts all from the end, and moves over to the start as it goes.
+ */
+export function seamless(c: BaseAudioContext, source: AudioBuffer, fade = SEAM, trim = TRIM): AudioBuffer {
+  const rate = source.sampleRate;
+  const [head, tail] = fadedEnds(source);
+  const most = Math.floor(source.length / 8);
+  const cutHead = Math.min(Math.max(Math.floor(trim * rate), head), most);
+  const cutTail = Math.min(Math.max(Math.floor(trim * rate), tail), most);
+  const kept = source.length - cutHead - cutTail;
+  const blend = Math.min(Math.floor(fade * rate), Math.floor(kept / 3));
+  const length = kept - blend;
+  const out = c.createBuffer(source.numberOfChannels, length, rate);
+  let squares = 0;
+  for (let ch = 0; ch < source.numberOfChannels; ch++) {
+    const from = source.getChannelData(ch).subarray(cutHead, cutHead + kept);
+    const to = out.getChannelData(ch);
+    to.set(from.subarray(0, length));
+    for (let i = 0; i < blend; i++) {
+      const share = ((i + 0.5) / blend) * (Math.PI / 2);
+      to[i] = from[i] * Math.sin(share) + from[length + i] * Math.cos(share);
+    }
+    for (let i = 0; i < length; i++) squares += to[i] * to[i];
+  }
+  const rms = Math.sqrt(squares / (length * source.numberOfChannels));
+  const gain = rms > 0 ? Math.min(MOST_GAIN, LOUDNESS / rms) : 1;
+  for (let ch = 0; ch < out.numberOfChannels; ch++) {
+    const to = out.getChannelData(ch);
+    for (let i = 0; i < length; i++) to[i] *= gain;
+  }
+  return out;
+}
+
+/** How many samples at each end of `source` are faded (quieter than half its middle window's loudness, -6 dB: a
+ *  recording faded in and out), `FADE_MOST` s at most an end: blended into each other, a faded end and a faded start
+ *  dipped the day's forest 4 dB at its seam. */
+function fadedEnds(source: AudioBuffer): [number, number] {
+  const window = Math.round(FADE_WINDOW * source.sampleRate);
+  const count = Math.floor(source.length / window);
+  const levels = new Float32Array(count);
+  for (let ch = 0; ch < source.numberOfChannels; ch++) {
+    const data = source.getChannelData(ch);
+    for (let w = 0; w < count; w++) {
+      let squares = 0;
+      for (let i = w * window; i < (w + 1) * window; i++) squares += data[i] * data[i];
+      levels[w] = Math.max(levels[w], Math.sqrt(squares / window));
+    }
+  }
+  const quiet = [...levels].sort((a, b) => a - b)[Math.floor(count / 2)] * 0.5;
+  const most = Math.floor(FADE_MOST / FADE_WINDOW);
+  let head = 0;
+  while (head < most && head < count && levels[head] < quiet) head++;
+  let tail = 0;
+  while (tail < most && tail < count && levels[count - 1 - tail] < quiet) tail++;
+  return [head * window, tail * window + (source.length - count * window)];
+}
+
+/** Recording `id` fetched, decoded in `c` and made a seamless loop, once (a failed one is silent, and tried again). */
+function load(c: BaseAudioContext, id: LoopId): Promise<void> {
+  let on = loading.get(id);
+  if (!on) {
+    on = (async () => {
+      try {
+        const data = await (await fetch(URLS[id])).arrayBuffer();
+        loops[id] = seamless(c, await c.decodeAudioData(data));
+      } catch {
+        loading.delete(id);
+      }
+    })();
+    loading.set(id, on);
+  }
+  return on;
+}
+
+/** Every recording decoded and made a loop (the lab's renders, which play them at once). */
+export async function ambienceLoaded(c: BaseAudioContext): Promise<void> {
+  await Promise.all(LOOPS.map((id) => load(c, id)));
+}
+
+/** Each recording as it loops (the lab's `ambienceSeams`), those decoded. */
+export const ambienceLoops = (): Readonly<Partial<Record<LoopId, AudioBuffer>>> => loops;
+
+/** The graph made in the effects' context: each layer's level (and pan) into the effects' output. */
+function makeGraph(): Graph {
+  const v = voice(0, 0.05);
+  const c = v.c;
+  const bed = (id: LoopId, panned: boolean, offset = 0): Bed => {
+    const gain = c.createGain();
+    gain.gain.value = 0;
+    let pan: StereoPannerNode | null = null;
+    if (panned) {
+      pan = c.createStereoPanner();
+      gain.connect(pan).connect(v.out);
+    } else {
+      gain.connect(v.out);
+    }
+    return { id, gain, pan, source: null, offset };
+  };
+  const fires = Array.from({ length: FIRE_VOICES }, (_, i) => bed('fire', true, i * 7.3));
+  return { day: bed('day', false), night: bed('night', false), water: bed('water', true), fires };
+}
+
+/** `b`'s loop started (looped over its whole length, from its offset) once its recording is decoded. */
+function startWhenLoaded(c: BaseAudioContext, b: Bed, at: number): void {
+  const buffer = loops[b.id];
+  if (b.source || !buffer) return;
+  const source = c.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  source.connect(b.gain);
+  source.start(at, b.offset % buffer.duration);
+  b.source = source;
+}
+
+/** Each bed of `g` with the level and pan `levels` asks of it, as a list. */
+function bedsOf(g: Graph, levels: Levels): { bed: Bed; level: number; pan: number }[] {
+  return [
+    { bed: g.day, level: levels.day, pan: 0 },
+    { bed: g.night, level: levels.night, pan: 0 },
+    { bed: g.water, level: levels.water, pan: levels.waterPan },
+    ...g.fires.map((bed, i) => ({ bed, level: levels.fires[i], pan: levels.firePans[i] })),
+  ];
+}
+
+/** A frame of the ambience: each layer's recording fetched once it's first wanted, its level eased to the asked. */
 export function updateAmbience(wanted: AmbienceWanted): void {
   const levels = levelsFor(wanted);
-  Object.assign(asked, levels);
+  asked = levels;
   const c = audioContext();
-  if (!c || (!graph && !wanted.on)) return;
-  graph ??= makeGraph();
+  if (!c) return;
+  // (made the first frame anything is heard: a battleground with no fire near makes none)
+  if (!graph) {
+    if (!anyHeard(levels)) return;
+    graph = makeGraph();
+  }
   const now = c.currentTime;
-  for (const layer of LAYERS) {
-    graph[layer].gain.setTargetAtTime(levels[layer], now, EASE);
+  for (const { bed, level, pan } of bedsOf(graph, levels)) {
+    if (level > 0) {
+      void load(c, bed.id);
+      startWhenLoaded(c, bed, now);
+    }
+    bed.gain.gain.setTargetAtTime(level, now, EASE);
+    bed.pan?.pan.setTargetAtTime(pan, now, PAN_EASE);
   }
-  graph.firePan.pan.setTargetAtTime(levels.firePan, now, 0.1);
-  graph.waterPan.pan.setTargetAtTime(levels.waterPan, now, 0.1);
-  if (levels.birds > 0.001 && now >= nextPhrase) {
-    if (nextPhrase > 0) phrase(graph, now + 0.05);
-    nextPhrase = now + PHRASE_EVERY + Math.random() * PHRASE_SPREAD;
-  }
-  if (levels.crickets > 0.001 && now >= nextSong) {
-    if (nextSong > 0) song(graph, now + 0.05);
-    nextSong = now + SONG.every + Math.random() * SONG.spread;
-  }
+}
+
+/** Whether any layer is asked to be heard. */
+function anyHeard(levels: Levels): boolean {
+  return levels.day + levels.night + levels.water + levels.fires.reduce((a, b) => a + b, 0) > 0;
 }
 
 /** The ambience played at `wanted` into the effects' current context until its stop() (the lab's `lab sound`
- *  renders it offline: a graph of its own there, birds scheduled ahead over `seconds`). */
-export function playAmbience(wanted: AmbienceWanted, seconds: number): () => void {
+ *  renders it offline, a graph of its own there; `ambienceLoaded` first, or the layers not yet decoded are silent). */
+export function playAmbience(wanted: AmbienceWanted): () => void {
   const g = makeGraph();
   const levels = levelsFor(wanted);
-  const now = g.leaves.context.currentTime;
-  for (const layer of LAYERS) g[layer].gain.setValueAtTime(levels[layer], now);
-  g.firePan.pan.setValueAtTime(levels.firePan, now);
-  g.waterPan.pan.setValueAtTime(levels.waterPan, now);
-  if (levels.birds > 0.001) {
-    for (let at = now + 0.3; at < now + seconds; at += PHRASE_EVERY + Math.random() * PHRASE_SPREAD) phrase(g, at);
-  }
-  if (levels.crickets > 0.001) {
-    for (let at = now + 0.3; at < now + seconds; at += SONG.every + Math.random() * SONG.spread) song(g, at);
+  const c = g.day.gain.context;
+  const now = c.currentTime;
+  for (const { bed, level, pan } of bedsOf(g, levels)) {
+    bed.gain.gain.setValueAtTime(level, now);
+    bed.pan?.pan.setValueAtTime(pan, now);
+    if (level > 0) startWhenLoaded(c, bed, now);
   }
   return () => {
-    const end = g.leaves.context.currentTime;
-    for (const layer of LAYERS) g[layer].gain.setTargetAtTime(0, end, 0.1);
+    const end = c.currentTime;
+    for (const { bed } of bedsOf(g, levels)) bed.gain.gain.setTargetAtTime(0, end, 0.1);
   };
 }

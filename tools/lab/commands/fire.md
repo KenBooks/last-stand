@@ -4,7 +4,10 @@ The rest of the commands are in [`COMMANDS.md`](../COMMANDS.md).
 
 - `fire`: each biome's fire as the player meets it (`page/fire.ts`, `page/fireMeasure.ts`, tested in
   `test/fireMeasure.test.mjs`; `--biomes crypt,forest`). Found by its light, the warm one of the biome's ten, the hero
-  stood 4.5 m before it towards the middle. For `--seconds` (2), 30 times a second, it's drawn from beside it with its
+  stood 4.5 m before it towards the middle; there it must be heard (the nearest fire's level the ambience asks for,
+  `core/ambience.ts`: from Kenneth, "include all the fire sounds for all fire objects in the game, in rounds"; said
+  where the tree's ambience has fires, `page/ambienceModule.ts`). For `--seconds` (2), 30 times a second, it's drawn
+  from beside it with its
   own light, without (what draws unlit within 1.5 m of its light, and the glow particles) and without its smoke too:
   the differences are its light alone (graded: the tone curve carries the logs' grain into it) and its smoke (a pale
   smoke over the daylit forest, read as light, was counted into the tips). Read: its size, its light and hue in four

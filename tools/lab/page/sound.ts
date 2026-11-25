@@ -6,6 +6,7 @@
 // bass a laptop can't play, its most tonal peak (a note standing over its noise, which the music hears as a second
 // tune: #413's "the background music gets duplicated"), the nodes it made and its silence once it's over.
 import type { Report } from './lab';
+import { ambienceModule } from './ambienceModule';
 import { playInto, sfx } from '../../../src/core/audio';
 import {
   centroidOf, decibels, levelsOf, loudestOf, mono, peakOf, shareAbove, spectrumOf, tonalPeak, wavBytes,
@@ -397,10 +398,17 @@ const ambienceScene = (what: string, hour: number, fireAt: number, waterAt = WAT
   held: [1, AMBIENCE_HEARD],
 });
 
+/** The ambience's recordings decoded into `c` before a scene plays them (`core/ambience.ts`), where the tree has
+ *  them (an A/B's other commit may have no ambience, or one made in code). */
+async function ambienceDecoded(c: BaseAudioContext): Promise<void> {
+  const ambience = await ambienceModule();
+  await ambience?.ambienceLoaded?.(c);
+}
+
 /** The village's ambience by day, by night and beside the campfire. */
 const AMBIENCE: Record<string, Scene> = {
-  ambienceDay: ambienceScene('the village by day: leaves, birds, fire and fountain far off', 12, FIRE_FAR),
-  ambienceNight: ambienceScene('the village by night: leaves, crickets, fire and fountain far off', 0, FIRE_FAR),
+  ambienceDay: ambienceScene('the village by day: the forest, a fire and the fountain far off', 12, FIRE_FAR),
+  ambienceNight: ambienceScene('the village by night: the forest, a fire and the fountain far off', 0, FIRE_FAR),
   ambienceFire: ambienceScene('the village by day beside the campfire, straight ahead', 12, FIRE_CLOSE),
   ambienceFountain: ambienceScene('the village by day at the fountain, straight ahead', 12, FIRE_FAR, WATER_CLOSE),
 };
@@ -547,6 +555,7 @@ function playCue(cue: Cue, kept: Map<string, Play>): string | null {
 /** A scene rendered: its channels, the nodes it made and what it couldn't play. */
 async function render(scene: Scene, canary: boolean) {
   const c = new OfflineAudioContext(2, Math.ceil(lengthOf(scene) * RATE), RATE);
+  if (scene.cues.some((cue) => cue.sound?.includes('ambience'))) await ambienceDecoded(c);
   const made = countNodes(c);
   const restore = playInto(c);
   const missed: string[] = [];
