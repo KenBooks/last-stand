@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather as leatherMaps, mail as mailMaps, cloth as clothMaps, steel as steelMaps, fur as furMaps, wood as woodMaps, pbrMaterialMaps } from '../../core/textures';
 import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';
-import { footToFloor, onFloor, restHands, satBy, sitPose, type RestTurn } from './sit';
+import { footToFloor, freeHands, onFloor, restHands, satBy, sitPose, type RestTurn } from './sit';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, heroFall, pulse, ramp, reachArm, groundFeet, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe, fighterWrap } from './shapes';
 import { buildTrousers, type TrouserCut } from './trousers';
@@ -3615,7 +3615,8 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // (his arm as the standing pose has it, before the sit places his hands: the carry the keyed pick-up ends on)
     _rightArm.forEach((joint, i) => _standArm[i].copy(joint.quaternion));
     _standAt.copy(j.shoulderR.position);
-    restHands(j, st.sit, _resting, _sitTurn, SIT_HANDS.rise, _lifted);
+    // (his drinking hand let go of his thigh as he drinks, last frame's: rested, he drank sat from nothing)
+    restHands(j, st.sit, _resting, _sitTurn, SIT_HANDS.rise, _lifted, 1, freeHands(0, drinkOn));
     if (st.sit && !fp && st.dead < 0) {
       // (ahead over his far knee on a seat, down across his shins by a fire, as a palm on the knee holds it: straight
       // across his lap, an axe's haft went through his shield, a sword over his other hand and two swords made one bar;

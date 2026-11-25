@@ -9,7 +9,9 @@ import { G } from '../../../src/state';
 import type { TavernKeeper } from '../../../src/world/tavernKeeper';
 import type { Keeper } from '../../../src/entities/models/keeper';
 import { villageObject } from '../../../src/game/village';
-import { stand } from './houses';
+import { BACK, BAR, TUB } from '../../../src/data/tavern';
+import { stand, viewAs } from './houses';
+import { lookAlong } from './light';
 
 /** A look: when it's taken (the task set and the step he must be on, how many frames into it, or a test of the frame),
  *  and how (the views by his own facing, the point it's framed on over his feet, and how far off). */
@@ -84,6 +86,8 @@ export async function keeperLooks(lab: Lab, tv: TavernKeeper, keeper: Keeper): P
     }
     if (!took) problems.push(`looks: ${look.label} never came (doing ${tv.doing().job}: ${tv.doing().step})`);
   }
+  // (before he's serving: while a mug waits for the hero he attends him, and takes no task)
+  for (const seen of SEEN) await asSeen(lab, tv, keeper, seen, moments, problems);
   // --- at the bar: the ale poured, his shoulders' tops from above (99, 100, 20) ---
   const him = villageObject('keeper')!;
   await stand(lab, him.stand, Math.atan2(him.at[0] - him.stand[0], him.at[1] - him.stand[1]));
@@ -97,6 +101,115 @@ export async function keeperLooks(lab: Lab, tv: TavernKeeper, keeper: Keeper): P
   }
   if (!took) problems.push(`looks: ${pour.label} never came (doing ${tv.doing().job}: ${tv.doing().step})`);
   return { moments, problems };
+}
+
+/** A moment of his day as the player sees it, the whole screen in the game's own views (from above, over the
+ *  shoulder): when it comes (the task set, the step he must be on and how many frames into it, a mug left dirty for
+ *  him first), and where the hero stands to see it (by the keeper, `from` him in his own facing's frame, or at a place
+ *  of the room). */
+interface Seen {
+  label: string;
+  note: string;
+  task?: string;
+  step: string;
+  after: number;
+  dirty?: boolean;
+  /** the hero's place off the keeper (m: across his right, ahead of him), facing him */
+  from?: [number, number];
+  /** the hero's place in the room (its own x, z) and his facing */
+  at?: () => [number, number, number];
+  /** a close picture besides, framed on this point and from this far, the hero hidden */
+  close?: () => { at: THREE.Vector3; distance: number };
+}
+
+/** the moments seen as the player sees them */
+const SEEN: readonly Seen[] = [
+  // (the elbow's patch after its fix: Kenneth's round 4, note 5, "hole at the elbow")
+  {
+    label: '18-elbow-as-seen', note: 'his elbow bent as he wipes the small table, as the player sees it (round 4, note 5)',
+    task: 'smallTable', step: 'wipe table', after: 40, from: [0.9, -0.9],
+  },
+  // (the tub's water in the bar's light: round 4, note 13, read as a dark disc after it)
+  {
+    label: '19-tub-as-seen', note: 'the tub as he washes a mug in it, from the bar\'s front: its water seen (round 4, note 13)',
+    step: 'wash', after: 30, dirty: true, at: () => [BAR.x - BAR.half - 0.45, TUB.z, Math.PI / 2],
+    close: () => ({ at: tubAt(), distance: 1.1 }),
+  },
+];
+
+/** `seen` waited for and taken from above and over the shoulder, the hero stood where the player would see it from. */
+// (each view switched first and the moment waited for in it: switched after, the view's settling took the second
+// that the moment lasted, and he was pictured walking away from the table)
+async function asSeen(lab: Lab, tv: TavernKeeper, keeper: Keeper, seen: Seen, moments: Pictured[], problems: string[]) {
+  for (const view of ['top', 'third'] as const) {
+    // (by the door while the moment comes: stood by him, he turns to attend the hero and takes no task)
+    await stand(lab, BY_DOOR, Math.PI / 2);
+    await viewAs(lab, view);
+    if (!await momentOf(lab, tv, seen)) {
+      problems.push(`looks: ${seen.label} never came ${view === 'top' ? 'from above' : 'over the shoulder'} `
+        + `(doing ${tv.doing().job}: ${tv.doing().step})`);
+      continue;
+    }
+    // (over the shoulder the camera looks where the mouse turned it, not where he faces: turned his way)
+    const facing = standToSee(keeper, seen);
+    if (view === 'third') await lookAlong(lab, facing);
+    await lab.step(SEEN_SETTLE);
+    moments.push(await lab.screen(`${seen.label}-${view}`, [`${seen.note}: ${view === 'top' ? 'from above' : 'over the shoulder'}`]));
+    if (seen.close && view === 'top') moments.push(closeUp(lab, keeper, seen));
+  }
+  await viewAs(lab, 'top');
+}
+
+/** `seen`'s close picture, the keeper and the hero hidden: leant over the tub, his body hid it from every side. */
+function closeUp(lab: Lab, keeper: Keeper, seen: Seen): Pictured {
+  keeper.root.visible = false;
+  lab.model.root.visible = false;
+  const pictured = lab.picture(`${seen.label}-close`, ['above', 'right', 'front'],
+    [`${seen.note}: close, in the room's light, him and the hero hidden`], seen.close!());
+  lab.model.root.visible = true;
+  keeper.root.visible = true;
+  return pictured;
+}
+
+/** `seen`'s moment come: its mug left dirty and its task set, then `after` frames of its step; whether it came. */
+async function momentOf(lab: Lab, tv: TavernKeeper, seen: Seen): Promise<boolean> {
+  if (seen.dirty) tv.mugs.move(0, { at: 'bar', x: 4.0, z: BAR.from + 0.3 }, { full: 0.03, dirty: true });
+  if (seen.task) tv.setTask(seen.task);
+  let on = 0;
+  for (let f = 0; f < WAIT && on < seen.after; f++) {
+    await lab.step(1);
+    on = tv.doing().step === seen.step ? on + 1 : 0;
+  }
+  return on >= seen.after;
+}
+
+/** the tub's middle in the world, on its water */
+function tubAt(): THREE.Vector3 {
+  const room = G.arena.rooms!.tavern;
+  return room.group.localToWorld(new THREE.Vector3((BACK.front + BACK.wall) / 2, BACK.top + TUB.water, TUB.z));
+}
+
+/** the frames the camera is given to come round before a moment is taken */
+const SEEN_SETTLE = 12;
+
+/** The hero stood for `seen`, off the keeper and facing him or at its place of the room: his facing. */
+function standToSee(keeper: Keeper, seen: Seen): number {
+  G.player.walkTo = null;
+  if (seen.at) {
+    const [x, z, facing] = seen.at();
+    const room = G.arena.rooms!.tavern;
+    G.player.place(room.group.localToWorld(new THREE.Vector3(x, 0, z)), facing);
+    return facing;
+  }
+  const [across, ahead] = seen.from!;
+  const him = keeper.root.getWorldPosition(new THREE.Vector3());
+  const yaw = keeper.root.rotation.y;
+  const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+  const right = new THREE.Vector3(-forward.z, 0, forward.x);
+  const at = him.clone().addScaledVector(right, across).addScaledVector(forward, ahead);
+  const facing = Math.atan2(him.x - at.x, him.z - at.z);
+  G.player.place(at, facing);
+  return facing;
 }
 
 /** `look` taken now: framed on his body, from his own facing's sides, the hero hidden and turned back after. */

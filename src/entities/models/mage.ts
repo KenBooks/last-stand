@@ -19,7 +19,7 @@ import type { BellCloth } from './sleeve';
 import { LegIK } from './ik';
 import { buildBoot } from './boot';
 import { fitArm } from './armIK';
-import { SKIRT_TUCK, floorUnder, footOutOfFloor, onFloor, restHands, satBy, sitPose } from './sit';
+import { SKIRT_TUCK, floorUnder, footOutOfFloor, freeHands, onFloor, restHands, satBy, sitPose } from './sit';
 import { bodyShape } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { onTunic, tunicFront, tunicCutSteps, armholeEdge, neckHem, necklineBack, outOfTunic, tunicNormal, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
@@ -1483,7 +1483,8 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
     // laid down)
     st.look?.();
     const staffDown = st.sit && onFloor(st.sit) ? satBy(st.sit) : 0;
-    restHands(j, st.sit, [0]);
+    // (his drinking hand let go of his thigh as the mug comes out, last frame's: rested, he drank sat from nothing)
+    restHands(j, st.sit, [0], undefined, 0, undefined, 1, freeHands(0, flaskOut));
     body.legs = floorW * floorW * (3 - 2 * floorW);
     // (the staff hand to his knee once he's well down: from the start, his fist round the staff as it went, the wrist
     // bent 19 degrees past its range)

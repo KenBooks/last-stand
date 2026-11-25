@@ -28,7 +28,9 @@ export const KEEPER_SPOT = { x: 4.85, z: -0.7 } as const;
 export const BAR = { x: 4.1, top: 1.07, half: 0.35, from: -3.1, to: 1.0 } as const;
 /** the back counter behind him against the east wall, under the bottles' shelves: its front edge, its top, and how far
  *  along the room it runs (his clean mugs and his wash tub stand on it) */
-export const BACK = { front: 5.0, wall: 5.4, top: 0.9, from: -1.95, to: 0.75 } as const;
+// (its top under his elbows as they swing walking the aisle behind the bar, which holds him nearer it than the bar: at
+// 0.9 his left elbow's ball went 2.2 cm into its edge, `lab tavern`)
+export const BACK = { front: 5.0, wall: 5.4, top: 0.86, from: -1.95, to: 0.75 } as const;
 
 /** how many mugs the tavern has, every one of them somewhere at all times (game/mugs.ts) */
 // (ten, from Kenneth's round 3: "10 cups")

@@ -135,6 +135,58 @@ function padGeometry(): THREE.BufferGeometry {
 const RAG_FETCH = 0.35;
 /** how near his apron's tie his right hand is for the rag to go in or come out with no reach for it (m) */
 const RAG_NEAR = 0.25;
+/** the wash tub's shape, its radius's shares: its outside at its rim and its foot, its inside at its rim and its foot,
+ *  and its height (m) */
+const TUB_SHAPE = { rim: 1, foot: 0.85, inRim: 0.9, inFoot: 0.78, high: 0.15 };
+/** the share of the tub's radius its inside has at the water's level (`TUB.water` up its side) */
+const TUB_INSIDE_AT_WATER = TUB_SHAPE.inFoot + (TUB_SHAPE.inRim - TUB_SHAPE.inFoot) * (TUB.water / TUB_SHAPE.high);
+
+/** The wash tub of radius `r`, open (its foot at 0): its outside, its inside (facing in) and the ring of its rim. */
+function tubGeometry(r: number): THREE.BufferGeometry[] {
+  const { rim, foot, inRim, inFoot, high } = TUB_SHAPE;
+  const outside = new THREE.CylinderGeometry(r * rim, r * foot, high, 18, 1, true).translate(0, high / 2, 0);
+  const inside = facingIn(new THREE.CylinderGeometry(r * inRim, r * inFoot, high, 18, 1, true).translate(0, high / 2, 0));
+  const top = new THREE.RingGeometry(r * inRim, r * rim, 18).rotateX(-Math.PI / 2).translate(0, high, 0);
+  const floor = new THREE.CircleGeometry(r * inFoot, 18).rotateX(-Math.PI / 2).translate(0, 0.005, 0);
+  return [outside, inside, top, floor];
+}
+
+/** `geo` turned inside out: its faces wound the other way and its normals reversed, so it's seen from within. */
+function facingIn(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+  const index = geo.index!;
+  for (let i = 0; i < index.count; i += 3) {
+    const a = index.getX(i + 1);
+    index.setX(i + 1, index.getX(i + 2));
+    index.setX(i + 2, a);
+  }
+  const normal = geo.attributes.normal;
+  for (let i = 0; i < normal.count; i++) normal.setXYZ(i, -normal.getX(i), -normal.getY(i), -normal.getZ(i));
+  return geo;
+}
+
+/** the share of its soapy tint the tub's water gives of itself: a little, so it reads as water in the bar's dim light
+ *  and not as a hole (the room's lamps are warm and low, and the counter's top shades it) */
+const WATER_GLOW = 0.22;
+/** the tub's water's colours: under the tub's wall, its open middle, and the sheen of the lamps laid across it */
+const WATER_SHADE = new THREE.Color(0x56675f), WATER_OPEN = new THREE.Color(0x9fb3ab), WATER_SHEEN = new THREE.Color(0xdde8e2);
+
+/** The tub's water, a disc of radius `r` (its middle at 0) in rings, coloured by them: darker toward its rim where
+ *  the tub's wall shades it, paler in the open, and a soft sheen off-middle where a lamp catches it. */
+function waterGeometry(r: number): THREE.BufferGeometry {
+  const geo = new THREE.RingGeometry(r * 0.02, r, 28, 6).rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position, colours: number[] = [], colour = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i) / r, z = pos.getZ(i) / r;
+    const out = Math.hypot(x, z);
+    colour.copy(WATER_OPEN).lerp(WATER_SHADE, Math.max(0, (out - 0.55) / 0.45) ** 1.5);
+    const sheen = Math.exp(-(((x + 0.3) ** 2) + ((z - 0.15) ** 2)) / 0.08);
+    colour.lerp(WATER_SHEEN, sheen * 0.8);
+    colours.push(colour.r, colour.g, colour.b);
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
+  return geo;
+}
+
 /** the suds on the tub's water: a ring of small heaps round its rim and a few clumps on it (its middle at 0, its
  *  radius `r`, seeded) */
 function sudsGeometry(r: number): THREE.BufferGeometry {
@@ -197,6 +249,8 @@ const PUSH_ACROSS = 0.08;
 const POINTED_MOST = 8, MUG_NEAR = 1;
 /** how near the pointer a mug is drawn for it to be the one pointed at (a share of the window's height) */
 const MUG_PICK = 0.035;
+/** how much further back than `REACH_X` he stands to wipe the bar (m) */
+const WIPE_BACK = 0.03;
 /** how far behind the bar he stands to reach a mug at its front (m: leaning over it) */
 const REACH_X = BAR.x + BAR.half + BODY_CLEAR;
 /** how near his hand must come to a mug to take it up or let it go (m), and how long he leans and steps in for it
@@ -294,7 +348,13 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   const backX = (BACK.front + BACK.wall) / 2;
   box(g, BACK.wall - BACK.front, BACK.top - 0.04, BACK.to - BACK.from, backX, 0, (BACK.from + BACK.to) / 2, M.panel);
   box(g, BACK.wall - BACK.front + 0.04, 0.04, BACK.to - BACK.from + 0.04, backX, BACK.top - 0.04, (BACK.from + BACK.to) / 2, M.oak);
-  drum(g, TUB.r, TUB.r * 0.85, 0.15, backX, BACK.top, TUB.z, M.oak, 18);
+  // (open: a closed drum's oak lid stood 5 cm over the water and was the dark disc seen in the tub, Kenneth's round 4)
+  for (const wall of tubGeometry(TUB.r)) {
+    const mesh = new THREE.Mesh(wall, M.oak);
+    mesh.position.set(backX, BACK.top, TUB.z);
+    mesh.castShadow = mesh.receiveShadow = true;
+    g.add(mesh);
+  }
   for (const y of [0.03, 0.12]) {
     const hoop = new THREE.Mesh(new THREE.TorusGeometry(TUB.r * (0.88 + y * 0.8), 0.005, 5, 24).rotateX(Math.PI / 2), M.iron);
     hoop.position.set(backX, BACK.top + y, TUB.z);
@@ -303,10 +363,14 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   // (open, its soapy water seen a hand below the rim from every view, its suds round the rim and a few heaps on it,
   // rippling and bubbling as he scrubs: "lets just have the lid removed the entire time. Should be able to see water
   // there", Kenneth's round 4; round 3's lid he lifted to wash is gone)
-  const water = new THREE.Mesh(new THREE.CircleGeometry(TUB.r * 0.97, 24).rotateX(-Math.PI / 2),
-    kit.std({ color: 0x7f8f88, roughness: 0.12, metalness: 0.05 }));
+  // (a pale soapy grey-green, shaded darker under the tub's wall and lit by a sheen off the bar's lamps: a glossy dark
+  // disc mirrors nothing here, the engine giving the room no sky to mirror, and read as a hole in the tub)
+  const water = new THREE.Mesh(waterGeometry(TUB.r * TUB_INSIDE_AT_WATER), kit.std({
+    color: 0xffffff, vertexColors: true, roughness: 0.32, metalness: 0,
+    emissive: 0x6f8c84, emissiveIntensity: WATER_GLOW,
+  }));
   water.position.set(backX, BACK.top + TUB.water, TUB.z);
-  const suds = new THREE.Mesh(sudsGeometry(TUB.r * 0.95), kit.std({ color: 0xe8ecea, roughness: 0.35 }));
+  const suds = new THREE.Mesh(sudsGeometry(TUB.r * TUB_INSIDE_AT_WATER), kit.std({ color: 0xe8ecea, roughness: 0.35 }));
   suds.position.copy(water.position);
   /** how stirred the water is (1 as he scrubs, settling after), and its clock */
   let stirred = 0, waterT = 0;
@@ -792,14 +856,17 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   // --- his idle tasks ---
   const TASKS: Record<string, () => Step[]> = {
     wipeBar: () => {
-      const back = me.z > -0.6, from = behindBar(back ? BAR.to - 0.15 : BACK.from + 0.2, REACH_X), to = behindBar(back ? BACK.from + 0.2 : BAR.to - 0.15, REACH_X);
+      // (stood a little further back than to reach a mug, his rag's circles as far out on the top as they were: at the
+      // circle's near side his right elbow came down onto the bar's back edge, 1.4 to 3.2 cm into it, `lab tavern`)
+      const x = REACH_X + WIPE_BACK;
+      const back = me.z > -0.6, from = behindBar(back ? BAR.to - 0.15 : BACK.from + 0.2, x), to = behindBar(back ? BACK.from + 0.2 : BAR.to - 0.15, x);
       return [walkTo(from), {
         name: 'wipe bar', spot: from, along: to, dur: TASK.wipeBar,
         pose: (_k, t) => {
           // (wide circles, a forearm's sweep: "bigger circles", Kenneth's round 3; they were 10 by 12 cm)
           // (its sideways reach short of his elbow meeting the bar's edge: 18 cm across, his right elbow went into it)
-          const a = t * 2.3, rag = ahead(0.55 + 0.12 * Math.sin(a), BAR.top + 0.026, 0.14 * Math.cos(a));
-          return { bend: 0.4, look: rag, right: wiping(rag, BAR_TOP), left: { at: ahead(0.32, BAR.top + 0.04, 0.3) } };
+          const a = t * 2.3, rag = ahead(0.55 + WIPE_BACK + 0.12 * Math.sin(a), BAR.top + 0.026, 0.14 * Math.cos(a));
+          return { bend: 0.4, look: rag, right: wiping(rag, BAR_TOP), left: { at: ahead(0.32 + WIPE_BACK, BAR.top + 0.04, 0.3) } };
         },
       }];
     },

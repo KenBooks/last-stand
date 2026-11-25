@@ -24,10 +24,10 @@ const CARRIED_LEAST = 0.6;
 export interface TakeWays { lines: string[]; problems: string[] }
 
 /** Each way of taking, the carry and the door, run on the room `tv`: `run` steps frames the watch reads, `until`
- *  steps until `done` or `most` frames (the frames it took, or -1). */
+ *  steps until `done` or `most` frames (the frames it took, or -1), `forget` has the watch forget the frame before. */
 export async function takeWays(lab: Lab, tv: TavernKeeper, run: Stepper,
   until: (most: number, done: () => boolean, input?: () => Frame) => Promise<number>, canary = false,
-  view: (view: 'top') => Promise<void> = (to) => viewAs(lab, to)): Promise<TakeWays> {
+  view: (view: 'top') => Promise<void> = (to) => viewAs(lab, to), forget: () => void = () => {}): Promise<TakeWays> {
   // (the canary's plants, each set for its own way alone: set for the whole run, the drink taken by standing close
   // never came)
   const plant = (way: 'near' | 'click' | 'door', on: boolean) => { if (canary) KEEPER_TAKE[way] = !on; };
@@ -118,8 +118,12 @@ export async function takeWays(lab: Lab, tv: TavernKeeper, run: Stepper,
 
   // --- lost at the door: back where he took it, every mug still counted ---
   plant('door', true);
+  // (put back on the bar at once as he goes, unseen: a move the watch forgets, as it does a fixture's)
   leaveRoom(true);
-  await run(30, () => ({}));
+  forget();
+  await run(1, () => ({}));
+  forget();
+  await run(29, () => ({}));
   const back = tv.mugs.get(id), counts = tv.mugs.counts();
   const lost = back.place.at !== 'hero' && !choosingAle() && !G.player.casting?.skill.def.ale;
   lines.push(`out of the door: the mug ${lost ? `back on the ${back.place.at}, ${back.full > 0.5 ? 'full' : 'empty'}` : 'STILL in his hand'}, `

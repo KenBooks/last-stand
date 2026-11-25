@@ -53,6 +53,8 @@ function follow(at: THREE.Vector3, goal: THREE.Vector3, v: THREE.Vector3, dt: nu
   at.copy(target).add(change.add(temp).multiplyScalar(decay));
 }
 const _off = new THREE.Vector3(), _tmpV = new THREE.Vector3(), _tmpV2 = new THREE.Vector3(), _aim = new THREE.Vector3();
+/** how far his arms hang out from his sides past his belly (rad, at the shoulder: their goals override it) */
+const ARMS_PAST_BELLY = 0.06;
 /** how long an arm takes to come to its goal from his walk's swing, or go back to it (s), eased in and out: eased
  *  by a rate, its first frame back from the tap's handle was its fastest, 17.6 cm (`lab tavern`) */
 const ARM_BLEND = 0.4;
@@ -561,6 +563,11 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
     // sank 14 m in a serve, `lab tavern`)
     j.hips.position.y = hipY;
     walkCycle(j, phase, Math.min(1, speed / WALK_FULL), { stride: 0.5, knee: 1, arm: 0.25, bob: 0.05 });
+    // (his arms' swing held out past his belly, which an arm blending to or from a goal starts from: from the heroes'
+    // walk, his right forearm brushed it 2.1 cm as he came up to the broom, `lab tavern`; set on the free arm alone, it
+    // still did, his hand reaching for the broom from that swing)
+    j.shoulderL.rotation.z += ARMS_PAST_BELLY;
+    j.shoulderR.rotation.z -= ARMS_PAST_BELLY;
     // (lowered or raised no faster than his planted legs follow: stood up 11 cm at once as he walked off from the tub,
     // a planted foot fell short of its spot and slipped 10 cm, `lab tavern`)
     const dropWanted = (crouch + knees) * 0.32;

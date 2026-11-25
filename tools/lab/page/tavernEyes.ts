@@ -61,7 +61,9 @@ export async function throughTheEyes(lab: Lab, c: EyesCase, lines: string[], pro
   if (viewMode() !== 'first') problems.push('the view never came through the eyes');
   // (looking at the keeper over his bar, as a player who's come up to it does: the view turned his way, and round if
   // the camera's heading came out the other way)
-  const keeperAt = c.tv.keeper()!.root.getWorldPosition(new THREE.Vector3());
+  // (at where he serves from, not where he stands now: off clearing a mug a sat hero set down along the bar, the view was
+  // turned 35 degrees off the bar where he'd slide the beer)
+  const keeperAt = new THREE.Vector3(c.keeper.at[0], 0, c.keeper.at[1]);
   const looksAtHim = () => {
     const cam = G.camera as THREE.PerspectiveCamera, ahead = cam.getWorldDirection(new THREE.Vector3());
     return ahead.dot(keeperAt.clone().sub(cam.getWorldPosition(new THREE.Vector3())).setY(0).normalize()) > 0.7;

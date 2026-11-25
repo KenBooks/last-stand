@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, bowWood as bowWoodMaps, pbrMaterialMaps } from '../../core/textures';
-import { SKIRT_TUCK, WRIST_INSIDE, floorUnder, onFloor, restHands, satBy, sitPose, type RestTurn } from './sit';
+import { SKIRT_TUCK, WRIST_INSIDE, floorUnder, freeHands, onFloor, restHands, satBy, sitPose, type RestTurn } from './sit';
 import { tunable } from '../../core/tuning';
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, heroFall, groundFeet, disposeGeometries, ramp, updateJoints } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
@@ -1034,7 +1034,8 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     const floorW = st.sit && onFloor(st.sit) ? smooth(st.sit.w) : 0;
     quiver.rotation.x = -QUIVER_TIP * floorW;
     st.look?.(aim < 0.5 ? 1 : 0);
-    restHands(j, st.sit, [0, 1], SIT_HANDS);
+    // (his drinking hand let go of his thigh as the mug comes out: rested, he drank sat from nothing)
+    restHands(j, st.sit, [0, 1], SIT_HANDS, 0, undefined, 1, freeHands(1, flaskOut));
     body.legs = floorW;
     if (st.dead >= 0) { heroFall(j, st.dead); legs.reset(); }
     else {

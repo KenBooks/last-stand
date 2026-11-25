@@ -74,3 +74,14 @@ collar's over the chest's) read every 20 frames all day by rays either side (`ke
 repeat apart. His walk (`keeperGait.ts`) and his arms and tools against his body (`keeperWatch.ts`'s `LimbsClear`).
 `--canary` adds the belly's piece of his shirt shifted a third round and a second ale stacked on the first; each of
 its seven plants must be caught.
+
+**Round 4's follow-ups.** Sat on the bar stool, his ale is drunk three times: from above (the screen as the player sees
+it at two-thirds of the drink, `sat-at-the-bar`, and close from either side), over the shoulder and through the eyes;
+in the first two the rim must be within 1.5 cm of his lower lip at each swallow, as stood. Every hero's sat pose laid
+his drinking hand on his thigh over the drink's (`restHands` in `models/sit.ts`, its `free`), and he drank from a mug
+in his lap: 85 cm from his lips, which nothing read. `--canary` plants that again (`SIT_FREE.drink`). The eyes' case
+aims at his serving spot, not where he stands as it begins (off clearing a mug, the view was 35 degrees off the bar).
+The mug put back on the bar as the hero leaves the tavern is forgotten by the watch, as a fixture's move is.
+`--looks` adds his bent elbow as he wipes the small table and the tub as he washes, each as the player sees it from
+above and over the shoulder, and the tub close, him and the hero hidden. Still flaky: his feet at a walk's end
+(crossed by up to 10 cm, ankles under 10 cm apart, a different walk each run).

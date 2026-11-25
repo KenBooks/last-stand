@@ -17,6 +17,7 @@ import { G } from '../../../src/state';
 import { enterRoom } from '../../../src/game/rooms';
 import { ALE, ALE_BEATS, BAR, BAR_STOOL_X, BAR_STOOLS, KEEPER_SPOT, MUG_COUNT, TUB } from '../../../src/data/tavern';
 import { SIT } from '../../../src/entities/sitting';
+import { SIT_FREE } from '../../../src/entities/models/sit';
 import { satWhole } from './sit';
 import { usedWhileSat } from '../../../src/game/village';
 import { villageObject } from '../../../src/game/village';
@@ -59,6 +60,8 @@ const WAITS_FOR = 120, CHOICE_IN = 90, HELD_FOR = 60, HELD_AT = 0.16;
 const SIT_IN = 900;
 /** how long E sat by the party table is given to open Play together (frames) */
 const PARTY_IN = 60;
+/** the share of the drink sat at the bar at which it's pictured: past its last swallow read (`sips`) */
+const SAT_PICTURED_AT = 0.64;
 /** how far off facing the bar a hero sat on a bar stool may face (degrees) */
 const FACING_BAR_MOST = 10;
 const SETTLE = 12;
@@ -269,6 +272,7 @@ const CANARIES: readonly [string, string][] = [
   ['his wipe reaching past the table', 'went off its top'], ['his broom swept low', 'into the floor sweeping'],
   ['his rag spun in his hand', 'spun in his hand'], ['no mug taken by standing close', 'by E standing close'],
   ['no mug taken by a click', 'taken by a click'], ['the mug kept past the door', 'lost at the door'],
+  ['his drinking hand rested sat', 'sat on a bar stool, the rim stood'],
 ];
 /** each of the canary's plants set (`on`) or taken away */
 function plant(on: boolean): void {
@@ -280,6 +284,7 @@ function plant(on: boolean): void {
   ALE_STACKS.canary = on;
   KEEPER_WIPES.offTop = on;
   KEEPER_WIPES.broomDip = on;
+  SIT_FREE.drink = !on;
 }
 
 export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> {
@@ -352,9 +357,9 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     await viewAs(lab, view);
     watch.forget();
   };
-  const drinkSeated = async (view: 'third' | 'first' = 'third'): Promise<void> => {
+  const drinkSeated = async (view: 'third' | 'first' | 'top' = 'third'): Promise<void> => {
     await viewWatched(view);
-    const seen = view === 'first' ? ' through the eyes' : '';
+    const seen = view === 'first' ? ' through the eyes' : view === 'top' ? ' from above' : '';
     const seats = G.arena.rooms!.tavern.seats;
     const stoolAt = BAR_STOOLS.reduce((a, b) => (Math.abs(b - KEEPER_SPOT.z) < Math.abs(a - KEEPER_SPOT.z) ? b : a));
     const seat = seats.find((s) => Math.abs(s.ax - BAR_STOOL_X) < 0.01 && Math.abs(s.az - stoolAt) < 0.01);
@@ -385,21 +390,38 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
       const waited = await frames(SERVE_IN, () => waitingMug(tv) >= 0);
       let stood = 0, most = 0;
       const drank = waited >= 0 && await takeAndDrink();
-      let pictured = false;
-      await frames(ALE.castTime * 60 + 60, () => {
+      // (the rim at his lips at each swallow, as stood: rested on his thigh, his drinking hand kept the mug in his lap)
+      const sips = view !== 'first' ? [0.3, 0.46, 0.62] : [];
+      let worstRim = 0;
+      const drinking = (): boolean => {
         if (!satWhole(G.player.sitting.pose)) stood++;
-        // (sat at the bar with his drink half down: from his side, and from before him as Bertram sees him)
-        if (!pictured && drinkShare() > 0.5 && view === 'third') {
-          pictured = true;
-          moments.push(lab.picture('sat-at-the-bar', ['left', 'front'], ['a hero sat on a bar stool facing the bar, his ale half drunk']));
-        }
         most = Math.max(most, drinkShare());
+        if (sips.length && drinkShare() >= sips[0]) {
+          sips.shift();
+          worstRim = Math.max(worstRim, mugInHand().rimOff);
+        }
         return drinkShare() < 0;
-      });
+      };
+      // (sat at the bar with his drink two-thirds down, the mug at his lips: the whole screen from above in the room's
+      // own light, and close from either side (over the shoulder from behind his head hid the mug, brought round a
+      // chandelier did; from before him the bar stood in the way, dark). In a drink of its own: a view switched in the
+      // drink's middle took its end)
+      await frames(ALE.castTime * 60 / 2 + 30, () => drinking() || (view === 'top' && drinkShare() > SAT_PICTURED_AT));
+      if (view === 'top' && drinkShare() > SAT_PICTURED_AT) {
+        moments.push(await lab.screen('sat-at-the-bar', ['a hero sat on a bar stool facing the bar, his ale two-thirds '
+          + 'drunk, the mug at his lips: as the player sees it, from above']));
+        moments.push(lab.picture('sat-at-the-bar-close', ['left', 'right'], ['the same, close from either side']));
+        watch.forget();
+      }
+      await frames(ALE.castTime * 60 + 60, drinking);
       if (!drank) lines.push(`  (waited ${waited}, ${lastOffer}, now offered ${tv.doing().offered})`);
       lines.push(`drunk sat${seen}: ${!drank ? 'NOT taken up and drunk' : `drunk to ${(most * 100).toFixed(0)}%, ${stood ? `up for ${stood} frames` : 'sat all the while'}`}`);
       if (!drank || most < ALE_BEATS.setDown) problems.push(`sat on a bar stool${seen}, his ale was never drunk`);
       if (stood) problems.push(`sat on a bar stool${seen}, his drink got him up (${stood} frames)`);
+      if (view !== 'first') {
+        lines.push(`drunk sat${seen}: the rim at most ${(worstRim * 100).toFixed(1)} cm from his lower lip at a swallow`);
+        if (worstRim > RIM_NEAR) problems.push(`sat on a bar stool${seen}, the rim stood ${(worstRim * 100).toFixed(1)} cm from his lower lip at a swallow`);
+      }
     } finally {
       SIT.auto = before;
       G.player.sits = false;
@@ -665,6 +687,9 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     if (cleared < 0) problems.push(`his mugs never all came back to the shelf (${where}; he was at ${tv.doing().job}: ${tv.doing().step})`);
 
     // --- sat on a bar stool: asked from it, the mug taken up by E and drunk, sat all the while (note 11) ---
+    // (from above first: the eyes' case after holds the view's heading on the keeper alone, and come into the eyes from
+    // above its pitch left the bar below the frame)
+    await drinkSeated('top');
     await drinkSeated();
     // (through the eyes too, as #890 lets him sit there: his ale's cast kept him standing in that view before)
     await drinkSeated('first');
@@ -697,7 +722,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
   watch.forget();
 
   // --- every way of taking it up, a walk with it and the door (round 4); last, as it leaves the tavern ---
-  const taken = await takeWays(lab, tv, watched, frames, !!options.canary, viewWatched);
+  const taken = await takeWays(lab, tv, watched, frames, !!options.canary, viewWatched, () => watch.forget());
   lines.push(...taken.lines);
   problems.push(...taken.problems);
 
