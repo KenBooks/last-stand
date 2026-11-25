@@ -80,9 +80,8 @@ import { candleLightsNear, chestOpensNear } from './villageChestLid';
 import { wallingAligned } from './villageWalling';
 import { windowsLetSunIn } from './villageWindows';
 import { grassRingsGentle, grassRingsUnseen } from './villageGrassRing';
-import {
-  fogUnderEaves, fogUnderRoofs, firesStillInFog, fogHoldsSteady, leavesInFog, roofShowsWhatHeSees,
-} from './villageFog';
+import { firesStillInFog, fogHoldsSteady, leavesInFog } from './villageFog';
+import { fogUnderEaves, fogUnderRoofs, roofShowsWhatHeSees } from './villageFogRoofs';
 import { doorConeOpens, heroSeenPastHall, noDotsBesideHall } from './villageHallOpens';
 import { columnsStayGhosts, portalOverAll, wallsPastHimWhole } from './villageSeenPast';
 import { startSpots, topKeepsHim } from './villageStart';

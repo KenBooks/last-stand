@@ -2,7 +2,8 @@
 // frame drawn. From play, "still seeing green where character cannot see": the rays agreed with his line of sight, so
 // what's read is the picture, each place he can't see projected into it and its pixel's colour taken.
 import * as THREE from 'three';
-import type { Lab } from './lab';
+import type { Lab, Pictured } from './lab';
+import { RUST } from '../../../src/engine';
 import { G } from '../../../src/state';
 import { COTTAGES, type Cottage } from '../../../src/data/village';
 import { COTTAGE } from '../../../src/world/villagePlan';
@@ -11,7 +12,7 @@ import { faceCamera, viewMode } from '../../../src/core/renderer';
 import { holdFogHueLetOff, holdSightOff, seenShareAt } from '../../../src/core/sight';
 import { groundHeight } from '../../../src/world/ground';
 import { drawFrame } from './light';
-import { greenAt, isGreen } from './villageFog';
+import { greenTaken, isGreen } from './fogGreen';
 import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
 
@@ -30,9 +31,11 @@ const ROUND: Spot[] = [[0, 0], [HIDDEN_BY, 0], [-HIDDEN_BY, 0], [0, HIDDEN_BY], 
 /** how far out from a wall he stands (m), and where along each side (shares of its half length) */
 const OUT = 0.6;
 const ALONG = [-0.5, 0.5];
-/** the frames he's given to settle, and the most of what he can't see that may show plainly green */
+/** the frames he's given to settle, and the least of the green of what he can't see the fog must take: softened by #755,
+ *  fogged grass still reads greener than red or blue, so the share taken is read (the engine took 33% at the least;
+ *  `sightBlacksOut` asks an unseen place for a third of its warmth) */
 const SETTLE = 60;
-const MOST_GREEN = 0.03;
+const LEAST_GREEN_TAKEN = 0.25;
 
 /** how much greener than it's red or blue a place of the ground he can't see reads as green (a share of its green),
  *  and the most of the places read that may: none in the open's fog, whose tint is blue; under a roof's ghost the
@@ -151,18 +154,18 @@ function standsRound(c: Cottage): { at: Spot; facing: number }[] {
   return stands;
 }
 
-/** The share of what a cottage hides from him that shows plainly green, from each place round each cottage, the camera
- *  behind him; the worst place named. */
+/** The share of its green the fog takes from what a cottage hides from him, from each place round each cottage, the
+ *  camera behind him; the worst place (the least taken) named. */
 async function greenestPast(lab: Lab): Promise<{ share: number; name: string; at: Spot; facing: number }> {
-  let worst = { share: -1, name: '', at: [0, 0] as Spot, facing: 0 };
+  let worst = { share: 2, name: '', at: [0, 0] as Spot, facing: 0 };
   for (const [k, c] of COTTAGES.entries()) {
     for (const [s, stand] of standsRound(c).entries()) {
       G.player.walkTo = null;
       G.player.place(new THREE.Vector3(stand.at[0], groundHeight(...stand.at), stand.at[1]), stand.facing);
       faceCamera(stand.facing);
       await lab.step(SETTLE);
-      const share = greenAt(lab, unseenFrom(stand.at));
-      if (share > worst.share) worst = { share, name: `cottage ${k + 1}, side ${s + 1}`, ...stand };
+      const share = greenTaken(lab, unseenFrom(stand.at)).taken;
+      if (share < worst.share) worst = { share, name: `cottage ${k + 1}, side ${s + 1}`, ...stand };
     }
   }
   return worst;
@@ -207,6 +210,20 @@ function hideTrees(): [THREE.Object3D, number][] {
   return hidden;
 }
 
+/** the engine's fog mixed in by next to nothing, his sight still on (as `fogGreen.ts` reads it against) */
+const FOG_NONE = 1e-4;
+
+/** The screen as it stands with the engine's fog mixed in by next to nothing: what the fog took, beside it. */
+async function clearShot(lab: Lab, label: string): Promise<Pictured> {
+  const fog = RUST.tune.sightFog;
+  RUST.tune.sightFog = FOG_NONE;
+  try {
+    return await lab.screen(label, []);
+  } finally {
+    RUST.tune.sightFog = fog;
+  }
+}
+
 /** From round each cottage, what its walls hide from him lies in the fog (`--canary` holds the fog off). */
 export async function fogPastCottages(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const kept = viewMode();
@@ -216,16 +233,17 @@ export async function fogPastCottages(lab: Lab, canary: boolean): Promise<Lights
   try {
     await viewBy(lab, 'top');
     const worst = await greenestPast(lab);
-    const line = `round the cottages, what their walls hide: at most ${(worst.share * 100).toFixed(1)}% plainly green `
-      + `(${worst.name}; at most ${MOST_GREEN * 100}%)`;
-    const wrong = worst.share > MOST_GREEN;
+    const line = `round the cottages, what their walls hide: the fog takes ${(worst.share * 100).toFixed(0)}% of its `
+      + `green at the least (${worst.name}; at least ${LEAST_GREEN_TAKEN * 100}%)`;
+    const wrong = worst.share < LEAST_GREEN_TAKEN;
     if (canary) return { lines: [line], problems: [], caught: wrong, moments: [] };
     G.player.place(new THREE.Vector3(worst.at[0], groundHeight(...worst.at), worst.at[1]), worst.facing);
     faceCamera(worst.facing);
     await lab.step(SETTLE);
     const read = rayRead(lab, worst.at);
-    const shot = await lab.screen(`the greenest of what a cottage hides: ${worst.name}`, []);
-    return { lines: [line, read], problems: wrong ? [line] : [], caught: null, moments: [shot] };
+    const shot = await lab.screen(`the least fogged of what a cottage hides: ${worst.name}`, []);
+    const clear = await clearShot(lab, `the same, the fog mixed in by next to nothing`);
+    return { lines: [line, read], problems: wrong ? [line] : [], caught: null, moments: [shot, clear] };
   } finally {
     for (const [tree, mask] of trees) tree.layers.mask = mask;
     holdSightOff(false);

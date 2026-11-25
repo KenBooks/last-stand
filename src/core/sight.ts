@@ -230,11 +230,6 @@ export function holdSightOff(off: boolean): void {
   heldOff = off;
 }
 
-/** For a harness (tools/lab): the ground seen through a roof away from him taken as unseen, as it was. */
-export function holdRoofAsOne(held: boolean): void {
-  SIGHT.uSightRoofOne.value = held ? 1 : 0;
-}
-
 /** For a harness (tools/lab): the rays shown as they're cast, at once, as they were (`--only fogHoldsSteady`'s canary). */
 export function holdSightSharp(sharp: boolean): void {
   heldSharp = sharp;
