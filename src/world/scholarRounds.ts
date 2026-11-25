@@ -13,6 +13,7 @@ import type { Obstacle } from '../types';
 import type { VillageObject } from '../data/village';
 import { WALK, type HandAim, type Pinch, type Scholar } from '../entities/models/scholar';
 import { clamp, lerp, mulberry, smooth } from '../util';
+import { SCHOLAR_DOES } from '../data/houses/library';
 
 /** The room as his rounds need it, every place in the room's frame (`g`'s). */
 export interface RoundsRoom {
@@ -85,6 +86,8 @@ export interface Rounds {
   readonly out: ShelfBookOut | null;
   /** a task begun now, whatever he's doing (a harness's) */
   begin(task: Task): void;
+  /** `n` tasks drawn as he'd choose them on getting up, by randomness of `seed` (a harness's: his own is left as it was) */
+  tasks(n: number, seed: number): Task[];
   /** whether his right hand's pinch has closed on the shut book he holds (from then till he lets go of it, the book is
    *  placed from his hand: a harness reads his pads on it) */
   readonly gripped: boolean;
@@ -1393,11 +1396,13 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
   }
 
   let asked: Task | null = null;
-  /** what he does next when he gets up (weights: browsing most) */
-  const nextTask = (): Task => {
-    const can: [Task, number][] = [['browse', 3], ['keep', 1], ['dust', 2], ['tidy', 1.5], ['globe', 1]];
+  /** what he does next when he gets up (weights: browsing most; dusting only while `SCHOLAR_DOES` has it), drawn by
+   *  `draw` (his own randomness, or a harness's) */
+  const nextTask = (draw = rng): Task => {
+    const can: [Task, number][] = [['browse', 3], ['keep', 1], ['tidy', 1.5], ['globe', 1]];
+    if (SCHOLAR_DOES.dust) can.push(['dust', 2]);
     if (gaps.length && stack.length > STACK.fewest) can.push(['restock', 2]);
-    let r = rng() * can.reduce((t, [, w]) => t + w, 0);
+    let r = draw() * can.reduce((t, [, w]) => t + w, 0);
     for (const [task, w] of can) if ((r -= w) <= 0) return task;
     return 'browse';
   };
@@ -1480,7 +1485,13 @@ export function scholarRounds(s: Scholar, room: RoundsRoom): Rounds {
     get spots() { return spots; },
     begin(task) {
       if (act.sit < 1 || carried) return;
+      // (a task switched off, asked for anyway, isn't done)
+      if (task === 'dust' && !SCHOLAR_DOES.dust) return;
       asked = task;
+    },
+    tasks(n, seed) {
+      const draw = mulberry(seed);
+      return Array.from({ length: n }, () => nextTask(draw));
     },
     update(frameDt, hero, talking, said) {
       dt = frameDt;

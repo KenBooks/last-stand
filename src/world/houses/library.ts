@@ -13,7 +13,7 @@ import { particles, col } from '../../fx/particles';
 import { G } from '../../state';
 import { scholarSteps, type Scholar } from '../../entities/models/scholar';
 import { blockGeometry, bookShape, printGeometry, type BookShape } from '../../entities/models/book';
-import { SCHOLAR_DESK } from '../../data/houses/library';
+import { SCHOLAR_DESK, SCHOLAR_DOES } from '../../data/houses/library';
 import { HOUSE_OBJECTS } from '../../data/houses';
 import { scholarRounds, type Rounds } from '../scholarRounds';
 import { chairSeat } from '../seats';
@@ -598,6 +598,16 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): {
   return { seat, desk: d, sat: new THREE.Vector3(0, 0, SAT), stack, chair };
 }
 
+/** his dusting cloth: a rag in the paper's material, crumpled */
+function dustingCloth(M: Mats): THREE.Mesh {
+  const rag = new THREE.IcosahedronGeometry(1, 2), rp = rag.attributes.position, rr = mulberry(31);
+  for (let i = 0; i < rp.count; i++) rp.setXYZ(i, rp.getX(i) * 0.06 * (0.8 + rr() * 0.4), rp.getY(i) * 0.022 * (0.7 + rr() * 0.6), rp.getZ(i) * 0.05 * (0.8 + rr() * 0.4));
+  rag.computeVertexNormals();
+  const cloth = new THREE.Mesh(rag, M.paper);
+  cloth.castShadow = true;
+  return cloth;
+}
+
 /** The library: built into `group`. */
 export function build(group: THREE.Group): Room {
   const id: RoomId = 'library', b = begin(id, group, 2718), { g, M, rng } = b;
@@ -761,12 +771,10 @@ export function build(group: THREE.Group): Room {
   // (both moved by his rounds, and shown and hidden: out of the room's merge)
   keepApart(held);
   keepApart(openHeld);
-  const rag = new THREE.IcosahedronGeometry(1, 2), rp = rag.attributes.position, rr = mulberry(31);
-  for (let i = 0; i < rp.count; i++) rp.setXYZ(i, rp.getX(i) * 0.06 * (0.8 + rr() * 0.4), rp.getY(i) * 0.022 * (0.7 + rr() * 0.6), rp.getZ(i) * 0.05 * (0.8 + rr() * 0.4));
-  rag.computeVertexNormals();
-  const cloth = new THREE.Mesh(rag, M.paper);
+  // (his dusting cloth, built only while he dusts, `SCHOLAR_DOES`: off, a place of nothing in its stead, as his rounds
+  // move it)
+  const cloth = SCHOLAR_DOES.dust ? dustingCloth(M) : new THREE.Object3D();
   cloth.name = 'library dusting cloth';
-  cloth.castShadow = true;
   cloth.visible = false;
   g.add(cloth);
   keepApart(cloth);

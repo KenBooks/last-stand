@@ -13,6 +13,7 @@ import { head, num, para, pct, points, secs, whole } from './parts';
 import { HOLLIS } from '../../data/talk';
 import { HOUSES } from '../../data/houses';
 import { CUT, RESTOCK_RUNS, STOCKED_FROM, TRADED } from '../../data/merchant';
+import { SCHOLAR_DOES } from '../../data/houses/library';
 
 export interface Tip { id: string; title: string; html: () => string }
 
@@ -174,7 +175,7 @@ export const TIPS_PAGES: Tip[] = [
     id: 'folk', title: 'Folk of the village',
     html: () => para(`Some of the village's houses have someone in them. Walk up and press <b>E</b> (or tap Use, or click them); what they say comes a line at a time (a click, a tap, Space or Enter shows the rest at once), then pick what to say with a click, a tap, its number's key, or the arrows and Enter. Leave, or Esc, ends the talk. They remember you: a first meeting goes otherwise than a visit after, and what you've already asked is marked.`)
       + points('', [
-        `<b class="gold">${HOLLIS.name}</b>, ${HOLLIS.title.toLowerCase()}, reads at his table in the library, south of the square, or goes about it: taking a book down to look it over, putting it back, shelving what's piled on his table, dusting the shelves, squaring a row of books, setting the globe turning. Come close and he'll look up; he stops for you only once you talk to him. Ask him about himself and his scripture, the village and its houses, the battlegrounds and what waits at their ends, or, once you've fought, what he makes of you. He knows the village's old books, and maybe a secret or two: ask him if he has heard anything strange.`,
+        `<b class="gold">${HOLLIS.name}</b>, ${HOLLIS.title.toLowerCase()}, reads at his table in the library, south of the square, or goes about it: taking a book down to look it over, putting it back, shelving what's piled on his table, ${SCHOLAR_DOES.dust ? 'dusting the shelves, ' : ''}squaring a row of books, setting the globe turning. Come close and he'll look up; he stops for you only once you talk to him. Ask him about himself and his scripture, the village and its houses, the battlegrounds and what waits at their ends, or, once you've fought, what he makes of you. He knows the village's old books, and maybe a secret or two: ask him if he has heard anything strange.`,
         `<b class="gold">Odo the Merchant</b> keeps ${HOUSES.merchant.name}, on the Thornwood's road by the campfire. He trades gear for gear, no coin: press E at his counter, choose one of his wares, then offer banked gear from your stash until its value reaches his price (a piece's own value and ${pct(CUT - 1)} more). He takes and sells only ${TRADED.map((r) => RARITIES.find((x) => x.id === r)?.name.toLowerCase()).join(', ')} gear (rares once you have reached wave ${whole(STOCKED_FROM.rare)}, epics once you have reached wave ${whole(STOCKED_FROM.epic)}), keeps all you give him, and has new wares every ${whole(RESTOCK_RUNS)} runs. Between customers he works about his shop (stocking his shelves, dusting, looking over a blade, weighing coin, keeping his ledger) and glances over at whoever is in; walk in, or up to his counter, and he puts down what he's doing and comes to his desk to serve you.`,
       ]),
   },

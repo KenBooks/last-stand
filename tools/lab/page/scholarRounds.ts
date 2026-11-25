@@ -22,6 +22,7 @@ import { jointsOf, offHero } from './scholar';
 import { HOOD, scholarPlant } from '../../../src/entities/models/scholar';
 import { GRIP_SHUT, roundsPlant } from '../../../src/world/scholarRounds';
 import { CASE_R, type LadderPart } from '../../../src/world/houses/library';
+import { SCHOLAR_DOES } from '../../../src/data/houses/library';
 import type { Obstacle } from '../../../src/types';
 import { CHAIR, TABLE_INTO_MOST, chairHandOff, chairRead, intoTable } from './scholarChair';
 import { LINEN_OUT_MOST, MOUTH_MOST, linenOut as linenRead, mouthRead } from './scholarSleeves';
@@ -30,6 +31,17 @@ import { LINEN_OUT_MOST, MOUTH_MOST, linenOut as linenRead, mouthRead } from './
  *  forearm (`SLEEVE_FALL` once: 0.3) and more, as Kenneth saw it hang apart from his arm */
 const MOUTH_CANARY_TIP = 0.6;
 import { GRAB, INTO_BOOK_MOST, PADS_MOST, PAGE_FACING, SLEEVES_INTO_BOOK_MOST, bookRead, fingerPoints, grabRead, intoBook, padsRead, pageFacing, printsOf, turnedRound } from './bookHold';
+
+/** how many of his tasks a day's drawing of them reads (`dustInDay`): far more than a visit's */
+const DAY_TASKS = 400;
+/** How many times he dusts over a day's drawing of his tasks (`Rounds.tasks`), as his data has it and, a canary's,
+ *  with dusting switched on. */
+function dustInDay(rounds: Rounds): { dusts: number; planted: number } {
+  const count = () => rounds.tasks(DAY_TASKS, 7).filter((t) => t === 'dust').length;
+  const was = SCHOLAR_DOES.dust, dusts = count();
+  SCHOLAR_DOES.dust = true;
+  try { return { dusts, planted: count() }; } finally { SCHOLAR_DOES.dust = was; }
+}
 
 /** whether the open book read wrong to him at some frame (its least facing under `PAGE_FACING`) */
 const pageWrong = (r: { pageAway: number; pageRight: number }) => r.pageAway < PAGE_FACING.away || r.pageRight < PAGE_FACING.right;
@@ -747,6 +759,10 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
     const outOfSleeve = planted.mouthOff > MOUTH_MOST;
     lines.push(`canary: his sleeves tipped down off his forearms as the wide bells hung ${outOfSleeve ? 'caught' : 'went unseen'} (${planted.mouthOff.toFixed(2)} of a mouth's radius, ${planted.mouthAt})`);
     if (!outOfSleeve) problems.push('rounds: the canary\'s sleeves tipped off his forearms went unseen');
+    // (dusting switched on, a day's drawing of his tasks must find it: the check that he never dusts reads something)
+    const dusted = dustInDay(rounds).planted;
+    lines.push(`canary: dusting switched on, drawn over a day ${dusted ? 'caught' : 'went unseen'} (${dusted} times of ${DAY_TASKS})`);
+    if (!dusted) problems.push('rounds: the canary\'s dusting switched on went unseen');
     const overlapped = planted.tableInto > TABLE_INTO_MOST;
     lines.push(`canary: his chair left where it stands as he gets up and sits ${overlapped ? 'caught' : 'went unseen'} (${(planted.tableInto * 1000).toFixed(0)} mm of him into his table's top, ${planted.tableAt})`);
     if (!overlapped) problems.push('rounds: the canary\'s chair left where it stands went unseen');
@@ -925,18 +941,32 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
   lines.push(`books off their shelves: ${gaps} after he kept one, ${rounds.gaps} after he restocked`);
   // (his other tasks: a case dusted, a row squared, the globe set turning)
   const cloth = G.scene.getObjectByName('library dusting cloth')!, ball = G.scene.getObjectByName('library globe')!;
-  let clothFar = 0, clothFrames = 0;
-  rounds.begin('dust');
-  const dust = await follow(lab, s, rounds, canary, () => {
-    if (!cloth.visible || rounds.doing !== 'dusting a case') return;
-    clothFrames++;
-    const palm = hands(s)[1], at = cloth.getWorldPosition(new THREE.Vector3());
-    clothFar = Math.max(clothFar, palm.distanceTo(at));
-  });
-  lines.push(lineOf('dust', dust), `his dusting cloth shown ${clothFrames} frames, at most ${clothFar.toFixed(2)} m from his right palm`);
-  problems.push(...problemsOf('dust', dust));
-  if (!clothFrames) problems.push('rounds: he dusted with no cloth shown');
-  if (clothFar > CLOTH_MOST) problems.push(`rounds: his dusting cloth ${clothFar.toFixed(2)} m from his right palm (at most ${CLOTH_MOST})`);
+  // (dusting only while his data has it, `SCHOLAR_DOES`: off, its round is skipped, not passed, and over a long day's
+  // drawing of his tasks he never dusts; its canary is the canary run's)
+  const day = dustInDay(rounds);
+  lines.push(`his tasks over a day (${DAY_TASKS} drawn): dusting ${day.dusts} times${SCHOLAR_DOES.dust ? '' : ' (dusting is off)'}`);
+  if (!SCHOLAR_DOES.dust && day.dusts) problems.push(`rounds: he dusted ${day.dusts} times of ${DAY_TASKS} with dusting off (from play: "Remove dusting for Hollis")`);
+  if (!SCHOLAR_DOES.dust) {
+    // (its time a book's, as his day's is: a browse in its stead)
+    lines.push('his dust round: skipped (dusting is off: `SCHOLAR_DOES.dust`); a browse in its place');
+    rounds.begin('browse');
+    const instead = await follow(lab, s, rounds, canary);
+    lines.push(lineOf('browse, in dusting\'s place', instead));
+    problems.push(...problemsOf('browse, in dusting\'s place', instead));
+  } else {
+    let clothFar = 0, clothFrames = 0;
+    rounds.begin('dust');
+    const dust = await follow(lab, s, rounds, canary, () => {
+      if (!cloth.visible || rounds.doing !== 'dusting a case') return;
+      clothFrames++;
+      const palm = hands(s)[1], at = cloth.getWorldPosition(new THREE.Vector3());
+      clothFar = Math.max(clothFar, palm.distanceTo(at));
+    });
+    lines.push(lineOf('dust', dust), `his dusting cloth shown ${clothFrames} frames, at most ${clothFar.toFixed(2)} m from his right palm`);
+    problems.push(...problemsOf('dust', dust));
+    if (!clothFrames) problems.push('rounds: he dusted with no cloth shown');
+    if (clothFar > CLOTH_MOST) problems.push(`rounds: his dusting cloth ${clothFar.toFixed(2)} m from his right palm (at most ${CLOTH_MOST})`);
+  }
   rounds.begin('tidy');
   const tidy = await follow(lab, s, rounds, canary);
   lines.push(lineOf('tidy', tidy));
