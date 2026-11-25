@@ -63,6 +63,7 @@ const MOST_UNDER_WAIST = 0.0005;
 /** the village's lamps, and the portico's columns where this commit has them (an A/B's other side may not) */
 const { LAMPS } = world_;
 const PORTICO_COLUMNS = (world_ as { PORTICO_COLUMNS?: readonly THREE.Box3[] }).PORTICO_COLUMNS;
+const ROOM_COLUMNS = (world_ as { ROOM_COLUMNS?: readonly THREE.Box3[] }).ROOM_COLUMNS;
 /** what of the frame the hole may change round his box, the post's and the cheek's */
 const SCENARIOS: readonly BehindProp[] = [
   {
@@ -88,6 +89,7 @@ const SCENARIOS: readonly BehindProp[] = [
     leastRound: 0.001,
   },
   ...porticoScenario(),
+  ...roomColumnScenario(),
 ];
 
 /**
@@ -107,6 +109,26 @@ function porticoScenario(): BehindProp[] {
     off: 2.2,
     aside: 0,
     view: 'top',
+    leastRound: 0.005,
+  }];
+}
+
+/**
+ * From play, in the hall over the shoulder a column of its room stood between the camera and him, whole and dark over
+ * half the screen, "it should thin so I can see the character": the room's columns thinned from above alone. Behind the
+ * east row's second, turned to the dais, the camera across the column.
+ */
+function roomColumnScenario(): BehindProp[] {
+  if (!ROOM_COLUMNS) return [];
+  const middle = ROOM_COLUMNS[3].getCenter(new THREE.Vector3());
+  return [{
+    name: "a column of the hall's room",
+    x: middle.x,
+    z: middle.z,
+    way: Math.PI,
+    off: 1.1,
+    aside: 0,
+    view: 'third',
     leastRound: 0.005,
   }];
 }

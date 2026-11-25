@@ -23,7 +23,7 @@ import { approach, want } from './warm';
 import { stands, walkLength } from '../world/walkPath';
 import { completeStep } from './training';
 import { HALL, TERRACE, inHall } from '../data/village';
-import { PORTICO_COLUMNS, inHallsBulk } from '../world/village';
+import { PORTICO_COLUMNS, ROOM_COLUMNS, hallWindows, inHallsBulk } from '../world/village';
 import { meadowFromAbove } from '../world/meadow';
 import { onWholeView, wholeView } from '../core/wholeView';
 import { CLASS_IDS } from '../data/classes/index';
@@ -527,7 +527,7 @@ function hallInside(dt: number): void {
   // over him, from play "this column thins less than others somehow")
   const columnGhost = roofAway && inside ? (porticoHidesHim() ? OUTSIDE_GHOST : COLUMN_GHOST)
     : (lobby && view === 'top' && hallHidesHim() && !under) || (lobby && view !== 'first' && porticoHidesHim())
-      || (roofAway && porticoConeOutsideHeld)
+      || (lobby && view !== 'first' && inside && roomColumnHidesHim()) || (roofAway && porticoConeOutsideHeld)
       ? OUTSIDE_GHOST : 0;
   columnFade = THREE.MathUtils.damp(columnFade, columnGhost, CUT_AWAY_FADE, dt);
   // (all their depth kept in the hall alone: outside it, the fog read a ghost's place in the hall, unseen, as a slab)
@@ -542,7 +542,8 @@ function hallInside(dt: number): void {
   village.meadow.visible = meadowSeen || wholeView();
   // (nor what stands loose in its room from outside it, in the close views with its doorway out of sight: its
   // walls hide the room, whose torches, plinths, banners and columns were drawn all the same)
-  roomSeen = !lobby || view === 'top' || inside || cameraInHall() || (doorwayOnScreen() && roomThroughDoor());
+  roomSeen = !lobby || view === 'top' || inside || cameraInHall() || (doorwayOnScreen() && roomThroughDoor())
+    || windowOnScreen();
   showRoom(roomSeen || wholeView());
   // (from above, the camera sees past the walls: while he can see a plinth, from play, "pedestals are empty from this
   // position, they should display heroes if character can see them from their cone of view")
@@ -618,12 +619,31 @@ const ROOM_ACROSS = [-0.9, -0.45, 0, 0.45, 0.9];
 const ROOM_ALONG = [0.03, 0.2, 0.5, 0.97];
 const ROOM_UP = [0.2, 2, 4.5];
 
-/** Whether the camera sees into the hall's room through its doorway from before its front (from beside or behind
- *  it, never: its walls and panes show nothing). */
+/** Whether the camera sees into the hall's room through its doorway from before its front (from beside it, its
+ *  windows do: `windowOnScreen`). */
 function roomThroughDoor(): boolean {
   if (G.camera.position.z <= HALL.door) return false;
   return ROOM_ACROSS.some((across) => ROOM_ALONG.some((along) => ROOM_UP.some((up) => throughDoor(
     TERRACE.x + across * HALL.inHalf, TERRACE.high + up, HALL.inFront + (HALL.wall - HALL.inFront) * along))));
+}
+
+/** the hall's windows, and how far out from a window's glass the camera must be to see in through it (m) */
+const HALL_WINDOWS = hallWindows();
+const OUT_OF_WALL = 0.3;
+const _window = new THREE.Box3();
+
+/** Whether the camera, outside the hall's wall, has one of its windows in view: its room shows through their glass
+ *  (from play, "should be able to see hall from outside too, so both ways"), and was left out of the frame wherever
+ *  the doorway wasn't on screen. */
+function windowOnScreen(): boolean {
+  const cam = G.camera;
+  _frustum.setFromProjectionMatrix(_viewProj.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+  return HALL_WINDOWS.some((window) => {
+    if (_sightTo.copy(cam.position).sub(window.sill).dot(window.out) < OUT_OF_WALL) return false;
+    _window.min.set(window.sill.x - 0.2, window.sill.y, window.sill.z - window.half);
+    _window.max.set(window.sill.x + 0.2, window.sill.y + window.high, window.sill.z + window.half);
+    return _frustum.intersectsBox(_window);
+  });
 }
 
 /** Whether he sees any plinth of the hall's, by the rays round him. */
@@ -676,12 +696,24 @@ function beamHidesHim(): boolean {
  *  round him, `hallColumn`), so from the square below and over the shoulder on the terrace one stood over him solid,
  *  from play, "why this not becoming transparent ?" (`lab village --only heroBehindProps`). */
 function porticoHidesHim(): boolean {
+  return columnHidesHim(PORTICO_COLUMNS);
+}
+
+/** Whether a column of the hall's room stands between the camera and him: over the shoulder in the hall one stood
+ *  whole and dark over him, filling half the screen (from play, "it should thin so I can see the character"; the
+ *  room's columns thinned from above alone, `lab village --only roomColumnThinsOverShoulder`). */
+function roomColumnHidesHim(): boolean {
+  return columnHidesHim(ROOM_COLUMNS);
+}
+
+/** Whether one of `columns` stands between the camera and him, at his feet, waist or head. */
+function columnHidesHim(columns: readonly THREE.Box3[]): boolean {
   const eye = G.camera.position, p = G.player;
   for (const up of HIS_HEIGHTS) {
     _sightTo.set(p.pos.x, p.obj.position.y + up, p.pos.z).sub(eye);
     const away = _sightTo.length();
     _sight.set(eye, _sightTo.divideScalar(away));
-    for (const column of PORTICO_COLUMNS) {
+    for (const column of columns) {
       if (_sight.intersectBox(column, _sightHit) && _sightHit.distanceTo(eye) < away) return true;
     }
   }
@@ -1052,13 +1084,30 @@ function lampInside(i: number): boolean {
   return i >= n && i < n + village.hallTorches.length;
 }
 
-/** Lamp `i`'s light (in `allLamps`' order): its intensity now and its reach (m). */
-function lampLight(i: number): { intensity: number; reach: number } {
+/** how fast a torch's light follows its fire's flicker (a second): followed at once, its lamp changed by 1.2% in a
+ *  frame, where a lamp may change 1% (`lab village --only lampsSteady`; from play, "lamps have high frequency
+ *  flicker, I dont want that"), and the glow of a flame is slower than its tongues */
+const TORCH_EASE = 8;
+/** each torch's light now, as a share of it at rest, eased toward its fire's flicker */
+const torchGlow: number[] = [];
+
+/** Each torch's light eased toward its fire's flicker over `dt` (s). */
+function easeTorches(dt: number): void {
+  const flickers = G.arena.village.torchFlickers;
+  for (let k = 0; k < flickers.length; k++) {
+    torchGlow[k] = THREE.MathUtils.damp(torchGlow[k] ?? 1, flickers[k].intensity, TORCH_EASE, dt);
+  }
+}
+
+/** Lamp `i`'s light (in `allLamps`' order): its intensity now (a torch's at rest, `rest`) and its reach (m). */
+function lampLight(i: number, rest = false): { intensity: number; reach: number } {
   const village = G.arena.village, n = village.lanterns.length;
   if (i < n) return { intensity: LAMPLIGHT.intensity * village.night, reach: LAMPLIGHT.distance };
   if (i < n + TORCHLIGHT.dais) return { intensity: TORCHLIGHT.daisIntensity, reach: TORCHLIGHT.daisDistance };
-  if (lampInside(i)) return { intensity: TORCHLIGHT.intensity, reach: TORCHLIGHT.distance };
-  return { intensity: TORCHLIGHT.porchIntensity, reach: TORCHLIGHT.distance };
+  // (a torch's light swells with its fire's puffs: steady, the hall's torches were "completely broken and static")
+  const flicker = rest ? 1 : torchGlow[i - n - TORCHLIGHT.dais] ?? 1;
+  if (lampInside(i)) return { intensity: TORCHLIGHT.intensity * flicker, reach: TORCHLIGHT.distance };
+  return { intensity: TORCHLIGHT.porchIntensity * flicker, reach: TORCHLIGHT.distance };
 }
 
 /** Every lamp (the street lamps' and the hall's torches') placed in the lit shaders' list, the hall's inside its
@@ -1069,7 +1118,7 @@ function placeTheLamps(): LampPlace[] {
   // street lamps on their side of the hall's walls, say none)
   const street = G.arena.village.lanterns.length;
   const fullest = (i: number): [number, number, number] | undefined => {
-    const by = i < street ? LAMPLIGHT.intensity : lampInside(i) ? lampLight(i).intensity : 0;
+    const by = i < street ? LAMPLIGHT.intensity : lampInside(i) ? lampLight(i, true).intensity : 0;
     return by > 0 ? [LAMP_COLOR.r * by, LAMP_COLOR.g * by, LAMP_COLOR.b * by] : undefined;
   };
   const places = allLamps().map((at, i) => ({
@@ -1094,7 +1143,7 @@ export function prepareLamps(renderer: THREE.WebGLRenderer, village: THREE.Objec
  * drawn as painted pools elsewhere, each lamp turned into lit ground as he walked up ("it looks lame"). No lamp's
  * shadow is cast by a pooled light: the lights held for that (`lampLights`) stay dark.
  */
-function lightLamps(_dt: number): void {
+function lightLamps(dt: number): void {
   if (!lampsPlaced) {
     placeTheLamps();
     lampsPlaced = true;
@@ -1111,6 +1160,7 @@ function lightLamps(_dt: number): void {
   }
   // (each lamp by the list: no lamp's shadow is cast by a pooled light, the engine draws the lamps' own)
   const all = allLamps();
+  easeTorches(dt);
   for (let i = 0; i < all.length; i++) lightLamp(i, LAMP_COLOR, lampLight(i).intensity);
   for (const slot of lampLights) {
     slot.peak = 0;

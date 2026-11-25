@@ -2,13 +2,16 @@
 // what the doorway shows (looking out of the hall at the square, three's view culling drew the fountain, the yard's
 // dummies and the village's objects behind its walls, 555 draws and the render 11.9 ms of a frame's CPU, from play, a
 // perf report "looking at plaza from hall"), and from outside its room and the heroes on its dais are seen through
-// the doorway alone (its windows are too high, their panes show nothing: facing the hall from the square, the room
-// and the heroes were 128 of the frame's 429 draws, all drawn whatever the doorway showed of them).
+// the doorway alone (facing the hall from the square, the room and the heroes were 128 of the frame's 429 draws, all
+// drawn whatever the doorway showed of them). Its windows are openings too, seen through both ways as the doorway is:
+// their glass shows what's past it (from play, "make hall windows semi transparent, so they actually show what's
+// outside behind them").
 import * as THREE from 'three';
 import { fadedWhole } from '../core/seeThrough';
 import { SIGHT, nearDoorAt, seesIntoRoom } from '../core/sight';
 import { HALL, TERRACE, inHall } from '../data/village';
 import type { Doorway } from './doorways';
+import { hallWindows } from './village';
 
 /** the hall's room inside its walls (its least x and z, its most): while he sees any of it from outside, its roof
  *  is gone whole and its front wall may be, and the room is drawn whole */
@@ -49,6 +52,7 @@ export function hallDoorway(cutaway: readonly THREE.Object3D[]): Doorway {
     // room's far corners, from play "do you [see the] slanted roof effect")
     whole: () => cutaway.every((part) => part.visible) && !fadedWhole('hallFront') && !fadedWhole('hallRoof')
       && !seesIntoRoom(HALL_ROOM) && !byDoorInside(),
+    windows: hallWindows(),
     wallsSaid: () => `roof and front shown ${cutaway.every((part) => part.visible)}, `
       + `front thinned ${fadedWhole('hallFront')}, roof thinned ${fadedWhole('hallRoof')}`,
   };
