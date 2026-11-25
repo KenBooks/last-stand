@@ -207,6 +207,12 @@ fn place_hook(instance: u32, list: u32, p: ptr<function, Placed>) -> bool {
   return true;
 }
 
+/// The way a tuft's gusts travel. A constant of the module's, never a \`let\` of one in a function whose parts are
+/// read (\`.x\`, \`[0]\`): in a module with a pipeline constant (Bulwark's \`LAYER_PART\`) naga's pass over the
+/// constants, which Firefox runs on every stage, emits such a \`let\` twice and refuses the stage
+/// (ExpressionAlreadyInScope): the blades went undrawn there (report V1T3-G00X).
+const DOWNWIND = vec2f(0.83, 0.55);
+
 /// A blade's vertex, from the blade as placed: bent along its lean, turned a little to the camera, in the wind.
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   let placed = (*v).placed;
@@ -253,10 +259,9 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   if (tufted > 0.5) {
     // (a tuft's: gusts, patches of moving air that travel downwind, the grass near upright between them; its
     // card barely flutters and sways mostly in its own plane: world/meadow.ts VERTEX_BLADE)
-    let downwind = vec2f(0.83, 0.55);
     let veer = (blade_noise(root * 0.035 + time * 0.03) - 0.5) * 2.4;
-    let wind_way = vec2f(downwind.x * cos(veer) - downwind.y * sin(veer), downwind.x * sin(veer) + downwind.y * cos(veer));
-    let gust = blade_noise(root * 0.11 - downwind * time * 0.3) * 0.65 + blade_noise(root * 0.37 - downwind * time * 0.5) * 0.35;
+    let wind_way = vec2f(DOWNWIND.x * cos(veer) - DOWNWIND.y * sin(veer), DOWNWIND.x * sin(veer) + DOWNWIND.y * cos(veer));
+    let gust = blade_noise(root * 0.11 - DOWNWIND * time * 0.3) * 0.65 + blade_noise(root * 0.37 - DOWNWIND * time * 0.5) * 0.35;
     let blowing = smoothstep(0.42, 0.78, gust);
     let beat = sin(time * 1.7 + h.y * 6.2832) * (0.04 + 0.16 * blowing) * 0.25;
     let sway = turned * dot(wind_way, turned);
