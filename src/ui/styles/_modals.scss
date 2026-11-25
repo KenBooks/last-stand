@@ -135,6 +135,11 @@ body.touch #item-sheet .dc-buttons .btn { min-height: calc(32px / var(--ui, 1));
 .pb-opt-col { display: flex; flex-direction: column; min-width: 0; }
 .pb-opts .opt-row { justify-content: flex-start; margin: 4px 0 14px; }
 .pb-opts .quality-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+/* the advanced graphics, folded under a heading of their own (#747): opened, their rows as the others' */
+.pb-opts .opt-advanced { margin: 4px 0 14px; }
+.pb-opts .opt-advanced summary { cursor: $cursor-hand; font-size: 14px; color: var(--ink); margin-bottom: 8px; }
+/* (each row on one line, its name before its buttons: under it, as the other rows, the six ran past the page's foot) */
+.pb-opts .opt-advanced .quality-row { flex-direction: row; align-items: center; justify-content: space-between; margin: 0 0 6px; }
 .pb-opts .quality-row > span { color: var(--ink-dim); font-size: 13px; }
 /* a checkbox beside a row's choice, wrapping under it where there's no room (the anonymous play stats beside the
    slow-game reports) */

@@ -29,7 +29,7 @@ import { isTouch } from './touch';
 import { perfHudSize, setPerfHudSize, type PerfHudSize } from './perfHud';
 import { netHudEnabled, setNetHud } from './netHud';
 import { battleLogEnabled, setBattleLog } from './battleLog';
-import { qualitySetting, qualityLevel, resolutionSetting, setQuality, setResolution } from '../core/quality';
+import { advancedSetting, qualitySetting, qualityLevel, resolutionSetting, setAdvanced, setQuality, setResolution } from '../core/quality';
 import { colourPickerHtml, bindColourPicker, refreshColourPickers } from './colourPicker';
 import { framesUncapped, setFramesUncapped } from '../core/frameLoop';
 import { readCookie, writeCookie } from '../core/cookies';
@@ -283,6 +283,12 @@ export function initMenus(h: MenuHooks): void {
     b.onclick = () => { sfx.click(); setGearGlow(b.dataset.g === 'on'); renderGearGlowOptions(); };
   });
   renderGearGlowOptions();
+  for (const key of ['bloomShare', 'grassSpread', 'floorPlants', 'simpleTrees', 'particles', 'lampShadows'] as const) {
+    document.querySelectorAll<HTMLElement>(`#opt-adv-${key} button`).forEach((b) => {
+      b.onclick = () => { sfx.click(); setAdvanced(key, advancedValue(b.dataset.v ?? '') as never); renderAdvancedOptions(); };
+    });
+  }
+  renderAdvancedOptions();
   document.querySelectorAll<HTMLElement>('#opt-eyes-portal button').forEach((b) => {
     b.onclick = () => { sfx.click(); setEyesPortal(b.dataset.g === 'on'); renderEyesPortalOptions(); };
   });
@@ -1114,6 +1120,22 @@ function renderEyesPortalOptions(): void {
 
 /** The Gear glow setting's buttons, the one in effect lit: the player's choice, else the quality level's (off at
  *  Very low). */
+/** An advanced setting's button's value as the setting takes it: '' the level's, a flag, else a number. */
+function advancedValue(text: string): number | boolean | undefined {
+  if (text === '') return undefined;
+  if (text === 'true' || text === 'false') return text === 'true';
+  return Number(text);
+}
+
+/** The advanced graphics' buttons, each setting's choice lit (Auto where it's the level's). */
+function renderAdvancedOptions(): void {
+  for (const key of ['bloomShare', 'grassSpread', 'floorPlants', 'simpleTrees', 'particles', 'lampShadows'] as const) {
+    const chosen = advancedSetting(key);
+    const lit = chosen === undefined ? '' : String(chosen);
+    document.querySelectorAll<HTMLElement>(`#opt-adv-${key} button`).forEach((b) => b.classList.toggle('active', b.dataset.v === lit));
+  }
+}
+
 function renderGearGlowOptions(): void {
   const on = gearGlow() ? 'on' : 'off';
   document.querySelectorAll<HTMLElement>('#opt-gear-glow button').forEach((b) => b.classList.toggle('active', b.dataset.g === on));

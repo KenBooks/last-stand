@@ -14,7 +14,7 @@
 // to cut, we need to cut something else, not resolution").
 import * as THREE from 'three';
 import { G } from '../state';
-import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualitySetting } from '../data/quality';
+import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualityPreset, type QualitySetting } from '../data/quality';
 import { setBloomShare, setRenderQuality, setResolutionShare, setShadowInTurns } from './renderer';
 import { setParticleShare } from '../fx/particles';
 import { setFlameSteps } from '../world/fire';
@@ -57,6 +57,44 @@ let aboveNext = false;
 let trialFrom: QualityLevel | null = null;
 /** the most pixels the scene renders (Infinity: the screen's own); only a harness sets one (`useQuality`) */
 let budget = Infinity;
+
+/**
+ * The player's advanced graphics settings (#747, "Add Advanced Settings for Greater User Customization", the pause
+ * menu's Advanced graphics): each one of a level's settings held to the player's choice whatever the level (Auto's
+ * too), or left to it. Only settings a level already switches live without a shader change (a share, a count, a
+ * flag a uniform or a mesh's visibility reads), so a choice compiles nothing and shows at once. Kept in the cookie
+ * `last-stand-advanced`.
+ */
+export type AdvancedKey = 'bloomShare' | 'grassSpread' | 'floorPlants' | 'simpleTrees' | 'particles' | 'lampShadows';
+const ADVANCED_KEYS: readonly AdvancedKey[] = ['bloomShare', 'grassSpread', 'floorPlants', 'simpleTrees', 'particles', 'lampShadows'];
+const ADVANCED_COOKIE = 'last-stand-advanced';
+let advanced: Partial<Pick<QualityPreset, AdvancedKey>> = readAdvanced();
+
+/** The advanced settings kept, each a value of its kind (anything else in the cookie passed over). */
+function readAdvanced(): Partial<Pick<QualityPreset, AdvancedKey>> {
+  try {
+    const kept = JSON.parse(readCookie(ADVANCED_COOKIE) ?? '{}') as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const key of ADVANCED_KEYS) {
+      const value = kept[key];
+      if (typeof value === typeof QUALITY.high[key]) out[key] = value;
+    }
+    return out as Partial<Pick<QualityPreset, AdvancedKey>>;
+  } catch {
+    return {};
+  }
+}
+
+/** The player's choice for advanced setting `key`, or undefined where it's the level's. */
+export const advancedSetting = <K extends AdvancedKey>(key: K): QualityPreset[K] | undefined => advanced[key];
+
+/** Advanced setting `key` held to `value` (undefined: the level's again), kept and put to use at once. */
+export function setAdvanced<K extends AdvancedKey>(key: K, value: QualityPreset[K] | undefined): void {
+  if (value === undefined) delete advanced[key];
+  else advanced = { ...advanced, [key]: value };
+  writeCookie(ADVANCED_COOKIE, JSON.stringify(advanced));
+  apply(level, budget);
+}
 let frames = 0, time = 0, settle = 0;
 /** the window's frame times up to `longestFrame` (s), and their sum: the quick path's median reads them */
 const quick: number[] = [];
@@ -320,7 +358,8 @@ export const useQuality = (l: QualityLevel, most = Infinity): void => apply(l, m
 function apply(l: QualityLevel, most = Infinity): void {
   level = l;
   budget = most;
-  const p = QUALITY[l];
+  // (the level's settings, with the player's advanced choices over them)
+  const p: QualityPreset = { ...QUALITY[l], ...advanced };
   setRenderQuality(p, most);
   setHeroDetail(p.heroDetail);
   const shadow = G.arena.moon.shadow;
