@@ -33,6 +33,7 @@ import type { FadesWhole } from '../core/seeThrough';
 import { particles, col } from '../fx/particles';
 import { mulberry, rand, TAU } from '../util';
 import { bannerGeo, buildBrazier } from './crypt';
+import { placeShelterOpenings, type ShelterOpening } from '../core/lamps';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { BONFIRE_LIGHT, buildBonfire } from './forest';
 import { asLeaves, asTree, mergeChildren, movesInShadows, boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
@@ -1397,10 +1398,11 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   // (between the side walls, as the front wall's wings are: run to their outer faces, each shared a plane with them at the
   // corners, from play, "still flickering")
   wall.add(walling(walls, half * 2 - thick * 2, eaves, thick, X, y0, HALL.wall - thick / 2, M.ashlar), true, 'wall', true);
+  const windows: ShelterOpening[] = [];
   for (const s of [-1, 1]) {
     const sideX = X + s * (half - thick / 2), sideLen = face - back;
     const sideWall = sideWalls[s < 0 ? 0 : 1];
-    hallSideWall(sideWall, wall, M, sideX, s, thick, eaves, back, face);
+    windows.push(...hallSideWall(sideWall, wall, M, sideX, s, thick, eaves, back, face));
     // (its plinth course in the wall too: drawn alone, the hero walked along the terrace into it, "can pass through
     // textures here")
     // (and whole, as the front's: too low to hide him, thinned with its wall it stood graded by the floor it hid and
@@ -1411,6 +1413,7 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
       block(sideWall, thick + 0.3, 0.1, WINDOWS.wide + 0.3, sideX, y0 + WINDOWS.sill - 0.1 + SILL_PROUD, z, M.coping);
     }
   }
+  placeShelterOpenings([WINDOWS.wide / 2, WINDOWS.high / 2], windows);
   // the front wall either side of the door and over it, its plinth course, the door in its stone frame (a group of
   // their own: cut away with the roof over the hero inside, as from above they hid the room)
   const { doorHalf: dh, doorHigh: high } = HALL, wing = half - dh;
@@ -1533,7 +1536,7 @@ function windowsAlong(): number[] {
  *  outside and by the sky inside: clear, the hall would show the village through them, where it draws outside only
  *  what its doorway shows (`doorways.ts`, its doorway `hallPortal.ts`). */
 function hallSideWall(scene: THREE.Object3D, wall: Wall, M: Mats, sideX: number, s: number, thick: number, eaves: number,
-  back: number, face: number): void {
+  back: number, face: number): ShelterOpening[] {
   const y0 = TERRACE.high, { sill, high, wide } = WINDOWS, top = sill + high;
   const add = (len: number, h: number, y: number, z: number): void => {
     wall.add(walling(scene, thick, h, len, sideX, y, z, M.ashlar), true, 'wall', true);
@@ -1558,6 +1561,8 @@ function hallSideWall(scene: THREE.Object3D, wall: Wall, M: Mats, sideX: number,
       mesh.castShadow = mesh.receiveShadow = false;
     }
   }
+  // (each an opening the sky lights the hall through, on the wall's inner face, facing in)
+  return windowsAlong().map((z) => ({ at: new THREE.Vector3(sideX - s * thick / 2, y0 + sill + high / 2, z), way: -s }));
 }
 
 /** The hall's two rows of columns down its length, from the door to the dais (each a granite base, a stucco shaft up

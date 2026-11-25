@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
+import { RUST } from '../../../src/engine';
 import { COTTAGES, HALL, portalPlace, TERRACE } from '../../../src/data/village';
 import { COTTAGE } from '../../../src/world/villagePlan';
 import { holdHour } from '../../../src/game/clock';
@@ -45,7 +46,8 @@ const SHEET_STRIDE = 3;
 const SHEET_CHANGE = 0.025;
 
 /** A stand of his and what stands past him there; `noColumns`: the hall's columns are taken out of both frames, as they
- *  stand over the walls read; `inHall`: its roof is too, which nothing thinned lays over every place read from above. */
+ *  stand over the walls read; `inHall`: in the hall, what the house rule opens there by design is too (`OPENED_IN_HALL`),
+ *  so the walls across the room and what hangs on them are what's read. */
 interface Stand {
   name: string;
   x: number;
@@ -54,6 +56,9 @@ interface Stand {
   past: THREE.Vector3[];
   noColumns?: boolean;
   inHall?: boolean;
+  /** a side wall of the hall the camera looks over into the room: his room's wall before the room, which the house
+   *  rule opens whole, taken out of both frames too */
+  wallBefore?: 'hallEast' | 'hallWest';
 }
 
 /** The hero placed at (x, z) facing `facing`, the camera behind him, let settle. */
@@ -64,16 +69,17 @@ async function standAt(lab: Lab, x: number, z: number, facing: number): Promise<
   await lab.step(SETTLE);
 }
 
-/** The places read past him at each stand: walls he's before, the hall's far columns and its back wall. */
+/** the kinds the house rule opens inside the hall by design, taken out of both frames there: its roof (open whole over
+ *  him, which nothing thinned lays over every place read from above), its front wall and door (his room's wall before
+ *  the room, open whole) and its columns (each keeping a share of its own where it hides floor he sees) */
+const OPENED_IN_HALL = ['hallRoof', 'hallFront', 'hallLeaves', 'hallColumn'] as const;
+
+/** The places read past him at each stand: walls he's before, and the hall's back wall with its banners. */
 function stands(): Stand[] {
   const x = TERRACE.x;
   const floor = TERRACE.high;
   const north = Math.PI;
   const backWall = HALL.plinths.map((across) => new THREE.Vector3(x + across, floor + 3.6, HALL.wall + 0.02));
-  const backColumns = [-1, 1].flatMap((side) => [
-    new THREE.Vector3(x + side * HALL.columnX, floor + 1.4, HALL.columnZ[3]),
-    new THREE.Vector3(x + side * HALL.columnX, floor + 2.4, HALL.columnZ[3]),
-  ]);
   const frontWall = [-3, -2.2, 2.6, 4].flatMap((across) => [1.6, 3, 4.6].map((up) =>
     new THREE.Vector3(x + across, floor + up, HALL.door + 0.02)));
   const cottage = COTTAGES[0];
@@ -88,17 +94,15 @@ function stands(): Stand[] {
     return new THREE.Vector3(wx, groundHeight(wx, wz) + up, wz);
   };
   const cottageWall = [-1.6, 1.6].map((along) => onTheWall(along, 1.5));
-  const halfW = (COTTAGE.w / 2) * cottage.size;
-  const [cornerX, cornerZ] = inFront(-halfW - 0.7, halfD + 0.7);
-  const alongWall = [-0.8, -0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6].flatMap((share) =>
-    [0.9, 1.5, 2.1].map((up) => onTheWall(share * halfW, up)));
   return [
+    // (on the dais, before the plinths: from the floor before it the back wall lay past the frame's top)
     {
-      name: 'on the hall\'s floor before the dais',
+      name: 'on the hall\'s dais before the plinths',
       x,
-      z: HALL.daisZ + 3,
+      z: HALL.daisZ - 1,
       facing: north,
-      past: [...backWall, ...backColumns],
+      // (the back wall where its banners hang before it: from above inside, the three were gone)
+      past: backWall,
       inHall: true,
     },
     // (well aside of the door: nearer it he sees into the room, and the wall over that floor thins whole for it,
@@ -131,20 +135,21 @@ function stands(): Stand[] {
       facing: north + 0.9,
       past: [...backWall, new THREE.Vector3(x + HALL.plinths[0], floor + 1.5, HALL.wall + 0.02)],
       inHall: true,
+      wallBefore: 'hallEast',
     },
-    // (from play, "it shows green where it should not": beside the wall, hiding nothing of him, it stays whole)
-    { name: 'at a cottage\'s corner', x: cornerX, z: cornerZ, facing: cottage.facing + Math.PI + 0.7, past: alongWall },
+    // (at a cottage's corner, from play "it shows green where it should not", retired: the house rule opens the
+    // roof's corner over grass he sees there, the owner's rule, "he needs to see the ground, so we thin")
   ];
 }
 
-/** The hall's roof taken out of the frame: every mesh drawn in its kind (`material.seeThrough`, a kind's one value),
- *  read off the scene, as an A/B's other commit has the same. Returns what shows them again. */
-function hallRoofHidden(): () => void {
-  const roof = seeValue('hallRoof');
+/** The meshes drawn in `kinds` taken out of the frame: each kind found by its one value on a material
+ *  (`material.seeThrough`), read off the scene, as an A/B's other commit has the same. Returns what shows them again. */
+function kindsHidden(kinds: readonly string[]): () => void {
+  const values = new Set<unknown>(kinds.map((kind) => seeValue(kind as Parameters<typeof seeValue>[0])));
   const hidden: THREE.Object3D[] = [];
   G.scene.traverse((object) => {
     const material = (object as THREE.Mesh).material as { seeThrough?: unknown } | undefined;
-    if (!object.visible || material?.seeThrough !== roof) return;
+    if (!object.visible || !values.has(material?.seeThrough)) return;
     object.visible = false;
     hidden.push(object);
   });
@@ -156,10 +161,11 @@ function hallRoofHidden(): () => void {
 /** Each part a stand leaves out of both its frames taken out; returns what puts them back. */
 function partsLeftOut(stand: Stand): () => void {
   if (stand.noColumns) hideHallColumns(true);
-  const roofBack = stand.inHall ? hallRoofHidden() : null;
+  const opened = stand.wallBefore ? [...OPENED_IN_HALL, stand.wallBefore] : OPENED_IN_HALL;
+  const openedBack = stand.inHall ? kindsHidden(opened) : null;
   return () => {
     if (stand.noColumns) hideHallColumns(false);
-    roofBack?.();
+    openedBack?.();
   };
 }
 
@@ -176,12 +182,19 @@ function pixelOf(point: THREE.Vector3, width: number, height: number): number | 
  *  frame. */
 function readStand(lab: Lab, stand: Stand): { wrong: number; read: number; worst: number; places: string } {
   const putBack = partsLeftOut(stand);
+  // (the sun's map drawn every frame, and a frame drawn first with the parts gone: kept between turns, the first
+  // frame read the banners in the hall's roof's shade and the frame after it in the noon sun through its roof taken
+  // out, 52% apart)
+  const turns = RUST.tune.shadowTurns;
+  RUST.tune.shadowTurns = 0;
+  drawFrame(lab);
   const canvas = drawFrame(lab);
   const thinned = canvas.pixels.slice();
   const giveBack = nothingThinned();
   const whole = drawFrame(lab).pixels;
   giveBack();
   putBack();
+  RUST.tune.shadowTurns = turns;
   let wrong = 0;
   let read = 0;
   let worst = 0;

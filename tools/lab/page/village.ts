@@ -79,6 +79,7 @@ import { hallWallsHold } from './villageHallSide';
 import { candleLightsNear, chestOpensNear } from './villageChestLid';
 import { wallingAligned } from './villageWalling';
 import { windowsLetSunIn } from './villageWindows';
+import { windowsLightTheHall } from './villageWindowLight';
 import { grassRingsGentle, grassRingsUnseen } from './villageGrassRing';
 import { firesStillInFog, fogHoldsSteady, leavesInFog } from './villageFog';
 import { fogUnderEaves, fogUnderRoofs, roofShowsWhatHeSees } from './villageFogRoofs';
@@ -268,6 +269,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     arrowsStickInGround: () => arrowsStickInGround(lab, options.canary),
     wallingAligned: () => wallingAligned(options.canary),
     windowsLetSunIn: () => windowsLetSunIn(lab, options.canary),
+    windowsLightTheHall: () => windowsLightTheHall(lab, options.canary),
     propHoleWhereHidden: () => propHoleWhereHidden(lab, options.canary),
     housesBesideFence: () => housesBesideFence(lab, options.canary),
     housesPastFence: () => housesPastFence(lab, options.canary),
