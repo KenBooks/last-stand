@@ -67,6 +67,9 @@ interface Kind {
   /** of a cover with a `reach`: how high it stands over its floor (m). Where it stands between the camera and him
    *  all of it is a ghost, foot to top, by that height */
   high?: number;
+  /** of a cover with `walls`: never gone whole. Where its wall would be (he stands in its room, or before its door
+   *  seeing in), all of it is the rule's ghost instead: what keeps him out of where it stands, a door's leaves */
+  stays?: boolean;
   /** the room it thins for (least x, least z, most x, most z): only what has it just past it along the view thins whole;
    *  everywhere if not given */
   room?: { value: THREE.Vector4 };
@@ -175,6 +178,8 @@ const HALL_K = { value: new THREE.Vector4(1.0, 1.8, 0, -1000) };
  *  solid above, a smoke gradient (from play, "still looks broken to me"; a review) */
 /** how high the hall's columns stand over its floor, their capitals' tops (m) */
 const COLUMN_HIGH = 6;
+/** how far the hall's front wall thins whole: its door's leaves' too, a kind of their own */
+const FRONT_WHOLE = { value: 0 };
 const COLUMN_K = { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) };
 /** the share of the floor he sees the hall's columns thin by (`HALL_SIGHT`; their pale surfaces further, `PALE`) */
 const COLUMN_SIGHT = 1.45;
@@ -229,8 +234,14 @@ const kinds = {
   // near him thinned where it stood short of him, and one hiding him stayed solid over the last of the way to him, from
   // play, "here we should not try to make transparent the side which doesn't help see the hero", "this wall should be
   // transparent but the one 90 degree to it should not", "here both should be transparent, but only 1 is")
-  hallFront: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
+  hallFront: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: FRONT_WHOLE, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
     sight: true, room: HALL_ROOM, door: HALL_DOOR, doorOn: HALL_DOOR_ON, walls: HALL_IN, porch: HALL_PORCH },
+  /** the leaves of the door in that wall, swung in: its wall's own in everything, but never gone whole (`stays`):
+   *  they keep him out of where they stand, and with their wall gone whole round him in its room nothing showed
+   *  what stopped him, from play "can we not completely thin doors? because they are obstacles, players will not
+   *  know why they cannot move" */
+  hallLeaves: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: FRONT_WHOLE, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
+    sight: true, room: HALL_ROOM, door: HALL_DOOR, doorOn: HALL_DOOR_ON, walls: HALL_IN, porch: HALL_PORCH, stays: true },
   hallBack: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
     sight: true, sightOn: HALL_SIGHT_ASIDE, walls: HALL_IN, porch: HALL_PORCH },
   // (the portico's beam goes with the roof it carries, whole (`roofs`): as a wall of his room it opened where it
@@ -557,6 +568,9 @@ export interface SeeThrough {
   /** of a cover with a `reach`: how high it stands over its floor (m). Where it stands between the camera and him
    *  all of it is a ghost, foot to top, by that height */
   high?: number;
+  /** of a cover with `walls`: never gone whole. Where its wall would be (he stands in its room, or before its door
+   *  seeing in), all of it is the rule's ghost instead: what keeps him out of where it stands, a door's leaves */
+  stays?: boolean;
   room?: { value: THREE.Vector4 };
   door?: { value: THREE.Vector4 };
   doorOn?: { value: number };
@@ -1201,7 +1215,7 @@ function ghostTwin(mesh: THREE.Mesh, material: THREE.Material): THREE.Mesh {
 }
 
 /** The kinds that thin whole. */
-export type FadesWhole = HallWallKind | 'hallRoof' | 'hallColumn';
+export type FadesWhole = HallWallKind | 'hallRoof' | 'hallColumn' | 'hallLeaves';
 
 /** The hall's walls, each thinning by itself. */
 export const HALL_WALL_KINDS = ['hallFront', 'hallBack', 'hallEast', 'hallWest', 'hallBeam'] as const;

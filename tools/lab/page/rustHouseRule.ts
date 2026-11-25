@@ -62,8 +62,8 @@ export const RULE_VIEWS: readonly RuleView[] = [
 ];
 
 /** the kinds of see-through a house is built of (`kinds` in core/seeThrough.ts) */
-const HOUSE_KINDS = ['built', 'roof', 'gable', 'hallFront', 'hallBack', 'hallBeam', 'hallEast', 'hallWest',
-  'hallRoof'] as const;
+const HOUSE_KINDS = ['built', 'roof', 'gable', 'hallFront', 'hallLeaves', 'hallBack', 'hallBeam', 'hallEast',
+  'hallWest', 'hallRoof'] as const;
 /** the roof of the one building he can stand in (the hall of heroes) */
 // (and the portico's beam, which the roof stands on and goes with: left to the walls' rule it stood in three
 // pieces, one whole, one a ghost, one gone, from play "just odd geometry... we should not make player wondering
@@ -73,7 +73,8 @@ const INSIDE_ROOFS = ['hallRoof', 'hallBeam'] as const;
 const HALL_ROOM = [TERRACE.x - HALL.inHalf, HALL.wall, TERRACE.x + HALL.inHalf, HALL.inFront] as const;
 /** the walls with the hall's door in them: opened whole while he stands before the door and sees in (from play,
  *  "he just needs to see whole wall behind it") */
-const DOOR_WALLS = ['hallFront', 'hallBeam'] as const;
+// (its doorway's frame and leaves with it, which stay a ghost where the wall goes whole)
+const DOOR_WALLS = ['hallFront', 'hallLeaves', 'hallBeam'] as const;
 /** a block's side (pixels of the picture): grass in the wind and the frame's grain average out of it */
 const BLOCK = 12;
 /** how far apart a block's colour must be with the houses whole and with them hidden to count as covered (the three
@@ -551,6 +552,13 @@ export async function houseRule(lab: Lab, only = ''): Promise<[Checked[], Pictur
     checks.push(check);
     moments.push(...pictures);
   }
+  // (and the doorway of a wall gone whole, which stays a ghost: `rustDoorway.ts`)
+  const { DOORWAY_VIEW_NAME, doorwayStays } = await import('./rustDoorway');
+  if (DOORWAY_VIEW_NAME.includes(only)) {
+    const [check, pictures] = await doorwayStays(lab);
+    checks.push(check);
+    moments.push(...pictures);
+  }
   return [checks, moments];
 }
 
@@ -594,6 +602,8 @@ export async function houseRuleHolds(lab: Lab): Promise<Checked> {
   }
   const { columnOverHim } = await import('./rustColumnOver');
   broken.push(...(await columnOverHim(lab))[0].problems);
+  const { doorwayStays } = await import('./rustDoorway');
+  broken.push(...(await doorwayStays(lab))[0].problems);
   if (broken.length) return failed(`a house from above: ${broken.join('; ')}`);
   return passed(`a house from above opens over ground he sees alone: the portico case from four sides, and a cottage (lab houserule: all)`);
 }

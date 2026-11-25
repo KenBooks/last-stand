@@ -127,6 +127,9 @@ export const TUNE = tunable('rust', {
   /** whether a column that stands between the camera and him is a ghost from foot to top, all of it alike (0: by
    *  its hole round him, a ball, a check's canary: its shaft cut through and its capital left in the air) */
   columnsWhole: 1,
+  /** whether a door's leaves stay as a ghost where their wall is gone whole (0: gone with it, a check's canary:
+   *  nothing showed what kept him out of where they stand) */
+  leavesStay: 1,
   /** whether what the rule leaves of a house's part is a smooth ghost, blended, the nearest of its layers alone
    *  drawn (0: a fine pattern of its pixels dropped, drawn opaque; from play, "whats the deal with dots? we didn't
    *  have them before... like perforated texture") */

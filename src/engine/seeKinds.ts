@@ -131,6 +131,9 @@ export class SeeKinds {
       // (`rust.housesWhole`, a harness's frame of nothing thinned: neither then)
       const inside = TUNE.housesWhole ? 0 : this.inside.get(see) ?? 0;
       if (cover) g[at + 19] = see.roofs ? inside : -Math.max(inside, TUNE.housesWhole ? 0 : seenIn);
+      // (what stays is no wall of his room to open whole: all of it the rule's ghost by that share, below)
+      const stays = cover && see.stays === true && TUNE.leavesStay > 0;
+      if (stays) g[at + 19] = 0;
       // (and a wall with the door he stands before and sees in through opens whole, to the rule's ghost: from
       // play, "he just needs to see whole wall behind it")
       // (not till the pipelines its room's layers are drawn apart with have compiled, `ROOMS`)
@@ -142,7 +145,7 @@ export class SeeKinds {
         const had = this.opens.get(see) ?? asked;
         const opens = had + Math.sign(asked - had) * Math.min(Math.abs(asked - had), passed / INSIDE_FADE);
         this.opens.set(see, opens);
-        g[at + 6] = opens;
+        g[at + 6] = stays ? Math.max(opens, inside) : opens;
       }
       // (`rust.see` off: nothing of any kind thinned; `rust.housesWhole`: nothing of a house's, a harness's frame)
       if (!TUNE.see || (TUNE.housesWhole && see.cover)) { g[at + 2] = 0; g[at + 6] = 0; g[at + 10] = 0; g[at + 18] = 0; }

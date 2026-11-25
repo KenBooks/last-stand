@@ -1435,7 +1435,7 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   // (the lintel, the frame and the leaves are in the wall: stood in a leaf, he and the camera went through it)
   const inWall = frontWall.children.length;
   walling(frontWall, dh * 2, eaves - high, thick, X, y0 + high, face - thick / 2, M.ashlar);
-  hallDoor(frontWall, M, X, y0, face);
+  const leaves = hallDoor(frontWall, M, X, y0, face);
   for (const part of frontWall.children.slice(inWall)) wall.add(part, false, 'wall', true);
   const ceiling = y0 + eaves - ROOF.ceiling - 0.32;
   const look = torchLook();
@@ -1480,7 +1480,11 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   block(beam, half * 2, COLONNADE.lintel, HALL.beamDeep, X, y0 + HALL.beamFoot, HALL.beamZ, M.coping);
   const roof = hallRoof(scene, M, y0 + eaves, back, front);
   fadesWhole(roof, 'hallRoof');
-  fadesWhole(frontWall, 'hallFront');
+  // (the doorway first, its frame and leaves, a kind of their own that never goes whole: the wall's pass leaves
+  // them be. From play, "completely thinning the wall works for walls without entrance... but if there is a gap...
+  // it needs to be hinted at")
+  for (const leaf of leaves) fadesWhole(leaf, 'hallLeaves');
+  fadesWhole(frontWall, 'hallFront', false, leaves);
   fadesWhole(walls, 'hallBack');
   fadesWhole(beam, 'hallBeam');
   fadesWhole(sideWalls[0], 'hallWest');
@@ -1631,11 +1635,16 @@ const glowTwins: [THREE.MeshStandardMaterial, THREE.MeshStandardMaterial][] = []
 
 /** What's under `group` drawn in materials of its own that thin as `kind` says (`fadeWhole`): the hall's cut away parts,
  *  as a material a hole round the hero alone has is the rest of the village's too. */
-function fadesWhole(group: THREE.Object3D, kind: FadesWhole, inHall = false): void {
+function fadesWhole(group: THREE.Object3D, kind: FadesWhole, inHall = false, but: THREE.Object3D[] = []): void {
   const fading = new Map<THREE.Material, THREE.Material>();
+  const left = new Set<THREE.Object3D>(but.flatMap((part) => {
+    const under: THREE.Object3D[] = [];
+    part.traverse((object) => under.push(object));
+    return under;
+  }));
   group.traverse((object) => {
     const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh) return;
+    if (!mesh.isMesh || left.has(mesh)) return;
     const was = mesh.material as THREE.Material;
     if (!fading.has(was)) {
       const copy = was.clone();
@@ -1720,13 +1729,16 @@ function hallDais(scene: THREE.Object3D, backWall: THREE.Object3D, levels: Level
 
 /** The hall's door in the front wall's face at `face` (z): a frame of dressed stone round it, a lintel stone over it,
  *  and its two leaves of planks set back in it, iron-strapped, an iron ring on each. */
-function hallDoor(scene: THREE.Object3D, M: Mats, X: number, y0: number, face: number): void {
+function hallDoor(scene: THREE.Object3D, M: Mats, X: number, y0: number, face: number): THREE.Object3D[] {
   const { doorHalf: dh, doorHigh: high } = HALL, f = DOOR.frame;
-  for (const s of [-1, 1]) block(scene, f, high, 0.2, X + s * (dh + f / 2 - 0.02), y0, face + 0.08, M.coping);
-  block(scene, dh * 2 + f * 2 + 0.2, f, 0.24, X, y0 + high, face + 0.1, M.coping);
+  // (its frame and its leaves are what's handed back, the doorway: where the wall goes whole they stay, a ghost)
+  const leaves: THREE.Object3D[] = [];
+  for (const s of [-1, 1]) leaves.push(block(scene, f, high, 0.2, X + s * (dh + f / 2 - 0.02), y0, face + 0.08, M.coping));
+  leaves.push(block(scene, dh * 2 + f * 2 + 0.2, f, 0.24, X, y0 + high, face + 0.1, M.coping));
   // (each leaf hung on its side of the frame and swung in, open: the hall is walked into)
   for (const s of [-1, 1]) {
     const leaf = new THREE.Group();
+    leaves.push(leaf);
     leaf.position.set(X + s * (dh - DOOR.clear), y0, face - DOOR.set);
     leaf.rotation.y = -s * DOOR.open;
     scene.add(leaf);
@@ -1737,6 +1749,7 @@ function hallDoor(scene: THREE.Object3D, M: Mats, X: number, y0: number, face: n
     ring.position.set(-s * (dh - 0.22), 1.3, 0.1);
     leaf.add(ring);
   }
+  return leaves;
 }
 
 /** The hall's ceiling and roof over its walls, from `back` to `front` (z), its eaves at `eaves` (m): a planked
