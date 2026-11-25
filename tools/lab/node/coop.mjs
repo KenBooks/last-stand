@@ -5,6 +5,7 @@
 // late message holds up the ones behind it), and every couple of seconds on average a stall of several times the
 // jitter (a mobile network's). The pages play each scenario (page/coop.ts), and what the host and the guest showed is
 // judged against each other (coopJudge.mjs); a party's room is judged as it fills (`judgeRoom`).
+import { AFK_CANARY } from './coopAfk.mjs';
 import { JOIN_CANARY, judgeJoined, judgeReadying } from './coopJoin.mjs';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -825,6 +826,8 @@ export async function runCoop(side, options) {
         continue;
       }
       await Promise.all(pair.pages.map((page) => callPage(page, 'coopScenario', { name, canary })));
+      // (the canary of `afk`: the guest's state never says it's away, which the host's screen must miss)
+      if (canary && name === 'afk') await callPage(guest, 'coopAfkQuiet', { quiet: true });
       const { frames, pictures: at } = await callPage(side.page, 'coopScenarioFrames', { name });
       if (pictures && at.length) {
         const files = await pair.runPicturing(settle + frames, name, at.map((frame) => settle + frame));
@@ -835,6 +838,13 @@ export async function runCoop(side, options) {
       const judged = judgeScenario({ name, about: about[name], host: hostSamples, guest: guestSamples, frameMs });
       lines.push(...judged.lines);
       problems.push(...(canary && name === 'belt' ? beltCanary(judged.problems, lines) : judged.problems));
+      if (canary && name === 'afk') {
+        await callPage(guest, 'coopAfkQuiet', { quiet: false });
+        const missed = problems.some((problem) => problem.includes(AFK_CANARY));
+        lines.push(`canary: the guest never saying it's away ${missed ? 'caught' : 'went unseen'}`);
+        if (!missed) problems.push('coop: the canary\'s silent away went unseen');
+        else problems.splice(0, problems.length, ...problems.filter((problem) => !problem.includes(AFK_CANARY)));
+      }
     }
     problems.push(...await backToLobby(pair, lines, canary, pictures));
     lines.push(...await heroCostLines(pair));

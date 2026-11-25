@@ -5,6 +5,7 @@
 // little behind the freshest, so its character moves smoothly and casts in step with its body
 // whatever the link's jitter. The host hands out the party slots (0 is the host) and starts the
 // runs. Built for up to COOP.maxPlayers.
+import { awayToSay, heardFrom } from './afk';
 import { ROOM_IDS, type RoomId } from '../data/houses';
 import { G } from '../state';
 import { COOP } from '../data/balance';
@@ -815,6 +816,8 @@ interface StateMsg {
   e: number; l: number; av?: string | null; rm?: number; sw: number; sh: number; sf: number; sb: number; sa: number;
   /** the warrior's Frenzy stacks (combat/frenzy.ts), for its look on the partners' screens; none: 0 */
   fz?: number;
+  /** 1 while the player is away from the game (net/afk.ts): its page hidden or no input for a minute */
+  afk?: 1;
 }
 /** A player's actions since its last frame, stamped with its clock (ms). */
 interface ActionsMsg { t: number; a: PlayerAction[] }
@@ -827,6 +830,7 @@ function onState(from: string, m: StateMsg): void {
     hooks.changed();
   }
   peer.clock.heard(m.t);
+  heardFrom(peer.player, m.afk === 1);
   // (gone into a house or out of one: its place in the other frame, never a slide across from the last)
   const room = m.rm ?? 0;
   if (room !== peer.room) {
@@ -1141,6 +1145,7 @@ export function updateSession(dt: number, reviving: boolean): void {
       run: G.mode === 'run' ? 1 : 0, rv: reviving ? 1 : 0, e: r2(p.energy / s.maxEnergy), l: r2(p.life), av: portraitOf(p), rm: roomIndex(),
       sw: r2(sat?.w ?? 0), sh: r2(sat?.hip ?? 0), sf: r2(sat?.foot ?? 0), sb: r2(sat?.before ?? 0), sa: r2(sat?.after ?? 0),
       ...(p.frenzy ? { fz: p.frenzy } : {}),
+      ...(awayToSay() ? { afk: 1 as const } : {}),
     } satisfies StateMsg);
   }
   // the fight's events go out every frame, its snapshot at the send rate

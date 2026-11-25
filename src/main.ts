@@ -79,6 +79,7 @@ import { initTouch, updateTouch } from './ui/touch';
 import { initAutoFullScreen, keyboardLockState } from './ui/autoFullScreen';
 import { initPwa, reloadForMissingChunk } from './ui/pwa';
 import { everyTickEvenHidden } from './core/backgroundTick';
+import { watchInput } from './net/afk';
 import { initItemIcons } from './ui/itemIcons';
 import { initTraceConsent, layOutAskAhead } from './perf/consent';
 import { startHeartbeat } from './stats/heartbeat';
@@ -351,6 +352,7 @@ async function boot() {
   });
   initLoadoutEditor(() => buildHotbar(G.player));
   initPwa();
+  watchInput();
   $('#decision .bank').onclick = () => chooseBank();
   $('#decision .cont').onclick = () => chooseContinue();
 

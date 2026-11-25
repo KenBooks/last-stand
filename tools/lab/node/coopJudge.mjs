@@ -7,6 +7,7 @@
 // guest's charge by whether every foe it met on its screen was carried and thrown on both, and ended before it.
 import { describePings } from './coopPings.mjs';
 import { describeChat } from './coopChat.mjs';
+import { describeAfk } from './coopAfk.mjs';
 
 /** the longest delay looked for, frames (a second and a quarter) */
 const MOST_DELAY = 75;
@@ -1063,6 +1064,7 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
   if (name === 'ghosts') add(describeGhosts(host, guest, frameMs));
   if (name === 'ping') add(describePings(host, guest, frameMs));
   if (name === 'chat') add(describeChat(host, guest, frameMs));
+  if (name === 'afk') add(describeAfk(host, guest, frameMs));
   if (name === 'wall') add(describeWall(host, guest, frameMs));
   if (name === 'belt') add(describeBelt(host, guest));
   return { lines, problems };

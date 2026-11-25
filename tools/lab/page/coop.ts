@@ -33,6 +33,7 @@ import { lobbyCastInput, practiseInTheYard, watchHall, watchTags } from './coopL
 import { endInput, watchOut } from './coopEnd';
 import { pingInput, pingsNow, resetPings, PINGS, PING_FOE, type PingSample } from './coopPing';
 import { chatInput, chatNow, SAID, ESC_AT, QUIET, type ChatSample } from './coopChat';
+import { afkGuestInput, afkHostInput, afkNow, afkQuiet, AFK_HIDDEN_AT, AFK_SHOWN_AT, type AfkSample } from './coopAfk';
 import { duelInput, duelNow, pickLost, type DuelNow } from './coopDuel';
 import { tradeLost, tradeNow, type TradeNow } from './coopTrade';
 export {
@@ -167,6 +168,11 @@ export interface Sample {
   /** in `chat`: the chat as this game's page shows it (page/coopChat.ts); the first sample also carries what the
    *  scenario says and when it presses Esc */
   chat?: ChatSample;
+  /** in `afk`: each player's name tag's height as drawn (page/coopAfk.ts); the first sample also carries when the
+   *  guest's page hides and shows again */
+  afk?: AfkSample;
+  afkHiddenAt?: number;
+  afkShownAt?: number;
   said?: typeof SAID;
   escAt?: typeof ESC_AT;
   quiet?: typeof QUIET;
@@ -707,6 +713,17 @@ const SCENARIOS: Record<string, Scenario> = {
     pictures: [70, 220, 250, 448, 1100, 1145],
     hostInput: (frame) => chatInput('host', frame),
     guestInput: (frame) => chatInput('guest', frame),
+  },
+  afk: {
+    about: 'the guest\'s page is hidden for 3 s, as a player switching tabs hides it, and shown again: the '
+      + 'host\'s screen must say Idle over its name tag meanwhile (#847)',
+    frames: 360,
+    host: [9, 19],
+    guest: [11, 19],
+    foes: [],
+    pictures: [150],
+    hostInput: afkHostInput,
+    guestInput: afkGuestInput,
   },
   ghosts: {
     about: 'the host kills three dazed foes by the guest, whose game never hears of their deaths: its copies must go '
@@ -1301,6 +1318,10 @@ function sampleNow(): Sample {
   }
   if (play.scenario === 'wall' && wallNow) sample.wall = wallNow();
   if (play.scenario === 'belt' && belt) sample.belt = belt.beltNow();
+  if (play.scenario === 'afk') {
+    sample.afk = afkNow();
+    if (!play.samples.length) Object.assign(sample, { afkHiddenAt: AFK_HIDDEN_AT, afkShownAt: AFK_SHOWN_AT });
+  }
   if (play.scenario === 'chat') {
     sample.chat = chatNow();
     if (!play.samples.length) Object.assign(sample, { said: SAID, escAt: ESC_AT, quiet: QUIET });
@@ -1466,4 +1487,9 @@ function loosedArrows(): number {
 export async function coopTraining(lab: Lab, command: import('./trainingCoop').TrainingStep): Promise<import('./lab').Report> {
   const { trainingCoop } = await import('./trainingCoop');
   return trainingCoop(lab, command);
+}
+
+/** The canary of `afk`: this page's state never says it's away (`quiet`), or says so again. */
+export function coopAfkQuiet(_lab: Lab, { quiet }: { quiet: boolean }): void {
+  afkQuiet(quiet);
 }

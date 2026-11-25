@@ -26,7 +26,7 @@ export default {
     scenarios: {
       kind: 'list',
       usage: 'a,b',
-      choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'staffs', 'rush', 'strike', 'throws', 'wave', 'ping', 'chat', 'colours', 'ghosts', 'duel', 'ends', 'houses', 'seats', 'trade', 'looks', 'wall', 'belt'],
+      choices: ['walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'staffs', 'rush', 'strike', 'throws', 'wave', 'ping', 'chat', 'afk', 'colours', 'ghosts', 'duel', 'ends', 'houses', 'seats', 'trade', 'looks', 'wall', 'belt'],
       help: 'the scenarios (all the hero can play by default): walk, foes, shoot, evade (a ranger or a mage), dodge, '
         + 'down, blink (a mage), rush and strike (a warrior), throws, belt (the Ossuary Twins\' belt skulls); '
         + 'ends alone: the ways a run ends that left a '
