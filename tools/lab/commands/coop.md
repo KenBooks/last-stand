@@ -9,13 +9,28 @@ combat scenarios keep their existing room checks.
 `coop --scenarios houses` runs alone, in the village with no run (`node/coopHouses.mjs`, `page/coopHouses.ts`): the
 host stands before the tavern's door and the guest goes into the tavern. The host's game must draw the marker over
 its door with the guest's name (`ui/houseMarks.ts`), a dot for him at the door on its minimap, and his name under the
-tavern's on the village's map; none of them before he goes in or once he's out. Then the host enters the tavern and
+tavern's on the village's map; none of them before he goes in or once he's out. Then a partner's casts in the yard
+while the other is in the house (from play: a mage in the yard holding his right click, "it would actually appear
+inside the village house where the Player 2 is"): one stands in the tavern, the other then holds his right click
+aimed across the square (over the ground the rooms stand on) for 5 s and casts every skill in turn for 6 s; then the
+other holds it first and the one walks in under it; the one inside read every half second, all none, both ways round
+(`--class mage`, `ranger`, `warrior`). As main had it the beam held through his going in stood in the tavern for good
+(its channel, 2 lights, its particles: its end never reaches a game it's away from), pictured
+(`houses-beam-from-house-*.png`); a cast begun after he went in never showed (his actions are passed over while he's
+away). Then nothing of the training yard may show in a house: both heroes cast every
+skill of theirs in the yard in turn, each held 40 frames (channels and draws held), then one walks into the tavern
+while the other casts on, and the one inside is read every half second for 6 s: the projectiles, the effects (not
+those standing with the game, `Effect.standing`), the particles and pooled lights within 12 m of the yard, the numbers
+floating, the heroes holding a channel or a cast and the spent arrows, all none (as main kept them: up to 5 effects,
+40 particles, 2 casts held, 24 arrows); host inside, then the guest. Then the host enters the tavern and
 creates a party inside it: every guest joining from outside in the village must spawn inside the tavern (zoom locked,
 spaced apart with `--party 3|4`, all partners visible to each other), and leaving back to the village must restore
 zoom with zero late shader compiles (#740); last, a guest inside the tavern joining a host outside in the village must
 leave the tavern and appear with the host outside. `--pictures` takes the marker, the map and the party in the tavern
-(`out/coop/houses-*.png`); `--canary` takes the host's marker off the screen once drawn and moves the guest out of the
-tavern after joining, both of which must be found.
+(`out/coop/houses-*.png`, the host in the tavern with the guest casting in the yard among them); `--canary` takes the
+host's marker off the screen once drawn, keeps the yard's going as a room shows (`holdVillageKept`), takes a partner
+in another of the village's places as here (`holdPlacesIgnored`, as if `away` didn't cover a house), and moves the
+guest out of the tavern after joining, all of which must be found.
 
 `coop --scenarios seats` runs alone, in the village with no run (`node/coopSeats.mjs`, `page/coopSeats.ts`): a seat a
 partner sits on can't be used (`seatTaken` in `world/seats.ts`; from the owner, "need to check if another player is

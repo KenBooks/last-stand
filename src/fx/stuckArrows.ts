@@ -114,6 +114,7 @@ function start(): void {
     return m;
   }) as unknown as [THREE.InstancedMesh, THREE.InstancedMesh];
   addEffect({
+    standing: true,
     update: step,
     dispose() { for (const m of ms) { G.scene.remove(m); m.dispose(); } meshes = null; lists[0].length = lists[1].length = 0; order.length = 0; moving.clear(); },
   });

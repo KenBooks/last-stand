@@ -47,12 +47,12 @@ export {
 import { joinNow, watchJoin, type JoinState } from './coopJoin';
 export { coopHideJoining, coopJoinAfresh, coopJoinSeen, coopReadyingShare, coopShowJoining } from './coopJoin';
 export {
-  coopCastInLobby, coopCloseHall, coopHallSeen, coopLeaveRun, coopLobbyBar, coopOpenHall, coopPractiseAgain,
-  coopSummaryDone, coopTagsSeen,
+  coopCastEveryInLobby, coopCastInLobby, coopCloseHall, coopHallSeen, coopHoldInLobby, coopLeaveRun, coopLobbyBar,
+  coopOpenHall, coopPractiseAgain, coopSummaryDone, coopTagsSeen,
 } from './coopLobby';
 export {
-  coopEnterHouse, coopFaceHouse, coopHouseMarkLost, coopHousePartyState, coopHouseSeen, coopLeaveHouse,
-  coopPartyHost, coopPartyJoin, coopPartyLeave, coopVillageMap,
+  coopEnterHouse, coopFaceHouse, coopHouseMarkLost, coopHousePartyState, coopHouseSeen, coopKeepVillage, coopLeaveHouse,
+  coopPartyHost, coopPartyJoin, coopPartyLeave, coopPlacesIgnored, coopVillageMap, coopYardSeen,
 } from './coopHouses';
 export { coopPointAtSeat, coopSeatsSeen, coopSitOn, coopStandBySeat, coopStandUp } from './coopSeats';
 export {

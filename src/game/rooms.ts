@@ -16,6 +16,9 @@ import { HERO_RADIUS } from '../entities/player';
 import { resolveWorld } from '../world/collision';
 import { groundHeight } from '../world/ground';
 import { particles, col } from '../fx/particles';
+import { clearEffects } from '../fx/effects';
+import { clearProjectiles } from '../combat/projectiles';
+import { clearFloaters } from '../ui/floaters';
 import { rand } from '../util';
 import { chronicleOf, favouriteSkill } from './chronicle';
 import { readyingWhile, whenWarm } from './warm';
@@ -111,6 +114,7 @@ export const everyFolkSeated = (): boolean => ROOM_IDS.every((id) => !G.arena.ro
 /** Put the hero inside house `id` immediately (`rooms` must already be warm). `slot`: party slot (0 for solo entry). */
 function goIntoRoom(id: RoomId, slot = 0): void {
   if (G.mode !== 'menu' || roomHere() === id) return;
+  leaveTheVillageBehind();
   G.arena.showRoom(id);
   showFoes(false);
   if (id === 'records') writeRecords();
@@ -126,6 +130,29 @@ function goIntoRoom(id: RoomId, slot = 0): void {
   placeHero(at);
   doorPuff(0, HOUSES[id].half[1] - 0.4);
   told(id);
+}
+
+/** whether a harness keeps what the village has going as a room is shown, as it was */
+let villageKept = false;
+
+/** For a harness (tools/lab): what the village has going kept as a room is shown, as it was (a canary's). */
+export function holdVillageKept(kept: boolean): void {
+  villageKept = kept;
+}
+
+/** What the village has going let go as a room is shown in its stead, as the hall of heroes' opening does: the room
+ *  stands at the world's middle and the training yard is a few metres off it, so a skill left going there (a partner's
+ *  held channel or a draw, whose end never comes while he's away, or his own) drew its projectiles, beams, ground marks,
+ *  particles, lights and numbers over the room's frame, and its hum played on (from play, "make sure you cant see any
+ *  casts while inside the village houses"; `lab coop --scenarios houses`). A partner out in the village is away while
+ *  he's inside (`syncAway` in net/session.ts), so nothing he casts there is played here after. */
+function leaveTheVillageBehind(): void {
+  if (villageKept) return;
+  for (const p of G.players) p.standDown();
+  clearProjectiles();
+  clearEffects();
+  particles.clear();
+  clearFloaters();
 }
 
 /** The hero into house `id`'s room (its programs warmed first, under the loading bar if they aren't yet). */

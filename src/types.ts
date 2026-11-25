@@ -668,6 +668,9 @@ export interface Effect {
   update(dt: number): boolean;
   dispose?(): void;
   cancel?(): void;
+  /** it stays with the game rather than with a cast, and draws only what it's given (a drawn arrow's motes, the aim's
+   *  path, the spent arrows' meshes): a harness counts what it draws, not it */
+  standing?: boolean;
 }
 
 /** A prop's footprint on the floor (a circle), and `h`: the height of its top. Everything walks round

@@ -45,6 +45,9 @@ export function updateEffects(dt: number): void {
   }
 }
 
+/** For a harness (tools/lab): how many effects are going now where they were cast (not one standing, `Effect.standing`). */
+export const effectsGoing = (): number => active.filter((e) => !e.standing).length;
+
 export function clearEffects(): void { for (const e of active) e.dispose?.(); active.length = 0; clearRubble(); }
 
 function tracked(obj: THREE.Object3D, mats: THREE.Material[]): () => void {
