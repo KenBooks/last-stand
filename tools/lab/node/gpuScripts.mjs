@@ -10,13 +10,36 @@ export function shaderCodes() {
   const device = globalThis.GPUDevice?.prototype;
   if (!device) return;
   const codes = new WeakMap();
+  /** every module made, in order, with its label and code, and the constants each pipeline made of it was given
+   *  (`lab naga`, which checks each stage as Firefox's WebGPU takes it) */
+  const modules = [];
   const make = device.createShaderModule;
   device.createShaderModule = function (descriptor) {
     const module = make.call(this, descriptor);
-    if (typeof descriptor?.code === 'string') codes.set(module, descriptor.code);
+    if (typeof descriptor?.code === 'string') {
+      codes.set(module, descriptor.code);
+      modules.push({ module, label: descriptor.label ?? '', code: descriptor.code, constants: new Set() });
+    }
     return module;
   };
+  const noteConstants = (stage) => {
+    const made = stage && modules.find((entry) => entry.module === stage.module);
+    if (!made) return;
+    const pairs = Object.entries(stage.constants ?? {}).sort(([a], [b]) => (a < b ? -1 : 1));
+    made.constants.add(pairs.map(([name, value]) => `${name}=${value}`).join(','));
+  };
+  for (const name of ['createRenderPipeline', 'createRenderPipelineAsync', 'createComputePipeline',
+    'createComputePipelineAsync']) {
+    const pipeline = device[name];
+    device[name] = function (descriptor) {
+      noteConstants(descriptor?.vertex);
+      noteConstants(descriptor?.fragment);
+      noteConstants(descriptor?.compute);
+      return pipeline.call(this, descriptor);
+    };
+  }
   window.__labShaderCodes = codes;
+  window.__labShaderModules = modules;
 }
 
 /**

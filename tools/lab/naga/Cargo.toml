@@ -1,0 +1,16 @@
+# `lab naga`'s checker: the page's shader modules through naga as Firefox's WebGPU takes them (src/main.rs).
+[package]
+name = "lab-naga"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
+
+[dependencies]
+# wgpu 30's, as the engine's: Firefox's own may be older or newer (tools/lab/commands/naga.md)
+naga = { version = "=30.0.2", features = ["wgsl-in", "hlsl-out", "msl-out", "spv-out"] }
+
+[profile.release]
+debug = false
+
+[workspace]
