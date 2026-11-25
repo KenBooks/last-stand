@@ -228,8 +228,12 @@ const kinds = {
     sight: true, room: HALL_ROOM, door: HALL_DOOR, doorOn: HALL_DOOR_ON, walls: HALL_IN, porch: HALL_PORCH },
   hallBack: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
     sight: true, sightOn: HALL_SIGHT_ASIDE, walls: HALL_IN, porch: HALL_PORCH },
+  // (the portico's beam goes with the roof it carries, whole (`roofs`): as a wall of his room it opened where it
+  // stood before the room, was a ghost where it hid floor he saw and stood whole past that, one beam in three
+  // pieces, a slab of it left on a column, from play "just odd geometry... we should not make player wondering
+  // what the geometry was before thinning", "like, wth is this")
   hallBeam: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
-    sight: true, door: HALL_DOOR, doorOn: HALL_DOOR_ON, walls: HALL_IN, porch: HALL_PORCH },
+    sight: true, door: HALL_DOOR, doorOn: HALL_DOOR_ON, walls: HALL_IN, porch: HALL_PORCH, roofs: HALL_IN },
   hallEast: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
     sight: true, sightOn: HALL_SIGHT_ASIDE, walls: HALL_IN, porch: HALL_PORCH },
   hallWest: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,

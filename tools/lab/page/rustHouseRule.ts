@@ -48,6 +48,8 @@ export const RULE_VIEWS: readonly RuleView[] = [
   { name: 'just inside the door', at: [-1.5, -15.5], turned: 0, zoom: 0.5 },
   { name: 'inside the hall', at: [-1.5, -20], turned: 0, zoom: 0.5 },
   { name: 'inside the hall, camera from its far end', at: [-1.5, -20], turned: 180, zoom: 0.5 },
+  // (from play, in the owner's own game (lab join): the portico's beam across the frame in pieces, "wth is this")
+  { name: 'inside the hall by its door, as played', at: [-1.46, -16.87], turned: -51, zoom: 0.84 },
   // (the eye brought down under the roof and the walls' tops: from play, "also bug at this zoom level")
   { name: 'inside the hall, zoomed in', at: [-1.5, -22], turned: 0, zoom: 0.4 },
   { name: 'inside the hall, zoomed in from the east', at: [-1.5, -22], turned: 90, zoom: 0.4 },
@@ -63,7 +65,10 @@ export const RULE_VIEWS: readonly RuleView[] = [
 const HOUSE_KINDS = ['built', 'roof', 'gable', 'hallFront', 'hallBack', 'hallBeam', 'hallEast', 'hallWest',
   'hallRoof'] as const;
 /** the roof of the one building he can stand in (the hall of heroes) */
-const INSIDE_ROOFS = ['hallRoof'] as const;
+// (and the portico's beam, which the roof stands on and goes with: left to the walls' rule it stood in three
+// pieces, one whole, one a ghost, one gone, from play "just odd geometry... we should not make player wondering
+// what the geometry was before thinning")
+const INSIDE_ROOFS = ['hallRoof', 'hallBeam'] as const;
 /** the room that roof is over: the hall's, inside its walls (its least x and z, its most) */
 const HALL_ROOM = [TERRACE.x - HALL.inHalf, HALL.wall, TERRACE.x + HALL.inHalf, HALL.inFront] as const;
 /** the walls with the hall's door in them: opened whole while he stands before the door and sees in (from play,
