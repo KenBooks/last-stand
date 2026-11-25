@@ -24,7 +24,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G } from '../state';
 import { createKit } from '../core/materials';
 import { sfx } from '../core/audio';
-import { floatText } from '../ui/floaters';
+import { anchorLabel, floatText, promptArt } from '../ui/floaters';
+import { ORDER, type Label } from '../ui/overlay/layer';
 import { particles, col } from '../fx/particles';
 import { keeperSteps, KEEPER_HEAD, KEEPER_MADE, RAG_TUCKED, type HandGoal, type Keeper, type KeeperPose } from '../entities/models/keeper';
 import { readyHead } from '../entities/models/head';
@@ -41,7 +42,7 @@ import { tavernLink } from '../net/tavernLink';
 import { onMessages } from '../net/messages';
 import { cursorRay, input, spendPress, wasPressed } from '../core/input';
 import { outline } from '../ui/overlay/outline';
-import { takeKeyWhen } from '../game/keyTakers';
+import { claimPointWhen, objectNearAt, objectPointed, takeClickWhen, takeKeyWhen } from '../game/keyTakers';
 import { drinkChoice, type DrinkPick } from '../game/drinkChoice';
 import { box, drum, type Build } from './rooms';
 import { buildBroom } from './tavernBroom';
@@ -58,19 +59,73 @@ export const KEEPER_WAYS = { planned: true, stopToTurn: false };
 /** the keeper talked to: he holds the hero in his eye (main.ts sets it as the talk card opens and closes) */
 export const keeperTalk = { talking: false };
 
-/** how far the tub's lid opens back on its hinge (rad, short of upright), and the share of the dry he lets it down
- *  from */
-const LID_OPEN = 1.45, LID_CLOSE = 0.82;
+/** (switches for `lab tavern --canary`: his wipe reaching past the table's top, his broom's head swept 6 cm low) */
+export const KEEPER_WIPES = { offTop: false, broomDip: false };
+/** (switches for `lab tavern --canary`: a mug never taken by standing close, nor by a click, nor lost at the door) */
+export const KEEPER_TAKE = { near: true, click: true, door: true };
+/** how far along the broom from his upper hand its bristles' lowest tips reach (m: its head's foot and its splayed
+ *  tufts, read by `lab tavern`), and how far into the floor they press as they sweep (m: the bristles bending) */
+const BROOM_REACH = 1.41, BROOM_TOUCH = 0.002;
+/** the broom carried upright at his side: his fist's place in his chest's frame (x to his left, y up, z ahead, m),
+ *  the way its head hangs from it, and how far down the handle from its top he holds it (m: near its middle, its head
+ *  just off the floor by his foot) */
+// (his fist high enough that the broom hangs straight: tipped out from a lower fist, its handle's top tipped in at his
+// head, `lab tavern`)
+// (out past his thigh, its foot tipped a little further out: straight down by his side, his stride's thigh met it)
+const BROOM_CARRY = { at: [0.36, -0.34, 0.1] as const, dir: [0.2, -1, 0.04] as const, along: 0.68 };
+/** how far over the floor a carried broom's lowest point is kept (m) */
+const BROOM_CLEAR = 0.04;
+/** how fast his fist slides along the broom's handle (m/s) */
+const BROOM_SLIDE = 2.5;
+/** how far down its handle he takes the leaning broom (m: higher than he carries it, then let slide; reached for lower
+ *  on it, his forearm crossed his belly) */
+const BROOM_TAKEN_AT = 0.5;
+/** how high a broom just taken up is lifted as he swings it to his side (m), and for how long (s) */
+const BROOM_LIFT = 0.3, BROOM_LIFT_FOR = 0.6;
+/** how far over a top the flat rag lies under his palm (m) */
+const PAD_ON = 0.003;
+/** a top he wipes: its height, and its edge (a disc's radius, or a box's half sizes), in the room */
+interface Top { x: number; z: number; y: number; r?: number; hx?: number; hz?: number }
+/** the bar's top as he wipes it */
+const BAR_TOP: Top = { x: BAR.x, z: (BAR.from + BAR.to) / 2, y: BAR.top, hx: BAR.half, hz: (BAR.to - BAR.from) / 2 };
+/** a table's top as he wipes it */
+const tableTop = (name: keyof typeof TABLES): Top => ({ ...TABLES[name], y: TABLES[name].top });
+/** how far inside a top's edge the rag's middle is kept (m: to its corners, so all of it lies on the top however it's
+ *  turned) */
+const PAD_INSIDE = 0.19;
+/** `at` (room) brought within `top`, the rag's half width inside its edge */
+function onTop(at: THREE.Vector3, top: Top): THREE.Vector3 {
+  const out = at.clone();
+  if (top.r !== undefined) {
+    const dx = out.x - top.x, dz = out.z - top.z, d = Math.hypot(dx, dz), most = top.r - PAD_INSIDE;
+    if (d > most) {
+      out.x = top.x + (dx / d) * most;
+      out.z = top.z + (dz / d) * most;
+    }
+  } else {
+    out.x = clamp(out.x, top.x - top.hx! + PAD_INSIDE, top.x + top.hx! - PAD_INSIDE);
+    out.z = clamp(out.z, top.z - top.hz! + PAD_INSIDE, top.z + top.hz! - PAD_INSIDE);
+  }
+  return out;
+}
+/** the way down a broom's handle from its upper hand at `grip` (world) so a point `reach` along it meets the floor,
+ *  towards `toward` across the floor */
+function broomDown(grip: THREE.Vector3, toward: THREE.Vector3, reach: number): THREE.Vector3 {
+  const drop = Math.min(grip.y, reach * 0.999), out = Math.sqrt(reach * reach - drop * drop);
+  const way = new THREE.Vector3(toward.x - grip.x, 0, toward.z - grip.z).normalize();
+  return way.multiplyScalar(out).add(new THREE.Vector3(0, -drop, 0)).normalize();
+}
 /** how far under his palm the flat rag lies (m: the palm's place is 2.6 cm over the top, the cloth 4 mm on it) */
 const PAD_UNDER = 0.022;
-/** his rag spread on a top: a cloth about a hand and a half across, rumpled, one corner turned over (seeded) */
+/** his rag spread on a top: a cloth twice a hand across, its edges round his fingers from any view, rumpled, one
+ *  corner turned over (seeded) */
 function padGeometry(): THREE.BufferGeometry {
-  const geo = new THREE.PlaneGeometry(0.24, 0.18, 10, 8).rotateX(-Math.PI / 2);
+  const geo = new THREE.PlaneGeometry(0.3, 0.22, 12, 9).rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
     const rumple = 0.003 * Math.sin(x * 61 + z * 23) + 0.002 * Math.sin(z * 83 - x * 17);
-    const fold = x + z > 0.15 ? (x + z - 0.15) * 0.25 : 0;
+    const fold = x + z > 0.19 ? (x + z - 0.19) * 0.25 : 0;
     pos.setY(i, Math.max(0, rumple + 0.002) + fold);
   }
   geo.computeVertexNormals();
@@ -118,6 +173,9 @@ const MUG_ASIDE = 0.14, BEHIND_BAR_FROM = BAR.from + 0.9;
 const REACH_OVER = 0.14;
 /** how far his hips may turn past a planted foot before he slows his turn for it (rad) */
 const FEET_LAG_MOST = 0.45;
+/** how fast his turn gathers speed (rad/s²), and how near his heading it eases off (per s: its speed this times the
+ *  angle left) */
+const TURN_ACCEL = 10, TURN_EASE = 5;
 /** his hips' half width (m): how far from a counter his middle may come at the closest */
 const HIPS_HALF = 0.12;
 /** the bar's and the back counter's footprints (room m), and how far his middle keeps from each: the bar's top is at
@@ -132,6 +190,11 @@ const TAKEN = 0.085;
 /** the share of the drink it's held at while he chooses to drink or put it down (the mug lifted off the top before
  *  him), and how far from a mug's middle he takes it up (m, from his feet) */
 const HOLD_AT = 0.16, MUG_REACH = 1.3;
+/** how far to his right (m, along the bar) his left hand follows a mug it pushes across */
+const PUSH_ACROSS = 0.08;
+/** how far off a mug the pointer is on may be to be outlined and walked to by a click (m), and how near he stands to
+ *  one to take it by E with the pointer on nothing (m) */
+const POINTED_MOST = 8, MUG_NEAR = 1;
 /** how near the pointer a mug is drawn for it to be the one pointed at (a share of the window's height) */
 const MUG_PICK = 0.035;
 /** how far behind the bar he stands to reach a mug at its front (m: leaning over it) */
@@ -181,7 +244,7 @@ export interface TavernKeeper {
   /** the mugs' ledger (tools/lab `tavern`) */
   readonly mugs: MugLedger;
   /** what he's doing (the lab: its step's name, and the job's) */
-  doing(): { job: string; step: string; jumped: string; where: string; offered: string };
+  doing(): { job: string; step: string; jumped: string; where: string; offered: string; broom: string };
   /** what his body was last asked (the lab reads his hands against it) */
   body(): KeeperPose;
   /** where a mug is drawn now (world), and its mesh, for the lab */
@@ -237,42 +300,39 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     hoop.position.set(backX, BACK.top + y, TUB.z);
     g.add(hoop);
   }
-  // (soapy water, its suds round the rim and a few heaps on it, under a lid he lifts to wash: "open the tub's lid,
-  // bubbly water", Kenneth's round 3)
+  // (open, its soapy water seen a hand below the rim from every view, its suds round the rim and a few heaps on it,
+  // rippling and bubbling as he scrubs: "lets just have the lid removed the entire time. Should be able to see water
+  // there", Kenneth's round 4; round 3's lid he lifted to wash is gone)
   const water = new THREE.Mesh(new THREE.CircleGeometry(TUB.r * 0.97, 24).rotateX(-Math.PI / 2),
     kit.std({ color: 0x7f8f88, roughness: 0.12, metalness: 0.05 }));
   water.position.set(backX, BACK.top + TUB.water, TUB.z);
-  g.add(water);
   const suds = new THREE.Mesh(sudsGeometry(TUB.r * 0.95), kit.std({ color: 0xe8ecea, roughness: 0.35 }));
   suds.position.copy(water.position);
-  g.add(suds);
-  /** the lid: hinged at its back edge by the wall, opened (rotation about z) as far as `lidOpen` (rad) */
-  const lid = new THREE.Group();
-  lid.position.set(backX + TUB.r, BACK.top + 0.15, TUB.z);
-  {
-    const lidWood = kit.std({ color: 0x6a4e30, roughness: 0.8 });
-    const board = new THREE.Mesh(new THREE.CylinderGeometry(TUB.r * 1.04, TUB.r * 1.04, 0.018, 24).translate(-TUB.r, 0.009, 0), lidWood);
-    const batten = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, TUB.r * 1.6).translate(-TUB.r * 1.55, 0.028, 0), lidWood);
-    const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.015, 0.03, 8).translate(-TUB.r * 1.7, 0.033, 0), M.iron);
-    for (const mesh of [board, batten, knob]) mesh.castShadow = true;
-    lid.add(board, batten, knob);
-  }
-  g.add(lid);
-  let lidOpen = 0, lidWant = 0;
+  /** how stirred the water is (1 as he scrubs, settling after), and its clock */
+  let stirred = 0, waterT = 0;
+  /** the water rippling while it's stirred, calm once it settles: its surface rocked and its suds turned a little */
+  const rippleWater = (dt: number) => {
+    stirred = Math.max(0, stirred - dt * 0.8);
+    waterT += dt;
+    const lap = stirred * 0.004 * Math.sin(waterT * 11);
+    water.position.y = BACK.top + TUB.water + lap;
+    water.rotation.set(stirred * 0.03 * Math.sin(waterT * 7), 0, stirred * 0.03 * Math.cos(waterT * 9));
+    suds.position.y = water.position.y;
+    suds.rotation.y += dt * stirred * 0.6;
+  };
   /** his rag flat on a top as he wipes it, shown where the frame's pose asked (`padAt`, world) */
-  const pad = new THREE.Mesh(padGeometry(), kit.std({ color: 0xd8cdb8, roughness: 1, side: THREE.DoubleSide }));
+  // (a pale linen against the dark wood, and drawn from the first: hidden by its size, as a mug in a hand is, so its
+  // pipeline is made with the room's)
+  const pad = new THREE.Mesh(padGeometry(), kit.std({ color: 0xf2eadb, roughness: 0.95, side: THREE.DoubleSide }));
   pad.name = 'keeper rag flat';
-  pad.visible = false;
-  g.add(pad);
+  pad.scale.setScalar(0.0001);
   let padAt: THREE.Vector3 | null = null, padTurn = 0;
-  /** where his hand takes the lid by its knob, open by `open` (rad; room m) */
-  const lidKnob = (open: number) => V(lid.position.x - TUB.r * 1.7 * Math.cos(open), lid.position.y + 0.04 + TUB.r * 1.7 * Math.sin(open), TUB.z);
   // --- the broom leaning by the bar's end, the poker against the hearth ---
   const wood = kit.std({ color: 0x6a4a2a, roughness: 0.75 });
   const straw = kit.std({ color: 0xb89a58, roughness: 1 });
   const iron = kit.std({ color: 0x2e2c2a, metalness: 0.8, roughness: 0.5 });
   /** the broom: its origin where his upper hand holds it, its bristles out along +y (world/tavernBroom.ts) */
-  const broom = buildBroom({
+  const broomBody = buildBroom({
     wood, straw, iron,
     worn: kit.std({ color: 0x8a6a44, roughness: 0.45 }),
     twine: kit.std({ color: 0x5a4430, roughness: 0.95 }),
@@ -297,7 +357,49 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     const [foot, top] = tool === 'broom' ? [V(BROOM_AT.x - 0.18, 0, BROOM_AT.z), V(BROOM_AT.x + 0.06, 1.42, BROOM_AT.z)] : [V(POKER_AT.x, 0, POKER_AT.z + 0.12), V(POKER_AT.x, 0.86, POKER_AT.z - 0.12)];
     return W(...foot.toArray()).sub(W(...top.toArray())).normalize();
   };
-  const leanBroom = () => stand(broom, { x: BROOM_AT.x - 0.18, z: BROOM_AT.z }, V(BROOM_AT.x + 0.06, 1.42, BROOM_AT.z), 1.36);
+  /** the broom as his hand holds it: the broom itself within, slid along its handle so his fist is at its top as he
+   *  sweeps and near its middle as he carries it (`broomGrip`, eased), and leaning in its corner at its top */
+  const broom = new THREE.Group();
+  broom.name = 'broom grip';
+  broom.add(broomBody);
+  let broomGrip = 0, broomHeldFor = 0;
+  /** where along the broom his fist is (m from its top, eased towards `want` at a hand's slide) */
+  const slideBroom = (want: number, dt: number) => {
+    broomGrip += clamp(want - broomGrip, -BROOM_SLIDE * dt, BROOM_SLIDE * dt);
+    broomBody.position.y = -broomGrip;
+  };
+  /** his hold moved along the broom to `along` from its top at once, the broom where it is (the holder moved with it):
+   *  taken from its corner and put back there at its middle */
+  const regripBroom = (along: number) => {
+    broom.position.add(V(0, 1, 0).applyQuaternion(broom.quaternion).multiplyScalar(along - broomGrip));
+    broomGrip = along;
+    broomBody.position.y = -broomGrip;
+  };
+  /** the leaning broom's point `along` from its top (room) */
+  const leaningAt = (along: number) => {
+    const foot = V(BROOM_AT.x - 0.18, 0, BROOM_AT.z), down = foot.clone().sub(V(BROOM_AT.x + 0.06, 1.42, BROOM_AT.z)).normalize();
+    return foot.addScaledVector(down, along - BROOM_REACH);
+  };
+  /** The broom held as a sweeper holds it, its head `swing` across (-1 to 1) a pace before him: his left hand at its top
+   *  before his chest, his right a forearm's length down it, both well out before him (his right hand crossed his chest
+   *  to reach it at 0.28 ahead, `lab tavern`); laid so its bristles' lowest tips just meet the floor from where his fist
+   *  is (aimed at a point on the floor nearer than its length, its head went 17 cm into the boards, "too low to the
+   *  ground", Kenneth's round 4; laid from where his fist was sent, it rose and sank 30 cm as his hand lagged). */
+  const sweepHold = (swing: number): Pick<KeeperPose, 'left' | 'right'> => {
+    const head = ahead(0.85, 0, 0.26 * swing), grip = ahead(0.45, 1.12, 0.16);
+    const fist = holding === 'broom' ? broom.getWorldPosition(new THREE.Vector3()) : grip;
+    const dir = broomDown(fist, head, BROOM_REACH - broomGrip);
+    const floor = { reach: BROOM_REACH - broomGrip, level: W(0, 0, 0).y - BROOM_TOUCH - (KEEPER_WIPES.broomDip ? 0.06 : 0), touch: true };
+    return {
+      left: { at: grip, held: broom, r: 0.016, dir, floor },
+      right: { at: grip.clone().addScaledVector(dir, 0.34), r: 0.016, on: { thing: broom, along: 0.34 } },
+    };
+  };
+  const leanBroom = () => {
+    broomGrip = 0;
+    broomBody.position.y = 0;
+    stand(broom, { x: BROOM_AT.x - 0.18, z: BROOM_AT.z }, V(BROOM_AT.x + 0.06, 1.42, BROOM_AT.z), BROOM_REACH);
+  };
   const leanPoker = () => stand(poker, { x: POKER_AT.x, z: POKER_AT.z + 0.12 }, V(POKER_AT.x, 0.86, POKER_AT.z - 0.12), 0.78);
   // --- the ale running from the tap as he fills a mug: a thin amber stream ---
   const ale = kit.std({ color: 0xc07a18, emissive: 0x3a1c00, emissiveIntensity: 0.4, roughness: 0.2 });
@@ -376,9 +478,13 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   /** his rag pressed under his palm, his fist over it knuckles forward (its axis across him): wiping */
   /** his rag laid flat under his palm on a top he wipes (`at`, world, the palm's place), its bunch in his fist hidden
    *  meanwhile: held bunched, it went into the top out of sight ("the cloth visible", Kenneth's round 3) */
-  const wiping = (at: THREE.Vector3): HandGoal => {
-    padAt = at;
-    return ragHold(at, V(Math.cos(me.facing), 0, -Math.sin(me.facing)));
+  const wiping = (at: THREE.Vector3, top: Top): HandGoal => {
+    // (the canary's wipe past the table left where it reaches)
+    const on = KEEPER_WIPES.offTop ? room(at) : onTop(room(at), top);
+    on.y = top.y + PAD_UNDER + PAD_ON;
+    const hand = W(on.x, on.y, on.z);
+    padAt = hand;
+    return ragHold(hand, V(Math.cos(me.facing), 0, -Math.sin(me.facing)));
   };
   const say = (text: string) => {
     if (clock - saidAt < 1.5) return;
@@ -392,14 +498,24 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   /** in his chest's frame (x to his left, y up, z ahead: keeper.ts `HandGoal.carried`), as a hero's weapon is held */
   const onChest = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
   const CARRY = {
-    broom: (): HandGoal => ({ at: onChest(0.33, -0.36, 0.46), held: broom, r: 0.016, dir: onChest(0.2, -0.55, 0.81).normalize(), carried: true }),
+    // (upright at his side, its handle's top in his fist by his shoulder and its head just off the floor beside his foot,
+    // as a broom is carried: held out before him down to the floor it was a cane, "Thats not how you carry a broom",
+    // Kenneth's round 4)
+    broom: (): HandGoal => ({
+      // (lifted as it's first taken up and swung to his side, then let down there: brought straight across before him,
+      // its foot swept through his thigh, `lab tavern`)
+      at: onChest(...BROOM_CARRY.at).add(V(0, BROOM_LIFT * Math.max(0, 1 - broomHeldFor / BROOM_LIFT_FOR), 0)),
+      held: broom, r: 0.016, dir: onChest(...BROOM_CARRY.dir).normalize(), carried: true,
+      // (straight down wherever its foot clears the floor, tipped out only as far as it must where it wouldn't)
+      floor: { reach: BROOM_REACH - broomGrip, level: W(0, 0, 0).y + BROOM_CLEAR, touch: false },
+    }),
     poker: (): HandGoal => ({ at: onChest(-0.3, -0.4, 0.12), held: poker, r: 0.012, dir: onChest(-0.15, -0.6, 0.78).normalize(), carried: true }),
     // (a mug at his left side, his forearm forward from the elbow: held before his belly, his forearm went through it,
     // "cup and arm goes through the body")
     // (before him a little to his left: at his side, his elbow brushed the bar walking behind it)
     // (carried a little higher, his elbow clear over the back counter's top walking the aisle: at 24 cm under his chest
     // joint his elbow hung at the top's height and went 3 cm into it, `lab tavern`)
-    mug: (): HandGoal => ({ ...mugHold(onChest(0.17, -0.18, 0.3)), carried: true }),
+    mug: (): HandGoal => ({ ...mugHold(onChest(0.17, -0.12, 0.3)), carried: true }),
   };
 
   // --- his steps ---
@@ -447,7 +563,10 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
       const set = V(near - 0.1, BAR.top + MUG.foot, me.z);
       if (k < 0.35) return { bend: 0.2, look: W(...set.toArray()), left: mugHold(W(...set.toArray())) };
       const push = sliding ? sliding.from.clone().lerp(sliding.to, 0.45 * smooth((k - 0.35) / 0.4)) : set;
-      return { bend: 0.35 * smooth(Math.min(1, k * 2)), look: W(...push.toArray()), left: { at: W(push.x + 0.1, push.y + 0.02, push.z) } };
+      // (his open hand behind it only as far across his front as his left arm reaches without crossing his chest, the
+      // mug gliding on alone: followed all the way to a hero at his right, his forearm went into his chest, `lab tavern`)
+      const hand = V(push.x + 0.1, push.y + 0.02, Math.max(push.z, me.z - PUSH_ACROSS));
+      return { bend: 0.35 * smooth(Math.min(1, k * 2)), look: W(...push.toArray()), left: { at: W(...hand.toArray()) } };
     },
     at: [[0.35, () => {
       // (set down on the bar: from here his open hand pushes it, and it glides on to the bar's front before the hero)
@@ -525,14 +644,8 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     at: [[0.95, () => ledger.move(id, { at: 'keeper' }, { dirty: false, full: 0 })]],
   }, {
     name: 'dry', spot: PLACES.tub, dur: TASK.dry,
-    pose: (k, t) => {
+    pose: (_k, t) => {
       const held = ahead(0.36, 1.12, 0.05), rub = Math.sin(t * 5), side = -0.7 + 0.5 * rub, reach = MUG.rimR + 0.026;
-      // (the lid let down again over its last share, by its knob, his rag in the same hand)
-      if (k > LID_CLOSE) {
-        lidWant = lidOpen = LID_OPEN * (1 - smooth((k - LID_CLOSE) / (1 - LID_CLOSE)));
-        return { bend: 0.15, look: W(...lidKnob(lidOpen).toArray()), left: mugHold(held), right: ragHold(W(...lidKnob(lidOpen).toArray())) };
-      }
-      lidWant = LID_OPEN;
       return { bend: 0.1, look: held, left: mugHold(held), right: ragHold(held.clone().add(new THREE.Vector3(Math.sin(side) * reach, 0.03 * Math.sin(t * 2.4), -Math.cos(side) * reach).applyAxisAngle(V(0, 1, 0), me.facing))) };
     },
   }];
@@ -544,13 +657,10 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     const look = W(...tubAt().toArray());
     const [dipIn, scrubTo, rinseTo] = WASH;
     if (k < dipIn) {
-      // (the lid lifted back by its knob first, then the mug lowered in)
-      const lift = smooth(Math.min(1, k / (dipIn * 0.6)));
-      lidWant = lidOpen = LID_OPEN * lift;
-      const at = over.clone().lerp(inWater, smooth(Math.max(0, k / dipIn - 0.4) / 0.6));
-      return { ...BODY0, bend: 0.35, look, left: mugHold(W(...at.toArray())), right: lift < 1 ? { at: W(...lidKnob(lidOpen).toArray()), grip: true, r: 0.012 } : null };
+      const at = over.clone().lerp(inWater, smooth(k / dipIn));
+      return { ...BODY0, bend: 0.35, look, left: mugHold(W(...at.toArray())), right: null };
     }
-    lidWant = LID_OPEN;
+    stirred = 1;
     if (Math.random() < 0.3) bubble();
     if (k < scrubTo) {
       // (the mug held up out of the water, its mouth to him, turned in his hand; the rag worked round inside its rim)
@@ -658,7 +768,9 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   /** a tool fetched from its corner (his rag tucked away) or put back (his rag taken out again) */
   const toolStep = (tool: 'broom' | 'poker', fetch: boolean): Step => {
     const spot = tool === 'broom' ? PLACES.broom : PLACES.poker, thing = tool === 'broom' ? broom : poker;
-    const corner = tool === 'broom' ? V(BROOM_AT.x + 0.04, 1.2, BROOM_AT.z) : V(POKER_AT.x, 0.8, POKER_AT.z - 0.1);
+    // (the broom taken at its middle, where it's carried: at its top, his hand slid 60 cm down it as he walked and it
+    // swung out into his chest and down into the floor meanwhile, `lab tavern`)
+    const corner = tool === 'broom' ? leaningAt(BROOM_TAKEN_AT) : V(POKER_AT.x, 0.8, POKER_AT.z - 0.1);
     return {
       name: fetch ? `fetch ${tool}` : `put back ${tool}`, spot, dur: TASK.fetch,
       pose: (k) => {
@@ -668,8 +780,11 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
         return { bend: 0.1 + 0.2 * Math.sin(Math.PI * k), look: W(...corner.toArray()), [hand]: goal };
       },
       at: [[0.5, () => {
-        if (fetch) { holding = tool; keeper!.carry(tool === 'broom' ? 'left' : 'right', thing); }
-        else { holding = null; keeper!.drop(thing, g); if (tool === 'broom') leanBroom(); else leanPoker(); }
+        if (fetch) {
+          holding = tool;
+          if (tool === 'broom') regripBroom(BROOM_TAKEN_AT);
+          keeper!.carry(tool === 'broom' ? 'left' : 'right', thing);
+        } else { holding = null; keeper!.drop(thing, g); if (tool === 'broom') leanBroom(); else leanPoker(); }
       }]],
     };
   };
@@ -684,16 +799,30 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
           // (wide circles, a forearm's sweep: "bigger circles", Kenneth's round 3; they were 10 by 12 cm)
           // (its sideways reach short of his elbow meeting the bar's edge: 18 cm across, his right elbow went into it)
           const a = t * 2.3, rag = ahead(0.55 + 0.12 * Math.sin(a), BAR.top + 0.026, 0.14 * Math.cos(a));
-          return { bend: 0.4, look: rag, right: wiping(rag), left: { at: ahead(0.32, BAR.top + 0.04, 0.3) } };
+          return { bend: 0.4, look: rag, right: wiping(rag, BAR_TOP), left: { at: ahead(0.32, BAR.top + 0.04, 0.3) } };
         },
       }];
     },
     cask: () => [walkTo(PLACES.cask), {
       name: 'check cask', spot: PLACES.cask, dur: TASK.cask,
       pose: (k, t) => {
-        const knock = k < 0.45 ? 0.03 * Math.max(0, Math.sin(t * 9)) : 0, top = W(near - 0.38, BAR.top + 0.33 + knock, tap.z);
-        const rag = W(tap.x - 0.02 + 0.01 * Math.sin(t * 6), tap.y - 0.01, tap.z + 0.015 * Math.cos(t * 6));
-        return { bend: 0.25, look: k < 0.45 ? top : rag, left: k < 0.5 ? { at: top } : null, right: k > 0.4 ? ragHold(rag) : null };
+        // (his knuckles knocked on its side to hear how full it is, then wiped over its top with the rag, palm down in
+        // small strokes round its curve, his other hand on its hoop steadying it: his hand hung palm up over it, "Its
+        // face up, place it face down at least, and resting on barrel", Kenneth's round 4)
+        const cask = V(near - 0.38, BAR.top + 0.17, tap.z), r = 0.155;
+        const knock = 0.025 * Math.max(0, Math.sin(t * 9));
+        const side = W(cask.x + 0.05, cask.y + 0.02, cask.z + r + 0.02 + knock);
+        const round = 0.55 * Math.sin(t * 2.4), along = 0.1 * Math.sin(t * 1.1);
+        const over = W(cask.x + along, cask.y + (r + 0.028) * Math.cos(round), cask.z - (r + 0.028) * Math.sin(round));
+        const steady = W(cask.x - 0.12, cask.y + r + 0.01, cask.z + 0.04);
+        const wipingIt = k > 0.4;
+        return {
+          bend: 0.25, look: W(...cask.toArray()),
+          left: wipingIt ? { at: steady } : { at: side, grip: true, r: 0.02 },
+          // (the rag in his right hand on the bar by the cask as he knocks: left free, it was tucked away and fetched
+          // again from his hip across his belly to wipe, `lab tavern`)
+          right: ragHold(wipingIt ? over : W(cask.x + 0.05, BAR.top + 0.03, cask.z - r - 0.12), V(Math.cos(me.facing), 0, -Math.sin(me.facing))),
+        };
       },
     }],
     bottles: () => [walkTo(PLACES.bottles), {
@@ -713,13 +842,8 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
         steps.push(walkTo(from), {
           name: 'sweep', spot: from, along: to, dur: Math.hypot(to.x - from.x, to.z - from.z) * TASK.sweep,
           pose: (_k, t) => {
-            // (the broom held as a sweeper holds it: his left hand at its top before his chest, his right a forearm's
-            // length down it, the bristles swept side to side a pace ahead)
-            // (both hands well out before him, the lower a long hand down the stick: his right hand crossed his chest to
-            // reach it at 0.28 ahead, `lab tavern`)
-            const swing = Math.sin(t * 3.4), head = ahead(0.85, 0.02, 0.26 * swing), grip = ahead(0.42, 1.12, 0.12);
-            const dir = head.clone().sub(grip).normalize();
-            return { bend: 0.2, look: head, left: { at: grip, held: broom, r: 0.016, dir }, right: { at: grip.clone().addScaledVector(dir, 0.34), r: 0.016, on: { thing: broom, along: 0.34 } } };
+            const swing = Math.sin(t * 3.4);
+            return { bend: 0.2, look: ahead(0.85, 0, 0.26 * swing), ...sweepHold(swing) };
           },
         });
       }
@@ -738,17 +862,20 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
       },
     }, walkTo(PLACES.poker), toolStep('poker', false), ...walkBack()],
     smallTable: () => [...walkOut(PLACES.smallTable), walkTo(PLACES.smallTable), wipeTable('smallTable'), ...walkBack()],
-    longTable: () => [...walkOut(PLACES.longTable), walkTo(PLACES.longTable), wipeTable('longTable'), ...walkBack()],
+    // (wiped from each of its ends in turn, a half each: from one end alone his reach was a third of its length, and
+    // his rag went past its end into the air, "some just wipe the air", Kenneth's round 4)
+    longTable: () => [...walkOut(PLACES.longTable), walkTo(PLACES.longTable), wipeTable('longTable', PLACES.longTable, 0.5),
+      walkTo(PLACES.longTableFar), wipeTable('longTable', PLACES.longTableFar, 0.5), ...walkBack()],
   };
-  function wipeTable(name: keyof typeof TABLES): Step {
-    const t0 = TABLES[name], spot = PLACES[name];
+  function wipeTable(name: keyof typeof TABLES, spot: Spot = PLACES[name], share = 1): Step {
+    const t0 = TABLES[name], top = tableTop(name);
     return {
-      name: 'wipe table', spot, dur: TASK.wipeTable,
+      name: 'wipe table', spot, dur: TASK.wipeTable * share,
       pose: (_k, t) => {
-        const a = t * 2.2, across = Math.sin(t * 0.9), reachOut = t0.reach * (0.6 + 0.4 * Math.sin(t * 0.5));
-        const rag = ahead(0.43 + 0.1 * (reachOut / t0.reach) + 0.12 * Math.sin(a), t0.top + 0.026, 0.22 * across + 0.13 * Math.cos(a));
+        const a = t * 2.2, across = Math.sin(t * 0.9), reachOut = 0.6 + 0.4 * Math.sin(t * 0.5);
+        const rag = ahead(0.4 + 0.1 * reachOut + 0.12 * Math.sin(a) + (KEEPER_WIPES.offTop ? 0.6 : 0), t0.top + 0.026, 0.22 * across + 0.13 * Math.cos(a));
         // (bent well over the low table, his knees giving a little, his free hand on its edge)
-        return { bend: 0.7, crouch: 0.3, look: rag, right: wiping(rag), left: { at: ahead(0.32, t0.top + 0.04, 0.28) } };
+        return { bend: 0.7, crouch: 0.3, look: rag, right: wiping(rag, top), left: { at: ahead(0.3, t0.top + 0.04, 0.28) } };
       },
     };
   }
@@ -931,19 +1058,24 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   }
   function tick(dt: number): void {
     const wasX = me.x, wasZ = me.z;
-    lidWant = 0;
     padAt = null;
     tickOn(dt);
     showPad(dt);
-    // (left open by a wash broken off, it falls shut over a moment)
-    if (lidWant < lidOpen) lidOpen = Math.max(lidWant, lidOpen - dt * LID_OPEN * 2);
-    lid.rotation.z = -lidOpen;
+    // (slid to its top on his way to where he sweeps, and back to its middle once he's done)
+    // (over the last stroke's end already, his hand down to where he carries it before he walks off: slid as he walked,
+    // his fist at its top before his chest, its handle's top passed his head, `lab tavern`)
+    const lastStroke = step?.name === 'sweep' && !plan.some((next) => next.name === 'sweep') && stepT > step.dur * 0.7;
+    const sweepingNext = (step?.name === 'sweep' && !lastStroke) || (!!step?.walk && plan[0]?.name === 'sweep');
+    slideBroom(holding === 'broom' && !sweepingNext ? BROOM_CARRY.along : 0, dt);
+    // (lifted again as he walks off from sweeping, as when first taken up)
+    broomHeldFor = holding === 'broom' && step?.name !== 'sweep' ? broomHeldFor + dt : 0;
+    rippleWater(dt);
     const moved = Math.hypot(me.x - wasX, me.z - wasZ);
     if (moved > 0.05) jumped = `${job}: ${step?.name ?? '-'} moved ${(moved * 100).toFixed(1)} cm, from ${wasX.toFixed(2)},${wasZ.toFixed(2)}`;
   }
   /** the flat rag under his palm while he wipes (turning a little with his circles), his fist's bunch hidden then */
   function showPad(dt: number): void {
-    pad.visible = padAt !== null;
+    pad.scale.setScalar(padAt ? 1 : 0.0001);
     if (keeper) keeper.rag.visible = padAt === null;
     if (!padAt) return;
     padTurn += dt * 0.6;
@@ -979,6 +1111,13 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     if (s.walk) {
       if (walkOn(s, dt)) step = null;
       const walking = { x: goalV.x, z: goalV.z };
+      // (walking to where he sweeps, the broom held as he sweeps with it, its head on the floor before him, as a sweeper
+      // goes from one patch to the next: carried at his side, his hand slid up its handle as he went and its foot swung
+      // out, its handle through his belly, `lab tavern`)
+      if (holding === 'broom' && plan[0]?.name === 'sweep') {
+        body = { goal: walking, speed: me.speed, bend: 0.1, crouch: 0, look: null, ...sweepHold(0) };
+        return;
+      }
       body = { goal: walking, speed: me.speed, bend: 0, crouch: 0, look: null, left: holding === 'broom' ? CARRY.broom() : holding === 'poker' ? null : inHand >= 0 ? CARRY.mug() : null, right: holding === 'poker' ? CARRY.poker() : null };
       return;
     }
@@ -1021,9 +1160,14 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   }
   const angleTo = (want: number) => Math.atan2(Math.sin(want - me.facing), Math.cos(want - me.facing));
   /** turned towards `want`: walking at his turn's pace, standing as fast as his feet step round */
+  // (his turn gathering speed and easing off as it nears his heading: begun and ended at full speed in a frame, at the
+  // brisker turn his hand held before him jolted, its speed snapping 5 cm a frame, `lab tavern`)
+  let turnV = 0;
   const turnTo = (want: number, dt: number, walking = false) => {
     const rate = (walking ? WALK.turn : TURN_ON_SPOT * feetCaughtUp()), d = angleTo(want);
-    me.facing += clamp(d, -rate * dt, rate * dt);
+    const wantV = clamp(d * TURN_EASE, -rate, rate);
+    turnV += clamp(wantV - turnV, -TURN_ACCEL * dt, TURN_ACCEL * dt);
+    me.facing += clamp(turnV * dt, -Math.abs(d), Math.abs(d));
   };
   /** standing, how fast he may turn as a share of his turn's pace: slower while a planted foot is left turned well
    *  behind his hips, so his feet step round under him and never cross (turned on at a steady pace, his hips led his
@@ -1078,7 +1222,14 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
       drinkChoice.shown = false;
       return;
     }
-    // (held at the lift while he chooses: drink it, or put it down, by E and F or the buttons, `drinkChoice`)
+    // (gone from his hand as he leaves the tavern with it undrunk, back where he took it from for anyone to take: "once
+    // you exit the tavern you lose the cup", Kenneth's round 4)
+    if (choosing && G.arena.room !== 'tavern' && KEEPER_TAKE.door) {
+      putDown(hero, true);
+      return;
+    }
+    // (held at the lift while he chooses, walking about with it as he likes: drink it, or put it down, by E and F or
+    // the buttons, `drinkChoice`)
     drinkChoice.shown = choosing;
     if (choosing) {
       if (k > HOLD_AT) c!.t = HOLD_AT * c!.dur;
@@ -1130,54 +1281,138 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   const onScreen = new THREE.Vector3();
   /** how far from the pointer mug `id` is drawn (css px at its rim's height), or Infinity past `MUG_PICK` (a share of
    *  the window's height: a fingertip round the mug as drawn, which is a few px across from above) */
-  const fromPointer = (id: number): number => {
+  const fromPointer = (id: number, px: number, py: number): number => {
     meshes[id].getWorldPosition(onScreen);
     onScreen.y += MUG.up;
     onScreen.project(G.camera);
     const x = ((onScreen.x + 1) / 2) * innerWidth, y = ((1 - onScreen.y) / 2) * innerHeight;
-    const apart = Math.hypot(x - input.mouse.x, y - input.mouse.y);
+    const apart = Math.hypot(x - px, y - py);
     return onScreen.z < 1 && apart < MUG_PICK * innerHeight ? apart : Infinity;
   };
+  /** the mug the pointer is on (-1: none), a click's walk to take one, and whether this frame's click was a mug's */
+  let pointedAt = -1, goingFor = -1, clickTook = false;
   takeKeyWhen(() => offered >= 0 || choosing);
+  takeClickWhen(() => {
+    const took = clickTook;
+    clickTook = false;
+    return took;
+  });
   /** The mug this game's hero would take up by E: the one the pointer is on within his reach (by the keyboard and
    *  mouse, as a seat is pointed at: "chosen by what the pointer highlights", Kenneth's round 3), or with no pointer
    *  (touch, the close views' crosshair) the nearest within it; any hero's, never one already in a hand. */
   function offerMug(): void {
     const hero = G.player;
     offered = -1;
+    pointedAt = -1;
     offerSaid = `none free (room ${G.arena.room}, casting ${!!hero?.casting}, drinking ${drinking})`;
-    const free = hero && G.arena.room === 'tavern' && !hero.casting && drinking < 0
-      && !ledger.mugs.some((m) => m.place.at === 'hero' && m.place.who === myId());
-    if (free) {
-      const at = room(hero.pos);
-      const near = ledger.mugs.filter((m) => (m.place.at === 'bar' || m.place.at === 'table') && m.full > 0.5
-        && sliding?.id !== m.id && Math.hypot(m.place.x - at.x, m.place.z - at.z) < MUG_REACH);
-      // (no pointer to point with: touch, and the close views' crosshair, which a mug on the bar lies far below)
-      const ray = input.centerAim ? null : cursorRay();
-      offerSaid = `${near.length} near, a ray ${ray ? 'cast' : 'none'}`;
-      let best = Infinity;
-      if (ray) G.camera.updateMatrixWorld();
-      for (const m of near) {
-        const p = m.place as { x: number; z: number };
-        const d = ray ? fromPointer(m.id) : Math.hypot(p.x - at.x, p.z - at.z);
-        if (d < best) {
-          best = d;
-          offered = m.id;
+    if (hero && takeFree()) {
+      const at = room(hero.pos), point = pointerNow();
+      const waiting = ledger.mugs.filter((m) => (m.place.at === 'bar' || m.place.at === 'table') && m.full > 0.5 && sliding?.id !== m.id);
+      // (the one the pointer is on, the mouse's from above or the crosshair through the eyes and over the shoulder,
+      // within a room's length; then within his reach it's his to take by E, and further off a click walks him to it)
+      if (point) pointedAt = mugAt(point.x, point.y, waiting, POINTED_MOST);
+      const apart = (id: number) => {
+        const place = ledger.get(id).place as { x: number; z: number };
+        return Math.hypot(place.x - at.x, place.z - at.z);
+      };
+      if (pointedAt >= 0 && apart(pointedAt) < MUG_REACH) offered = pointedAt;
+      // (pointing at nothing, the one he stands very close to: "or if you are very low to it", Kenneth's round 4; the
+      // pointer or crosshair on Bertram is his talk's)
+      if (KEEPER_TAKE.near && pointedAt < 0 && !(point && objectPointed(point.x, point.y))) {
+        let best = Math.min(MUG_NEAR, objectNearAt());
+        for (const m of waiting) if (apart(m.id) < best) { best = apart(m.id); offered = m.id; }
+      }
+      offerSaid = `${waiting.length} waiting, pointed at ${pointedAt}, a pointer ${point ? 'there' : 'none'}`;
+      // (a click's walk to it finished as he comes within reach; given up if he walked off by the keys)
+      if (goingFor >= 0) {
+        if (!waiting.some((m) => m.id === goingFor) || (!hero.walkTo && apart(goingFor) >= MUG_REACH)) goingFor = -1;
+        else if (apart(goingFor) < MUG_REACH) {
+          hero.walkTo = null;
+          takeMug(goingFor);
+          goingFor = -1;
         }
       }
     }
-    if (offered !== outlinedMug) {
-      outline(offered >= 0 ? meshes[offered] : null, 0xffffff);
-      outlinedMug = offered;
+    const shown = offered >= 0 ? offered : pointedAt;
+    if (shown !== outlinedMug) {
+      outline(shown >= 0 ? meshes[shown] : null, 0xffffff);
+      outlinedMug = shown;
     }
+    takeHint(offered);
     if (offered < 0 || !wasPressed('e')) return;
-    // (taken up: asked of the host, who rules who took it first, `takeFor`)
     spendPress('e');
-    const id = offered, who = myId();
+    takeMug(offered);
+  }
+  /** whether this game's hero is free to take a mug up: in the tavern, not drinking, none in his hand */
+  const takeFree = (): boolean => !!G.player && G.arena.room === 'tavern' && !G.player.casting && drinking < 0
+    && !ledger.mugs.some((m) => m.place.at === 'hero' && m.place.who === myId());
+  /** mug `id` taken up: asked of the host, who rules who took it first (`takeFor`) */
+  function takeMug(id: number): void {
+    const who = myId();
     takenFrom = meshes[id].getWorldPosition(new THREE.Vector3());
     const was = ledger.get(id).place as { at: string; x: number; z: number; y?: number };
     takenPlace = { x: was.x, z: was.z, y: was.at === 'bar' ? BAR.top : was.y ?? TABLES.smallTable.top };
     tell({ t: 'tv?', a: 'took', id }, () => takeFor(id, who));
+  }
+  /** where the pointer is on the page (css px): the mouse's, or through the eyes and over the shoulder the crosshair's
+   *  at the middle; none on touch, which takes a mug by a tap or by standing close */
+  const pointerNow = (): { x: number; y: number } | null => {
+    if (input.touchMode) return null;
+    if (input.centerAim) return { x: innerWidth / 2, y: innerHeight / 2 };
+    return cursorRay() ? { x: input.mouse.x, y: input.mouse.y } : null;
+  };
+  /** the mug of `among` drawn nearest (`x`, `y`) on the page, within a fingertip of it and `far` m of the hero, or -1 */
+  function mugAt(x: number, y: number, among: readonly Mug[], far: number): number {
+    G.camera.updateMatrixWorld();
+    const at = room(G.player.pos);
+    let best = Infinity, found = -1;
+    for (const m of among) {
+      const place = m.place as { x: number; z: number };
+      if (Math.hypot(place.x - at.x, place.z - at.z) > far) continue;
+      const d = fromPointer(m.id, x, y);
+      if (d < best) { best = d; found = m.id; }
+    }
+    return found;
+  }
+  // (a click or a tap on a waiting mug takes it, within reach, or walks him to it to take it: "Or you can just click
+  // on the cup to grab it", Kenneth's round 4; the press is the mug's, never his walk's or a blow's)
+  const waitingNow = () => ledger.mugs.filter((m) => (m.place.at === 'bar' || m.place.at === 'table') && m.full > 0.5 && sliding?.id !== m.id);
+  /** where a press is on the page: the crosshair's, the screen's middle, in the close views (the pointer locked) */
+  const pressAt = (x: number, y: number) => (input.centerAim ? { x: innerWidth / 2, y: innerHeight / 2 } : { x, y });
+  claimPointWhen((x, y) => {
+    const at = pressAt(x, y);
+    return !!keeper && takeFree() && mugAt(at.x, at.y, waitingNow(), POINTED_MOST) >= 0;
+  });
+  addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || !keeper || !KEEPER_TAKE.click || !takeFree() || e.target !== G.renderer.domElement) return;
+    const press = pressAt(e.clientX, e.clientY);
+    const id = mugAt(press.x, press.y, waitingNow(), POINTED_MOST);
+    if (id < 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    clickTook = true;
+    const place = ledger.get(id).place as { x: number; z: number }, at = room(G.player.pos);
+    if (Math.hypot(place.x - at.x, place.z - at.z) < MUG_REACH) {
+      takeMug(id);
+      return;
+    }
+    // (walked to the bar's front or the table's side nearest him, within reach of it)
+    const toward = V(at.x - place.x, 0, at.z - place.z).normalize().multiplyScalar(MUG_REACH * 0.6);
+    goingFor = id;
+    G.player.walkTo = W(place.x + toward.x, 0, place.z + toward.z).setY(0);
+  }, true);
+  /** the prompt to take the mug offered, over it: the village's objects' own (`promptArt`) */
+  let hint: Label | null = null, hintFor = -1;
+  function takeHint(id: number): void {
+    hintFor = id;
+    if (hint || id < 0) return;
+    hint = anchorLabel(ORDER.tag, () => {
+      if (hintFor < 0 || G.arena.room !== 'tavern') return null;
+      const top = meshes[hintFor].getWorldPosition(new THREE.Vector3());
+      return { x: top.x, y: top.y + 0.18, z: top.z };
+    }, true);
+    hint.ay = 0.5;
+    hint.show(promptArt('E', 'Take', { face: 'display', size: 14, weight: 700, spacing: 0.5, color: '#ffe7b0' }));
   }
   /** mug `id` into hero `who`'s hand if it still waits full on a top (the host's word: the first to ask has it) */
   function takeFor(id: number, who: string): void {
@@ -1332,7 +1567,9 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
       keeper.placed();
       posedAt.set(me.x, 0, me.z);
       // (what comes and goes, added with him once the room is built: out of its baked shadows and still meshes)
-      g.add(stream, broom, poker, ...meshes);
+      // (his rag laid flat and the tub's water too: added with the room, the room's merge took the rag in and it was
+      // never seen, "you cant see the towel", Kenneth's round 4)
+      g.add(stream, broom, poker, pad, water, suds, ...meshes);
       leanBroom();
       leanPoker();
       for (const m of ledger.mugs) drawMug(m);
@@ -1361,6 +1598,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     mugs: ledger,
     doing: () => ({
       job, step: step?.name ?? '', jumped, offered: `${offered} (${offerSaid})`,
+      broom: `held ${broomGrip.toFixed(2)} m down from its top, his fist ${broom.getWorldPosition(new THREE.Vector3()).y.toFixed(2)} m up`,
       where: `at ${me.x.toFixed(2)}, ${me.z.toFixed(2)} facing ${me.facing.toFixed(2)}, pace ${pace.toFixed(2)}, step to ${step ? `${step.spot.x.toFixed(2)}, ${step.spot.z.toFixed(2)} facing ${step.spot.facing.toFixed(2)}` : '-'}, way ${route.map((p) => p.map((v) => v.toFixed(2)).join(',')).join(' ')} (at ${routeAt})`,
     }),
     body: () => body,

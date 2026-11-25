@@ -36,7 +36,8 @@ export const MUG_COUNT = 10;
 /** where each clean mug stands on the back counter (z), in a row, mouth up: a mug's width and a finger apart */
 export const SHELF_SLOTS: readonly number[] = Array.from({ length: MUG_COUNT }, (_, i) => -1.86 + i * 0.1);
 /** the wash tub on the back counter: its middle (z) and its radius (m), and how high its water stands over the counter */
-export const TUB = { z: 0.3, r: 0.17, water: 0.1 } as const;
+// (wider, open: a mug and both his hands go in it; Kenneth's round 4)
+export const TUB = { z: 0.3, r: 0.2, water: 0.1 } as const;
 
 /** his places: the tap (his serving spot), the clean mugs, the tub, the bottles' shelf, the cask's tap, the bar's
  *  end where he comes out into the room, and in the room the hearth, the two tables he wipes and the broom's and
@@ -51,23 +52,29 @@ export const PLACES = {
   // that fire, distance him a bit")
   hearth: { x: 0.6, z: -2.45, facing: NORTH },
   smallTable: { x: 0.82, z: -0.68, facing: Math.atan2(-0.52, 0.48) },
-  longTable: { x: -3.8, z: 2.95, facing: NORTH },
+  // (the long table wiped from each of its ends, close in: from 0.45 m past its end, his rag went into the air)
+  longTable: { x: -3.8, z: 2.78, facing: NORTH },
+  longTableFar: { x: -3.8, z: 0.02, facing: 0 },
   broom: { x: 4.85, z: 1.2, facing: EAST },
   poker: { x: 1.3, z: -2.85, facing: NORTH },
 } as const satisfies Record<string, Spot>;
 /** where the broom leans against the east wall by the bar's end, and the poker against the hearth (m, its foot) */
 export const BROOM_AT = { x: 5.32, z: 1.3 } as const;
 export const POKER_AT = { x: 1.45, z: -3.45 } as const;
-/** the tables he wipes: their middle and their top (m), and how far across its top his rag goes (m) */
+/** the tables he wipes: their middle and their top (m), how far across its top his rag goes (m), and its edge (a round
+ *  one's radius, a long one's half sizes across and along the room, m) */
 export const TABLES = {
-  smallTable: { x: 0.3, z: -0.2, top: 0.76, reach: 0.32 },
-  longTable: { x: -3.8, z: 1.4, top: 0.76, reach: 0.38 },
+  smallTable: { x: 0.3, z: -0.2, top: 0.76, reach: 0.32, r: 0.45 },
+  longTable: { x: -3.8, z: 1.4, top: 0.76, reach: 0.38, hx: 0.45, hz: 1.1 },
 } as const;
 /** the floor he sweeps in front of the bar: the way his broom goes (m), out and back */
 export const SWEEP: readonly [number, number][] = [[2.7, 1.6], [2.7, -1.4], [2.1, -2.3], [1.5, -1.0], [1.6, 1.6]];
 /** the stools before the bar (their middles' z, all `BAR_STOOL_X` along the room): world/houses/tavern.ts builds them,
  *  his ways keep off them (world/tavernNav.ts) */
-export const BAR_STOOL_X = BAR.x - 0.75;
+// (back from the bar's front by what a body sat facing it needs, his knees and shins clear of the counter and his feet
+// set between, his forearm on the bar: 0.4 m off it, a sat body facing the bar had his knees in its front; Kenneth's
+// round 4, "move the chairs back a bit to have enough space")
+export const BAR_STOOL_X = BAR.x - 1.15;
 export const BAR_STOOLS: readonly number[] = [-2.2, -1.2, -0.2, 0.7];
 /** how high the bar stools' tops stand, and their rung round the legs (m) */
 export const BAR_STOOL_HIGH = 0.66, BAR_STOOL_RUNG = 0.25;
@@ -79,7 +86,9 @@ export const WALK = { speed: 1.05, turn: 2.2, accel: 2.2 } as const;
 /** how fast he turns on the spot (rad/s: as fast as his feet step round under him, a few steps to a half turn) */
 // (1.5 led his feet: the heroes' gait steps round under a turning body, and faster his pelvis turned past his planted
 // feet and they read crossed, "when he turns, his feet end up crossing each other")
-export const TURN_ON_SPOT = 1.0;
+// (2.4: about round in 1.3 s, brisk as a man turns about, "when he turns around (in the same spot), its very slow",
+// Kenneth's round 4; slowed while a planted foot lags, `feetCaughtUp`)
+export const TURN_ON_SPOT = 2.4;
 /** how far ahead along his way he looks to steer (m), how far from its end he turns to the place's facing as he comes
  *  in (m), and how far off his way's heading it must set off for him to turn on the spot before he walks (rad) */
 export const STEER = { look: 0.42, arrive: 0.35, turnFirst: 1.1 } as const;

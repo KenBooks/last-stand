@@ -72,6 +72,8 @@ const bendOf = (joint: THREE.Object3D) => THREE.MathUtils.radToDeg(2 * Math.acos
 export class GaitWatch {
   /** feet: the least apart across him (negative: crossed), and the least apart at all */
   readonly across = new Worst();
+  /** his quickest turn about where he stands (rad/s) */
+  spotTurn = 0;
   readonly near = new Worst();
   /** this frame set a new worst crossing (the measure pictures it) */
   newWorst = false;
@@ -161,6 +163,8 @@ export class GaitWatch {
     if (this.yawWas !== null) {
       const rate = Math.atan2(Math.sin(yaw - this.yawWas), Math.cos(yaw - this.yawWas)) * 60;
       this.rates.push(rate);
+      // (turned about where he stands: his quickest)
+      if (speed < 0.1) this.spotTurn = Math.max(this.spotTurn, Math.abs(rate));
       if (this.rates.length > 30) this.rates.shift();
       // (while walking on: turned on the spot as he comes to his place, after curving in the other way, is his arrival)
       if (walking && speed > 0.3 && Math.abs(rate) > TURNING) {
@@ -200,6 +204,7 @@ export class GaitWatch {
     return `his walk: his feet at least ${(-this.across.value * 100).toFixed(1)} cm apart across him (${this.across.at}) and `
       + `${(-this.near.value * 100).toFixed(1)} cm apart at all; his knees walking ${this.stanceKnee().toFixed(1)}° standing on average, `
       + `${this.swing.value.toFixed(0)}° swinging at most; ${this.stops} stops and ${this.zigzags} left-right turns on his ways; `
+      + `turned on the spot at up to ${this.spotTurn.toFixed(1)} rad/s (a half turn in ${(Math.PI / Math.max(this.spotTurn, 1e-3)).toFixed(1)} s); `
       + `his middle at least ${(-this.walked.value).toFixed(2)} m from a stool's or table's edge (${this.walked.at})`;
   }
 }

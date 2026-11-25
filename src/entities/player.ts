@@ -1,6 +1,10 @@
 // The player character: input -> movement/skills, resources, damage, animation.
 import { countCast } from '../game/chronicle';
 import { aleLifeShare } from '../game/aleBoost';
+import { clickTaken } from '../game/keyTakers';
+import { drinkChoice } from '../game/drinkChoice';
+/** the share of his pace he walks at with a mug of the tavern's ale in his hand */
+const ALE_CARRY_PACE = 0.55;
 import * as THREE from 'three';
 import { gaitRate, legLength, LookAt, type LegIK } from './models/ik';
 import { stepVelocity } from './movement';
@@ -708,7 +712,9 @@ export class Player {
     const keyLeft = this.sitting.keyLeft;
     const sitKey = this.local && wasPressed('e') && !keyLeft && !this.downedNear() && !this.sitting.ask();
     // (sat or getting up: any key gets him up, and nothing else is done until he's up; a key still held then acts)
-    const acted = sitKey || len > 0 || SKILL_KEYS.some((k) => isDown(k) || wasPressed(k));
+    // (a click that took the tavern's mug is the mug's: sat at the bar, he stays sat)
+    const clickedThing = clickTaken();
+    const acted = sitKey || len > 0 || SKILL_KEYS.some((k) => !(k === 'mouse0' && clickedThing) && (isDown(k) || wasPressed(k)));
     if (this.sitting.update(this, dt, this.freeToSit(), acted)) {
       this.goal.set(0, 0, 0);
       this.vel.set(0, 0, 0);
@@ -717,7 +723,10 @@ export class Player {
       return;
     }
     let speed = this.stats.moveSpeed;
-    if (this.casting && !this.casting.skill.def.freeMove) speed *= this.casting.skill.def.still ? 0 : 0.45;
+    // (the tavern's ale held while he chooses to drink it or put it down: carried about at a walk, Kenneth's round 4)
+    const carryingAle = !!this.casting?.skill.def.ale && drinkChoice.shown;
+    if (this.casting && !this.casting.skill.def.freeMove && !carryingAle) speed *= this.casting.skill.def.still ? 0 : 0.45;
+    if (carryingAle) speed *= ALE_CARRY_PACE;
     if (this.channel) speed *= this.channel.skill.def.moveMult ?? 0.4;
     if (this.rooted || this.stunned) speed = 0;
     if (this.chilledUntil > G.time) speed *= PVP.chill;

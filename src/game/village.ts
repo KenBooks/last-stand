@@ -31,7 +31,7 @@ import { LAMP_SOFT } from '../core/lamps';
 import { showStanding, standHeroes } from './hall';
 import { dropNameAt } from './groundItems';
 import { leaveSeatsTo, useWhileSatBy } from '../entities/sitting';
-import { keyTaken } from './keyTakers';
+import { keyTaken, objectsNearBy, objectsPointedBy, pointClaimed } from './keyTakers';
 import type { Seat } from '../world/seats';
 import { isWarm } from './warm';
 import { flash, release, type LightSlot } from '../fx/lights';
@@ -156,6 +156,11 @@ export function initVillage(h: VillageHooks): void {
   hooks = h;
   leaveSeatsTo(fireLeftToItsObject);
   useWhileSatBy(usedWhileSat);
+  objectsPointedBy((x, y) => !!objectAt(x, y));
+  objectsNearBy(() => {
+    const o = hooks.active() ? nearest() : null;
+    return o ? distanceTo(o) : Infinity;
+  });
   for (const o of OBJECTS) {
     const at = (): { x: number; y: number; z: number } | null => {
       if (!named(o)) return null;
@@ -347,7 +352,8 @@ function bindPointer(): void {
     if (e.button !== 0) return;
     // (a thrown item's name over an object is the floor's to take: both hear the press, and the object, used, opened
     // over the name before the press lifted, so the item was never picked up)
-    const o = dropNameAt(e.clientX, e.clientY) ? null : over(e);
+    // (nor what another claims there first: the tavern's mug before Bertram behind it)
+    const o = dropNameAt(e.clientX, e.clientY) || pointClaimed(e.clientX, e.clientY) ? null : over(e);
     if (!o) return;
     e.preventDefault();
     e.stopPropagation();

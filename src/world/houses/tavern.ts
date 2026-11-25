@@ -126,7 +126,10 @@ export function build(group: THREE.Group): Room {
     rung.position.set(BAR_STOOL_X, BAR_STOOL_RUNG, z);
     rung.castShadow = true;
     barStool.group.add(rung);
-    b.seats.push(stoolSeatOf(barStool, BAR_STOOL_X, z));
+    // (sat on facing the bar, whichever side he comes from: his back to the bar, he looked out at the room, "should sit
+    // the other way, facing the counter", Kenneth's round 4)
+    // (come close to to sit, as the bar's keep-out stands between it and the bar)
+    b.seats.push({ ...stoolSeatOf(barStool, BAR_STOOL_X, z), faces: { x: 1, z: 0 }, near: 0.06 });
   }
   const east = onWall(g, id, 'east');
   const bottles: THREE.Matrix4[] = [], tints: THREE.Color[] = [];

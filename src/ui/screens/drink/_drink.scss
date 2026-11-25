@@ -6,6 +6,13 @@
 #drink-choice { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + #{ui(120px)}); z-index: 40;
   display: flex; gap: ui(10px); transform: translateX(-50%); }
 #drink-choice.hidden { display: none; }
+// (the ale's boost waiting for his next run, told in the village, where the run's buffs aren't shown)
+#ale-fortified { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + #{ui(10px)}); z-index: 40;
+  display: flex; align-items: center; gap: ui(6px); height: ui(28px); padding: 0 ui(12px); transform: translateX(-50%);
+  font: 700 ui(14px) var(--font-display); color: #ffe7b0; background: rgba(18, 12, 8, .78);
+  border: 1px solid rgba($frame, .6); border-radius: ui(14px); pointer-events: none; white-space: nowrap; }
+#ale-fortified.hidden { display: none; }
+#ale-fortified .af-mug { font-size: ui(15px); }
 .dc-btn { display: flex; align-items: center; justify-content: center; gap: ui(8px); width: ui(150px); height: ui(40px);
   padding: 0 ui(12px); font: 700 ui(16px) var(--font-display); letter-spacing: .5px; color: #ffe7b0;
   background: rgba(18, 12, 8, .82); border: 1px solid rgba($frame, .7); border-radius: 3px; cursor: $cursor-hand;

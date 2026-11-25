@@ -46,6 +46,11 @@ const LOOKS: readonly Look[] = [
   { label: '12-fetch-broom', note: 'taking up the broom (7)', task: 'sweep', step: 'fetch broom', after: 40, views: ['left', 'front', 'right'], y: 0.6, distance: 2.0 },
   { label: '10-stripes', note: 'his shirt stripes, front, back and sides (102, 22)', task: 'sweep', step: 'sweep', after: 50, views: ['back', 'front', 'left', 'right'], y: 0, distance: 1.1, joint: 'chest' },
   { label: '10-stripes-hanging', note: 'his shirt stripes with his arms hanging as he walks, front, back and sides (22)', task: 'smallTable', step: 'walk', after: 40, views: ['back', 'front', 'left', 'right'], y: 0, distance: 1.1, joint: 'chest' },
+  { label: '13-elbow', note: 'his elbow bent, from behind and beside: no hole at the cuff (118, 119)', task: 'smallTable', step: 'wipe table', after: 60, views: ['back', 'left', 'right'], y: 0, distance: 0.8, joint: 'chest' },
+  { label: '14-cask', note: 'wiping the cask with the rag, palm down, his other hand steadying it (120)', task: 'cask', step: 'check cask', after: 170, views: ['front', 'left', 'above'], y: 0, distance: 2.2, joint: 'chest' },
+  { label: '15-long-table', note: 'wiping the long table from its end, the rag on its top (116, 117)', task: 'longTable', step: 'wipe table', after: 80, views: ['left', 'above', 'front'], y: 0, distance: 2.6, joint: 'chest' },
+  { label: '16-broom-carried', note: 'the broom taken up and carried at his side (115)', task: 'sweep', step: 'fetch broom', after: 45, views: ['front', 'left', 'right'], y: 0, distance: 3.0, joint: 'chest' },
+  { label: '17-broom-swept', note: 'sweeping, the bristles just touching the floor (round 4, note 2)', task: 'sweep', step: 'sweep', after: 30, views: ['left', 'front'], y: 0, distance: 3.0, joint: 'chest' },
   { label: '11-stripes-bent', note: 'his shirt stripes bent over a table, from behind (102, 22)', task: 'smallTable', step: 'wipe table', after: 70, views: ['back', 'left'], y: 0, distance: 1.1, joint: 'chest' },
 ];
 

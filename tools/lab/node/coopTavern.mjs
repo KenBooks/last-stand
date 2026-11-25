@@ -114,6 +114,20 @@ export async function drinkTogether(pair, callPage, lines, { canary = false, pic
       for (const [page, sawIt] of [[host, h2], [guest, g2]]) if (sawIt.choosing) await callPage(page, 'coopTavernDrink');
       await until((h, g) => h.drinking < 0 && g.drinking < 0, 600);
     } else found.push('the mug for the race never waited within both heroes\' reach');
+    // --- carried and lost at the door (Kenneth's round 4): the guest takes one up, the host sees him hold it; he leaves
+    // the tavern with it, and both games have it back on the bar, every mug counted ---
+    await callPage(guest, 'coopTavernAsk');
+    if (await until((h, g) => g.waiting >= 0, SERVED_IN) >= 0) {
+      await callPage(guest, 'coopTavernTake');
+      const held = await until((h, g) => g.choosing && h.partnerHolding, 240);
+      lines.push(`carried: the host ${held < 0 ? 'NEVER saw' : 'saw'} the guest holding his mug`);
+      if (held < 0) found.push('the host never saw the guest holding his mug');
+      await callPage(guest, 'coopTavernLeave');
+      const back = await until((h, g) => !g.choosing && !h.partnerHolding && h.places === g.places && h.sum === h.count, 300);
+      const [h, g] = await seen();
+      lines.push(`left with it: ${back < 0 ? `NOT agreed (host ${h.places} | guest ${g.places})` : 'the mug back off his hand on both games, every mug counted'}`);
+      if (back < 0) found.push('the guest left the tavern with a mug, and the games didn\'t agree it was put back');
+    } else found.push('the guest\'s mug to carry never waited');
   }
   lines.push(`the ledgers: ${disagreed ? `disagreed (${disagreed})` : 'agreed once settled'}, ${badSum ? `didn't add up (${badSum})` : 'added up at every look'}`);
   if (disagreed) found.push(`the two games' mugs disagreed: ${disagreed}`);

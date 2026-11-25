@@ -44,7 +44,7 @@ const skill: InstantSkill = {
       // (his own hero fortified for his next run, once: a second before it adds nothing, game/aleBoost.ts)
       if (player.local) {
         const fortified = aleDrunk();
-        const said = fortified ? `+${Math.round(ALE_BOOST.life * 100)}% health next run` : 'Already fortified';
+        const said = fortified ? `Fortified: +${Math.round(ALE_BOOST.life * 100)}% health next run, ${ALE_BOOST.waves} waves` : 'Already fortified for your next run';
         schedule(0.6, () => floatText(player.pos.x, 2.5, player.pos.z, said, 'info', fortified ? '#ffd890' : '#c8b890'));
       }
       // (a few flecks of foam off his lips as he wipes them)

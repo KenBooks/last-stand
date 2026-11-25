@@ -93,6 +93,10 @@ const HIPS_RATE = 0.3;
  *  x to his left): in the pocket at his front's left, his right forearm crossed his belly to reach it, `lab tavern` */
 export const RAG_TUCKED = new THREE.Vector3(-0.19, -0.05, 0.12);
 const TUCKED = RAG_TUCKED;
+/** the most his rag turns in his hand in a 60th of a second (rad) */
+const RAG_TURN_MOST = 0.1;
+/** how many times a thing laid to the floor is read and laid again (`HandGoal.floor`) */
+const FLOOR_PASSES = 6;
 /** his body's solids grown by what he wears over them (m: the shirt and the apron's bib on his chest, his belly and
  *  the apron over it), how far off them his arms keep, and the elbow's turns about the shoulder-to-wrist line tried
  *  for an arm clear of him (rad, nearest first) */
@@ -132,6 +136,10 @@ export interface HandGoal {
   /** an open hand shaped to take what it reaches for, its fingers in a C (from play: "his hand is flat for a moment")
    *  rather than flat, as a hand pushing or resting is */
   cup?: boolean;
+  /** what it holds laid so the point `reach` along it meets the floor at `level` (world y), its way across the floor
+   *  `dir`'s, from where the fist is once the arm is placed (a broom swept: laid from where the fist was sent, it rose and
+   *  sank 3 to 7 cm as the hand lagged its goal, `lab tavern`) */
+  floor?: { reach: number; level: number; touch: boolean };
   /** what it holds turned about its axis (rad: a mug turned in the hand as it's washed) */
   spin?: number;
   /** carried: `at` (and `dir`) given in his chest's own frame (x to his left, y up, z ahead, from the chest joint), so
@@ -297,6 +305,11 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
   const trunk = body.solids.filter((solid) => ['chest', 'belly', 'neck', 'head'].includes(solid.name));
   yield;
   const rag = add(ragGeometry(), towel, j.handR, 'rag', false);
+  /** the rag's turn in his hand at rest, each frame's own begun from (`easeWrist` turns what a hand holds by the frame's
+   *  ease: begun from the last frame's, its turns added up and it spun round in his fist, "the wipe does a bunch of turns
+   *  in his hand like 360s", Kenneth's round 4) */
+  const ragRest = rag.quaternion.clone(), ragWas = rag.quaternion.clone();
+  let ragSeen = false;
   // (his feet as his boots have them: the sole under the ankle, the toe ahead and the heel behind)
   j.root.updateMatrixWorld(true);
   const sole = footShape(j.ankleL, j.root);
@@ -354,7 +367,20 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
   /** each arm's last turn of its elbow about the line from its shoulder to its wrist (rad: `keepOffBody`) */
   const elbowTurn = [0, 0];
   /** each hand's held thing and the way it's stood (world), as the arm last seated it */
-  const heldWay: ({ thing: THREE.Object3D; dir: THREE.Vector3; spin: number } | null)[] = [null, null];
+  const heldWay: ({ thing: THREE.Object3D; dir: THREE.Vector3; spin: number; floor?: { reach: number; level: number; touch: boolean } } | null)[] = [null, null];
+  const floorAt = new THREE.Vector3(), turnInv = new THREE.Quaternion(), lowAt = new THREE.Vector3();
+  /** the lowest of `thing`'s meshes' points (world y) */
+  const lowestOf = (thing: THREE.Object3D): number => {
+    thing.updateWorldMatrix(true, true);
+    let lowest = Infinity;
+    thing.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const pos = mesh.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) lowest = Math.min(lowest, lowAt.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld).y);
+    });
+    return lowest;
+  };
   const heldDir = [new THREE.Vector3(), new THREE.Vector3()];
   /** each arm's elbow pole, eased (`POLE_EASE`), and the frame's time it's eased by */
   const poleEased = [new THREE.Vector3(), new THREE.Vector3()], poleSet = [false, false];
@@ -422,7 +448,7 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
     // counter, it stood 39 cm out from his middle and met the bar walking behind it, `lab tavern`)
     // (carried, the elbow hangs down by his side, a little out: out 0.35, his elbow caught the back counter walking
     // the aisle behind the bar, `lab tavern`)
-    const wantPole = g.carried ? armPole.set(left ? 0.2 : -0.2, -1, -0.3).normalize() : armPole.set(left ? 1 : -1, 0.05 + far * ELBOW_UP_MOST, -0.5).normalize();
+    const wantPole = g.carried ? armPole.set(left ? 0.1 : -0.1, -1, -0.35).normalize() : armPole.set(left ? 1 : -1, 0.05 + far * ELBOW_UP_MOST, -0.5).normalize();
     // (eased from one to the other: switched at once between a carry and a reach, the elbow flipped and the hand
     // jumped 10 cm in a frame)
     if (poleSet[i]) poleEased[i].lerp(wantPole, 1 - Math.exp(-POLE_EASE * frameDt)).normalize(); else poleEased[i].copy(wantPole);
@@ -442,7 +468,7 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
     if (KEEPER_ARMS.offBody) keepOffBody(left, wrist, pole);
     const seat = () => {
       if (g.held) {
-        heldWay[i] = { thing: g.held, dir: heldDir[i].copy(dir), spin: g.spin ?? 0 };
+        heldWay[i] = { thing: g.held, dir: heldDir[i].copy(dir), spin: g.spin ?? 0, floor: g.floor };
         hold(h, dir, g.r ?? 0.02);
         seatHeld(h, g.held, g.r ?? 0.02);
         // (the thing stood along its axis in the world, whatever the hand's turn)
@@ -655,6 +681,7 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
       j.root.updateMatrixWorld(true);
       j.handR.getWorldQuaternion(turn);
       hold(handR, ragDir.set(0, -1, 0.35).normalize().applyQuaternion(turn), RAG_R);
+      rag.quaternion.copy(ragRest);
       seatHeld(handR, rag, RAG_R);
     } else poseHand(handR, 0.3, 0.05, 0, 0, 0);
     // (no hand moved further than a hand moves in a frame, whatever asked it to)
@@ -662,6 +689,24 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
     // (each hand's turn eased from the last frame's, what it holds turned with it: a grip changed for another, the
     // poker's for the rag's, turned the wrist over in a frame)
     for (const [i, h] of [handL, handR].entries()) easeWrist(h, i, dt);
+    // (his rag's turn in his hand eased from the last frame's, never more than `RAG_TURN_MOST` a frame: from the free
+    // hand's hold to the wipe's and back it was set at once, a half turn in a frame, `lab tavern`)
+    if (rag.parent === j.handR && ragSeen) {
+      const turned = ragWas.angleTo(rag.quaternion), most = RAG_TURN_MOST * Math.min(1, dt * 60);
+      if (turned > most) rag.quaternion.copy(ragWas.slerp(rag.quaternion, most / turned));
+    }
+    ragSeen = rag.parent === j.handR;
+    ragWas.copy(rag.quaternion);
+    // (a thing just taken up eased from where it stood into the fist closing round it, before what each hand holds is
+    // stood along its way (laid to the floor from its place eased, it went into the floor as it eased after), after all
+    // that moves the hand: seated at once, it jumped the fist's 13 cm off its handle in a frame, `lab tavern`)
+    if (seating && seating.t < 1 && seating.thing.parent) {
+      j.root.updateMatrixWorld(true);
+      seating.thing.getWorldPosition(seatAt);
+      seatAt.lerp(seating.from, 1 - smooth(seating.t));
+      seating.thing.parent.worldToLocal(seatAt);
+      seating.thing.position.copy(seatAt);
+    }
     // (what each hand holds stood along its way again, after the arm's and the wrist's limits turned the hand back part
     // of the way: turned with it, a broom just taken up pointed back through his legs and a sweeping broom up past his
     // shoulder, `lab tavern`)
@@ -670,16 +715,27 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
       if (!held || !goal?.held || held.thing.parent === null) { heldWay[i] = null; continue; }
       j.root.updateMatrixWorld(true);
       held.thing.parent.getWorldQuaternion(turn).invert();
-      held.thing.quaternion.copy(turn.multiply(along.setFromUnitVectors(up, held.dir)).multiply(spinQ.setFromAxisAngle(up, held.spin)));
-    }
-    // (a thing just taken up eased from where it stood into the fist closing round it, last, after all that moves the
-    // hand: seated at once, it jumped the fist's 13 cm off its handle in a frame, `lab tavern`)
-    if (seating && seating.t < 1 && seating.thing.parent) {
-      j.root.updateMatrixWorld(true);
-      seating.thing.getWorldPosition(seatAt);
-      seatAt.lerp(seating.from, 1 - smooth(seating.t));
-      seating.thing.parent.worldToLocal(seatAt);
-      seating.thing.position.copy(seatAt);
+      const stand = (way: THREE.Vector3) => {
+        held.thing.quaternion.copy(turnInv.copy(turn).multiply(along.setFromUnitVectors(up, way)).multiply(spinQ.setFromAxisAngle(up, held.spin)));
+      };
+      if (!held.floor) {
+        stand(held.dir);
+        continue;
+      }
+      // (laid from the fist as it is now down to the floor along its way across it, then its lowest point read and the
+      // lay corrected: its head rolls on the handle and its splayed tufts reach lower at one side, and laid by its length
+      // alone it went 5 cm into the floor and swept 3 cm over it, `lab tavern`)
+      const fist = held.thing.getWorldPosition(floorAt).y, level = held.floor.level, flat = held.dir.clone().setY(0).normalize();
+      // (by its slope: the share of its length that goes down, from where its length alone puts the floor)
+      const reach = held.floor.reach;
+      let down = clamp((fist - level) / reach, 0.05, 1);
+      for (let pass = 0; pass < FLOOR_PASSES; pass++) {
+        stand(held.dir.copy(flat).multiplyScalar(Math.sqrt(1 - down * down)).add(floorAt.set(0, -down, 0)).normalize());
+        const low = lowestOf(held.thing) - level;
+        // (swept, its lowest point brought onto the floor; carried, only kept off it)
+        if (held.floor.touch ? Math.abs(low) < 0.001 : low >= 0) break;
+        down = clamp(down + low / reach, 0.05, 1);
+      }
     }
     // (everything he holds placed where his hands are now: the leg IK's working leaves world matrices of its own, and
     // read after it his hands stood 13 m under the floor with the mug in them, `lab tavern`)
@@ -822,6 +878,14 @@ function ragGeometry(): THREE.BufferGeometry {
   return rowsSurface(rows, 4);
 }
 
+/** His bare upper arm under the rolled sleeve, on its shoulder (hanging along -y): from inside the sleeve down to the
+ *  cuff's foot, closed there in a dome, a little narrower than the cuff's ring so it never shows through the cloth. */
+function upperArmGeometry(): THREE.BufferGeometry {
+  return new THREE.LatheGeometry([
+    [0.0005, -0.318], [0.022, -0.314], [0.04, -0.305], [0.052, -0.292], [0.058, -0.27], [0.06, -0.22], [0.062, -0.15],
+  ].map(([r, y]) => new THREE.Vector2(r, y)), 20);
+}
+
 /** A bare forearm on its elbow (hanging along -y to the wrist at `fore`): fuller below the elbow where its muscles
  *  are, narrowing to the wrist, and flatter than round, wider across than deep, more so at the wrist; a little uneven.
  *  A round lathe tapered straight to the wrist read as "a featureless cone". */
@@ -829,7 +893,10 @@ function forearmGeometry(fore: number, seed: number): THREE.BufferGeometry {
   const ph = mulberry(seed)() * 6;
   const g = new THREE.LatheGeometry([
     [0.026, fore - 0.012], [0.029, fore + 0.02], [0.032, fore * 0.78], [0.04, fore * 0.55], [0.049, fore * 0.3], [0.053, -0.04],
-    [0.052, 0.02], [0.05, 0.06],
+    // (closed over the elbow in a dome inside a 6 cm round of its joint: open there, a bent arm showed the cone's hollow
+    // end inside the cuff's ring, "Elbow has a hole when doing animations/tasks", Kenneth's round 4; reaching 12 cm up
+    // past the joint, the dome swung out through the side of the rolled cuff as the elbow bent, skin through the cloth)
+    [0.052, 0.02], [0.05, 0.034], [0.04, 0.046], [0.025, 0.055], [0.0005, 0.06],
   ].map(([r, y]) => new THREE.Vector2(r, y)), 24);
   const pos = g.attributes.position;
   for (let i = 0; i < pos.count; i++) {
@@ -1054,6 +1121,9 @@ function dressBody(j: Joints, add: Add, M: Mats): { skirt: THREE.Mesh; cols: num
     stripesAlong(add(sleeve([[0.07, -0.265], [0.078, -0.258], [0.08, -0.247], [0.075, -0.238], [0.066, -0.235]], 0.03, 9 + s), M.shirt, shoulder, 'sleeve cuff'), STRIPES.sleeve);
     const fore = -j.P.foreL;
     add(forearmGeometry(fore, 13 + s), M.arm, elbow, 'forearm');
+    // (his bare upper arm inside the rolled sleeve, closed at its foot: looking up into the cuff from below or behind,
+    // the shirt's inside and the dark past it showed through, Kenneth's round 4)
+    add(upperArmGeometry(), M.arm, shoulder, 'upper arm');
   }
   return { skirt: skirt!, cols: 11, sewn, belly: belly! };
 }

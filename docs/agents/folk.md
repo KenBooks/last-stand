@@ -28,4 +28,27 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md).
     knob; the broom (`world/tavernBroom.ts`); his talk card's face: `KEEPER_PORTRAIT` in `data/tavern.ts`, his picture
     made by the folk's portraits (`ui/guide/folkPortraits.ts`, `bertram`) as the hero walks into the tavern, `lab talk`
     holding his head and eyes on the camera (its canary turns his head 30°).
+  - **Round 4** (Kenneth's notes after play):
+    - The broom (`tavernBroom.ts`) hangs in a holder his fist holds (`broom grip`), slid along its handle: at its top
+      sweeping, 0.68 m down carrying it upright at his side, head down by his foot (`BROOM_CARRY`); taken from its
+      corner at 0.5 m in one grip (`regripBroom`), lifted as it's taken or as he walks off from sweeping. Sweeping
+      and carried, `HandGoal.floor` lays it from where his fist is once the arm is placed, reading its lowest point
+      and turning its slope until its bristles meet the floor (touching 2 to 3 mm) or clear it.
+    - The flat rag and the open tub's water are added with what moves, kept out of the room's merge (merged, the rag
+      was never seen). The rag is held inside each top's edge (`onTop`), and the long table is wiped from both ends.
+    - The rag in a free hand starts from its rest turn each frame, and its turn in his hand is eased (`RAG_TURN_MOST`).
+      `easeWrist` piles the frame's ease onto what a hand holds, and it spun.
+    - The forearm is domed into the cuff, and a bare upper arm sits inside the sleeve.
+    - The cask is knocked by his knuckles and wiped palm down, his other hand on its hoop.
+    - His turn on the spot is 2.4 rad/s, eased in and out (`TURN_ACCEL`, `TURN_EASE`).
+    - The tub stands open (round 3's lid gone), its water rocking as he scrubs.
+    - The bar stools are seats facing the counter (`faces`), 1.15 m back from the bar so his stand to sit clears the
+      bar's keep-out (his radius 0.45).
+    - The mug is taken by E when pointed at (the mouse from above, the crosshair in the close views), or by standing
+      within 1 m with nothing pointed at, never past a village object nearer him (`objectNearAt`, `objectPointed` in
+      `game/keyTakers.ts`). A click or a tap on it takes it, or walks him to it (`claimPointWhen` keeps it from
+      Bertram's talk behind it). Held undrunk, it's carried at 0.55 of his pace, and leaving the tavern puts it back
+      full where he took it, for anyone to take.
+    - The boost is told: a line as he finishes, a pill at the screen's top in the village while it waits, a line at
+      the run's start.
 - **The Strawman's scarecrow** (`scarecrow.ts`, raised by `combat/skills/strawman.ts`; not a `Model`, so not in `MODELS`): made as its skill's icon draws it, a rough post and cross arm braced by two stakes, an olive coat patched, buttoned and belted with rope, straw tied off at the cuffs and spilling from the neck and the hem, a stuffed sack head with a stitched face (a button for one eye) and straw hair, under a frayed straw hat with a red band, worn nearly level (tipped well back to show the face, it read as fallen over: "it would not be leaned down so much"). The hat is what the top view reads it by: the first one, olive under a dark felt hat, was lost against the forest's floor. Its geometry and three materials are made once (`build`, seeded) and shared by every cast, never disposed: a cast is five meshes on them (7.4k triangles: the body's wood, cloth and straw, and the head's cloth and straw on a joint of its own, which lolls after a blow), three of them casting. The cloth and the wood are the game's burlap and wood maps under vertex colours (a cloth's colour is given as what it reads over the burlap, `dyed`), both drawn two-sided so they are one program; the straw, rope, thread and buttons are vertex colours alone. A sheaf of straws has a solid heart so it reads as a bundle from afar, and the glow of where it would stand (`scarecrowOutline`) is the wood and cloth alone: each straw a glow of its own added up to a glare. The skill's `warm()` returns one whole, so a first cast compiles nothing (`npm run lab -- cast strawman --class ranger --ab`). It shares no code with the training dummy: the dummy's straw is thinner, for the lobby's nearer camera. **Every straw grows from what it sticks out of** (from play: "floating hay pieces around the hat and body (that are not attached)"): the brim's fray is rooted on the brim's edge as the brim is bent there (`brimEdge`, which bends the hat's lathe too, `brimFray`: laid on a flat ring, it hung in the air where the brim waved up or was bitten and poked up through its top where it waved down), the neck's ruff at the collar's rim laid down the shoulders, and the collar's tuft in its opening (rooted inside the coat, both came out through its cloth as loose spikes). Look at it close with `npm run lab -- live`: a scarecrow stood where the hero stands (`live eval`, `buildScarecrow`), the hero hidden, pictured `--on` its head and hem from `front,left,right,back,above` at about 1 m.
