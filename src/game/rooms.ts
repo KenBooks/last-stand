@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { HOUSES, insideOf, outsideOf, ROOM_IDS, TROPHIES, type RoomId } from '../data/houses';
-import { BIOMES, BIOME_IDS, rungBoss } from '../data/biomes';
+import { BIOMES, BIOME_IDS, bossesOf, rungBoss } from '../data/biomes';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { RARITIES } from '../data/items';
@@ -301,9 +301,9 @@ export function recordsShown(): RecordsShown {
       ...RARITIES.map((x) => [`· ${x.name}`, num(c.bankedBy[x.id] ?? 0)] as const),
     ],
   };
-  // (each boss wave's boss, a pair under its first by its pair's name)
-  const waves = BIOME_IDS.flatMap((b) => [BIOMES[b].boss, ...(BIOMES[b].bossWaves ?? []).map((s) => s.id)]);
-  const bosses = [...new Set([...waves, ...(Object.keys(TROPHIES) as EnemyId[])])].filter((b) => rungBoss(b) === b);
+  // (every boss a battleground can bring, its ladder's and its exceptions', a pair under its first by its pair's name)
+  const bosses = [...new Set([...BIOME_IDS.flatMap((b) => bossesOf(b)), ...(Object.keys(TROPHIES) as EnemyId[])])]
+    .filter((b) => rungBoss(b) === b);
   const right: Board = {
     title: 'Bosses Slain',
     rows: [

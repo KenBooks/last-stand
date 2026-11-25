@@ -21,6 +21,7 @@ import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, s
 export const CRYPT_ENV: EnvColours = { sky: [0.3, 0.36, 0.56], panel: [1.0, 1.05, 1.3] };
 import { PropSet, instanceLook, meshLook, groupLook, type PropLook } from './destructible';
 import { buildFire } from './fire';
+import { buildRisenGraves } from './risenGraves';
 import { COARSE_CELL, restingLift, skullGeometry, skullsDrawn } from './skull';
 import { asClutter, cullInCells, eachInstance, gridCell } from './culling';
 import type { Obstacle } from '../types';
@@ -266,6 +267,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   }
   walkParts.push(ringWalk(17.4, 19.6, 0.25));
   const walks = new THREE.Mesh(mergeGeometries(walkParts), walkMat);
+  walks.name = 'crypt walks';
   walks.receiveShadow = true;
   scene.add(walks);
 
@@ -435,6 +437,8 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   }
   heads.count = hi; crosses.count = ci;
   for (const m of [heads, crosses]) { m.castShadow = m.receiveShadow = true; scene.add(m); }
+  // (the Ossuary Cantor's risen graves: its headstones in the same stone, drawn as they are, shrunk away till they rise)
+  buildRisenGraves(scene, stoneGeo, carved);
 
   // --- Candles: warm points of light round the props (no lights: emissive tips + bloom) ------
   buildCandles(scene, candleSpots, rng, wax, flameMat, updaters);

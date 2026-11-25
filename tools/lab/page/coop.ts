@@ -54,6 +54,7 @@ export {
   coopEnterHouse, coopFaceHouse, coopHouseMarkLost, coopHousePartyState, coopHouseSeen, coopKeepVillage, coopLeaveHouse,
   coopPartyHost, coopPartyJoin, coopPartyLeave, coopPlacesIgnored, coopVillageMap, coopYardSeen,
 } from './coopHouses';
+export { coopChoirCast, coopChoirSamples, coopChoirSetup, coopChoirSpawn } from './coopChoir';
 export { coopPointAtSeat, coopSeatsSeen, coopSitOn, coopStandBySeat, coopStandUp } from './coopSeats';
 export {
   coopBarBack, coopBarFit, coopBarScreens, coopCanvasCover, coopClick, coopDrag, coopDragEnd, coopFloor, coopHold,

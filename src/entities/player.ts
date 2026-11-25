@@ -39,6 +39,9 @@ import type { ActionState, CastAnim, CastHands, ClassDef, DamageType, DerivedSta
 import type { Enemy } from './enemy';
 import { walkPath } from '../world/walkPath';
 
+/** a stun's grace after it ends (s): no boss's stun takes him again within it */
+const STUN = { grace: 1.5 };
+
 /** How many times his speed he walks of himself to a spot (`?walkPace=3`: the stalls' `walks` crosses the village
  *  faster, its freezes the same in fewer seconds; 1 otherwise). */
 const WALK_PACE = typeof location === 'undefined' ? 1
@@ -290,11 +293,22 @@ export class Player {
   stunnedUntil = -1;
   stunLong = 0;
   get stunned(): boolean { return this.stunnedUntil > G.time; }
-  /** staggered: a broken guard (he can still move) or a stun (he can't), shown by the stagger's pose */
-  get staggered(): boolean { return this.guardBroken > G.time || this.stunned; }
+  /** staggered: a broken guard (he can still move), a stun (he can't) or something holding him up, shown by the
+   *  stagger's pose */
+  get staggered(): boolean { return this.guardBroken > G.time || this.stunned || this.seized; }
   /** game time until which a vine holds his feet to the ground (`root`): he can't walk, but a dash tears him free */
   rootedUntil = -1;
-  get rooted(): boolean { return this.rootedUntil > G.time; }
+  get rooted(): boolean { return this.rootedUntil > G.time || this.stunned || this.seized; }
+  /** held up off the ground by something that seized him (`seize`: a boss's grip): he neither walks nor acts
+   *  while it lasts, what holds him placing him, and how far over the ground his body is lifted (m). (Not a duel's
+   *  `held`, a rival's freeze or daze) */
+  seizedUntil = -1;
+  lift = 0;
+  get seized(): boolean { return this.seizedUntil > G.time; }
+  /** game time until which a boss's stun can't take him again (`stunAfterGrace`: `STUN.grace` past the last one's end) */
+  private stunGraceUntil = -1;
+  /** his shield raised (a block held): what a boss's blow breaks on */
+  get shieldRaised(): boolean { return this.gear.shield && !!this.channel?.skill.def.block; }
   /** game time the hero was last busy with an action: casting, channelling, dashing or staggered */
   private busyAt = -Infinity;
   lastBlock = -99;
@@ -571,7 +585,9 @@ export class Player {
     this.hitT = 0;
     this.blockCd = 0;
     this.guardBroken = -1;
-    this.stunnedUntil = -1;
+    this.stunnedUntil = this.stunGraceUntil = -1;
+    this.seizedUntil = -1;
+    this.lift = 0;
     this.lastLowEnergy = 0;
     this.cooldowns.clear();
     this.downed = false;
@@ -664,7 +680,7 @@ export class Player {
     const peace = G.mode !== 'run' || G.run?.phase !== 'fighting';
     const pointing = !(this.idle || this.out);
     if (this.local) this.sitting.point(this, pointing ? cursorRay() : null, dt, peace);
-    if (this.idle || this.out || this.held) {
+    if (this.idle || this.out || this.held || this.seized) {
       // the co-op pause menu, out of the run (banked, he's still standing, unseen), or held by a rival's skill in a
       // duel: stand still and let go of any channel
       this.goal.set(0, 0, 0);
@@ -1371,7 +1387,8 @@ export class Player {
     this.phase = this.cycleOn(dt * cadence * pace, backwards ? -1 : 1);
     let action: ActionState | null = null;
     const d = this.dash, dashed = d ? { name: d.anim ?? 'charge', t: Math.min(1, d.t / (d.dur + d.hold)) } : null;
-    if (this.staggered) action = { name: 'stagger', t: this.staggerShare() };
+    if (this.seized) action = { name: 'stagger', t: 0.35 };
+    else if (this.staggered) action = { name: 'stagger', t: this.staggerShare() };
     // (an open dash shows a skill cast as it runs, its own legs under it, and the action of a dash riding on it)
     else if (dashed && !(d?.open && (this.casting || this.channel || d.ride))) action = dashed;
     else if (d?.ride) action = { name: d.ride.anim ?? 'charge', t: Math.min(1, d.ride.t / d.ride.dur) };
@@ -1487,7 +1504,8 @@ export class Player {
     if (action && this.style === 'bare') this.fistT = G.time;
     // a jumping dash lifts the model along a parabola
     const d = this.dash, k = d ? Math.min(1, d.t / d.dur) : 0;
-    this.model.root.position.set(0, d ? d.lift * 4 * k * (1 - k) : 0, 0);
+    // (and something holding him up lifts him: `seize`)
+    this.model.root.position.set(0, (d ? d.lift * 4 * k * (1 - k) : 0) + this.lift, 0);
     // a raised player gets up the way it went down, in reverse
     const dead = this.deadT >= 0 ? Math.min(1, this.deadT / 1.0) : this.rising > 0 ? this.rising / RISE : -1;
     // (the legs told where the body is going, as the game eases it there: a stop's last stride lands where it rests)
@@ -1598,6 +1616,31 @@ export class Player {
     this.dash = null;
     this.vel.set(0, 0, 0);
     actionSink?.({ t: 'held', s: round2(seconds), f: frozen ? 1 : 0 });
+    return true;
+  }
+
+  /** Stunned for `seconds` by a boss (a ring that stuns: the Bell-Warden's toll) as `stun` stuns him, but never again
+   *  within `STUN.grace` of the last such stun's end, so two guards tolling in turn can't hold him stunned for good.
+   *  His own game alone judges it. Returns whether it took him. */
+  stunAfterGrace(seconds: number): boolean {
+    if (!this.active || !this.local || G.time < this.stunGraceUntil) return false;
+    this.stun(seconds);
+    this.vel.set(0, 0, 0);
+    this.stunGraceUntil = this.stunnedUntil + STUN.grace;
+    return true;
+  }
+
+  /** Seized and held for `seconds` (a boss's grip): what he was casting, channelling or aiming let go, and he
+   *  neither walks nor acts while what holds him places him and lifts him (`lift`). Not while he's dashing, held
+   *  already or stunned. Returns whether it took him. */
+  seize(seconds: number): boolean {
+    if (!this.active || !this.local || this.dash || this.seized || this.stunned) return false;
+    this.seizedUntil = G.time + seconds;
+    this.stopChannel();
+    this.endAim();
+    this.casting = null;
+    this.queued = null;
+    this.vel.set(0, 0, 0);
     return true;
   }
 

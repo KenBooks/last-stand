@@ -436,13 +436,18 @@ export interface EnemyDef {
   evade?: EvadeDef;
   /** what it throws at a hero too far off for its slam */
   throws?: ThrowDef;
-  /** a boss's fight in phases and its telegraphed attacks (entities/bossKit.ts) */
+  /** a boss's fight in phases, its telegraphed attacks and its weak-spot window (entities/bossKit.ts) */
   bossKit?: BossKitDef;
   /** a boss that shares its life with another rising with it (data/biomes.ts `BossWave.twin`): a hit on either takes
    *  it from both (entities/twins.ts) */
   shares?: EnemyId;
   /** the pair's name, on the target frame while both stand */
   pair?: string;
+  /** the most it turns a second to face its way (rad/s), where it turns slower than a small foe's quick turn */
+  turn?: number;
+  /** a boss that may come as another's guard (a ladder's rung's `guards`, data/biomes.ts): its life, damage and size
+   *  then, as shares of its own, and whether it stands where it rises (`stands`: it never walks, and no foe shoves it) */
+  asGuard?: { life: number; damage: number; size: number; stands?: boolean; name?: string };
 }
 
 /** A phase of a boss's fight: the share of its life it begins under (the first's is 1), and the line the banner says
@@ -459,16 +464,27 @@ export interface TelegraphDef {
   recover: number;
 }
 
-/** The boss toolkit's data (entities/bossKit.ts): the phases by life share, entered in order where the fight is
- *  simulated and told to every game (a banner, a cue, `BossHooks.enter`), and its telegraphed attacks by action name. */
+/**
+ * The shared boss toolkit's data (entities/bossKit.ts): the phases by life share, entered in order where the fight is
+ * simulated and told to every game (a banner, a cue, `BossHooks.enter`); its telegraphed attacks by action name; and
+ * its weak-spot window, a time it takes `taken` times the damage, its body edged in `edge` meanwhile.
+ */
 export interface BossKitDef {
   phases: BossPhaseDef[];
   attacks?: Record<string, TelegraphDef>;
+  weak?: { taken: number; edge: number };
+  /** warded while its guards stand (an encounter's main boss, data/biomes.ts `BossRung.guards`): it takes `taken` times
+   *  the damage until the last of them falls, its aura in `edge` meanwhile */
+  ward?: { taken: number; edge: number };
 }
 
-/** What a boss's model is told of its fight each frame (`AnimState.boss`): its phase. */
+/** What a boss's model is told of its fight each frame (`AnimState.boss`): its phase, how much of a weak-spot window
+ *  is left (s), and whether its guards ward it. */
 export interface BossLook {
   phase: number;
+  weak: number;
+  /** warded by its guards (`BossKitDef.ward`) */
+  warded: boolean;
 }
 
 // ---------------------------------------------------------------------------

@@ -11,8 +11,9 @@ declare module '../houses' {
  * none; world/houses/records.ts says where each stands): four shields on the back wall, the two by the tapestry first,
  * then the two outer; six stands in the trophy cabinet against the east wall, two a shelf, its middle shelf first.
  * Every place is built whether a trophy takes it or not, as a mount or a stand waiting. The bosses to come take theirs
- * by name (`TrophyDef.place`): the Rootmother `wall-outer-left`, the Stag of Ash `wall-outer-right`, the Bell-Warden
- * `shelf-middle-right`, the Ossuary Cantor `shelf-top-left`.
+ * by name (`TrophyDef.place`): the Rootmother `wall-outer-left`, the Stag of Ash `wall-outer-right`, the Ossuary
+ * Cantor `shelf-top-left` (its encounter's: its Bell-Warden guards are no boss of their own, and have no trophy);
+ * `shelf-middle-right` waits for a boss to come.
  */
 export const TROPHY_PLACES = {
   wall: ['wall-inner-left', 'wall-inner-right', 'wall-outer-left', 'wall-outer-right'],

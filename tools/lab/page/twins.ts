@@ -127,11 +127,24 @@ export const keepWhole = (): Record<string, never> => {
 
 // --- the waves ---------------------------------------------------------------------------------------------
 
-/** What wave `wave` of `biome` should send: the Twins on the Crypt's 15th and every 20th after, else its own boss. */
+/** Whether boss wave `wave` of `biome` is the Twins': the Crypt's 15th and every 20th after. */
+const twinsOn = (biome: BiomeId, wave: number): boolean =>
+  biome === 'crypt' && wave >= FIRST_WAVE && (wave - FIRST_WAVE) % EVERY === 0;
+
+/** What wave `wave` of `biome` should send: the Twins on theirs, else its ladder's next rung and that rung's guards (the
+ *  Cantor's two Bell-Wardens), the ladder going on only at the boss waves the Twins don't hold. */
 function wantedOf(biome: BiomeId, wave: number): EnemyId[] {
-  const twins = biome === 'crypt' && wave >= FIRST_WAVE && (wave - FIRST_WAVE) % EVERY === 0;
-  return twins ? ['twinslab', 'twinreliquary'] : [BIOMES[biome].boss];
+  if (twinsOn(biome, wave)) return ['twinslab', 'twinreliquary'];
+  let held = 0;
+  for (let before = WAVES.bossEvery; before < wave; before += WAVES.bossEvery) if (!twinsOn(biome, before)) held++;
+  const rung = BIOMES[biome].bosses[held % BIOMES[biome].bosses.length];
+  const guards = Array.from({ length: rung.guards?.count ?? 0 }, () => rung.guards!.id);
+  return [rung.id, ...guards];
 }
+
+/** The Continue button's name for what `wanted` sends on `biome`'s boss waves. */
+const nameOf = (biome: BiomeId, wanted: EnemyId[]): string | undefined =>
+  (wanted[0] === 'twinslab' ? 'Ossuary Twins' : BIOMES[biome].bosses.find((rung) => rung.id === wanted[0])?.short);
 
 /** Wave `wave` set off from its countdown as the game begins one (`startNextWave`: its banner put up), then let
  *  start: the bosses its run holds for it, and the banner's line. The wave is stopped before it sends anyone. */
@@ -165,7 +178,7 @@ async function judgeWaves(lab: Lab, biome: BiomeId, lines: string[], problems: s
     if (boss && !sent.banner.includes(boss.banner)) {
       problems.push(`waves: ${biome} wave ${wave}: the banner said "${sent.banner}", not its boss's line "${boss.banner}"`);
     }
-    const named = wanted[0] === 'twinslab' ? 'Ossuary Twins' : BIOMES[biome].bossShort;
+    const named = nameOf(biome, wanted);
     if (boss?.short !== named) problems.push(`waves: ${biome} wave ${wave}: the Continue button would name ${boss?.short}`);
   }
   lines.push(`waves: ${biome}: ${met.join(', ')}`);

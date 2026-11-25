@@ -12,7 +12,8 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
 - `behind`: the heroes built behind the lobby a piece a frame (the hall's heroes and the spares let go and built again: each frame's building by the browser's clock, at most 30 ms, the slowest pieces named; then the hall opened and another hero chosen, building none; and none of the guide's pictures made with it never opened)
 - `beyond`: the ranger's arrows loosed over the wall at the ground and the trees beyond it, over the shoulder; each arrow left standing must have a surface drawn at its point
 - `blink`: the mage's blink cast as the player casts it (open ground, past his reach, into a prop, past one, the arena's edge, onto the dais, his own feet: where it came out against its preview and his reach, the frames he was hidden and the blows that landed in them, the foes near and far it dazed and how they stood)
-- `bosswave`: bosses loaded at their wave (game/bossReady.ts): booted cold, none loaded; Continue into the Crypt's waves 5 and 15 shows the bar readying the Colossus and the Ossuary Twins, who rise warm, nothing compiled late (`--canary` spawns the Twins unwarmed in wave 14).
+- `boss`: the bosses' fights (`--parts`): each battleground's boss waves against its ladder and its exceptions, a boss standing its ground as the hero walks into it, the Ossuary Cantor's encounter (its guards' tolls near, further off and at a raised shield, their swing, warded while a guard stands, no two bosses' hits within its beat; its bars, its guards' ghosts diving, its choir's ring and rising graves), no program compiled in it, and the time each boss takes (`--canary`) (in full: [`commands/boss.md`](commands/boss.md))
+- `bosswave`: bosses loaded at their wave (game/bossReady.ts): booted cold, none loaded; Continue into the Crypt's waves 5, 10 and 15 shows the bar readying the Colossus, the Ossuary Cantor and its guards and the Ossuary Twins, who rise warm, nothing compiled late (`--canary` spawns the Twins unwarmed in wave 14).
 - `bowprop`: the ranger drawing at a prop he stands against, his bow's end in it (each biome, each kind of prop, 0.25 and 0.5 m off it: the nocked arrow, the bow's tip and the hero must not turn back frame after frame; the point the pose aims from within 5 cm of the arrow drawn level; the aim preview stopped by the prop, never through it; `--canary` aims the pose from the arrow as posed, #317)
 - `carry`: measures the carried bow
 - `cast <skill[,skill...]>`: a skill cast as the player casts it, its effect seen frame by frame (each biome and view with the biome's foes coming at him, every frame drawn and read back: its light against the budget, the frame's mean every tenth of a second, the flashes in any second and the changes counted in the worst cell's, each shared out among what's in the scene by a replay with each thing taken out of the frame in turn, the shaders compiled late) (in full: [`commands/cast.md`](commands/cast.md))
@@ -912,6 +913,18 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   through it (its skinned body is met by its hulls, which leave the cap's top out). About 3 min for the ranger, 1 for
   the mage, 20 s for the warrior.
 - `twins`: the Ossuary Twins and their belt skulls: in full in [`commands/twins.md`](commands/twins.md).
+- `boss`: the bosses' fights (`page/boss.ts`; `src/entities/bossKit.ts`), in parts (`--parts`, all by default).
+  `ladder`: in each battleground, boss waves 5, 10, 15 and 20 set off from their countdown as the run sets one off
+  (its wave and timer), the boss the run holds for it (`RunState.boss`) against its ladder's rung (`data/biomes.ts`
+  `bosses`, round again past its end) or the exception holding that wave (`bossWaves`: the Twins on the Crypt's 15th),
+  the banner's line and the Continue button's name. `stand`: the hero walks into a Colossus held still for 3 s: it
+  may give way 2 cm at most, and he must reach its body and be held off it (`holdOffBoss`). `ttk`: the hero's basic
+  attack (LMB) held 8 s on a Colossus held still 3.6 m off (a shooter 8 m), its damage a second, and from it the time
+  the Colossus takes at wave 5 (its life by `SCALING`), with the lab's starting gear. `--canary` plants a fault each
+  part must catch (a rung slipped onto the Crypt's ladder, a boss that yields as a small foe does, an attack that deals
+  nothing). Run it for each hero: `--class mage`, `--class ranger`, `--class warrior --gear shield`.
+  The Ossuary Cantor's encounter's parts (`toll`, `swing`, `encounter`, `bars`, `dive`, `choir`, `graves`,
+  `compiles`, and its pictures): in full in [`commands/boss.md`](commands/boss.md).
 - `throws`: what the slammers throw at a hero too far off to slam (`page/throws.ts`; `EnemyDef.throws`,
   `src/entities/throws.ts`), a throw a case, each thrower risen 12 m before the hero along the screen's W, pinned to
   its spot before every frame (it turns and throws as its AI has it, but never walks up) and its cooldown held out

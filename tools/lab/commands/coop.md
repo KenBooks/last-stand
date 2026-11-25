@@ -32,6 +32,15 @@ host's marker off the screen once drawn, keeps the yard's going as a room shows 
 in another of the village's places as here (`holdPlacesIgnored`, as if `away` didn't cover a house), and moves the
 guest out of the tavern after joining, all of which must be found.
 
+`coop --scenarios choir` runs alone, in a run in the crypt (`node/coopChoir.mjs`, `page/coopChoir.ts`): the Ossuary
+Cantor's choir's ring and rising graves on two games. The host raises the Cantor, dazed, then casts its ring and warns
+six stones at spots it rolls as its fight does (`graveSpot`); every game shows them from the host's fx. Each frame each
+game keeps the rings it shows (`ringsShown` in `entities/cantor.ts`: middle, radius, age) and its stones. Judged: the
+ring in one place on both screens, its radius the same at every age (within 5 cm, the wire rounding to centimetres),
+shown as long on each; the same stones at the same spots. Over a 300 ms link the ring read 0.000 m apart in place and
+radius over 983 frames, shown 16.38 s and 16.37 s, the six stones 5 mm apart at most. `--canary` has the guest's game
+raise each stone a metre off the spot it's told, which must read as the stones apart (1.001 m).
+
 `coop --scenarios seats` runs alone, in the village with no run (`node/coopSeats.mjs`, `page/coopSeats.ts`): a seat a
 partner sits on can't be used (`seatTaken` in `world/seats.ts`; from the owner, "need to check if another player is
 already sitting, if yes, then cannot use an object", "it should work in coop ofc (in village)"). The guest sits on one

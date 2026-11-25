@@ -138,7 +138,7 @@ async function foesOf(lab: Lab, set: FoeSet, at: THREE.Vector3, facing: number):
   const { forward, left } = waysOf(facing);
   const foes = set.foes.map((placed) => {
     const spot = at.clone().addScaledVector(forward, placed.ahead).addScaledVector(left, placed.across);
-    const kind = placed.boss ? BIOMES[G.arena.biome].boss : foeKind();
+    const kind = placed.boss ? BIOMES[G.arena.biome].bosses[0].id : foeKind();
     return lab.spawnFoe(kind, spot, { hero: Boolean(placed.elite) });
   });
   await lab.until(() => foes.every((foe) => foe.spawning <= 0), RISE_FRAMES, 'the foes never rose');
@@ -392,7 +392,7 @@ export async function rush(lab: Lab, options: RushOptions): Promise<Report> {
   await lab.setup(fixture);
   const facing = ((fixture.facing ?? G.player.facing) * 180) / Math.PI;
   const from = `from ${G.player.pos.x.toFixed(0)}, ${G.player.pos.z.toFixed(0)} at ${facing.toFixed(0)}°`;
-  const kinds = `${foeKind()}s and ${BIOMES[G.arena.biome].boss}`;
+  const kinds = `${foeKind()}s and ${BIOMES[G.arena.biome].bosses[0].id}`;
   const lines = [`${G.player.cls.id}, ${kinds}, ${G.arena.biome}, charging ${from}`];
   const problems: string[] = [];
   const moments: Pictured[] = [];

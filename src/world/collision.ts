@@ -5,6 +5,7 @@ import { groundHeight } from './ground';
 import { state as props, type Prop } from './destructible';
 import { placeBefore, stackBefore } from '../entities/carry';
 import type { Enemy } from '../entities/enemy';
+import type { Player } from '../entities/player';
 import type { Wall } from './wall';
 import type { Relaxed } from './seats';
 
@@ -192,6 +193,32 @@ export function inObstacle(pos: { x: number; z: number }, radius: number): boole
   return G.arena.obstacles.some((o) => Math.hypot(pos.x - o.x, pos.z - o.z) < o.r + radius);
 }
 
+/**
+ * A boss stands its ground (from play: "you should not be able to move the boss by just walking towards it"): a hero
+ * walked into it is held off its body on his own game (`p.local`: a partner's own game holds him), and it gives way
+ * not at all. Yielding the whole overlap as the small foes do, a boss was walked across the arena by a hero pressing
+ * into it; giving 1.5% of it, it still crept 0.2 m in 3 s.
+ */
+function holdOffBoss(boss: Enemy, p: Player): void {
+  if (!p.active || !p.local) return;
+  const dx = boss.pos.x - p.pos.x, dz = boss.pos.z - p.pos.z;
+  const min = boss.radius + p.radius, d2 = dx * dx + dz * dz;
+  if (d2 >= min * min || d2 <= 1e-6) return;
+  const d = Math.sqrt(d2), over = min - d, ux = dx / d, uz = dz / d;
+  p.pos.x -= ux * over;
+  p.pos.z -= uz * over;
+  resolveWorld(p.pos, p.radius);
+  // (his speed into it let go, as the wall lets it go: kept, his legs strode on in place, a hip past its range)
+  const into = p.vel.x * ux + p.vel.z * uz;
+  if (into > 0) {
+    p.vel.x -= ux * into;
+    p.vel.z -= uz * into;
+  }
+}
+
+/** An encounter's guard that stands where it rose (`EnemyDef.asGuard.stands`): no foe pushes it aside. */
+const stands = (e: Enemy): boolean => e.guard && !!e.def.asGuard?.stands;
+
 /** A co-op guest's copy its own game places (its own hero's charge swept it up), not the host's reports. */
 const placedHere = (e: Enemy): boolean => e.carried !== null || e.ownFor >= 0;
 
@@ -221,10 +248,15 @@ export function separateEnemies(ownOnly = false): void {
       if (d2 < min * min && d2 > 1e-6) {
         const d = Math.sqrt(d2), push = (min - d) * 0.5;
         const shared = b.mass / (a.mass + b.mass);
-        const wa = !moves(b) ? 1 : !moves(a) ? 0 : shared, wb = 1 - wa;
+        // (an encounter's guard that stands where it rose, `asGuard.stands`: the other gives way all of it)
+        const wa = !moves(b) || stands(b) ? 1 : !moves(a) || stands(a) ? 0 : shared, wb = 1 - wa;
         a.pos.x -= (dx / d) * push * wa * 2; a.pos.z -= (dz / d) * push * wa * 2;
         b.pos.x += (dx / d) * push * wb * 2; b.pos.z += (dz / d) * push * wb * 2;
       }
+    }
+    if (a.boss && !a.carried) {
+      for (const p of G.players) holdOffBoss(a, p);
+      continue;
     }
     if (!moves(a)) continue;
     // (in a house's room the lobby's foes stand in the village's frame, unseen: none meets the hero there)

@@ -142,7 +142,7 @@ async function stand(lab: Lab, command: RustCommand): Promise<string> {
   }
   if (command.boss && !command.village) {
     const ahead = new THREE.Vector3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing)).multiplyScalar(BOSS_AHEAD);
-    const boss = lab.spawnFoe(BIOMES[G.arena.biome].boss, G.player.pos.clone().add(ahead).setY(0));
+    const boss = lab.spawnFoe(BIOMES[G.arena.biome].bosses[0].id, G.player.pos.clone().add(ahead).setY(0));
     await lab.until(() => boss.spawning <= 0, BOSS_RISE_FRAMES, 'the boss never rose');
     boss.dazed = 999;
   }
