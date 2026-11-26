@@ -34,6 +34,7 @@ import { particles, col } from '../fx/particles';
 import { mulberry, rand, TAU } from '../util';
 import { bannerGeo, buildBrazier } from './crypt';
 import { placeShelterOpenings, type ShelterOpening } from '../core/lamps';
+import { keepNearOff } from '../core/nearPosts';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { BONFIRE_LIGHT, buildBonfire } from './forest';
 import { asLeaves, asTree, mergeChildren, movesInShadows, boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
@@ -73,6 +74,8 @@ export const VILLAGE_ENV: EnvColours = { sky: [0.5, 0.62, 0.78], panel: [1.25, 1
 const RELIEF = { cell: 0.1, half: 40 };
 /** a step's run (m): with `STEP_RISE`, a stair a man climbs a step a stride */
 const STEP_RUN = 0.32;
+/** the stair's granite's roughness: worn as the paving round it is (the granite's own map, 0.34 to 0.58, polished) */
+const STAIR_ROUGH = 0.9;
 /** the walls facing a ledge: how thick, and how far over the floor above them they stand (a parapet) */
 const PARAPET = { thick: 0.36, over: 0.75 };
 /** the hall's portico: its columns (x either side, their row's z), their shaft's radius and height, the lintel's */
@@ -318,6 +321,8 @@ export interface Mats {
   footAshlar: THREE.Material;
   /** the campfire's ring of field stones (`fireRing.ts`): the rock's maps, each stone's colour and soot its vertices' */
   fireStones: THREE.Material;
+  /** the terrace's stair: the granite's maps, matte as worn steps are (`stairGranite`) */
+  stairGranite: THREE.Material;
   plaster: THREE.Material; gable: THREE.Material; chimney: THREE.Material; timber: THREE.Material; planks: THREE.Material; logs: THREE.Material; roof: THREE.Material; boardRoof: THREE.Material;
   /** the palisade's logs and tips: a fence's hole, opened by it alone (`fence` in core/seeThrough.ts) */
   palisadeLogs: THREE.Material; palisadeTips: THREE.Material;
@@ -433,6 +438,14 @@ function makeMats(): Mats {
     // in the Thornwood's rock, whose picture has its moss and lichen, the stones read pale and green, a review; matte,
     // as weathered field stone is: by the granite's own roughness they shone as polished pebbles)
     fireStones: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(granite(7), 3, 2), roughnessMap: null, vertexColors: true, roughness: 1 }),
+    // (the terrace's stair, worn matte by feet as the paving round it: by the granite's own roughness, polished, each
+    // tread's edge caught the stair's two lamps at night as one highlight straight back at a camera in the hall's door,
+    // a bright line along the top step past the paving, from play "at night, the top step lights up too bright, not
+    // sure where it's from" (#946, `lab village --only stepPlainAtNight`)
+    stairGranite: new THREE.MeshStandardMaterial({
+      name: 'stairGranite', ...pbrMaterialMaps(granite(7), 2, 0.8), roughnessMap: null, color: 0xc8c4c0,
+      roughness: STAIR_ROUGH,
+    }),
     gable: undefined as unknown as THREE.Material,
     chimney: undefined as unknown as THREE.Material,
     boardRoof: undefined as unknown as THREE.Material,
@@ -764,6 +777,9 @@ export function* villageSteps(scene: THREE.Group): Generator<void, Village, unde
   // (the hall stands still too: its 300 parts' matrices were made again every frame; its roof and front wall,
   // hidden over the hero inside, are kept out of the merge)
   const hall = stillBuilt(scene, () => buildHall(scene, wall, levels, M, obstacles, updaters));
+  // (the close views' near plane kept off its columns, as off the wall: cut by it, one a hand before the camera
+  // was a sliver down the screen, #948)
+  keepNearOff('village', [...ROOM_COLUMNS.map(withItsTorch), ...PORTICO_COLUMNS]);
   for (const part of hall.cutaway) {
     part.traverse((object) => { object.userData.noMerge = true; });
     part.userData.mergeWithin = true;
@@ -1378,7 +1394,7 @@ function buildTerrace(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats
   const steps = Math.round(high / STEP_RISE);
   for (let k = 1; k <= steps; k++) {
     const z0 = stairFoot - (k - 1) * STEP_RUN, d = z0 - front;
-    block(scene, stairHalf * 2, k * STEP_RISE, d, X, 0, front + d / 2, M.granite);
+    block(scene, stairHalf * 2, k * STEP_RISE, d, X, 0, front + d / 2, M.stairGranite);
   }
   levels.paint(X - stairHalf, front, X + stairHalf, stairFoot, (_x, z) => stepAt(stairFoot - z, high));
   // its cheeks: sloping walls either side, from the foot's knee to the parapet's top (convex: a body kept off them)
@@ -1571,6 +1587,20 @@ export const ROOM_COLUMNS: readonly THREE.Box3[] = HALL.columnZ.flatMap((z) => [
     new THREE.Vector3(x - 0.41, TERRACE.high, z - 0.41), new THREE.Vector3(x + 0.41, TERRACE.high + HALL.wallHigh, z + 0.41),
   );
 }));
+
+/** how far out from a room column's middle its torch's basket and flame reach, on its aisle side (m: its bed 0.66 out,
+ *  `wallTorch`) */
+const TORCH_REACH = 0.8;
+
+/** A room column's box (`ROOM_COLUMNS`) grown out to its torch on the aisle side: a camera kept off the column alone
+ *  stood in its torch, whose basket and fire the near plane cut (#948). */
+function withItsTorch(box: THREE.Box3): THREE.Box3 {
+  const middle = (box.min.x + box.max.x) / 2;
+  const grown = box.clone();
+  if (middle > TERRACE.x) grown.min.x = middle - TORCH_REACH;
+  else grown.max.x = middle + TORCH_REACH;
+  return grown;
+}
 
 /** The hall's windows' sills: each side's middle (x), their height's plane, how deep across the wall, and where along it. */
 export function hallSills(): { x: number; y: number; deep: number; wide: number; z: number }[] {

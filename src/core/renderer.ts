@@ -12,6 +12,7 @@ import { perfClock } from './perfClock';
 import { sunShadowStill } from '../world/props';
 import { moonShadowKept } from '../world/moonShadow';
 import { groundHeight } from '../world/ground';
+import { keepOffPosts, postsReach } from './nearPosts';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
 import { blendedBuiltFirst, sortBlendedFrom, updateSeeThrough } from './seeThrough';
@@ -979,13 +980,17 @@ function headClear(camera: THREE.Vector3, x: number, head: number, z: number): v
 const SIDE_ROOM = 0.2;
 const SIDE_REACH = 0.4;
 const FAR_NEAR = 0.5;
+/** how close to the box round a column the camera may stand (m): with the near plane brought in to it, as close as
+ *  the plane may come, a column no nearer than this is never cut (`keepOffPosts`, #948) */
+const POST_ROOM = 0.2;
 /** the share of the way to the far near plane a wall is kept off at, along a line through its corners */
 const NEAR_HELD = BOOM_NEAR / (FAR_NEAR * 0.85) + 0.02;
 /** the plane's corners and middle, in the frame's own -1 to 1 */
 const NEAR_POINTS: readonly (readonly [number, number])[] = [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]];
 const _nearRight = new THREE.Vector3(), _nearUp = new THREE.Vector3(), _nearWay = new THREE.Vector3();
 let farNearKept = false;
-/** For a harness (tools/lab): the near plane left as far as it was, by a wall beside the camera. */
+/** For a harness (tools/lab): the near plane left as far as it was, by a wall or a column beside the camera, and the
+ *  camera let stand by a column (`keepOffPosts`). */
 export function farNearAtWalls(on: boolean): void { farNearKept = on; }
 
 /**
@@ -1000,6 +1005,7 @@ function nearClear(camera: THREE.Vector3, sy: number, cy: number, fov: number): 
   const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
   const checkFloor = !boomThrough && !floorHeroOnly;
   if ((!wall && !checkFloor) || farNearKept) return FAR_NEAR;
+  keepOffPosts(G.arena?.place, camera, POST_ROOM);
   _nearRight.set(cy, 0, -sy);
   if (wall) {
     // (either side, and an eave over it)
@@ -1021,6 +1027,10 @@ function nearClear(camera: THREE.Vector3, sy: number, cy: number, fov: number): 
       camera.addScaledVector(_boomHit.normal, Math.max(0, NEAR_HELD - _boomHit.t) * _nearWay.length());
       share = Math.min(share, Math.max(_boomHit.t, NEAR_HELD));
     }
+    // (and short of a column it would cut, which the wall's casts never meet: at 0.5 m a column a hand before the
+    // camera was cut away but its edges, a thin sliver down the screen, #948)
+    const post = postsReach(G.arena?.place, camera, _boomAt.copy(camera).add(_nearWay));
+    if (post < 1) share = Math.min(share, Math.max(post, NEAR_HELD));
     if (checkFloor) {
       _boomAt.copy(camera).add(_nearWay);
       const floorAt = groundHeight(_boomAt.x, _boomAt.z) + 0.05;
