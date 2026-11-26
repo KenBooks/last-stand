@@ -178,15 +178,20 @@ export class LightCache {
   /** How bright the volume is read this frame, told to the engine: the street lamps' share of their fullest, and
    *  the hall's torches' (none while a lamp of its kind is out: the village not shown, the day). */
   tell(): void {
-    let open = 0, sheltered = 0;
+    let open = 0, sheltered = 0, shelteredOf = 0;
     for (const lamp of this.baked) {
       const still = lampStill(lamp), light = (1 + lamp * 2) * 4 + 4;
       if (!still || lampList[light + 3] === 0) continue;
       at.fromArray(lampList, light);
       const share = Math.max(at.x, at.y, at.z) / Math.max(still.full[0], still.full[1], still.full[2], 1e-6);
-      if (still.inside) sheltered = share;
-      else open = share;
+      // (the hall's torches as one, their mean: each swells with its own fire, and read by the last alone the whole
+      // hall's baked light would follow that one's puffs)
+      if (still.inside) {
+        sheltered += share;
+        shelteredOf++;
+      } else open = share;
     }
+    if (shelteredOf) sheltered /= shelteredOf;
     // (what's no lamp: as bright as those shown are now against as they were baked. The one that reaches
     // furthest by a strength of its own within its reach, the rest as one: a fire's light swells with its
     // flames and dims by the hour, a portal's pulses, and read as one each took on the other's)

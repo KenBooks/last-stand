@@ -48,7 +48,14 @@ export interface Doorway {
   whole(): boolean;
   /** what its walls and roof stand as now, said for the lab where they aren't whole */
   wallsSaid?(): string;
+  /** its other openings, each seen through as the doorway is (the hall's windows: from play, "make hall windows
+   *  semi transparent, so they actually show what's outside behind them") */
+  windows?: readonly Opening[];
 }
+
+/** An opening in a building's wall other than its doorway: the middle of its foot in the wall's outer face, the way
+ *  out through it (level, of unit length), how far either side of its middle it reaches and how high (m). */
+export interface Opening { sill: THREE.Vector3; out: THREE.Vector3; half: number; high: number }
 
 /** how far past the doorway's own edges the cone reaches (m): the camera's matrices stand as the frame's, and a
  *  part's bounds are its box's sphere, so this is only for what moves in it (a dummy struck, the fountain's foam) */
@@ -89,8 +96,12 @@ export function addDoorway(door: Doorway): void {
   doorways.push({ door, culled: new WeakMap(), inside: null });
 }
 
-/** the cone's four sides through the doorway's edges, each facing in */
-const sides = Array.from({ length: 4 }, () => new THREE.Plane());
+/** a cone's four sides through an opening's edges, each facing in */
+type Cone = THREE.Plane[];
+/** the cones through each opening this frame is drawn by (the doorway's, and a window's where it has them), as many
+ *  set as `conesSet` says */
+const cones: Cone[] = [];
+let conesSet = 0;
 /** the parts left out of this frame's draw */
 const hidden: THREE.Object3D[] = [];
 /** the doorway this frame is drawn looking out through (its cone set), if one */
@@ -135,7 +146,7 @@ function cullOf(kept: Kept, part: THREE.Object3D): Culled {
 
 /** Where `eye` stands from `door`'s sill: along the wall (its `x`), up (its `y`) and out through the doorway (its
  *  `z`, negative inside). */
-function fromSill(door: Doorway, eye: THREE.Vector3): THREE.Vector3 {
+function fromSill(door: Opening, eye: THREE.Vector3): THREE.Vector3 {
   const offset = _fromSill.copy(eye).sub(door.sill);
   const along = offset.x * -door.out.z + offset.z * door.out.x;
   const out = offset.x * door.out.x + offset.z * door.out.z;
@@ -158,9 +169,11 @@ function eyeInside(door: Doorway, eye: THREE.Vector3): boolean {
   return inRoom || inDoorway(door, eye);
 }
 
-/** The cone's sides set from `eye` through `door`'s edges, each facing the doorway's middle (`inward`: the eye
+/** The next cone's sides set from `eye` through `door`'s edges, each facing the opening's middle (`inward`: the eye
  *  outside, the cone opening into the building). */
-function coneFrom(door: Doorway, eye: THREE.Vector3, inward = false): void {
+function coneFrom(door: Opening, eye: THREE.Vector3, inward = false): void {
+  if (conesSet === cones.length) cones.push(Array.from({ length: 4 }, () => new THREE.Plane()));
+  const sides = cones[conesSet++];
   const across = _across.set(-door.out.z, 0, door.out.x).multiplyScalar(door.half + DOOR_MARGIN);
   const low = door.sill.y - DOOR_MARGIN, top = door.sill.y + door.high + DOOR_MARGIN;
   // (round the doorway: bottom one side, top that side, top the other, bottom the other)
@@ -175,18 +188,53 @@ function coneFrom(door: Doorway, eye: THREE.Vector3, inward = false): void {
   }
 }
 
-/** Whether `sphere` meets the cone through the doorway. */
-const seenThroughDoor = (sphere: THREE.Sphere): boolean =>
-  mode !== 'all' && sides.every((side) => side.distanceToPoint(sphere.center) >= -sphere.radius);
+/** Whether `sphere` meets one of the cones through the building's openings. */
+function seenThroughDoor(sphere: THREE.Sphere): boolean {
+  if (mode === 'all') return false;
+  for (let k = 0; k < conesSet; k++) {
+    if (cones[k].every((side) => side.distanceToPoint(sphere.center) >= -sphere.radius)) return true;
+  }
+  return false;
+}
 
-const _boxRound = new THREE.Sphere();
+/** The cones set from `eye` through `door`'s doorway and each window it sees out through (inside) or in through
+ *  (outside, before it: `inward`). */
+function conesFrom(door: Doorway, eye: THREE.Vector3, inward: boolean): void {
+  conesSet = 0;
+  coneFrom(door, eye, inward);
+  for (const window of door.windows ?? []) {
+    const out = fromSill(window, eye).z;
+    if (inward ? out > DOORWAY_SPARE : out < -DOORWAY_SPARE) coneFrom(window, eye, inward);
+  }
+}
+
+const _boxCorner = new THREE.Vector3();
+
+/** Whether `box` meets one of the cones through the building's openings, each side tested by the box's corner
+ *  furthest along it: a flat tile's sphere, some 6 m across, met a window's cone where the tile lay below it. */
+function boxThroughDoor(box: THREE.Box3): boolean {
+  if (mode === 'all') return false;
+  for (let k = 0; k < conesSet; k++) {
+    const inside = cones[k].every((side) => {
+      _boxCorner.set(
+        side.normal.x > 0 ? box.max.x : box.min.x,
+        side.normal.y > 0 ? box.max.y : box.min.y,
+        side.normal.z > 0 ? box.max.z : box.min.z,
+      );
+      return side.distanceToPoint(_boxCorner) >= 0;
+    });
+    if (inside) return true;
+  }
+  return false;
+}
+
 /** Whether the grass `box` bounds is out of this frame's sight, the doorway it's drawn looking out through showing
  *  none of it (the meadow's tiles, culled as each is listed: `meadow.ts`). A tile meeting the building's box is culled
  *  as any other: no grass grows in it, so what of it the doorway doesn't show is behind the walls (kept as the merged
  *  parts are, the tiles along the hall's walls were a fifth of the grass of a frame looking in from its doorway, all
  *  of it unseen). */
 export function hiddenByDoorway(box: THREE.Box3): boolean {
-  return lookingOutOf !== null && !seenThroughDoor(box.getBoundingSphere(_boxRound));
+  return lookingOutOf !== null && !boxThroughDoor(box);
 }
 
 /** Whether a cell of an instanced mesh outside the building (`sphere`, in the world) is out of this frame's sight,
@@ -303,7 +351,7 @@ function cullFrame(camera: THREE.Camera, scene: THREE.Scene, village: THREE.Obje
   const eye = camera.getWorldPosition(_eye);
   const out = doorways.find((kept) => lookingOut(kept.door, eye));
   if (out) {
-    coneFrom(out.door, eye);
+    conesFrom(out.door, eye, false);
     lookingOutOf = out;
     hideOutside(out, village);
     return;
@@ -311,7 +359,7 @@ function cullFrame(camera: THREE.Camera, scene: THREE.Scene, village: THREE.Obje
   const into = doorways.find((kept) => lookingIn(kept.door, eye));
   if (!into) return;
   // (the cone isn't set for the cells and the meadow: they're outside, before the building)
-  coneFrom(into.door, eye, true);
+  conesFrom(into.door, eye, true);
   hideInside(into, scene, village);
 }
 
@@ -331,6 +379,7 @@ export function cullForEngine(camera: THREE.Camera): () => void {
     showHidden(true);
     hidden.length = 0;
     lookingOutOf = null;
+    conesSet = 0;
   };
 }
 
@@ -351,6 +400,7 @@ export function cullByDoorways(scene: THREE.Scene, village: THREE.Object3D): voi
     showHidden(true);
     hidden.length = 0;
     lookingOutOf = null;
+    conesSet = 0;
   };
   // (their shadows drawn as ever: the shadow maps are drawn after the frame's list is made)
   aroundShadows(() => {

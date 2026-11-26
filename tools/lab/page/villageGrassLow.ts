@@ -20,6 +20,7 @@ import { grassShaded } from './grassCount';
 import type { LightsChecked } from './villageLights';
 import { PIPELINES } from '../../../src/engine/pipelinesAside';
 import { plainMade } from './villageBloomLow';
+import { drawnWhole } from './gpuTurns';
 
 /** where he stands and the way he faces: open meadow ahead, the cottages off to the side */
 const STAND = new THREE.Vector3(10, 0, 4);
@@ -71,6 +72,12 @@ export async function grassOnLow(lab: Lab, canary: boolean): Promise<LightsCheck
   try {
     for (const view of VIEWS) {
       await viewBy(lab, view);
+      // (High drawn whole here first, no pipeline of this place's still compiling: in the suite, come from a check
+      // in the hall with eight sessions loading the GPU, its first reading left out draws still compiling, 84582 and
+      // 526713 vertices against 76494 and 635358 back on High, and 6 pipelines counted to the switches)
+      useQuality('high');
+      await plainMade(lab);
+      await drawnWhole(() => drawFrame(lab));
       const high = await drawnAt(lab, 'high', canary);
       if (!canary) moments.push(await lab.screen(`${view}: High`, []));
       const low = await drawnAt(lab, 'low', canary);

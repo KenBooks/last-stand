@@ -7,7 +7,8 @@
 // wherever one is missing, over or well under: paste them over the old. Read again on 2026-11-25, after a day the
 // suite failed on other checks and none was read: the house rule (#848) draws a house's covers apart from the rest,
 // 40 to 60 draws more from above at the cottages and the square with the triangles the same (137 to 195 before
-// cottage 0), and the library's rounds and Brother Hollis (#702 and before) 18% more triangles in it.
+// cottage 0), and the library's rounds and Brother Hollis (#702 and before) 18% more triangles in it. The hall facing
+// out read again with its windows seen through (#945): 8% more triangles at High, what's past its side windows drawn.
 
 /** draws, triangles, materials switched, programs switched */
 export type Budget = [number, number, number, number];
@@ -39,8 +40,8 @@ export const BUDGETS: Readonly<Record<string, Budget>> = {
   'high third come back from the crypt 12:00': [421, 1329518, 0, 0],
   'high third come back from the forest 0:00': [422, 1249062, 0, 0],
   'high third come back from the forest 12:00': [418, 1250102, 0, 0],
-  'high third in the hall facing out 0:00': [374, 747592, 0, 0],
-  'high third in the hall facing out 12:00': [365, 748632, 0, 0],
+  'high third in the hall facing out 0:00': [376, 808640, 0, 0],
+  'high third in the hall facing out 12:00': [367, 809680, 0, 0],
   'high third in the hall facing the dais 0:00': [330, 416349, 0, 0],
   'high third in the hall facing the dais 12:00': [330, 416925, 0, 0],
   'high third in the library facing in 0:00': [210, 276589, 0, 0],
@@ -129,8 +130,8 @@ export const BUDGETS: Readonly<Record<string, Budget>> = {
   'verylow third come back from the crypt 12:00': [417, 731054, 0, 0],
   'verylow third come back from the forest 0:00': [422, 713776, 0, 0],
   'verylow third come back from the forest 12:00': [418, 714816, 0, 0],
-  'verylow third in the hall facing out 0:00': [374, 475462, 0, 0],
-  'verylow third in the hall facing out 12:00': [364, 476502, 0, 0],
+  'verylow third in the hall facing out 0:00': [376, 481440, 0, 0],
+  'verylow third in the hall facing out 12:00': [366, 482480, 0, 0],
   'verylow third in the hall facing the dais 0:00': [330, 368909, 0, 0],
   'verylow third in the hall facing the dais 12:00': [330, 369485, 0, 0],
   'verylow third in the library facing in 0:00': [210, 276589, 0, 0],

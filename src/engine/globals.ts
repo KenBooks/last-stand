@@ -10,7 +10,8 @@ export const GLOBALS = {
   shadowView: 48, points: 64, camRight: 320, camUp: 324, seeFocus: 328, seeHole: 332, grade: 336, shelter: 344,
   seeHall: 352, seeKinds: 360, floats: 1000,
   // (past what the page clears each frame: the lights' grid, the engine's own, and the arms' view)
-  cells: 1000, armsView: 1004, lightCache: 1020, takers: 1032, cacheOwn: 1048, sight: 1084, all: 1100,
+  cells: 1000, armsView: 1004, lightCache: 1020, takers: 1032, cacheOwn: 1048, sight: 1084, openingsSize: 1100,
+  openings: 1104, all: 1136,
 };
 /** the sun's shadow map, a side, where the game has no sun to say (`SHADOW_SIZE` in the engine's gpu.rs) */
 const SHADOW_SIZE = 2048;
@@ -76,10 +77,15 @@ export const TUNE = tunable('rust', {
   /** every opaque mesh casts the sun's shadow, not only those three is told to draw into its own map (the
    *  village's still things are in maps three keeps, which the engine doesn't have) */
   castAll: 1,
-  /** the share of the sky's light under the shelter's roof (the hall of heroes' inside), set against WebGL's frame
-   *  there at High and Very low (`lab rust --village --at -1.5,-18 --view third --webgl`): at a quarter its floor
-   *  was a third as bright */
-  shelterSky: 0.9,
+  /** the share of the sky's light under the shelter's roof everywhere alike (the hall of heroes' inside): 0.9 when
+   *  it was all the sky the hall had (set against WebGL's frame), a fifth now its windows light it (`openingSky`), so
+   *  they read against the rest ("windows are not real windows, they dont let light through") */
+  shelterSky: 0.2,
+  /** how strongly the sky lights the shelter's inside through its openings (the hall's windows), against the open sky
+   *  through as much of a point's view (0: none). Over 1 as the sky low over the horizon is brighter than the sky's
+   *  mean the game's hemisphere gives, and so the room by day reads lit from its windows (at 1 they brightened 4% of
+   *  the hall's frame; at 12, 42% by day and 16% by the moon: `lab village --only windowsLightTheHall`) */
+  openingSky: 12,
   /** ms a frame spent handing over what isn't shown yet (`prepareAhead`), under the loading screen and after it
    *  (0: nothing ahead, each place handed over as it's first shown) */
   aheadLoading: 30,

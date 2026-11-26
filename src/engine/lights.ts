@@ -1,13 +1,15 @@
 // The frame's lights written to the engine's globals: the sky's and the flat light summed, the sun chosen, each point
 // light of the scene and of the shown place, and the village's lamps with the shelter they light their own side of.
 import * as THREE from 'three';
-import { lampList, lampShadowsAllowed, LAMPS_MOST } from '../core/lamps';
+import { lampList, lampShadowsAllowed, LAMPS_MOST, shelterOpenings } from '../core/lamps';
 import type { Taking } from './lampShadows';
 import { HALL, TERRACE } from '../data/village';
 import type { Core } from './core';
 import { GLOBALS, TUNE, type Lit } from './globals';
 
 const MAX_POINTS = 32;
+/** the most openings the shelter's light comes through (the engine's `openings`) */
+const OPENINGS_MOST = 8;
 /** the lights that take away what a lamp lit behind a mover (the engine's `takers`) */
 const TAKERS = 2;
 const v3 = new THREE.Vector3();
@@ -25,6 +27,17 @@ export function shelterBox(): [number, number, number, number, number] {
   // the sun it's under. From play: "top down view wall/roof thinning is broken")
   return [lampList[0] - SHELTER_INTO_WALLS, lampList[1] - SHELTER_INTO_WALLS, lampList[2] + SHELTER_INTO_WALLS,
     lampList[3] + SHELTER_INTO_WALLS, TERRACE.high + HALL.wallHigh];
+}
+
+/** The shelter's openings into the globals: their half size, how many, the sky's strength through them, and each
+ *  one's middle and the way it faces in. */
+function writeOpenings(g: Float32Array): void {
+  const { half, openings } = shelterOpenings();
+  const count = Math.min(openings.length, OPENINGS_MOST);
+  g.set([half[0], half[1], count, TUNE.openingSky], GLOBALS.openingsSize);
+  for (const [k, opening] of openings.slice(0, count).entries()) {
+    g.set([opening.at.x, opening.at.y, opening.at.z, opening.way], GLOBALS.openings + k * 4);
+  }
 }
 
 export class Lights implements Lit {
@@ -96,6 +109,7 @@ export class Lights implements Lit {
     g.set(shelter.slice(0, 4), GLOBALS.shelter);
     g[GLOBALS.shelter + 4] = TUNE.shelterSky;
     g[GLOBALS.shelter + 5] = shelter[4];
+    writeOpenings(g);
     let lit = 0;
     const shadowed = lampShadowsAllowed() && TUNE.lampShadows > 0;
     for (let lamp = 0; TUNE.points && lamp < LAMPS_MOST && this.points < MAX_POINTS; lamp++) {

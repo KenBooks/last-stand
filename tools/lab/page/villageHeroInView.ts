@@ -7,7 +7,7 @@
 // with him and without him. The prop must have hidden him with its hole shut (the state checked), must show him with it
 // open, and must open round him; the stair's cheek hides him under his waist alone, and must open nothing ("lets make
 // exception for thinning, and dont thin if obstacle is below waist"). `--canary`: with the hole shut, too little of him
-// must show in every scenario.
+// must show in every scenario, and a hall column thinned whole must be read as gone.
 //
 // `wallsStayWhole` draws the frame with the hole and without, at spots round a cottage's corners and along the hall's
 // walls over the shoulder, and reads whether the near plane cuts a wall. `--canary`: what's built thinned as it was,
@@ -48,6 +48,9 @@ interface BehindProp {
   leastRound: number;
   /** it hides him under his waist alone, so nothing opens (from play, "dont thin if obstacle is below waist") */
   underWaist?: boolean;
+  /** a hall column's: the least of its pixels that must still show thinned, against it gone (from play, "column is
+   *  completely hidden": what's thinned must still read as what it was) */
+  leastLeft?: number;
 }
 
 /** the frames he's given to settle, and the hour */
@@ -60,9 +63,13 @@ const LEAST_SEEN = 0.65;
 const MOST_SHUT = 0.8;
 /** the most of the frame a hole may change where what stands before him hides him under his waist alone */
 const MOST_UNDER_WAIST = 0.0005;
+/** the least of a hall column's pixels still shown thinned over him, against it gone (its ghost and its edges round
+ *  the hole) */
+const LEAST_COLUMN_LEFT = 0.3;
 /** the village's lamps, and the portico's columns where this commit has them (an A/B's other side may not) */
 const { LAMPS } = world_;
 const PORTICO_COLUMNS = (world_ as { PORTICO_COLUMNS?: readonly THREE.Box3[] }).PORTICO_COLUMNS;
+const ROOM_COLUMNS = (world_ as { ROOM_COLUMNS?: readonly THREE.Box3[] }).ROOM_COLUMNS;
 /** what of the frame the hole may change round his box, the post's and the cheek's */
 const SCENARIOS: readonly BehindProp[] = [
   {
@@ -88,6 +95,7 @@ const SCENARIOS: readonly BehindProp[] = [
     leastRound: 0.001,
   },
   ...porticoScenario(),
+  ...roomColumnScenario(),
 ];
 
 /**
@@ -104,10 +112,31 @@ function porticoScenario(): BehindProp[] {
     x: middle.x,
     z: middle.z,
     way: 0,
-    off: 2.2,
+    off: 1.2,
     aside: 0,
     view: 'top',
     leastRound: 0.005,
+  }];
+}
+
+/**
+ * From play, in the hall over the shoulder a column of its room stood between the camera and him, whole and dark over
+ * half the screen, "it should thin so I can see the character": the room's columns thinned from above alone. Behind the
+ * east row's second, turned to the dais, the camera across the column.
+ */
+function roomColumnScenario(): BehindProp[] {
+  if (!ROOM_COLUMNS) return [];
+  const middle = ROOM_COLUMNS[3].getCenter(new THREE.Vector3());
+  return [{
+    name: "a column of the hall's room",
+    x: middle.x,
+    z: middle.z,
+    way: Math.PI,
+    off: 1.1,
+    aside: 0,
+    view: 'third',
+    leastRound: 0.005,
+    leastLeft: LEAST_COLUMN_LEFT,
   }];
 }
 
@@ -158,37 +187,61 @@ export function shownOf(lab: Lab, pixels: number[]): number {
   return pixels.filter((at) => differs(him, none, at)).length / Math.max(pixels.length, 1);
 }
 
-/** What a scenario read. */
+/** What a scenario read: his share shown, with the hole and without, what the hole opens, and of a hall column what
+ *  still shows thinned (null where none is read). */
 interface BehindRead {
   seen: number;
   seenShut: number;
   opened: number;
+  left: number | null;
   line: string;
 }
 
+/** The share of the pixels a hall column covers whole (`shut` against `gone`) where its thinned frame (`open`) still
+ *  differs from it gone. */
+function columnLeft(open: Canvas, shut: Canvas, gone: Canvas): number {
+  let covered = 0;
+  let left = 0;
+  for (let at = 0; at < shut.pixels.length; at += 4) {
+    if (!differs(shut, gone, at)) continue;
+    covered++;
+    if (differs(open, gone, at)) left++;
+  }
+  return left / Math.max(covered, 1);
+}
+
 /** A prop's scenario read: him shut away, shown, and what of the frame the hole opens. */
-async function readBehind(lab: Lab, prop: BehindProp): Promise<BehindRead> {
+async function readBehind(lab: Lab, prop: BehindProp, canary: boolean): Promise<BehindRead> {
   await viewBy(lab, prop.view);
   await standBehind(lab, prop);
   const pixels = hisPixels(lab);
   if (pixels.length < 100) throw new Error(`lab: village: the hero isn't in the frame behind ${prop.name}`);
   const seen = shownOf(lab, pixels);
+  // (the canary's column gone whole, as it was in play)
+  if (canary && prop.leastLeft !== undefined) fadeWhole('hallColumn', 1);
   const open = drawFrame(lab);
   holdPropHole(true);
   // (the hall's columns thin whole, by a share of their own: shut, as the hole is)
   fadeWhole('hallColumn', 0);
   const seenShut = shownOf(lab, pixels);
   const shut = drawFrame(lab);
+  let left: number | null = null;
+  if (prop.leastLeft !== undefined) {
+    fadeWhole('hallColumn', 1);
+    left = columnLeft(open, shut, drawFrame(lab));
+  }
   holdPropHole(false);
   await lab.step(1);
   const opened = changedShare(open, shut);
   const bound = prop.underWaist
     ? `at most ${(MOST_UNDER_WAIST * 100).toFixed(2)}%: under his waist alone`
     : `at least ${(prop.leastRound * 100).toFixed(1)}%`;
+  const columnSaid = left === null ? '' : `, ${(left * 100).toFixed(0)}% of the column still shows (at least `
+    + `${((prop.leastLeft ?? 0) * 100).toFixed(0)}%)`;
   const line = `behind ${prop.name}, ${prop.view}: ${(seen * 100).toFixed(0)}% of him shows `
     + `(${(seenShut * 100).toFixed(0)}% with no hole), the hole opens ${(opened * 100).toFixed(2)}% of the frame `
-    + `(${bound})`;
-  return { seen, seenShut, opened, line };
+    + `(${bound})${columnSaid}`;
+  return { seen, seenShut, opened, left, line };
 }
 
 /** Whether a read shows him and the place round him, behind what did hide him. */
@@ -199,6 +252,7 @@ function readFails(read: BehindRead, prop: BehindProp): string | null {
   }
   if (read.seen < LEAST_SEEN) return `${read.line}: he doesn't show`;
   if (read.opened < prop.leastRound) return `${read.line}: the place round him doesn't show`;
+  if (read.left !== null && read.left < (prop.leastLeft ?? 0)) return `${read.line}: the column is gone`;
   return null;
 }
 
@@ -212,12 +266,14 @@ export async function heroBehindProps(lab: Lab, canary: boolean): Promise<Lights
   let caught = 0;
   try {
     for (const prop of SCENARIOS) {
-      const read = await readBehind(lab, prop);
+      const read = await readBehind(lab, prop, canary);
       lines.push(read.line);
       const failed = readFails(read, prop);
       if (failed) problems.push(failed);
-      // (the canary: what the hole shut leaves of him must fail, or the scenario never hid him)
-      if (read.seenShut < MOST_SHUT) caught++;
+      // (the canary: what the hole shut leaves of him must fail, or the scenario never hid him; and a hall column gone
+      // whole must be read as gone)
+      const columnCaught = read.left === null || read.left < (prop.leastLeft ?? 0);
+      if (read.seenShut < MOST_SHUT && columnCaught) caught++;
       if (!canary) moments.push(await lab.screen(`behind ${prop.name}`, [read.line]));
     }
     if (canary) return { lines, problems: [], caught: caught === SCENARIOS.length, moments: [] };

@@ -33,6 +33,7 @@ import type { FadesWhole } from '../core/seeThrough';
 import { particles, col } from '../fx/particles';
 import { mulberry, rand, TAU } from '../util';
 import { bannerGeo, buildBrazier } from './crypt';
+import { placeShelterOpenings, type ShelterOpening } from '../core/lamps';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { BONFIRE_LIGHT, buildBonfire } from './forest';
 import { asLeaves, asTree, mergeChildren, movesInShadows, boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
@@ -61,6 +62,7 @@ import { SIGNPOSTS } from '../data/signposts';
 import { HOUSES, ROOM_IDS, type RoomId } from '../data/houses';
 import { solidsOver } from './meadowSolids';
 import { fireRing } from './fireRing';
+import { torchFire } from './torchFire';
 import type { Relief } from './ground';
 import type { Obstacle } from '../types';
 
@@ -79,8 +81,15 @@ const COLONNADE = { x: [3.3, 5.6], z: -13.4, radius: 0.36, high: 5.2, lintel: 0.
 const COLUMN_IN = { radius: 0.32 };
 /** the windows down the hall's long walls: their sill over its floor, how tall and wide (m) */
 const WINDOWS = { sill: 2.6, high: 2.4, wide: 1.1 };
+/** the hall's windows' glass: how much of what's past it its panes hold back (0 clear, 1 whole), and its tint (old
+ *  glass, a little green) */
+const GLASS = { through: 0.12, tint: [70, 84, 76], opacity: 0.99 };
 /** how far a window's sill stands over the wall's course it lies on (m) */
 const SILL_PROUD = 0.015;
+/** how far a window's sill juts out of the wall (m), and into the room: flush, as the window's lining, under what the
+ *  engine's house rule takes for hung in the room (5 cm) */
+const SILL_LIP = 0.15;
+const SILL_IN = 0.01;
 /** the lights on the heroes on the dais: how high over it, how far before their plinths (m) */
 const DAIS_LIGHT = { up: 3.0, ahead: 2.2 };
 /** the hall's door: its stone frame's width, how far its leaves are set back in the wall, its iron straps' heights */
@@ -203,6 +212,12 @@ export interface Village extends Biome {
   hallTorches: readonly THREE.Vector3[];
   /** the torches on the hall's front wall either side of its door, by the pooled lights outside it */
   porchTorches: readonly THREE.Vector3[];
+  /** the porch torches' fires: their baskets go with the front wall as it opens over him inside, and these with them
+   *  (game/village.ts) */
+  porchFires: THREE.Object3D;
+  /** each torch's fire's flicker (1 at rest, swelling with its puffs): the hall's columns' in `hallTorches`' order
+   *  after its dais's, then the door's */
+  torchFlickers: readonly THREE.PointLight[];
   /** its two lights casting the still shadows (the hall's braziers), which hand their shadows to the lamps lit by
    *  night (game/village.ts `castFromLamps`) */
   stillLights: readonly THREE.PointLight[];
@@ -306,7 +321,8 @@ export interface Mats {
   plaster: THREE.Material; gable: THREE.Material; chimney: THREE.Material; timber: THREE.Material; planks: THREE.Material; logs: THREE.Material; roof: THREE.Material; boardRoof: THREE.Material;
   /** the palisade's logs and tips: a fence's hole, opened by it alone (`fence` in core/seeThrough.ts) */
   palisadeLogs: THREE.Material; palisadeTips: THREE.Material;
-  iron: THREE.Material; window: THREE.MeshStandardMaterial; skyPane: THREE.MeshStandardMaterial;
+  iron: THREE.Material; window: THREE.MeshStandardMaterial;
+  hallGlass: THREE.MeshStandardMaterial;
   glass: THREE.MeshStandardMaterial; paper: THREE.Material; pagesLeft: THREE.Material; pagesRight: THREE.Material; pagesEdge: THREE.Material; ribbon: THREE.Material;
   binding: THREE.Material; brass: THREE.Material; lining: THREE.Material; liningInside: THREE.Material; wax: THREE.Material;
   gold: THREE.Material; coin: THREE.MeshStandardMaterial; gilt: THREE.MeshStandardMaterial; pearl: THREE.Material; gem: THREE.Material;
@@ -324,9 +340,6 @@ export interface Mats {
 /** how bright a cottage's window burns at night: its candlelit panes as a room's glow, short of a lamp's flame (at 2.4
  *  as one lit box, the bloom spread each into a blob) */
 const WINDOW_GLOW = 1.3;
-/** the hall's windows' panes seen from inside: the sky's light through them by day and by night (their glow, the
- *  sky's colour) */
-const SKY_PANE = { day: 1.3, night: 0.15, color: 0xdce6ff };
 
 /**
  * `m`, a paving's, shaded in broad patches over the world, some stones darker and some paler, worn and stained, so its
@@ -370,14 +383,18 @@ function makeMats(): Mats {
     // (lit from within by night: its glow is a uniform the hour sets, `daylight`)
     // (its panes' glass and leads, lit from within by their own picture: `windowPanes`)
     window: new THREE.MeshStandardMaterial({
-      map: panes.glass, roughness: 0.25, metalness: 0.2, emissive: 0xffd0a0, emissiveMap: panes.lit, emissiveIntensity: 0,
+      name: 'cottageWindow', map: panes.glass, roughness: 0.25, metalness: 0.2, emissive: 0xffd0a0, emissiveMap: panes.lit, emissiveIntensity: 0,
     }),
-    // (the same panes from inside the hall, lit by the sky through them: its glow the hour sets, `daylight`; the same
-    // program as the window's; matte, as glossy as the window's one sash a pane caught the sun's panel in the sky's map
-    // and burned white over its leads; its picture the sky's too, darkened: the day's glass's pale corner, lit by the
-    // room over the sky's glow, burned each window's upper sash white)
-    skyPane: new THREE.MeshStandardMaterial({
-      map: panes.sky, color: 0x303030, roughness: 1, metalness: 0, emissive: SKY_PANE.color, emissiveMap: panes.sky, emissiveIntensity: 0,
+    // (the hall's windows' glass, seen through both ways: its leads whole, the glass between them `GLASS.through`
+    // let through, from play "make hall windows semi transparent, so they actually show what's outside behind
+    // them"; written no depth, it is never drawn solid; and under 1 of its own opacity, it is never taken for a wall's
+    // ghost either, blended by the share the house rule leaves rather than its map's alpha: at 1, both ways its panes
+    // stood whole and dark, `flagsOf` in engine/seeKinds.ts). Matte to the lamps: a torch's lamp is lit 1.1 m out in
+    // the aisle from its flame (`wallTorch`), and glossy (0.1) the glass shone with it as a bright patch low on the
+    // middle windows, where no flame stood, at any hour (from play: "what's this light on window sill from ?")
+    hallGlass: new THREE.MeshStandardMaterial({
+      name: 'hallGlass', map: panes.leads, transparent: true, opacity: GLASS.opacity, depthWrite: false, roughness: 1, metalness: 0,
+      side: THREE.DoubleSide,
     }),
     glass: new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffc070, emissiveIntensity: 2.2 }),
     paper: new THREE.MeshStandardMaterial({ map: noticePaper(), roughness: 0.9 }),
@@ -479,7 +496,7 @@ function makeMats(): Mats {
     return seeThrough(face, 'prop');
   };
   // (a house's walls and roof, which never open over the shoulder; the rest stands free, opening wide as it hides him)
-  for (const m of [mats.ashlar, mats.coping, mats.plaster, mats.timber, mats.planks, mats.window, mats.skyPane,
+  for (const m of [mats.ashlar, mats.coping, mats.plaster, mats.timber, mats.planks, mats.window,
     mats.doorLeaf, mats.doorIron]) {
     seeThrough(m, 'built');
   }
@@ -635,18 +652,13 @@ function lanternPane(): THREE.CanvasTexture {
   return t;
 }
 
-function windowPanes(): { glass: THREE.CanvasTexture; lit: THREE.CanvasTexture; sky: THREE.CanvasTexture } {
+function windowPanes(): {
+  glass: THREE.CanvasTexture; lit: THREE.CanvasTexture; leads: THREE.CanvasTexture;
+} {
   const W = 128, H = 112, bar = 8, lead = 1.5;
-  const draw = (lit: boolean, sky = false): THREE.CanvasTexture => {
+  const draw = (lit: boolean): THREE.CanvasTexture => {
     const c = canvasOf(W, H), g = ctx2d(c), rng = mulberry(lit ? 31 : 37);
-    if (sky) {
-      // (the sky's light through the glass, seen from inside: even and pale, a little brighter up it; the day's
-      // glass's dark sheen lit by the sky read as a dusk in the noon's windows)
-      const day = g.createLinearGradient(0, 0, 0, H);
-      day.addColorStop(0, '#d8dde2');
-      day.addColorStop(1, '#b8bcc0');
-      g.fillStyle = day;
-    } else if (lit) {
+    if (lit) {
       const glow = g.createRadialGradient(W / 2, H * 0.8, 4, W / 2, H * 0.7, W * 0.75);
       glow.addColorStop(0, '#fff2d0');
       glow.addColorStop(0.45, '#e09040');
@@ -660,8 +672,8 @@ function windowPanes(): { glass: THREE.CanvasTexture; lit: THREE.CanvasTexture; 
       g.fillStyle = sheen;
     }
     g.fillRect(0, 0, W, H);
-    // (each pane a shade of its own: old glass is never even; but the sky's, its lightest sash bloomed white)
-    for (let px = 0; px < 2 && !sky; px++) for (let py = 0; py < 2; py++) {
+    // (each pane a shade of its own: old glass is never even)
+    for (let px = 0; px < 2; px++) for (let py = 0; py < 2; py++) {
       g.fillStyle = `rgba(0,0,0,${rng() * 0.25})`;
       g.fillRect(px * W / 2, py * H / 2, W / 2, H / 2);
     }
@@ -677,7 +689,25 @@ function windowPanes(): { glass: THREE.CanvasTexture; lit: THREE.CanvasTexture; 
     g.strokeRect(bar / 2, bar / 2, W - bar, H - bar);
     return textureFromCanvas(c);
   };
-  return { glass: draw(false), lit: draw(true), sky: draw(false, true) };
+  return { glass: draw(false), lit: draw(true), leads: leadsAlpha(W, H, bar, lead) };
+}
+
+/** The hall's glass, `W` by `H`, its panes' leads (`lead` wide) and frame (`bar`) dark and whole, the glass between
+ *  them tinted and `GLASS.through` of it shown (in its alpha: an alpha map beside no colour map is read as one, a
+ *  look the engine never took, and the panes stood whole and pale). */
+function leadsAlpha(W: number, H: number, bar: number, lead: number): THREE.CanvasTexture {
+  const c = canvasOf(W, H), g = ctx2d(c);
+  g.fillStyle = `rgba(${GLASS.tint.join(',')},${GLASS.through})`;
+  g.fillRect(0, 0, W, H);
+  g.fillStyle = '#1a1612';
+  for (let x = W / 6; x < W; x += W / 6) g.fillRect(x - lead / 2, 0, lead, H);
+  for (let y = H / 5; y < H; y += H / 5) g.fillRect(0, y - lead / 2, W, lead);
+  g.fillRect(W / 2 - bar / 2, 0, bar, H);
+  g.fillRect(0, H / 2 - bar / 2, W, bar);
+  g.lineWidth = bar;
+  g.strokeStyle = '#1a1612';
+  g.strokeRect(bar / 2, bar / 2, W - bar, H - bar);
+  return textureFromCanvas(c);
 }
 
 // --- the builder ----------------------------------------------------------------------------------------------------
@@ -839,6 +869,8 @@ export function* villageSteps(scene: THREE.Group): Generator<void, Village, unde
     hallRoom: looseInHall(scene, hall.cutaway),
     hallTorches: [...hall.dais, ...hall.torches],
     porchTorches: hall.porch,
+    porchFires: hall.porchFires,
+    torchFlickers: hall.flickers,
     stillLights: castingLights(scene),
     get night() { return night; },
     setCalm() {},
@@ -856,7 +888,6 @@ export function* villageSteps(scene: THREE.Group): Generator<void, Village, unde
       // white, from play, "fire blinding skin issue again")
       campfire.intensity = BONFIRE_LIGHT * CAMPFIRE_LIGHT.by
         * (CAMPFIRE_BY_DAY + (1 - CAMPFIRE_BY_DAY) * (1 - dayness(hour)));
-      M.skyPane.emissiveIntensity = SKY_PANE.night + (SKY_PANE.day - SKY_PANE.night) * dayness(hour);
       for (const [from, twin] of glowTwins) twin.emissiveIntensity = from.emissiveIntensity;
       M.lantern.color.copy(LANTERN_PANE.day).lerp(LANTERN_PANE.night, 1 - dayness(hour));
       night = 1 - dayness(hour);
@@ -1372,7 +1403,10 @@ function cheek(scene: THREE.Object3D, wall: Wall, M: Mats, x: number, z0: number
  *  columns with a torch either side of the door, two rows of columns down the inside to a dais at the far end where
  *  the other heroes stand, the two braziers behind them (the still shadows' lights), and a roof. */
 function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, obstacles: Obstacle[],
-  updaters: Updater[]): { cutaway: THREE.Object3D[]; torches: THREE.Vector3[]; dais: THREE.Vector3[]; porch: THREE.Vector3[] } {
+  updaters: Updater[]): {
+  cutaway: THREE.Object3D[]; torches: THREE.Vector3[]; dais: THREE.Vector3[]; porch: THREE.Vector3[];
+  porchFires: THREE.Object3D; flickers: THREE.PointLight[];
+} {
   const y0 = TERRACE.high, X = TERRACE.x, half = HALL.half, thick = HALL.half - HALL.inHalf;
   const eaves = HALL.wallHigh;
   const back = HALL.wall - thick, face = HALL.door, front = COLONNADE.z + 0.5;
@@ -1397,20 +1431,27 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   // (between the side walls, as the front wall's wings are: run to their outer faces, each shared a plane with them at the
   // corners, from play, "still flickering")
   wall.add(walling(walls, half * 2 - thick * 2, eaves, thick, X, y0, HALL.wall - thick / 2, M.ashlar), true, 'wall', true);
+  const windows: ShelterOpening[] = [];
   for (const s of [-1, 1]) {
     const sideX = X + s * (half - thick / 2), sideLen = face - back;
     const sideWall = sideWalls[s < 0 ? 0 : 1];
-    hallSideWall(sideWall, wall, M, sideX, s, thick, eaves, back, face);
+    windows.push(...hallSideWall(sideWall, wall, M, sideX, s, thick, eaves, back, face));
     // (its plinth course in the wall too: drawn alone, the hero walked along the terrace into it, "can pass through
     // textures here")
     // (and whole, as the front's: too low to hide him, thinned with its wall it stood graded by the floor it hid and
     // greyed as the wall came back, from play, "this border should have no shading at all... its not hiding anything")
     wall.add(block(scene, 0.35, 0.45, sideLen, sideX + s * 0.47, y0, back + sideLen / 2, M.coping), true, 'wall', true);
     // (its top a little over the wall's course under it: at one height, the two flickered from above, "probably z fighting")
+    // (its lip outside alone, flush with the room's face as the window's lining is: 15 cm into the room, the engine's
+    // house rule took it for a thing hung in the room, and from above the wall opened round it, the sills left in the
+    // air, from play "when thinning the wall, window sills left behind"; `lab village --only hallWallsFlush`)
+    const sillDeep = thick + SILL_LIP + SILL_IN;
+    const sillX = sideX + s * (SILL_LIP - SILL_IN) / 2;
     for (const z of windowsAlong()) {
-      block(sideWall, thick + 0.3, 0.1, WINDOWS.wide + 0.3, sideX, y0 + WINDOWS.sill - 0.1 + SILL_PROUD, z, M.coping);
+      block(sideWall, sillDeep, 0.1, WINDOWS.wide + 0.3, sillX, y0 + WINDOWS.sill - 0.1 + SILL_PROUD, z, M.coping);
     }
   }
+  placeShelterOpenings([WINDOWS.wide / 2, WINDOWS.high / 2], windows);
   // the front wall either side of the door and over it, its plinth course, the door in its stone frame (a group of
   // their own: cut away with the roof over the hero inside, as from above they hid the room)
   const { doorHalf: dh, doorHigh: high } = HALL, wing = half - dh;
@@ -1438,7 +1479,6 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   const leaves = hallDoor(frontWall, M, X, y0, face);
   for (const part of frontWall.children.slice(inWall)) wall.add(part, false, 'wall', true);
   const ceiling = y0 + eaves - ROOF.ceiling - 0.32;
-  const look = torchLook();
   M.column.userData[COLUMN_SHAFT] = true;
   // (what stands free in it, thinned further: interior columns and the portico as separate groups so interior columns
   // blend behind a thinned front wall while portico columns stand over it)
@@ -1447,7 +1487,11 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   // (their capitals with them: left whole, from over the roof one stood over him as a tall dark slab, from play, "why this
   // not becoming transparent ?")
   const capital = capitalStone(M.granite);
-  const torches = hallColumns(roomColumns, capital, M, look, obstacles, ceiling);
+  // (the torches' fires in a group of their own, out of the groups `fadesWhole` puts in a wall's materials)
+  const fires = new THREE.Group();
+  scene.add(fires);
+  const lit: TorchLit = { fires, updaters, flickers: [] };
+  const torches = hallColumns(roomColumns, capital, M, lit, obstacles, ceiling);
   const dais = hallDais(scene, walls, levels, M, obstacles);
   const daisTop = y0 + HALL.daisHigh;
   for (const s of [-1, 1]) {
@@ -1458,9 +1502,14 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
     brazier.userData.still = { side: 'inside', full: BRAZIERS.glow };
     obstacles.push({ x, z: BRAZIERS.z, r: 0.75, h: daisTop + 1.8 });
   }
-  // the torches either side of the door, on the front wall's face (cut away with it over the hero inside)
-  const porch = [-1, 1].map((s) => wallTorch(frontWall, M, look, X + s * PORCH_TORCH.x, y0 + PORCH_TORCH.up, face, 0, 1, true,
-    PORCH_TORCH.out));
+  // the torches either side of the door, on the front wall's face (cut away with it over the hero inside), their fires
+  // in a group of their own the game hides with them: from above in the hall they hung in the air where the wall had
+  // opened, from play
+  const porchFires = new THREE.Group();
+  scene.add(porchFires);
+  const porchLit: TorchLit = { fires: porchFires, updaters, flickers: lit.flickers };
+  const porch = [-1, 1].map((s) => wallTorch(frontWall, M, porchLit, X + s * PORCH_TORCH.x, y0 + PORCH_TORCH.up, face, 0,
+    1, true, PORCH_TORCH.out));
   // the portico: a pair of columns either side, one entablature across the whole front
   const portico = new THREE.Group();
   scene.add(portico);
@@ -1491,7 +1540,7 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   fadesWhole(sideWalls[1], 'hallEast');
   fadesWhole(roomColumns, 'hallColumn', true);
   fadesWhole(portico, 'hallColumn');
-  return { cutaway: [roof, frontWall], torches, dais, porch };
+  return { cutaway: [roof, frontWall], torches, dais, porch, porchFires, flickers: lit.flickers };
 }
 
 /** Whether a point of the world lies inside the hall of heroes as it stands: within its walls' feet and under its roof
@@ -1514,11 +1563,31 @@ export const PORTICO_COLUMNS: readonly THREE.Box3[] = [-1, 1].flatMap((s) => COL
   );
 }));
 
+/** The hall's room's columns, each a box round its plinth and shaft from the terrace to the walls' top (its capital
+ *  is under the ceiling, lower): what stands between the camera and him over the shoulder (`game/village.ts`). */
+export const ROOM_COLUMNS: readonly THREE.Box3[] = HALL.columnZ.flatMap((z) => [-1, 1].map((s) => {
+  const x = TERRACE.x + s * HALL.columnX;
+  return new THREE.Box3(
+    new THREE.Vector3(x - 0.41, TERRACE.high, z - 0.41), new THREE.Vector3(x + 0.41, TERRACE.high + HALL.wallHigh, z + 0.41),
+  );
+}));
+
 /** The hall's windows' sills: each side's middle (x), their height's plane, how deep across the wall, and where along it. */
 export function hallSills(): { x: number; y: number; deep: number; wide: number; z: number }[] {
   const thick = HALL.half - HALL.inHalf;
   const sides = [-1, 1].map((s) => TERRACE.x + s * (HALL.half - thick / 2));
   return sides.flatMap((x) => windowsAlong().map((z) => ({ x, y: TERRACE.high + WINDOWS.sill, deep: thick, wide: WINDOWS.wide, z })));
+}
+
+/** The hall's windows as openings its doorway's cull sees through (`Opening` in `doorways.ts`): each one's foot in
+ *  its wall's outer face, the way out, its half width and its height. */
+export function hallWindows(): { sill: THREE.Vector3; out: THREE.Vector3; half: number; high: number }[] {
+  return [-1, 1].flatMap((s) => windowsAlong().map((z) => ({
+    sill: new THREE.Vector3(TERRACE.x + s * HALL.half, TERRACE.high + WINDOWS.sill, z),
+    out: new THREE.Vector3(s, 0, 0),
+    half: WINDOWS.wide / 2,
+    high: WINDOWS.high,
+  })));
 }
 
 /** Where the windows stand down each long wall (z, from the back): between each pair of columns. */
@@ -1529,11 +1598,10 @@ function windowsAlong(): number[] {
 /** A long wall of the hall at `sideX` (`s` the side: -1 west, 1 east), from `back` to `face` (z), its windows open
  *  through it: a course under them, one over them and piers between, the panes in each opening casting nothing, so
  *  the sun and the moon light the hall through them (from play, "windows need to be real, and let sun/moonlight
- *  through": a pane's picture on a whole wall, they let none in). Each pane is leaded glass, lit from within by night
- *  outside and by the sky inside: clear, the hall would show the village through them, where it draws outside only
- *  what its doorway shows (`doorways.ts`, its doorway `hallPortal.ts`). */
+ *  through": a pane's picture on a whole wall, they let none in). Each pane is leaded glass seen through both ways,
+ *  each window an opening the doorway's cull draws through as it does the door (`doorways.ts`, `hallPortal.ts`). */
 function hallSideWall(scene: THREE.Object3D, wall: Wall, M: Mats, sideX: number, s: number, thick: number, eaves: number,
-  back: number, face: number): void {
+  back: number, face: number): ShelterOpening[] {
   const y0 = TERRACE.high, { sill, high, wide } = WINDOWS, top = sill + high;
   const add = (len: number, h: number, y: number, z: number): void => {
     wall.add(walling(scene, thick, h, len, sideX, y, z, M.ashlar), true, 'wall', true);
@@ -1550,21 +1618,27 @@ function hallSideWall(scene: THREE.Object3D, wall: Wall, M: Mats, sideX: number,
     // as none, "no reveal, jamb, depth or wall thickness")
     for (const side of [-1, 1]) block(scene, thick + 0.02, high, 0.08, sideX, y0 + sill, z + side * (wide / 2 - 0.04), M.coping);
     block(scene, thick + 0.02, 0.1, wide, sideX, y0 + top - 0.1, z, M.coping);
-    for (const [material, off] of [[M.window, 1], [M.skyPane, -1]] as const) {
-      const mesh = solid(scene, pane, material);
-      mesh.position.set(sideX + s * off * 0.03, y0 + sill + high / 2, z);
-      // (glass lets the sun through: casting nothing and taking no shadow, as the engine takes a still mesh that takes
-      // one for a caster, `TUNE.castAll`, and the panes shut every window to the sun)
-      mesh.castShadow = mesh.receiveShadow = false;
-    }
+    // (one pane of see-through glass in the wall's middle: two painted ones, the night's glow outside and the sky
+    // inside, showed nothing past them, "make hall windows semi transparent, so they actually show what's outside")
+    const mesh = solid(scene, pane, M.hallGlass);
+    mesh.position.set(sideX, y0 + sill + high / 2, z);
+    // (glass lets the sun through: casting nothing and taking no shadow, as the engine takes a still mesh that takes
+    // one for a caster, `TUNE.castAll`, and the panes shut every window to the sun)
+    mesh.castShadow = mesh.receiveShadow = false;
+    // (in the wall as what's flown into: see-through, the wall leaves it out, and over the shoulder the camera backed
+    // out through the window, from play "it should not zoom out outside the window in 3rd person")
+    mesh.updateWorldMatrix(true, false);
+    wall.addGeometry(pane, mesh.matrixWorld, true, 'beyond', undefined, 'hallGlass');
   }
+  // (each an opening the sky lights the hall through, on the wall's inner face, facing in)
+  return windowsAlong().map((z) => ({ at: new THREE.Vector3(sideX - s * thick / 2, y0 + sill + high / 2, z), way: -s }));
 }
 
 /** The hall's two rows of columns down its length, from the door to the dais (each a granite base, a stucco shaft up
  *  to the ceiling's beams, a granite capital), kept off by a circle each; and a torch on each, on its side to the
  *  aisle (an iron bracket, a flame in a cup: lit by the pool's lights as the hero walks past, game/village.ts
  *  `lightLamps`, the hall's own ten being spent outside). Returns where each torch's light is. */
-function hallColumns(scene: THREE.Object3D, capital: THREE.Material, M: Mats, look: TorchLook, obstacles: Obstacle[],
+function hallColumns(scene: THREE.Object3D, capital: THREE.Material, M: Mats, lit: TorchLit, obstacles: Obstacle[],
   ceiling: number): THREE.Vector3[] {
   const y0 = TERRACE.high, torches: THREE.Vector3[] = [];
   const shaftHigh = ceiling - y0 - 0.35 - 0.3;
@@ -1577,7 +1651,7 @@ function hallColumns(scene: THREE.Object3D, capital: THREE.Material, M: Mats, lo
       block(scene, 0.78, 0.3, 0.78, x, ceiling - 0.3, z, capital);
       obstacles.push({ x, z, r: 0.5, h: ceiling });
       // the torch on its aisle side, at a man's reach and a half
-      torches.push(wallTorch(scene, M, look, x - s * (COLUMN_IN.radius + 0.02), y0 + 2.7, z, -s, 0, false));
+      torches.push(wallTorch(scene, M, lit, x - s * (COLUMN_IN.radius + 0.02), y0 + 2.7, z, -s, 0, false));
       // (held by an iron band round the shaft: a flat plate on it stood off its curve at one edge and cut into it at
       // the other)
       // (proud of the tapering shaft all round: level with it there, it showed as a dash from some sides, a review)
@@ -1591,11 +1665,8 @@ function hallColumns(scene: THREE.Object3D, capital: THREE.Material, M: Mats, lo
   return torches;
 }
 
-/** A torch's flame and what it's drawn in, shared by every torch. */
-interface TorchLook {
-  fire: THREE.Material; flame: THREE.BufferGeometry; glow: THREE.Material; halo: THREE.BufferGeometry;
-  cup: THREE.BufferGeometry;
-}
+/** A small flame's materials (the chronicle's candle's): its tongue and the glow round it. */
+interface TorchLook { fire: THREE.Material; glow: THREE.Material }
 
 /** A flame's outline turned round its axis, `r` its widest and `h` its height: round at its foot, drawn in to a tip
  *  (`lean` puts its tip off its axis along x, as a draught bends it). */
@@ -1620,13 +1691,10 @@ function flameGeometry(r: number, h: number, lean: number): THREE.BufferGeometry
 function torchLook(): TorchLook {
   return {
     fire: new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffc070, emissiveIntensity: 1.1 }),
-    flame: flameGeometry(0.035, 0.17, 0.012),
     glow: new THREE.MeshBasicMaterial({
       // (faint: at 0.35, over a torch's own lit wall the ring round it was 2.3% blown out, `lab village`'s lights)
       color: 0xff8a30, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false,
     }),
-    halo: flameGeometry(0.06, 0.27, 0.025),
-    cup: new THREE.CylinderGeometry(0.11, 0.06, 0.16, 10),
   };
 }
 
@@ -1667,23 +1735,21 @@ function capitalStone(granite: THREE.Material): THREE.Material {
   return stone;
 }
 
+/** Where the hall's torches' fires go and what they hand back: the group of their fires, the village's updaters, and
+ *  each torch's flicker in the order built (its columns', then its door's). */
+interface TorchLit { fires: THREE.Object3D; updaters: Updater[]; flickers: THREE.PointLight[] }
+
 /** A torch on a wall's face at (x, z), `y` its bracket's top, standing out along (dx, dz) (a unit along x or z): an
- *  iron bracket, an arm out, a cup, its flame. Returns where its light is: out from it, as at its flame the wall
- *  beside it burned white. */
-function wallTorch(scene: THREE.Object3D, M: Mats, look: TorchLook, x: number, y: number, z: number, dx: number,
+ *  iron bracket, an arm out, a basket and its fire (`torchFire`: a lit tongue in a cup, still, from play "these
+ *  lights are super lame"). Returns where its light is: out from it, as at its flame the wall beside it burned
+ *  white. */
+function wallTorch(scene: THREE.Object3D, M: Mats, lit: TorchLit, x: number, y: number, z: number, dx: number,
   dz: number, plated = true, out = 1.1): THREE.Vector3 {
   const alongX = dx !== 0;
   const plate = plated ? block(scene, alongX ? 0.08 : 0.12, 0.5, alongX ? 0.12 : 0.08, x, y - 0.55, z, M.iron) : null;
   const arm = block(scene, alongX ? 0.3 : 0.06, 0.06, alongX ? 0.06 : 0.3, x + dx * 0.15, y - 0.3, z + dz * 0.15, M.iron);
-  const cup = new THREE.Mesh(look.cup, M.iron);
-  cup.position.set(x + dx * 0.32, y - 0.2, z + dz * 0.32);
-  scene.add(cup);
-  const flame = new THREE.Mesh(look.flame, look.fire);
-  flame.position.set(x + dx * 0.32, y - 0.14, z + dz * 0.32);
-  scene.add(flame);
-  const halo = new THREE.Mesh(look.halo, look.glow);
-  halo.position.set(x + dx * 0.32, y - 0.17, z + dz * 0.32);
-  scene.add(halo);
+  const bed = new THREE.Vector3(x + dx * 0.32, y - 0.04, z + dz * 0.32);
+  lit.flickers.push(torchFire(scene, lit.fires, M.iron, bed, lit.updaters).flicker);
   // (its own light is out from it: cast into the lamps' shadows, the bracket and cup threw a hole of shadow round the
   // torch on its own wall)
   for (const part of [plate, arm]) if (part) part.castShadow = false;

@@ -266,6 +266,25 @@ export function placeLamps(shelter: [number, number, number, number], places: re
   }
 }
 
+/** An opening in the shelter's walls the sky lights its inside through (a window): its middle, and the way it faces
+ *  into the shelter (1 or -1 along x, 2 or -2 along z). */
+export interface ShelterOpening { at: THREE.Vector3; way: number }
+
+/** the shelter's openings, each half `openingHalf` wide and high (m) */
+let openings: ShelterOpening[] = [];
+let openingHalf: [number, number] = [0, 0];
+
+/** The shelter's openings, all of a size (half its width and height, m): the engine lights its inside through them by
+ *  the sky (from play, "windows are not real windows, they dont let light through"). */
+export function placeShelterOpenings(half: [number, number], placed: readonly ShelterOpening[]): void {
+  openingHalf = half;
+  openings = [...placed];
+}
+
+/** The shelter's openings and their half size, as placed. */
+export const shelterOpenings = (): { half: [number, number]; openings: readonly ShelterOpening[] } =>
+  ({ half: openingHalf, openings });
+
 /** For a harness (tools/lab): each surface's side of the shelter read on it, as it was (or off it again). */
 export function readShelterOnSurface(on: boolean): void {
   list[SHELTER_READ] = on ? 0 : SHELTER_OFF;

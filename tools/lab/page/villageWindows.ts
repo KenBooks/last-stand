@@ -6,12 +6,13 @@
 // wall from a low sun, and the morning sun, south of east, lands each window's light some 5 m past it toward the dais.
 // `canary` draws both frames without the sun.
 import * as THREE from 'three';
-import type { Lab } from './lab';
+import type { Lab, Pictured, Tile } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
 import { TERRACE } from '../../../src/data/village';
 import { drawFrame, type Canvas } from './light';
+import { canvasOf } from './pixels';
 import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
 
@@ -29,6 +30,9 @@ const LEAST_LIT = 0.009;
 /** the most of it: lit through the roof (the engine's hall under its shelter, if its roof cast no shadow, was lit as the
  *  square is at noon) */
 const MOST_LIT = 0.06;
+
+/** how much brighter the sun's light alone is pictured */
+const PICTURED_GAIN = 3;
 
 /** The sun's light. */
 function sunLight(): THREE.DirectionalLight {
@@ -49,6 +53,25 @@ function sunlitShare(lit: Canvas, unlit: Canvas): number {
     if (withSun > NOT_BLACK && 1 - without / withSun >= SUNLIT) sunlit++;
   }
   return sunlit / (lit.pixels.length / 4);
+}
+
+/** The sun's light alone pictured: what it adds to each pixel, brightened, the canvas's rows turned top down. */
+function sunAlonePicture(lit: Canvas, unlit: Canvas, view: string): Tile {
+  const { width, height } = lit;
+  const image = new ImageData(width, height);
+  for (let row = 0; row < height; row++) {
+    for (let column = 0; column < width; column++) {
+      const from = ((height - 1 - row) * width + column) * 4;
+      const to = (row * width + column) * 4;
+      for (let part = 0; part < 3; part++) {
+        const added = Math.max(0, lit.pixels[from + part] - unlit.pixels[from + part]);
+        image.data[to + part] = Math.min(255, added * PICTURED_GAIN * 255);
+      }
+      image.data[to + 3] = 255;
+    }
+  }
+  const canvas = canvasOf(image);
+  return { view, png: canvas.toDataURL('image/png'), width, height };
 }
 
 /** The frame drawn with the sun and without it (both without, with `dark`), the hero hidden. */
@@ -77,7 +100,8 @@ export async function windowsLetSunIn(lab: Lab, canary: boolean): Promise<Lights
     G.player.place(STAND, FACING);
     faceCamera(FACING);
     await lab.step(SETTLE);
-    const share = sunlitShare(...withAndWithout(lab, canary));
+    const [lit, unlit] = withAndWithout(lab, canary);
+    const share = sunlitShare(lit, unlit);
     const line = `hall's windows at ${HOUR} h: ${(share * 100).toFixed(2)}% of the frame inside the hall lit by the sun`
       + ` (at least ${LEAST_LIT * 100}%)`;
     const dark = share < LEAST_LIT;
@@ -87,7 +111,9 @@ export async function windowsLetSunIn(lab: Lab, canary: boolean): Promise<Lights
     G.player.obj.visible = false;
     try {
       const moment = await lab.screen(`the hall at ${HOUR} h, the sun through its east windows`, []);
-      return { lines: [line], problems, caught: null, moments: [moment] };
+      const alone: Pictured = { label: `the sun's light alone, ${PICTURED_GAIN} times`, notes: [],
+        tiles: [sunAlonePicture(lit, unlit, 'sun')] };
+      return { lines: [line], problems, caught: null, moments: [moment, alone] };
     } finally {
       G.player.obj.visible = true;
     }

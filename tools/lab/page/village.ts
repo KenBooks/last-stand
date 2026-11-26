@@ -78,7 +78,12 @@ import { objectsUsedAgain } from './villageUseAgain';
 import { hallWallsHold } from './villageHallSide';
 import { candleLightsNear, chestOpensNear } from './villageChestLid';
 import { wallingAligned } from './villageWalling';
+import { hallWallsFlush } from './villageWallsFlush';
+import { hallTorchesBurn } from './villageTorchFires';
+import { hallWindowsSeeThrough } from './villageWindowsThrough';
+import { cameraStaysInHall } from './villageCameraInHall';
 import { windowsLetSunIn } from './villageWindows';
+import { windowsLightTheHall } from './villageWindowLight';
 import { grassRingsGentle, grassRingsUnseen } from './villageGrassRing';
 import { firesStillInFog, fogHoldsSteady, leavesInFog } from './villageFog';
 import { fogUnderEaves, fogUnderRoofs, roofShowsWhatHeSees } from './villageFogRoofs';
@@ -267,7 +272,12 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     daisOpensCompileNothing: () => daisOpensCompileNothing(lab, options.canary),
     arrowsStickInGround: () => arrowsStickInGround(lab, options.canary),
     wallingAligned: () => wallingAligned(options.canary),
+    hallWallsFlush: () => hallWallsFlush(options.canary),
+    hallTorchesBurn: () => hallTorchesBurn(lab, options.canary),
+    hallWindowsSeeThrough: () => hallWindowsSeeThrough(lab, options.canary),
+    cameraStaysInHall: () => cameraStaysInHall(lab, options.canary),
     windowsLetSunIn: () => windowsLetSunIn(lab, options.canary),
+    windowsLightTheHall: () => windowsLightTheHall(lab, options.canary),
     propHoleWhereHidden: () => propHoleWhereHidden(lab, options.canary),
     housesBesideFence: () => housesBesideFence(lab, options.canary),
     housesPastFence: () => housesPastFence(lab, options.canary),
