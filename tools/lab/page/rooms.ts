@@ -3,7 +3,8 @@
 // private), the public rooms read in the browser and one joined from its row, a password typed under its row or where
 // the room asked for it, a room joined by its code. Every press is the browser's own click or typing (`lab.clickOn`,
 // `lab.type`); what the dialog shows is read off the page, never off the game's own state alone.
-import { openCoop, coopOpen } from '../../../src/ui/coop';
+import { openCoop, coopOpen, joinInvited } from '../../../src/ui/coop';
+import { saveTag } from '../../../src/net/nameTag';
 import { session } from '../../../src/net/session';
 import type { Lab } from './lab';
 
@@ -24,6 +25,8 @@ export interface RoomsState {
   session: string; code: string; kind: string; partners: number;
   /** the room view's line saying what kind of room it is */
   kindLine: string;
+  /** what the Join by code field along its foot holds ('' where there's none) */
+  codeTyped: string;
 }
 
 const text = (element: Element | null): string => element?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
@@ -64,6 +67,7 @@ export function roomsState(): RoomsState {
     rows, empty: text(inDialog('.coop-rooms-empty')),
     session: session.status, code: session.code, kind: session.kind, partners: session.peers.size,
     kindLine: text(inDialog('.coop-room-kind')),
+    codeTyped: inDialog<HTMLInputElement>('#coop-code')?.value ?? '',
   };
 }
 
@@ -140,6 +144,48 @@ export async function roomsJoinCode(lab: Lab, { tag, code }: { tag: string; code
   roomsOpen();
   await nameTag(lab, tag);
   await typeInto(lab, 'coop-code', code);
+  await click(lab, '.coop-join button');
+}
+
+/** a bare socket filling a room's place on the relay (`roomsFill`), or none */
+let filler: WebSocket | null = null;
+
+/** A bare socket into room `code` on relay `server` (on), filling a place as a third player would, or it leaving the
+ *  room as a game leaves it (off). Resolves once the relay has let it in, or once it's gone. */
+export async function roomsFill(_lab: Lab, fill: { server: string; code: string; on: boolean }): Promise<void> {
+  const { server, code, on } = fill;
+  if (!on) {
+    const leaving = filler;
+    filler = null;
+    if (!leaving) return;
+    const gone = new Promise((resolve) => leaving.addEventListener('close', resolve, { once: true }));
+    leaving.close(1000, 'left');
+    await gone;
+    return;
+  }
+  const socket = new WebSocket(`${server}/room/last-stand-coop-1/${code}?id=labfiller`);
+  filler = socket;
+  await new Promise<void>((resolve, reject) => {
+    socket.addEventListener('message', () => resolve(), { once: true });
+    const refused = (): void => reject(new Error('lab: rooms: the relay turned the filler away'));
+    socket.addEventListener('close', refused, { once: true });
+  });
+}
+
+/** An invite link to room `code` opened with name tag `tag` kept (as a second tab of one browser keeps the first's):
+ *  straight into the room, as the game's boot does with `?room=`. */
+export function roomsInvited(_lab: Lab, { tag, code }: { tag: string; code: string }): void {
+  // (a fresh tab: the dialog closed, opened by the game itself on a refusal)
+  openCoop(false);
+  saveTag(tag);
+  joinInvited(code);
+}
+
+/** Another name tag typed where the dialog asks for it, and Join pressed with the code the field holds (as a player
+ *  turned away for a tag taken joins again: the code isn't typed again). */
+export async function roomsRetag(lab: Lab, { tag }: { tag: string }): Promise<void> {
+  roomsOpen();
+  await nameTag(lab, tag);
   await click(lab, '.coop-join button');
 }
 
