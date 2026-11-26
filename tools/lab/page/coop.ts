@@ -69,6 +69,12 @@ export {
 import { togetherNow, type Together } from './coopEnds';
 export { coopCode, coopFall, coopLeaveAgain, coopQuitCanary } from './coopEnds';
 
+/** Let the host's worker drive the fight while its animation frames and its page timer are held. */
+export async function coopHiddenHost(lab: Lab, options: { canary: boolean }) {
+  const { coopHiddenHost: measure } = await import('./coopHiddenHost');
+  return measure(lab, options);
+}
+
 /** Which game a page plays. */
 export type Role = 'host' | 'guest';
 

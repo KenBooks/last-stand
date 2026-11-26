@@ -739,6 +739,7 @@ const SLOW_GUEST_CANARY = 'the host\'s wave came while the guest readied the run
  */
 export async function runCoop(side, options) {
   const { scenarios, ping = DEFAULT_PING, jitter = DEFAULT_JITTER, pictures = false, party = 2, canary } = options;
+  const hiddenHost = scenarios?.includes('hidden-host');
   if (scenarios?.includes('colours') && scenarios.length !== 1) {
     throw labError('coop: colours runs alone, without combat');
   }
@@ -746,6 +747,9 @@ export async function runCoop(side, options) {
   if (scenarios?.includes('houses') && scenarios.length !== 1) throw labError('coop: houses runs alone');
   if (scenarios?.includes('seats') && scenarios.length !== 1) throw labError('coop: seats runs alone');
   if (scenarios?.includes('choir') && scenarios.length !== 1) throw labError('coop: choir runs alone, in the crypt');
+  if (hiddenHost && (scenarios.length !== 1 || party !== 2)) {
+    throw labError('coop: hidden-host runs alone, on a pair');
+  }
   const tavern = scenarios?.find((name) => name === 'tavern' || name === 'tavern-recovery');
   if (tavern && (scenarios.length !== 1 || party !== 2)) throw labError(`coop: ${tavern} runs alone, starting on a pair`);
   if (scenarios?.includes('ends') && (scenarios.length !== 1 || party !== 2)) {
@@ -814,11 +818,13 @@ export async function runCoop(side, options) {
       problems.push(...await tavernRecovery(pair, callPage, lines, { code, late, canary }));
       return { text: lines.join('\n'), problems };
     }
-    const start = await startTogether(pair, { ping, jitter }, lines, canary);
+    // The hidden-host canary needs the ordinary startup to reach an unheld countdown.
+    const startCanary = canary && !hiddenHost;
+    const start = await startTogether(pair, { ping, jitter }, lines, startCanary);
     const casting = start.free ? 'free casting' : 'a run\'s costs and cooldowns';
     lines.push(`the guest practising in its lobby as the host started; in the run: ${casting}`);
     const problems = [...start.problems];
-    if (canary) {
+    if (startCanary) {
       const caught = problems.some((problem) => problem.includes(SLOW_GUEST_CANARY));
       lines.push(`canary: the host told no guest readies ${caught ? 'caught' : 'went unseen'}`);
       if (!caught) problems.push('coop: the canary\'s wave without the guest went unseen');
@@ -831,6 +837,21 @@ export async function runCoop(side, options) {
     if (scenarios?.length === 1 && scenarios[0] === 'choir') {
       // (the Cantor's ring and stones, in the crypt: node/coopChoir.mjs)
       problems.push(...await choirTogether(pair, callPage, lines, { canary }));
+      return { text: lines.join('\n'), problems };
+    }
+    if (hiddenHost) {
+      const { started, spawned, unchanged } = await callPage(pair.host, 'coopHiddenHost', { canary });
+      const progressed = started && spawned;
+      if (canary) {
+        const caught = !started && !spawned && unchanged;
+        lines.push(`canary: an absent worker leaves the parked host at its countdown ${caught ? 'caught' : 'unseen'}`);
+        if (!caught) problems.push('hidden-host: the wave progressed with both tick sources held');
+      } else if (!progressed) {
+        problems.push('hidden-host: the wave failed to start and spawn on worker ticks');
+      } else {
+        await pair.until((host, guest) => guest.phase === 'fighting', 90, 'the guest never received the wave start');
+        lines.push('worker ticks started the wave and spawned a foe on the hidden host; the guest received the start');
+      }
       return { text: lines.join('\n'), problems };
     }
     if (scenarios?.length === 1 && scenarios[0] === 'ends') {

@@ -29,7 +29,7 @@ export default {
       choices: [
         'walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'staffs', 'rush', 'strike', 'throws', 'wave', 'ping',
         'chat', 'afk', 'colours', 'ghosts', 'duel', 'ends', 'houses', 'seats', 'trade', 'looks', 'wall', 'belt', 'choir',
-        'rootmother', 'rootcage', 'rootburrow', 'stag', 'tavern', 'tavern-recovery',
+        'rootmother', 'rootcage', 'rootburrow', 'stag', 'tavern', 'tavern-recovery', 'hidden-host',
       ],
       help: 'the scenarios (all the hero can play by default): walk, foes, shoot, evade (a ranger or a mage), dodge, '
         + 'down, blink (a mage), rush and strike (a warrior), throws, rootmother (her branches and vines at the '
@@ -43,7 +43,8 @@ export default {
         + '(a marker over its door, the minimap, the map); seats alone: a log a partner sits on not outlined for the '
         + 'host to sit on, a free one and the log once he\'s up outlined; choir alone: the Ossuary Cantor\'s choir\'s '
         + 'ring and rising graves on both screens alike (the ring\'s place and radius by its age, each stone\'s spot), '
-        + 'in the crypt; tavern-recovery alone: joining with a mug held, then its holder disconnecting; '
+        + 'in the crypt; hidden-host alone: a wave started on worker ticks while the host is hidden; '
+        + 'tavern-recovery alone: joining with a mug held, then its holder disconnecting; '
         + 'tavern alone: the keeper and his mugs as the host rules them, a guest served, '
         + 'both served at once with a mug each, both games\' mugs agreeing',
     },

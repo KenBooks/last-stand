@@ -7,13 +7,19 @@
 
 /** how often it ticks (ms) */
 const TICK_MS = 100;
+let held: 'page' | 'both' | null = null;
+
+/** In dev, let the lab isolate the worker from the browser page's fallback timer. */
+export function holdBackgroundTicks(source: typeof held): void {
+  if (import.meta.env.DEV) held = source;
+}
 
 /** `tick` run every `TICK_MS`, by a worker's clock and by the page's own. */
 export function everyTickEvenHidden(tick: () => void): void {
-  setInterval(tick, TICK_MS);
+  setInterval(import.meta.env.DEV ? () => { if (!held) tick(); } : tick, TICK_MS);
   try {
     const worker = new Worker(new URL('./backgroundTick.worker.ts', import.meta.url), { type: 'module' });
-    worker.onmessage = tick;
+    worker.onmessage = import.meta.env.DEV ? () => { if (held !== 'both') tick(); } : tick;
     worker.postMessage(TICK_MS);
   } catch {
     // (no worker: the page's own timer alone, slowed while hidden)
