@@ -219,7 +219,16 @@ with the last guest's Continue lost on the way: the first alone (main's next wav
 button must spin as it's sent and come back to be pressed once given up (main showed no spinner), pressed again then
 (`--pictures`: the guest's screen spinning and given back, `out/coop/continue-*-guest.png`). Every game must go back
 to the lobby by itself; one that doesn't is said with what each game shows (its own player, the partners it shows
-banked). `--canary` loses every guest's every Bank on the way to the host, which must be caught. About 70 s.
+banked). Then the races (`node/coopBankRaces.mjs`; from the owner, of a guest banking while his Continue spins: "will
+the host know if player does that ? the race condition I mean... we need lab for all those"): the last guest presses
+C and B a turn later, his key still spinning, with every Continue of his lost (and one sent after his Bank, as one
+held up on the way would reach the host, which must not count him in: `coopLateContinue`); with his Continue
+reaching the host first; and with his Continue the last vote the wave waited for, so the host's countdown has begun
+as his Bank comes (each line says the phase the host took it in; taken before the countdown, the race wasn't
+played). Every game must show him banked, the rest go on to the next wave without him and bank, every game back in
+the lobby by itself. All three pass on main too: its host already took a Bank in the countdown. `--canary` loses
+every guest's every Bank on the way to the host, which must be caught (the races aren't run under it). About 3 min
+with `--ab`.
 
 `--scenarios ends` (alone, a pair's; `node/coopEnds.mjs`, `page/coopEnds.ts`): the ways a run ends that
 left a player apart from the party. The host leaves the run, closes his summary to watch the guest play on, and opens

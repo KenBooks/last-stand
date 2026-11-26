@@ -69,7 +69,7 @@ export {
   coopWorldAngle,
 } from './coopEnd';
 import { togetherNow, type Together } from './coopEnds';
-export { coopBanksSeen, coopContinueShown } from './coopBanks';
+export { coopBanksSeen, coopContinueShown, coopLateContinue } from './coopBanks';
 export { coopCode, coopFall, coopLeaveAgain, coopQuitCanary } from './coopEnds';
 
 /** Let the host's worker drive the fight while its animation frames and its page timer are held. */

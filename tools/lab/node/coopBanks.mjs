@@ -16,14 +16,16 @@
 // `--canary` loses every guest's every Bank on its way to the host: his game must be caught still waiting on them.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { everyRace } from './coopBankRaces.mjs';
+import {
+  STEP_FRAMES, beginRun, leaveForLobby, pressTogether, toTheChoice, untilButton,
+} from './coopChoiceKit.mjs';
 import { waitFor } from './coopEnd.mjs';
 import { OUT } from './paths.mjs';
 
 /** where `--pictures` puts the guest's screen with its Continue spinning, and given back */
 const PICTURES = join(OUT, 'coop');
 
-/** the frames a step waits for what it plays (the run's end takes the 2.5 s it's said in) */
-const STEP_FRAMES = 600;
 /** the frames between one player's press and the next one's in a staggered order: half a second */
 const STAGGER_FRAMES = 30;
 /** the frames a Continue lost every time has to be given up in, its button back (the game gives up after 4 s) */
@@ -53,43 +55,6 @@ function roundsFor(size) {
       continued: { by: size - 1, lose: 'every' },
     },
   ];
-}
-
-/** Every page in `group` holds `key` for a turn of frames (every page stepped), then lets it go. */
-async function pressTogether(pair, call, group, key) {
-  for (const index of group) await call(pair.pages[index], 'coopHold', { frame: { keys: [key] } });
-  await pair.run(pair.turnFrames);
-  for (const index of group) await call(pair.pages[index], 'coopHold', { frame: null });
-}
-
-/** A run of the round's own begun from the lobby, held in its countdown. Returns a problem, or null. */
-async function beginRun(pair, call) {
-  const [host, ...guests] = pair.pages;
-  await call(host, 'coopHoldRun');
-  for (const guest of guests) await call(guest, 'coopJoinAfresh');
-  await call(host, 'coopStart');
-  const started = await waitFor(pair, (states) => states.every((state) => state.mode === 'run'), STEP_FRAMES);
-  return started.met ? null : 'the run never started on every game';
-}
-
-/** The host's wave cleared to the choice on every game. Returns a problem, or null. */
-async function toTheChoice(pair, call, what) {
-  for (const page of pair.pages) await call(page, 'coopClearWave');
-  const cleared = await waitFor(pair, (states) => states.every((state) => state.phase === 'cleared'), STEP_FRAMES);
-  return cleared.met ? null : `${what}: the wave never came to the choice on every game`;
-}
-
-/**
- * Steps every page a turn at a time until `done` holds of `page`'s Continue button as drawn, at most `limit` frames.
- * Returns the button as last drawn and whether it came.
- */
-async function untilButton(pair, call, page, done, limit) {
-  let shown = await call(page, 'coopContinueShown');
-  for (let frames = 0; !done(shown) && frames < limit; frames += pair.turnFrames) {
-    await pair.run(pair.turnFrames);
-    shown = await call(page, 'coopContinueShown');
-  }
-  return { shown, met: done(shown) };
 }
 
 /**
@@ -192,24 +157,6 @@ async function bankRound(pair, call, lines, { round, first, tags, canary, pictur
   return problems;
 }
 
-/** Every game sent back to the lobby as players would (a game still in the run leaves it), its summary closed. */
-async function leaveForLobby(pair, call) {
-  for (let tries = 0; tries < 3; tries++) {
-    const states = await pair.run(pair.turnFrames);
-    for (const [index, state] of states.entries()) {
-      if (state.summary) await call(pair.pages[index], 'coopSummaryDone');
-      else if (state.mode === 'run' && !state.out) await call(pair.pages[index], 'coopLeaveRun');
-    }
-    const home = await waitFor(pair, (all) => all.every((state) => state.mode === 'menu'), STEP_FRAMES);
-    if (home.met) break;
-  }
-  const settled = await pair.run(pair.turnFrames);
-  for (const [index, state] of settled.entries()) {
-    if (state.summary) await call(pair.pages[index], 'coopSummaryDone');
-  }
-  await pair.run(pair.turnFrames);
-}
-
 /**
  * The party banks together, round by round, on a party already in a run. Returns the problems (with `canary`, the
  * first round alone: each guest's Bank lost on its way to the host, which must be caught).
@@ -222,7 +169,7 @@ export async function everyoneBanks(pair, call, lines, { tags, canary, pictures 
     problems.push(...await bankRound(pair, call, lines, { round, first, tags, canary, pictures }));
     if (canary) break;
   }
-  if (!canary) return problems;
+  if (!canary) return [...problems, ...await everyRace(pair, call, lines, { tags })];
   const caught = problems.some((problem) => problem.includes('waiting on the others'));
   lines.push(`canary: the guests' Bank lost on the way to the host ${caught ? 'caught' : 'missed'}`);
   const rest = problems.filter((problem) => !problem.includes('waiting on the others'));

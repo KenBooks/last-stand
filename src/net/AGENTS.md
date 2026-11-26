@@ -122,7 +122,9 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   key spins as the boss readies, and a readying that fails says so and gives the button back (`bossNotReady` in
   `main.ts`). `lab coop --scenarios banks --party 3` continues a wave with the last guest's
   first Continue lost, and with every one lost till it's given up (`--pictures`: `continue-sending-guest.png`,
-  `continue-given-back-guest.png`).
+  `continue-given-back-guest.png`), then a guest's Bank pressed while his Continue spins, in each order the two
+  may reach the host (`node/coopBankRaces.mjs`): Bank alone, Continue then Bank, Continue the last vote so the Bank
+  comes in the countdown, and a Continue reaching the host after the Bank, which it passes over.
 - `wardTouch.ts`: a hero's wall (the Hedgeward) broken in the village by a partner walking into it, the protocol's
   part `ward-touch-1`: the toucher's own game judges the touch (`touchedByPartner` in `combat/skills/hedgeward.ts`),
   breaks its copy and sends where it stood on `ctl` (`wardTouch`, to every game, as a ping goes); each game breaks its
