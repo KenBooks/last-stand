@@ -531,6 +531,7 @@ function onHello(from: string, m: Record<string, unknown>): void {
     };
     send('ctl', welcome, from);
     send('ctl', { t: 'gall', list: groundDrops() }, from);
+    G.arena.rooms?.tavern.tavern?.()?.syncMugs(from);
     send('ctl', duelWordNow(), from);
     send('hello', hello(), from);
     publishColours();
@@ -995,7 +996,10 @@ function peerLeft(id: string): void {
   tradePeerLeft(id);
   dropPlayer(peer);
   session.peers.delete(id);
-  if (role.current === 'host') publishColours();
+  if (role.current === 'host') {
+    G.arena.rooms?.tavern.tavern?.()?.guestLeft(id);
+    publishColours();
+  }
   // (a guest gone while it readied the run isn't waited for)
   syncReadying();
   if (wasHost) { hooks.hostGone(); leaveRoom(); return; }

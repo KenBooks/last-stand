@@ -24,8 +24,10 @@ export interface EyesCase {
   frames: (most: number, done?: () => boolean) => Promise<number>;
   drinkShare: () => number;
   serve: () => void;
-  /** the mug waiting for him taken up by E and drunk by E; whether his drink began */
+  /** The waiting mug taken up by E, before answering the choice. */
   take: () => Promise<boolean>;
+  drink: () => Promise<boolean>;
+  hideMug?: boolean;
   tv: TavernKeeper;
   keeper: VillageObject;
 }
@@ -38,7 +40,7 @@ export function seenBy(thing: THREE.Object3D, camera: THREE.PerspectiveCamera, r
   let shown = true;
   for (let o: THREE.Object3D | null = thing; o; o = o.parent) shown &&= o.visible;
   let drawn = false;
-  thing.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.layers.test(camera.layers)) drawn = true; });
+  thing.traverseVisible((o) => { if ((o as THREE.Mesh).isMesh && o.layers.test(camera.layers)) drawn = true; });
   camera.updateMatrixWorld();
   const at = thing.getWorldPosition(new THREE.Vector3());
   const ahead = -at.clone().applyMatrix4(camera.matrixWorldInverse).z;
@@ -94,20 +96,21 @@ export async function throughTheEyes(lab: Lab, c: EyesCase, lines: string[], pro
   c.serve();
   // (the best it was seen at any frame of its slide: in view for some of the way, as the player looks at the keeper)
   let slid: Seen | null = null;
+  let servedMug = -1;
   const served = await c.frames(SERVED_IN, () => {
     const mug = c.tv.mugs.mugs.find((m) => m.place.at === 'bar' && m.full > 0.5);
     if (mug && c.drinkShare() < 0) {
       const seen = seenBy(c.tv.mugMesh(mug.id), G.camera as THREE.PerspectiveCamera, MUG.rimR);
       if (!slid || (fine(seen) && !fine(slid)) || seen.clear > slid.clear) slid = seen;
     }
-    return c.drinkShare() >= 0 || waitingMug(c.tv) >= 0;
+    servedMug = waitingMug(c.tv);
+    return servedMug >= 0;
   });
-  if (served >= 0 && c.drinkShare() < 0) await c.take();
   lines.push(`through the eyes: the slide's mug ${slid ? said(slid) : 'never seen sliding'}`);
   const slidSeen = slid as Seen | null;
-  if (!slidSeen?.shown || !slidSeen.inView) problems.push('through the eyes, the mug slid across was out of view');
-  if (served < 0) {
-    problems.push('through the eyes, he never got his beer');
+  if (!slidSeen || !fine(slidSeen)) problems.push('through the eyes, the mug slid across was out of view');
+  if (served < 0 || !(await c.take())) {
+    problems.push('through the eyes, he never picked up his beer');
     lab.beforeFrame.splice(lab.beforeFrame.indexOf(hold), 1);
     await viewAs(lab, 'third');
     return moments;
@@ -117,22 +120,44 @@ export async function throughTheEyes(lab: Lab, c: EyesCase, lines: string[], pro
   const mug = G.player.model.root.getObjectByName('flask')?.getObjectByName('mug');
   const worst: string[] = [];
   for (const beat of BEATS) {
-    await c.frames(DRUNK_IN, () => c.drinkShare() >= beat || c.drinkShare() < 0);
-    if (!mug) break;
-    const seen = seenBy(mug, armsCamera(), MUG.rimR + 0.02);
-    lines.push(`  at ${Math.round(beat * 100)}%: the mug ${said(seen)}`);
-    if (!fine(seen)) worst.push(`${Math.round(beat * 100)}%: ${said(seen)}`);
+    const reached = await c.frames(DRUNK_IN, () => c.drinkShare() >= beat);
     const share = Math.round(beat * 100);
-    moments.push(lab.picture(`eyes-drink-${share}`, ['eyes'], [`${share}% of the drink, through the eyes`]));
+    if (reached < 0) {
+      problems.push(`through the eyes, the drink never reached ${share}%`);
+      break;
+    }
+    if (!mug) break;
+    const visible = mug.visible;
+    const plant = c.hideMug && beat === BEATS[0];
+    if (plant) mug.visible = false;
+    try {
+      const seen = seenBy(mug, armsCamera(), MUG.rimR + 0.02);
+      lines.push(`  at ${share}%: the mug ${said(seen)}`);
+      if (plant) {
+        if (fine(seen)) problems.push('eyes canary: hiding the mug at 10% went unseen');
+        else if (!visible) problems.push('eyes canary: the mug was already hidden at 10%');
+        else lines.push('eyes canary: caught the hidden mug at 10%');
+      } else if (!fine(seen)) {
+        worst.push(`${share}%: ${said(seen)}`);
+      }
+      moments.push(lab.picture(`eyes-drink-${share}`, ['eyes'], [`${share}% of the drink, through the eyes`]));
+    } finally {
+      mug.visible = visible;
+    }
+    if (beat === BEATS[0] && !(await c.drink())) {
+      problems.push('through the eyes, the drink choice never let him drink');
+      break;
+    }
   }
   if (!mug) problems.push('through the eyes, the hero has no mug to drink from');
   if (worst.length) problems.push(`through the eyes, the mug wasn't seen in his hand: ${worst.join('; ')}`);
 
   // --- set down: on the bar, in view ---
-  await c.frames(DRUNK_IN, () => c.drinkShare() < 0);
-  await c.frames(30);
-  const down = c.tv.mugs.mugs.find((m) => m.place.at === 'bar' && m.dirty);
-  const downSeen = down ? seenBy(c.tv.mugMesh(down.id), G.camera as THREE.PerspectiveCamera, MUG.rimR) : null;
+  const finished = await c.frames(DRUNK_IN, () => c.drinkShare() < 0);
+  if (finished < 0) problems.push('through the eyes, the drink never finished');
+  const down = c.tv.mugs.get(servedMug);
+  const downSeen = down.place.at === 'bar' && down.dirty
+    ? seenBy(c.tv.mugMesh(down.id), G.camera as THREE.PerspectiveCamera, MUG.rimR) : null;
   lines.push(`through the eyes: set down ${downSeen ? said(downSeen) : 'nowhere on the bar'}`);
   if (!downSeen?.shown) problems.push('through the eyes, the mug was never set down on the bar');
   moments.push(lab.picture('eyes-set-down', ['eyes'], ['the mug set down, through the eyes']));

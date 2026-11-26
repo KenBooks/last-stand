@@ -18,6 +18,75 @@ const STEP = 30, SERVED_IN = 900, BOTH_IN = 2700, CLEARED_IN = 4200;
 const BY_TABLE = { guest: { x: 1.25, z: 0, facing: -Math.PI / 2 }, host: { x: 1.2, z: -0.5, facing: -Math.PI / 2 } };
 
 /**
+ * A new guest joins without disturbing a mug already in the first guest's hand. When that first guest disconnects,
+ * the exact mug must be reclaimable at its original bar spot and both remaining games must agree.
+ */
+export async function tavernRecovery(pair, callPage, lines, { code, late, canary }) {
+  const [host, guest] = pair.pages;
+  const ledger = (page) => callPage(page, 'coopTavernLedger');
+  const problems = [];
+  const waitFor = async (read, frames) => {
+    for (let elapsed = 0; elapsed <= frames; elapsed += STEP) {
+      if (await read()) return true;
+      await pair.run(STEP);
+    }
+    return false;
+  };
+  await callPage(host, 'coopEnterHouse', { id: 'tavern' });
+  await callPage(guest, 'coopEnterHouse', { id: 'tavern' });
+  await callPage(host, 'coopTavernStand', { side: -0.9 });
+  await callPage(guest, 'coopTavernStand', { side: 0.9 });
+  await pair.run(STEP * 2);
+  await callPage(guest, 'coopTavernAsk');
+  const guestSeen = () => callPage(guest, 'coopTavernSeen');
+  if (!(await waitFor(async () => (await guestSeen()).waiting >= 0, SERVED_IN))) {
+    return ['tavern recovery: the guest was never served'];
+  }
+  const { waiting: id } = await guestSeen();
+  const from = (await ledger(host))[id];
+  if (from?.place.at !== 'bar' || from.full <= 0.5) return ['tavern recovery: the host had no full mug on the bar'];
+  await callPage(guest, 'coopTavernTake', { id });
+  if (!(await waitFor(async () => (await ledger(host))[id]?.place.at === 'hero' && (await guestSeen()).choosing, 240))) {
+    return ['tavern recovery: the first guest did not hold the full mug'];
+  }
+  const before = await ledger(host);
+  if (canary) await callPage(host, 'coopTavernMute');
+  const joiner = await late.open();
+  await callPage(joiner, 'coopOpen', { ...late.opening, code });
+  await pair.add(joiner);
+  await pair.until((_, __, states) => states[2]?.status === 'joined' && states.every((s) => s.partners === 2),
+    900, 'the late tavern guest never joined the party');
+  const matches = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const synced = await waitFor(async () => matches(await ledger(joiner), before), 180);
+  if (!matches(await ledger(host), before)) problems.push('late join: the host changed the ledger as the guest joined');
+  if (canary) {
+    lines.push(`late join canary: missing ledger snapshot ${synced ? 'went unseen' : 'caught'}`);
+    if (synced) problems.push('late join canary: the guest got the snapshot despite the muted host');
+    return problems;
+  }
+  if (!synced) problems.push('late join: the new guest never received the live ledger while a mug was held');
+  else lines.push(`late join: the new guest received the unchanged ledger while mug ${id} was held`);
+
+  await callPage(guest, 'coopTavernDisconnect');
+  await pair.until((state, _, states) => state.partners === 1 && states[2]?.partners === 1,
+    600, 'the remaining games never registered the guest disconnecting');
+  const released = await waitFor(async () => {
+    const hostMugs = await ledger(host);
+    const mug = hostMugs[id];
+    return mug?.place.at === 'bar' && matches(mug.place, from.place) && mug.full === from.full
+      && !mug.dirty && !mug.held && matches(hostMugs, await ledger(joiner));
+  }, 180);
+  if (!released) return [...problems, 'disconnect: both games did not return the same full mug to its original spot'];
+  await callPage(joiner, 'coopTavernStand', { side: 0.9 });
+  await callPage(joiner, 'coopTavernTake', { id });
+  const retaken = await waitFor(async () => (await callPage(joiner, 'coopTavernSeen')).myMug === id
+    && matches(await ledger(host), await ledger(joiner)), 240);
+  if (!retaken) problems.push('disconnect: the remaining guest could not pick up the released mug');
+  else lines.push(`disconnect: the same full mug ${id} was returned and picked up by the remaining guest`);
+  return problems;
+}
+
+/**
  * The guest takes a mug up and puts it down (F) by the small table (Kenneth's round 5: on the nearest top, his side):
  * both games must agree where it stands, on that table, and the host, come round to it, must take it up. Its problems.
  */

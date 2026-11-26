@@ -57,6 +57,12 @@ must come back to the back counter on both games. At every look both games' mugs
 settled (a second on) agree mug for mug. `--pictures` takes the guest drinking (`out/coop/tavern-*.png`); `--canary`
 stops the host telling its guest of the mugs (`mute`), so the guest's mug never reaches him, which must be found.
 
+`coop --scenarios tavern-recovery` starts with a host and a guest in the tavern. The guest takes a full mug and holds
+it while a third, fresh page joins. The new guest must receive the entire ledger without a mug moving first. The
+holder then disconnects from the party, and the other two games must agree that the same full mug returned to its
+original bar spot. The remaining guest takes it up again. `--canary` mutes the host after the first guest takes the
+mug, so the missing welcome snapshot must be detected.
+
 `coop --scenarios looks` (alone, as `colours`) checks a hero's look across the room (`data/heroLooks.ts`, `Look.hl` in
 `src/net/session.ts`): the host opens its hero selection screen and picks another look and a hair colour on its Look
 page (`coopPickLook`: the hall's hero built again in it, the screen closed), and every partner must build its copy of

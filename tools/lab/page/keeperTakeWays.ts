@@ -12,7 +12,7 @@ import { leaveRoom } from '../../../src/game/rooms';
 import { MUG_COUNT } from '../../../src/data/tavern';
 import { KEEPER_TAKE, type TavernKeeper } from '../../../src/world/tavernKeeper';
 import type { Frame, Lab } from './lab';
-import { choosingAle, pickAle, takeMug, waitingMug, type Stepper } from './takeAle';
+import { choosingAle, mugOnPage, pickAle, takeMug, waitingMug, type Stepper } from './takeAle';
 import { viewAs } from './houses';
 
 /** the frames a serving, a choice and a walk to a mug may take */
@@ -39,11 +39,6 @@ export async function takeWays(lab: Lab, tv: TavernKeeper, run: Stepper,
     G.player.place(room.group.localToWorld(new THREE.Vector3(x, 0, z)), facing);
   };
   const away = () => G.player.pos.clone().add(new THREE.Vector3(-3, 0, 2));
-  const onPage = (id: number) => {
-    G.camera.updateMatrixWorld();
-    const at = mugAt(id).project(G.camera as THREE.Camera), box = G.renderer.domElement.getBoundingClientRect();
-    return { x: Math.round(box.left + ((at.x + 1) / 2) * box.width), y: Math.round(box.top + ((1 - at.y) / 2) * box.height) };
-  };
   /** the choice up, then put down again (F): whether it came */
   const chosenThenDown = async (way: string): Promise<boolean> => {
     const chosen = await until(CHOSEN_IN, choosingAle);
@@ -87,7 +82,7 @@ export async function takeWays(lab: Lab, tv: TavernKeeper, run: Stepper,
   document.querySelector<HTMLButtonElement>('#talk:not(.hidden) .tk-close')?.click();
   // (the camera settled back from the talk's view before the mug's place on the page is read)
   await run(SETTLED, () => ({ aim: away() }));
-  await lab.click(onPage(id));
+  await lab.click(mugOnPage(tv, id));
   await run(1, () => ({ aim: mugAt(id) }));
   await chosenThenDown('by a click within reach');
 
@@ -95,7 +90,7 @@ export async function takeWays(lab: Lab, tv: TavernKeeper, run: Stepper,
   placeAt(place().x - 3.2, place().z + 0.4, Math.PI / 2);
   const from = G.player.pos.clone();
   await run(20, () => ({ aim: away() }));
-  await lab.click(onPage(id));
+  await lab.click(mugOnPage(tv, id));
   const walked = await until(WALKED_IN, choosingAle, () => ({ aim: mugAt(id) }));
   lines.push(`taken by a click from ${(G.player.pos.distanceTo(from) + 0).toFixed(1)} m walked: ${walked < 0 ? 'NOT taken' : `in ${(walked / 60).toFixed(1)} s`}`);
   plant('click', false);

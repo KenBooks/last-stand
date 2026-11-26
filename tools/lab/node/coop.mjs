@@ -15,7 +15,7 @@ import { firstRunsEnd, floorInHall, lobbyTurns, watchedRun } from './coopEnd.mjs
 import { partnerInHouse } from './coopHouses.mjs';
 import { choirTogether } from './coopChoir.mjs';
 import { partnerOnSeat } from './coopSeats.mjs';
-import { drinkTogether } from './coopTavern.mjs';
+import { drinkTogether, tavernRecovery } from './coopTavern.mjs';
 import { fightDuel } from './coopDuel.mjs';
 import { fightPartyDuel } from './coopDuelParty.mjs';
 import { runsEnds } from './coopEnds.mjs';
@@ -745,7 +745,8 @@ export async function runCoop(side, options) {
   if (scenarios?.includes('houses') && scenarios.length !== 1) throw labError('coop: houses runs alone');
   if (scenarios?.includes('seats') && scenarios.length !== 1) throw labError('coop: seats runs alone');
   if (scenarios?.includes('choir') && scenarios.length !== 1) throw labError('coop: choir runs alone, in the crypt');
-  if (scenarios?.includes('tavern') && (scenarios.length !== 1 || party !== 2)) throw labError('coop: tavern runs alone, on a pair');
+  const tavern = scenarios?.find((name) => name === 'tavern' || name === 'tavern-recovery');
+  if (tavern && (scenarios.length !== 1 || party !== 2)) throw labError(`coop: ${tavern} runs alone, starting on a pair`);
   if (scenarios?.includes('ends') && (scenarios.length !== 1 || party !== 2)) {
     throw labError('coop: ends runs alone, on a pair (no --party)');
   }
@@ -801,6 +802,15 @@ export async function runCoop(side, options) {
       // (in the village's tavern, no run: its keeper and mugs, the host's word, node/coopTavern.mjs)
       const { problems } = await openTogether(pair, { ping, jitter }, lines, false);
       problems.push(...await drinkTogether(pair, callPage, lines, { canary, pictures }));
+      return { text: lines.join('\n'), problems };
+    }
+    if (tavern === 'tavern-recovery') {
+      const { problems, code } = await openTogether(pair, { ping, jitter }, lines, false);
+      const late = {
+        open: () => side.openPartner(side.heroClass),
+        opening: { role: 'guest', tag: PARTY_TAGS[2], colour: PARTY_PICKS[2], extra: 0, ping, jitter },
+      };
+      problems.push(...await tavernRecovery(pair, callPage, lines, { code, late, canary }));
       return { text: lines.join('\n'), problems };
     }
     const start = await startTogether(pair, { ping, jitter }, lines, canary);

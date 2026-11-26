@@ -8,6 +8,27 @@ options every command takes) for its size.
 `src/game/mugs.ts`, `src/game/aleBoost.ts`, `src/entities/models/keeper.ts`,
 `src/entities/models/flask.ts`, `src/combat/skills/ale.ts`), any `--class`.
 
+Use `--parts eyes,seated,touch,cost,boost` to run a subset without the full tavern sequence:
+
+- `eyes` runs the first-person serving and drink. It must reach each recorded beat, starting at 10% before the
+  choice is answered. Its canary hides the mug at 10%, and the later beats must still pass.
+- `seated` drinks on a bar stool in all three views, verifies the reached swallows and keeps the hero seated
+  through the drink. The mug reaches the lips in the two external views and stays visible at each swallow
+  through the eyes. Its canary rests the drinking hand on the thigh. Run both `eyes,seated` for each class.
+- `touch` taps a served mug on the canvas, taps Put down and takes the same full mug again, then taps Drink and
+  verifies the same mug returns dirty. Both rendered buttons must fit and be hittable, and the pending boost's
+  notice must fit. Its canary disables pickup for the first tap and then re-enables it for the full sequence.
+- `cost` samples draws and triangles from inside the tavern with the keeper in frame, subtracting the frames
+  with the mugs and then the keeper hidden. A sample must draw both the keeper and mugs.
+- `boost` drinks two ales and checks the lobby notice. Entering and clearing a training wave keeps the boost
+  waiting. Entering a normal run applies it once, and using Continue shows one fewer HUD wave per real clear
+  until it expires. The fixture empties the wave's queue before enemies spawn and lets the production run update
+  clear it. Further runs cover early Bank and death with waves remaining, via the summary's Return button.
+  Its canary stacks the two ales and verifies the wrong max health arrives through the normal portal.
+
+For a landscape phone viewport, run `npm run lab -- tavern --parts touch --screen 844x390@3`.
+The other layout sizes are `1024x700@1`, `1920x1080@1`, `1180x820@2`, and `820x1180@2`.
+
 **His day.** Into the Ember & Oak by its door, the hero by the door while the keeper's tasks are set and run to their
 work in turn (the bar wiped in passes along its length, sweeping, the fire stoked, the small table wiped), each
 pictured, his hands against their goals (`handsOff`: a held thing's own place against its goal). Then the hero at the
@@ -56,7 +77,8 @@ at once, `placings`):
 - his trunk, head and elbows (balls round their joints) no more than 2 cm into the bar, the back counter or a table,
   walking or leaning (`BodyClear`; from Victor's review, "him walking inside the counter sometimes").
 
-No program may compile from the room's coming in to the end.
+The engine's pipeline counter starts before the room opens. Frames drawn during the check must request no new
+pipelines.
 
 **Pictures**: the tasks, the talk card, each step of a mug's round once (taken, filled, slid, collected, washed, dried,
 shelved: from the keeper's sides along the aisle behind the bar, the hero hidden), frame strips of the table wiped,
@@ -65,6 +87,8 @@ before him, the set-down, and the first person's. The sheet comes in pages (`she
 
 `--canary` makes the ale a cast he may walk through, which must be caught. In co-op, `coop --scenarios tavern`
 (`commands/coop.md`).
+
+`coop --scenarios tavern-recovery` checks the guest who joins with a mug already held and the holder who disconnects.
 
 **Round 3's additions.** Sat on the bar stool nearest the tap (as `lab sit` lets him sit idle), ale asked from it, its
 mug taken up and drunk: he must stay sat from the ask to the drink's end. The ale's boost read after the drinks

@@ -36,7 +36,7 @@ import {
   ALE_BEATS, BACK, BAR, BAR_STOOL_HIGH, BAR_STOOL_X, BAR_STOOLS, BROOM_AT, COME_TO_BAR, PLACES, POKER_AT, SET_DOWN_WITHIN, SHELF_SLOTS,
   STEER, SWEEP, TABLES, TASK, TUB, TURN_ON_SPOT, WALK, WASH, type Spot,
 } from '../data/tavern';
-import { MugLedger, type Mug } from '../game/mugs';
+import { MugLedger, type Mug, type MugPlace } from '../game/mugs';
 import { isGuest, isHost } from '../net/role';
 import { tavernLink } from '../net/tavernLink';
 import { onMessages } from '../net/messages';
@@ -340,6 +340,10 @@ export interface TavernKeeper {
   serve(hero: Player): boolean;
   /** the mugs' ledger (tools/lab `tavern`) */
   readonly mugs: MugLedger;
+  /** Send the current ledger to a newly welcomed guest, even if no mug has moved. */
+  syncMugs(to: string): void;
+  /** Release mugs owned by a guest who disconnected and discard their pending orders. */
+  guestLeft(id: string): void;
   /** whether mug `id` is on its way down from a hero's hand to the top he set it on (the lab's mugs in the air) */
   settles(id: number): boolean;
   /** what he's doing (the lab: its step's name, and the job's) */
@@ -1766,11 +1770,26 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     hint.ay = 0.5;
     hint.show(promptArt('E', 'Take', { face: 'display', size: 14, weight: 700, spacing: 0.5, color: '#ffe7b0' }));
   }
+  const pickedFrom = new Map<number, Extract<MugPlace, { at: 'bar' | 'table' }>>();
   /** mug `id` into hero `who`'s hand if it still waits full on a top (the host's word: the first to ask has it) */
   function takeFor(id: number, who: string): void {
     const m = ledger.get(id);
     if (!m || (m.place.at !== 'bar' && m.place.at !== 'table') || m.full <= 0.5) return;
+    if (who !== myId()) pickedFrom.set(id, m.place);
     ledger.move(id, { at: 'hero', who }, { full: m.full, held: true, for: who });
+  }
+
+  function guestLeft(id: string): void {
+    for (let index = asked.length - 1; index >= 0; index--) {
+      if (asked[index] === id) asked.splice(index, 1);
+    }
+    for (const mug of ledger.mugs) {
+      if (mug.place.at !== 'hero' || mug.place.who !== id) continue;
+      const place = pickedFrom.get(mug.id);
+      if (!place) continue;
+      ledger.move(mug.id, place, { full: mug.held ? mug.full : 0.03, dirty: !mug.held, held: false });
+      pickedFrom.delete(mug.id);
+    }
   }
   /** a partner's drink as the host's ledger has it: held at the lift while his mug is held, let go once it's down */
   const holders = new Set<string>();
@@ -1846,7 +1865,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
 
   // --- co-op: the host tells, a guest takes the host's word ---
   onMessages(['tv', 'tv?'], (m, from) => {
-    if (m.t === 'tv?' && !isGuest()) {
+    if (m.t === 'tv?' && isHost()) {
       const id = Number(m.id);
       if (m.a === 'ale') asked.push(from);
       else if (m.a === 'took') {
@@ -1860,10 +1879,11 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
         // (put down undrunk: full and clean, for any hero to take up; drunk, empty and the keeper's to clear)
         const full = m.full === undefined ? 0.03 : Number(m.full);
         ledger.move(id, place, { full, dirty: full <= 0.5, held: false });
+        pickedFrom.delete(id);
       }
       return;
     }
-    if (m.t === 'tv' && isGuest()) {
+    if (m.t === 'tv' && isGuest() && from === tavernLink.host()) {
       if (Array.isArray(m.mugs)) {
         ledger.restore(m.mugs as Mug[]);
       }
@@ -1983,6 +2003,10 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
       return true;
     },
     mugs: ledger,
+    syncMugs(to) {
+      if (!muted) tavernLink.send({ t: 'tv', mugs: ledger.snapshot() }, to);
+    },
+    guestLeft,
     settles: (id) => settling.has(id),
     doing: () => ({
       job, step: step?.name ?? '', jumped, offered: `${offered} (${offerSaid})`, sweepPosed, walking: !!step?.walk, speed: me.speed,
