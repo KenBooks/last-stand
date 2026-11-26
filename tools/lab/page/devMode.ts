@@ -19,6 +19,7 @@ import { BIOMES, BIOME_IDS, bossesOf, type BiomeId } from '../../../src/data/bio
 import { updateRun } from '../../../src/game/run';
 import { middleOf, realWait, type Lab, type Pictured, type Report } from './lab';
 import { PIPELINES } from '../../../src/engine/pipelinesAside';
+import { RUST } from '../../../src/engine';
 
 const element = <T extends HTMLElement = HTMLElement>(selector: string): T => {
   const found = document.querySelector<T>(selector);
@@ -45,29 +46,42 @@ function bears(part: THREE.Object3D, mark: Mark): boolean {
   return Boolean(mesh.isMesh) && materialsOf(mesh).some((material) => material.userData.leaves);
 }
 
-/** Counts the draws of `parts` (a mesh's hooks run as it's drawn, in the frame and the shadow maps; their own hooks
- *  still run) until `stop`, which puts the hooks back and says the count. */
-function countDraws(parts: THREE.Object3D[]): { stop: () => number } {
-  let draws = 0;
-  const kept = parts.map((part) => [part.onBeforeRender, part.onBeforeShadow] as const);
-  parts.forEach((part, i) => {
-    const [render, shadow] = kept[i];
-    part.onBeforeRender = (...args) => {
-      draws++;
-      render.apply(part, args);
-    };
-    part.onBeforeShadow = (...args) => {
-      draws++;
-      shadow.apply(part, args);
-    };
-  });
-  const stop = (): number => {
-    parts.forEach((part, i) => {
-      [part.onBeforeRender, part.onBeforeShadow] = kept[i];
-    });
-    return draws;
-  };
-  return { stop };
+/** the frames drawn between two readings of the scene's triangles, and the most readings before it's held steady:
+ *  a cold boot's lobby still adds what its warm-ups bring, and the first click read more triangles without the
+ *  trees than with them */
+const SETTLE_FRAMES = 6;
+const SETTLE_READINGS = 30;
+/** the browser's own time let pass between two readings (ms) */
+const SETTLE_WAIT_MS = 100;
+
+/** Frames drawn until the scene's triangles read the same twice running, `SETTLE_FRAMES` and `SETTLE_WAIT_MS` of the
+ *  browser's time apart (or it gives up, `SETTLE_READINGS`). */
+async function steadyTriangles(lab: Lab): Promise<void> {
+  let last = -1;
+  for (let reading = 0; reading < SETTLE_READINGS; reading++) {
+    const drawing = lab.drawing;
+    lab.drawing = true;
+    try {
+      await lab.step(SETTLE_FRAMES);
+    } finally {
+      lab.drawing = drawing;
+    }
+    const now = frameTriangles();
+    if (now === last) return;
+    last = now;
+    // (the browser's time let pass: `lab.step` never yields, and what a warm-up brings comes in it)
+    await realWait(SETTLE_WAIT_MS);
+  }
+}
+
+/** The engine's triangles of the frame it drew last, its scene's and its shadow maps' (the lobby's camera may see no
+ *  tree, only their shadows), read once the frame holds steady (a click draws the still shadows again); its draws
+ *  not counted (the trees are batched, and a batch with one tree left in it is still a draw: 238 with them and 238
+ *  without). */
+function frameTriangles(): number {
+  const stats = RUST.bridge?.stats;
+  if (!stats) throw new Error('lab: dev: the engine is not drawing');
+  return stats.triangles + stats.shadowTriangles;
 }
 
 export async function devMode(lab: Lab, options: { canary: boolean }): Promise<Report> {
@@ -104,14 +118,14 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   await lab.showOn({ width: 1920, height: 1080, ratio: 1 });
   check(!document.querySelector('#dev-panel [data-act=close]'), 'redundant panel close button remained');
 
-  const parts = [...document.querySelectorAll<HTMLInputElement>('[data-part]')];
+  const parts = [...document.querySelectorAll<HTMLInputElement>('#dev-panel [data-part]')];
   check(parts.length >= 7 && parts.every((part) => part.checked), 'frame parts did not start included');
   check(element('[data-act=parts]').textContent === 'Uncheck all', 'all-checked button did not offer Uncheck all');
   await action('parts');
   check(parts.every((part) => !part.checked), 'Uncheck all did not remove every part');
   await action('parts');
   check(parts.every((part) => part.checked), 'Check all did not restore every part');
-  await click('[data-part="the hero"]');
+  await click('#dev-panel [data-part="the hero"]');
   check(!G.player.obj.visible, 'unchecking Hero did not hide it');
   await action('parts');
   check(G.player.obj.visible && parts.every((part) => part.checked), 'Check all did not restore the frame');
@@ -125,18 +139,18 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   const markedCosts: string[] = [];
   for (const [mark, key] of MARKED_PARTS) {
     const marked = bearing(mark);
-    const box = `[data-part="${key}"]`;
+    const box = `#dev-panel [data-part="${key}"]`;
     /** what bears the mark out of what's drawn, and the checkbox saying so */
     const allOut = (): boolean => marked.every((part) => part.layers.mask === 1 << HIDDEN_LAYER);
-    /** the screen pictured as `label`, and the draws of what bears the mark in its frame and its shadow maps */
+    /** the screen pictured as `label`, and the engine's triangles of its scene, settled a few frames after a click
+     *  (three's draw hooks, which this counted draws by, never run under the engine: it read 0 draws both ways) */
     const drawsOf = async (label: string): Promise<number> => {
-      const counter = countDraws(marked);
-      await lab.step(2);
+      await steadyTriangles(lab);
       moments.push(await lab.screen(label));
-      return counter.stop();
+      return frameTriangles();
     };
-    /** the checkbox clicked in the place shown: the marked draws with it and without (some with it where `seen`: the
-     *  crypt has no leaves), the programs unchanged */
+    /** the checkbox clicked in the place shown: the frame's triangles with it and without, fewer without (where
+     *  `seen`: the crypt has no leaves), the programs unchanged */
     const clickBox = async (label: string, seen: boolean): Promise<void> => {
       const on = markedShown(mark);
       const had = programs();
@@ -148,9 +162,10 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
       check(markedShown(mark) === !on && allOut() === on, `${what}: the checkbox did not ${on ? 'take out' : 'put back'} all of it`);
       check(element<HTMLInputElement>(box).checked === !on, `${what}: the checkbox did not show its state`);
       const [drawn, hidden] = on ? [before, after] : [after, before];
-      check((drawn > 0 || !seen) && hidden === 0, `${what}: its draws did not go with the checkbox (${drawn} with it, ${hidden} without)`);
+      const went = `(${drawn} with it, ${hidden} without)`;
+      check(drawn > hidden || !seen, `${what}: its triangles did not go with the checkbox ${went}`);
       check(programs() === had, `${what}: the checkbox made programs (${had} to ${programs()})`);
-      markedCosts.push(`${key} in ${place} ${drawn} draws a frame with it, ${hidden} without`);
+      markedCosts.push(`${key} in ${place}: the frame ${drawn} triangles with it, ${hidden} without`);
     };
     const startsDrawn = marked.length > 0 && markedShown(mark) && !marked.some((part) => part.layers.isEnabled(HIDDEN_LAYER));
     check(startsDrawn, `${key}: nothing marked, or it did not start drawn (${marked.length} marked)`);
@@ -174,7 +189,9 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   panelProfile.nextFrame = window.__labClock.realFrame;
   panelProfile.turns = { rounds: 1, frames: 1, settle: 1 };
   await action('profile');
-  const profiled = (): boolean => element('[data-act=profile]').textContent === 'Profile this spot';
+  // (its note is cleared as it starts and written as it ends: the button reads Profile this spot before its first
+  // progress too, and read by it, the times were read before any was taken)
+  const profiled = (): boolean => (element('.dv-prof-note').textContent ?? '') !== '';
   for (let i = 0; !profiled() && i < 600; i++) await realWait(20);
   check(profiled(), 'Profile this spot did not finish');
   const times = [...document.querySelectorAll<HTMLElement>('[data-ms]')];
@@ -236,7 +253,8 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   await lab.mouseTo({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
   for (let i = 0; i < 4; i++) { await lab.step(30); refreshPanel(); }
   check(getComputedStyle(profile).opacity === '1', 'hovered control did not return to full brightness');
-  check(getComputedStyle(element('[data-perf=off]')).opacity === '0.5', 'hover brightened neighbouring controls');
+  const neighbour = element('#dev-panel [data-perf=off]');
+  check(getComputedStyle(neighbour).opacity === '0.5', 'hover brightened neighbouring controls');
   check(element('.dv-perf-info') === statsNode && checksBefore.every((y, i) => Math.abs(y - parts[i].getBoundingClientRect().top) < 0.1)
     && Math.abs(box.top - profile.getBoundingClientRect().top) < 0.1, 'hover or live performance refresh shifted the layout');
   moments.push(await lab.screen('dev-hover-brightness', [], 'details:has(.dv-perf-info)'));
