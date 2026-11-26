@@ -241,6 +241,12 @@ unit-tested), and the guest goes back to the top-down view.
 
 `afk` (`page/coopAfk.ts`, judged by `node/coopAfk.mjs`, #847): the guest's page hidden from frame 60 to 240, as a player switching tabs hides it (`document.hidden` and its event), both pages noting input each frame otherwise: on the host's screen the guest's name tag, as drawn, a line taller (Idle over the name) within a second of it hiding and back within a second of it shown, never before; the guest's own tag says it too (away from frame 74, back from 251). `--canary` keeps the guest's state from ever saying it's away (`holdAwayWord`).
 
+`hidden-host` (#875) runs alone on a pair. It sets `document.hidden` on the host, parks animation frames, and
+holds the page's fallback timer. A real dedicated worker must tick the ordinary game update through the end
+of the countdown and spawn a foe. After the host is shown again, the guest must receive that wave's start.
+`--canary` holds the worker as well and must leave the countdown unchanged. Visibility and page-timer
+throttling are simulated, so this check completes without spending minutes in a real background tab.
+
 `chat` (`page/coopChat.ts`, judged by `node/coopChat.mjs`, unit-tested): the guest opens the chat with Enter and says a
 line holding markup; the host answers, and later says one of 320 characters; the guest says seven in a breath, then opens the
 box and presses Esc in it. Every line must show on the sayer's screen and its partner's within a second, under the
