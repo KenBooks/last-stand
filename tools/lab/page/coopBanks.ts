@@ -14,6 +14,24 @@ export interface BanksSeen {
   wave: number;
 }
 
+/** The Continue button as this game draws it: spinning (its choice on its way), pressable, and what it says. */
+export interface ContinueShown {
+  spinning: boolean;
+  pressable: boolean;
+  label: string;
+}
+
+/** The choice's Continue button now (`#decision .cont`). */
+export function coopContinueShown(): ContinueShown {
+  const button = document.querySelector<HTMLButtonElement>('#decision .cont');
+  const shown = !!button && !document.getElementById('decision')!.classList.contains('hidden');
+  return {
+    spinning: shown && button!.classList.contains('sending'),
+    pressable: shown && !button!.disabled,
+    label: button?.querySelector('.cont-label')?.textContent ?? '',
+  };
+}
+
 /** What this game shows of the party's choice now. */
 export function coopBanksSeen(): BanksSeen {
   const partners = G.players.filter((player) => !player.local && !player.away);

@@ -69,7 +69,7 @@ export {
   coopWorldAngle,
 } from './coopEnd';
 import { togetherNow, type Together } from './coopEnds';
-export { coopBanksSeen } from './coopBanks';
+export { coopBanksSeen, coopContinueShown } from './coopBanks';
 export { coopCode, coopFall, coopLeaveAgain, coopQuitCanary } from './coopEnds';
 
 /** Let the host's worker drive the fight while its animation frames and its page timer are held. */
@@ -925,21 +925,38 @@ const wire = {
   channels: new Set<LabChannel>(),
   /** the canary's: this page's look messages dropped as sent (`coopPickLook`'s `quiet`) */
   dropLooks: false,
-  /** this page's Bank dropped on its way to the host: every one (the canary's) or the first alone (`coopDropBanks`) */
-  dropBanks: false as false | 'every' | 'first',
+  /** this page's choices dropped on their way to the host, by kind (`bank`, `vote`): every one or the first alone
+   *  (`coopDropChoice`) */
+  dropChoices: new Map<Choice, Lose>(),
 };
 
-/** `banks`: this guest's Bank lost on its way to the host, as a link may lose it: every one sent (`every`, the
- *  canary's), the first alone (`first`, said again after it), or none. */
-export function coopDropBanks(_lab: Lab, { lose }: { lose: false | 'every' | 'first' }): void {
-  wire.dropBanks = lose;
+/** A guest's choice after a wave as it goes to the host (`sendControl` in main.ts): Bank, or Continue. */
+type Choice = 'bank' | 'vote';
+/** How many of a kind of message the link loses: every one sent, or the first alone (said again after it). */
+type Lose = 'every' | 'first';
+
+/** `banks`: this guest's Bank or Continue lost on its way to the host, as a link may lose it (`lose` false: none). */
+export function coopDropChoice(_lab: Lab, { choice, lose }: { choice: Choice; lose: Lose | false }): void {
+  if (lose) wire.dropChoices.set(choice, lose);
+  else wire.dropChoices.delete(choice);
 }
 
-/** A guest's Bank on its way to the host (`sendControl({ t: 'bank' })` in main.ts). */
-const isBank = (data: unknown): boolean => {
+/** The choice a packet carries to the host, if it carries one. */
+function choiceOf(data: unknown): Choice | null {
   const packet = data as { ch?: string; data?: { t?: string } } | null;
-  return packet?.ch === 'ctl' && packet.data?.t === 'bank';
-};
+  if (packet?.ch !== 'ctl') return null;
+  const kind = packet.data?.t;
+  return kind === 'bank' || kind === 'vote' ? kind : null;
+}
+
+/** Whether the link loses this packet: a choice it's told to lose (the first alone is lost once). */
+function lostChoice(data: unknown): boolean {
+  const choice = choiceOf(data);
+  const lose = choice && wire.dropChoices.get(choice);
+  if (!choice || !lose) return false;
+  if (lose === 'first') wire.dropChoices.delete(choice);
+  return true;
+}
 
 function wireTime(): number {
   return window.__labClock.t - wire.start;
@@ -961,10 +978,7 @@ class LabChannel {
 
   postMessage(data: unknown): void {
     if (wire.dropLooks && (data as Packet | null)?.ch === 'look') return;
-    if (wire.dropBanks && isBank(data)) {
-      if (wire.dropBanks === 'first') wire.dropBanks = false;
-      return;
-    }
+    if (lostChoice(data)) return;
     wire.outbox.push({ at: wireTime(), name: this.name, data: structuredClone(data) });
   }
 

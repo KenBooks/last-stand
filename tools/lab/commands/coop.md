@@ -214,8 +214,11 @@ wave as a whole party makes it, every player banking (from play, three at wave 3
 instead went into spectate mode"). Each round is a run of its own cleared to the choice: all press B in one frame;
 the host first, then each guest half a second apart; the guests first, the host last; all at once after a wave
 continued (a count left from the wave before); and all at once with the last guest's first Bank lost on its way to
-the host (main's host counted him in the run for good, every game left waiting). Every game must go back to the
-lobby by itself; one that doesn't is said with what each game shows (its own player, the partners it shows
+the host (main's host counted him in the run for good, every game left waiting); and two that continue a wave first
+with the last guest's Continue lost on the way: the first alone (main's next wave never came), and every one, whose
+button must spin as it's sent and come back to be pressed once given up (main showed no spinner), pressed again then
+(`--pictures`: the guest's screen spinning and given back, `out/coop/continue-*-guest.png`). Every game must go back
+to the lobby by itself; one that doesn't is said with what each game shows (its own player, the partners it shows
 banked). `--canary` loses every guest's every Bank on the way to the host, which must be caught. About 70 s.
 
 `--scenarios ends` (alone, a pair's; `node/coopEnds.mjs`, `page/coopEnds.ts`): the ways a run ends that
