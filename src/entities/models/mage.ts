@@ -19,7 +19,7 @@ import type { BellCloth } from './sleeve';
 import { LegIK } from './ik';
 import { buildBoot } from './boot';
 import { fitArm } from './armIK';
-import { SKIRT_TUCK, floorUnder, footOutOfFloor, onFloor, restHands, satBy, sitPose } from './sit';
+import { SKIRT_TUCK, floorUnder, footOutOfFloor, freeHands, onFloor, restHands, satBy, sitPose } from './sit';
 import { bodyShape } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { onTunic, tunicFront, tunicCutSteps, armholeEdge, neckHem, necklineBack, outOfTunic, tunicNormal, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
@@ -1401,9 +1401,11 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
           // two edges, their strands across the whole of it)
           if (both) { j.spine.rotation.x += BOTH.lean; j.neck.rotation.x += -BOTH.lean * BOTH.chin; bothHands(BOTH.reach - kick * (fp ? 0.02 : 0.08)); }
         }
-      } else if (a.name === 'drink' && !fp) {
+      } else if (a.name === 'drink' && (!fp || a.ale)) {
+        // (the tavern's ale through the eyes too, held up in the view: left out there, he drank from no mug, from
+        // Victor's review of the keeper, "no mug in 1st person", `lab tavern --class mage`)
         // the healing draught: taken from the belt and drunk (models/flask.ts)
-        flaskWant = drink(j, k, mouth, handL, flask, fp ? undefined : body); drinkLift = drinkUp(k);
+        flaskWant = drink(j, k, mouth, handL, flask, fp ? undefined : body, a.ale, fp); drinkLift = drinkUp(k, a.ale);
       } else if (a.name === 'summon' && !fp) {
         const w = ramp(k, 0, 0.15), rise = ramp(k, 0, 0.45) * (1 - ramp(k, 0.5, 0.62)), pull = ramp(k, 0.5, 0.62);
         j.shoulderL.rotation.x = lerp(j.shoulderL.rotation.x, curve(SU_ARM_X, k), w); j.shoulderL.rotation.z = lerp(j.shoulderL.rotation.z, curve(SU_ARM_Z, k), w);
@@ -1481,7 +1483,8 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
     // laid down)
     st.look?.();
     const staffDown = st.sit && onFloor(st.sit) ? satBy(st.sit) : 0;
-    restHands(j, st.sit, [0]);
+    // (his drinking hand let go of his thigh as the mug comes out, last frame's: rested, he drank sat from nothing)
+    restHands(j, st.sit, [0], undefined, 0, undefined, 1, freeHands(0, flaskOut));
     body.legs = floorW * floorW * (3 - 2 * floorW);
     // (the staff hand to his knee once he's well down: from the start, his fist round the staff as it went, the wrist
     // bent 19 degrees past its range)

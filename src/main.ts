@@ -305,7 +305,7 @@ async function boot() {
   // (a talk with the village's folk: he looks up from his book while it's open, and the village forgets it as it ends)
   // (into the library: Brother Hollis's portrait for his talk's card made as the hero comes in, behind the lobby a piece at a
   // time, so his face is there when he's talked to; the guide's are made only once it's opened)
-  onRoomChange((room) => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); showMerchant(false); setVillageMap(false); closedFrom(); syncAway(); if (room === 'library') void portrait('scholar'); if (room === 'merchant') void portrait('odo'); });
+  onRoomChange((room) => { showVillageCard(null); openPanels(null); openCoop(false); closeTalk(); showMerchant(false); setVillageMap(false); closedFrom(); syncAway(); if (room === 'library') void portrait('scholar'); if (room === 'merchant') void portrait('odo'); if (room === 'tavern') void portrait('bertram'); });
   initVillageCard((o) => closedFrom(o), (id) => { G.arena.setBiome(id); sendLobbyChoice(); });
   // (a player alone at the rack is walked to the campfire, where a party is gathered)
   initPvp(() => { const fire = villageObject('campfire'); if (fire) goUse(fire); }, biomeFirst(whenWarm(['fight'], startDuel, READYING.fight), startDuel, () => setupNow().ground));

@@ -333,9 +333,13 @@ export async function talk(lab: Lab, options: TalkOptions): Promise<Report> {
     await lab.until(() => G.arena.room === 'merchant', 600, "Odo's shop never opened");
     await lab.step(15);
     faces.push(faceChecked('odo', 'Odo'));
+    enterRoom('tavern');
+    await lab.until(() => G.arena.room === 'tavern', 600, 'the tavern never opened');
+    await lab.step(15);
+    faces.push(faceChecked('bertram', 'Bertram'));
     for (const f of faces) { lines.push(f.line); problems.push(...f.problems); }
     if (options.canary) {
-      for (const [id, name] of [['scholar', 'Brother Hollis'], ['odo', 'Odo']] as const) {
+      for (const [id, name] of [['scholar', 'Brother Hollis'], ['odo', 'Odo'], ['bertram', 'Bertram']] as const) {
         const c = faceCanary(id, name);
         lines.push(c.line);
         problems.push(...c.problems);

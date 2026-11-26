@@ -58,6 +58,10 @@ export {
 export { coopChoirCast, coopChoirSamples, coopChoirSetup, coopChoirSpawn } from './coopChoir';
 export { coopPointAtSeat, coopSeatsSeen, coopSitOn, coopStandBySeat, coopStandUp } from './coopSeats';
 export {
+  coopTavernAsk, coopTavernDrink, coopTavernLeave, coopTavernMug, coopTavernMute, coopTavernPutDown, coopTavernSeen, coopTavernStand,
+  coopTavernStandAt, coopTavernTake,
+} from './coopTavern';
+export {
   coopBarBack, coopBarFit, coopBarScreens, coopCanvasCover, coopClick, coopDrag, coopDragEnd, coopFloor, coopHold,
   coopOutCanary, coopOutSeen, coopOutWatch, coopSummaryCanary, coopTapBar, coopThrowItem, coopTwist, coopWatching,
   coopWorldAngle,

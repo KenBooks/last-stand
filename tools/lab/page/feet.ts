@@ -165,7 +165,7 @@ function soleAgainst(ankle: THREE.Object3D, shape: FootShape, level: number): So
 /** How far a planted sole slipped since `last` (its points a frame before, m): the least any of its points on the
  *  ground moved. Rolling over its heel or toes, or turning on its ball, one point stays where it is; sliding, none
  *  does. (By its ankle's move, a foot turning on its ball read as 7 cm of slide.) */
-function slipOf(points: THREE.Vector3[], last: THREE.Vector3[]): number {
+export function slipOf(points: THREE.Vector3[], last: THREE.Vector3[]): number {
   if (last.length !== points.length) return 0;
   const heights = points.map((point) => point.y - groundHeight(point.x, point.z));
   const lowest = Math.min(...heights);

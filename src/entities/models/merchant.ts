@@ -108,7 +108,7 @@ const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
 /** A surface of rows of points (each row the same count, its first and last points the same for a closed one), its
  *  faces wound out when each row runs the way the right hand's fingers curl round the rows' direction (bottom to top). */
-function rowsSurface(rows: THREE.Vector3[][], rep = 1): THREE.BufferGeometry {
+export function rowsSurface(rows: THREE.Vector3[][], rep = 1): THREE.BufferGeometry {
   const n = rows[0].length, pos: number[] = [], uv: number[] = [], idx: number[] = [];
   const down = new Array<number>(n).fill(0);
   rows.forEach((row, j) => {
@@ -133,18 +133,18 @@ function rowsSurface(rows: THREE.Vector3[][], rep = 1): THREE.BufferGeometry {
 }
 
 /** a superellipse's point at angle `a` (0 ahead, +x at a quarter turn), `w` across and `d` deep, its sides squared by `p` */
-function oval(a: number, w: number, d: number, p = 2.4): [number, number] {
+export function oval(a: number, w: number, d: number, p = 2.4): [number, number] {
   const s = Math.sin(a), c = Math.cos(a);
   return [w * Math.sign(s) * Math.abs(s) ** (2 / p), d * Math.sign(c) * Math.abs(c) ** (2 / p)];
 }
 
 /** A tube round a curve through `pts` (a cord, a seam), `r` thick. */
-const cord = (pts: THREE.Vector3[], r: number, closed = false, segs = 48) =>
+export const cord = (pts: THREE.Vector3[], r: number, closed = false, segs = 48) =>
   new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, closed), segs, r, 6, closed);
 
 /** A sleeve's piece on a joint (hanging along -y): a lathe through `profile` ([radius, y], bottom to top), with soft
  *  folds round it. */
-function sleeve(profile: [number, number][], folds: number, seed: number): THREE.BufferGeometry {
+export function sleeve(profile: [number, number][], folds: number, seed: number): THREE.BufferGeometry {
   const ph = mulberry(seed)() * 6;
   const g = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 24);
   const p = g.attributes.position;
@@ -158,7 +158,7 @@ function sleeve(profile: [number, number][], folds: number, seed: number): THREE
 }
 
 /** A geometry made in the face's frame (mm) moved into the head group's (m). */
-function inHead(g: THREE.BufferGeometry): THREE.BufferGeometry {
+export function inHead(g: THREE.BufferGeometry): THREE.BufferGeometry {
   const p = g.attributes.position, v = new THREE.Vector3();
   for (let i = 0; i < p.count; i++) {
     toGroup(p.getX(i), p.getY(i), p.getZ(i), v);

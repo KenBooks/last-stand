@@ -31,6 +31,7 @@ import { LAMP_SOFT } from '../core/lamps';
 import { showStanding, standHeroes } from './hall';
 import { dropNameAt } from './groundItems';
 import { leaveSeatsTo, useWhileSatBy } from '../entities/sitting';
+import { keyTaken, objectsNearBy, objectsPointedBy, pointClaimed } from './keyTakers';
 import type { Seat } from '../world/seats';
 import { isWarm } from './warm';
 import { flash, release, type LightSlot } from '../fx/lights';
@@ -155,6 +156,11 @@ export function initVillage(h: VillageHooks): void {
   hooks = h;
   leaveSeatsTo(fireLeftToItsObject);
   useWhileSatBy(usedWhileSat);
+  objectsPointedBy((x, y) => !!objectAt(x, y));
+  objectsNearBy(() => {
+    const o = hooks.active() ? nearest() : null;
+    return o ? distanceTo(o) : Infinity;
+  });
   for (const o of OBJECTS) {
     const at = (): { x: number; y: number; z: number } | null => {
       if (!named(o)) return null;
@@ -226,6 +232,8 @@ export function fireLeftToItsObject(seat: Seat): boolean {
  *  together from its logs): not a door, held to use, which would take him in sat. */
 export function usedWhileSat(): boolean {
   if (!hooks.active()) return false;
+  // (the tavern's mug taken up from a bar stool, and his ale chosen there: he stays sat)
+  if (keyTaken()) return true;
   const o = nearest();
   return !!o && !usedByHolding(o);
 }
@@ -344,7 +352,8 @@ function bindPointer(): void {
     if (e.button !== 0) return;
     // (a thrown item's name over an object is the floor's to take: both hear the press, and the object, used, opened
     // over the name before the press lifted, so the item was never picked up)
-    const o = dropNameAt(e.clientX, e.clientY) ? null : over(e);
+    // (nor what another claims there first: the tavern's mug before Bertram behind it)
+    const o = dropNameAt(e.clientX, e.clientY) || pointClaimed(e.clientX, e.clientY) ? null : over(e);
     if (!o) return;
     e.preventDefault();
     e.stopPropagation();
@@ -390,7 +399,8 @@ export function updateVillage(dt = 0): void {
   }
   if (!p.walkTo) going = null;
   // (none named or used while E is the sit's: sat on the campfire's logs, it offered Play together over him)
-  near = p.sitting.takesKey ? null : nearest();
+  // (nor while E is another's, the tavern's mug the pointer is on: `keyTaken`)
+  near = p.sitting.takesKey || keyTaken() ? null : nearest();
   // (what it opened put away by its own button: E opens it again where he stands, as he hadn't walked off it, "when I
   // press got it, I cannot press E again until I move away")
   if (opened && !hooks.shows(opened)) opened = null;

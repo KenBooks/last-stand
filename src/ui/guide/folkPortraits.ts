@@ -8,9 +8,11 @@
 import * as THREE from 'three';
 import { scholarBook, scholarSteps } from '../../entities/models/scholar';
 import { odoShop, odoSteps } from '../../entities/models/merchant';
+import { keeperSteps, KEEPER_MADE } from '../../entities/models/keeper';
+import { KEEPER_PORTRAIT } from '../../data/tavern';
 
-/** The folk pictured: the library's Brother Hollis, Odo the merchant. */
-export type FolkId = 'scholar' | 'odo';
+/** The folk pictured: the library's Brother Hollis, Odo the merchant, Bertram the tavern's keeper. */
+export type FolkId = 'scholar' | 'odo' | 'bertram';
 
 /** One of the folk, built for his picture: his root, his head's joint and his eyes, and his pose for a step of `dt`
  *  looking at `at` (his root's parent's frame: the picture's scene). */
@@ -56,6 +58,24 @@ export const FOLK: Record<FolkId, Folk> = {
       })();
     },
     backdrop: { glow: ['#5a4a26', '#22180c', '#0a0806'], shelf: (x) => `rgba(${120 + ((x * 11) % 70)}, ${90 + ((x * 5) % 50)}, ${50 + ((x * 3) % 40)}, .14)` },
+  },
+  // (built once his room has made his head and face, posed stood at rest looking at the camera: his neck and head as
+  // `KEEPER_PORTRAIT` holds them, the staging squaring them to it; the bar's bottles behind him, green and amber)
+  bertram: {
+    sitter() {
+      if (!KEEPER_MADE.head) return null;
+      return (function* () {
+        const b = yield* keeperSteps();
+        b.placed();
+        const look = (dt: number, at: THREE.Vector3) => {
+          b.pose(Math.max(dt, 1e-3), { speed: 0, bend: 0, crouch: 0, look: at, left: null, right: null });
+          b.joints.neck.rotation.x += KEEPER_PORTRAIT.neck.pitch;
+          b.joints.head.rotation.x += KEEPER_PORTRAIT.head.pitch;
+        };
+        return { root: b.root, head: b.joints.head, eyes: eyesOf(b.root), look };
+      })();
+    },
+    backdrop: { glow: ['#6a4a1c', '#26180a', '#0a0705'], shelf: (x) => (x % 3 ? `rgba(${40 + ((x * 7) % 30)}, ${80 + ((x * 11) % 50)}, 40, .16)` : `rgba(${140 + ((x * 13) % 60)}, ${90 + ((x * 5) % 40)}, 30, .16)`) },
   },
 };
 

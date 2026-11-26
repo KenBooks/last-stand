@@ -146,6 +146,12 @@ const clamp1 = (v: number) => Math.max(-1, Math.min(1, v));
 const _foot = new THREE.Vector3(), _up = new THREE.Vector3(), _on = new THREE.Vector3(), _now = new THREE.Vector3();
 const _pole = new THREE.Vector3(), _q = new THREE.Quaternion(), _bone = new THREE.Quaternion();
 const _shoulderWas = new THREE.Quaternion(), _elbowWas = new THREE.Quaternion();
+/** a side's arm as the pose before the rest had it (a drink's: its shoulder, elbow and hand), for a hand left free */
+const _freeArm = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+/** no hand left free */
+const NONE_FREE: readonly number[] = [0, 0];
+/** whether a hand a drink takes up sat is let go of its thigh (`restHands`' `free`): off, `lab tavern --canary`'s plant */
+export const SIT_FREE = { drink: true };
 
 /**
  * The hands on `sides` (0 the left, 1 the right) brought to rest on their thighs as he sits, palms down, the elbows
@@ -153,10 +159,13 @@ const _shoulderWas = new THREE.Quaternion(), _elbowWas = new THREE.Quaternion();
  * his face). Call after `sitPose` and the look (before it, a glance carried the shoulders round and the hands with them,
  * 8 cm over the knee); the arms' IK (`fitArm`) keeps them within their ranges after. `lifted`: the sides lifted over
  * the rising thighs on a seat (all of them by default; not a hand that sets a weapon down after).
- * `floorLift` scales the arc for a hand already lowered beside the legs.
+ * `floorLift` scales the arc for a hand already lowered beside the legs. `free`: each side's share left as the pose
+ * before had it (0 the left, 1 the right): a hand taking up a drink sat, eased off the thigh as the drink begins and back
+ * as it ends (rested whole, the ale's mug stayed in his lap and he drank from nothing, Kenneth's round 4).
  */
 export function restHands(
   j: Joints, s: SitState | null | undefined, sides: readonly number[], turn?: RestTurn, rise = 0, lifted = sides, floorLift = 1,
+  free: readonly number[] = NONE_FREE,
 ): void {
   if (!s || s.w <= 0) return;
   const floor = onFloor(s), [along, over, out] = floor ? SIT_POSE.knee : SIT_POSE.rest;
@@ -165,6 +174,11 @@ export function restHands(
   for (const side of sides) {
     const left = side === 0, sign = left ? 1 : -1;
     const thigh = left ? j.thighL : j.thighR, hand = left ? j.handL : j.handR;
+    const freed = SIT_FREE.drink ? free[side] ?? 0 : 0;
+    if (freed >= 1) continue;
+    _freeArm[0].copy(left ? j.shoulderL.quaternion : j.shoulderR.quaternion);
+    _freeArm[1].copy(left ? j.elbowL.quaternion : j.elbowR.quaternion);
+    _freeArm[2].copy(hand.quaternion);
     // (on the floor, placed from the knee: along the thigh past it, the knees up, the hands were held in the air before
     // the chest)
     const further = turn?.along?.[side] ?? 0;
@@ -204,6 +218,7 @@ export function restHands(
       hand.rotation.y += sign * turn.roll[side] * w;
       hand.rotation.x += turn.bend[side] * w;
       if (floor) hand.rotation.x += SIT_POSE.dangle * w;
+      leftFree(j, side, freed);
       continue;
     }
     // (an empty hand laid on the bone it rests on: its fingers along it, its palm onto it. Left with the arm's turn as
@@ -217,7 +232,25 @@ export function restHands(
     // to the little finger's side at once, an arm held at its stops all the while he sat; a turned hand holds what it
     // holds, which a clamp would turn in the world: the warrior's shield went 50 cm with no hand on it)
     clampWrist(hand.quaternion, left, hand.quaternion, undefined, WRIST_INSIDE);
+    leftFree(j, side, freed);
   }
+}
+
+/** A pair of free shares for `restHands`, `side` free by `share` (0 the left, 1 the right): kept, not made a frame. */
+export function freeHands(side: number, share: number): readonly number[] {
+  _freeShares[0] = side === 0 ? share : 0;
+  _freeShares[1] = side === 1 ? share : 0;
+  return _freeShares;
+}
+const _freeShares = [0, 0];
+
+/** Side `side`'s arm given back to the pose before the rest by `freed` (`restHands`' `free`, `_freeArm`). */
+function leftFree(j: Joints, side: number, freed: number): void {
+  if (freed <= 0) return;
+  const left = side === 0;
+  (left ? j.shoulderL : j.shoulderR).quaternion.slerp(_freeArm[0], freed);
+  (left ? j.elbowL : j.elbowR).quaternion.slerp(_freeArm[1], freed);
+  (left ? j.handL : j.handR).quaternion.slerp(_freeArm[2], freed);
 }
 
 /** The floor's height under `object` in its own space, a centimetre up (for cloth kept over it: `Skirt.keepAbove`). */

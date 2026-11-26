@@ -10,6 +10,9 @@ import {
   writing,
 } from '../rooms';
 import { lengthSeat } from '../seats';
+import { keeperTalk, tavernKeeper } from '../tavernKeeper';
+import { TOP_THINGS } from '../tavernTables';
+import { BAR_STOOL_HIGH, BAR_STOOL_RUNG, BAR_STOOL_X, BAR_STOOLS } from '../../data/tavern';
 
 /** Two axes crossed behind a round shield on a wall (its frame, facing +z), centred at (x, y). */
 function crossedAxes(g: THREE.Object3D, M: Mats, x: number, y: number): void {
@@ -113,10 +116,22 @@ export function build(group: THREE.Group): Room {
   for (let z = barFrom + 0.4; z < barTo; z += 0.75) box(g, 0.04, 0.85, 0.08, barX - 0.29, 0.08, z, M.timber);
   for (let z = barFrom + 0.3; z < barTo - 0.2; z += 0.8) obstacles.push({ x: barX, z, r: 0.42, h: 1.07 });
   obstacles.push({ x: barX, z: barTo - 0.2, r: 0.42, h: 1.07 });
-  for (const [z, metal] of [[-1.9, false], [-1.2, true], [-0.1, false], [0.6, false]] as const) tankard(g, M, barX - 0.1, 1.07, z, metal);
-  // (no seats: at 0.72 m his feet reached the floor only with his legs near straight, as a man stood, from review; a
-  // bar stool's sit wants a rung for his feet)
-  for (const z of [-2.2, -1.2, -0.2, 0.7]) stool(g, T, barX - 0.75, z, 0.72);
+  // (the keeper's place clear: his cask stands at his left, his mug slides across before him)
+  for (const [z, metal] of [[-1.9, false], [-1.4, true], [0.25, false], [0.6, false]] as const) tankard(g, M, barX - 0.1, 1.07, z, metal);
+  // (seats now, perched on at the bar, a ring of a rung round their legs: at 0.72 m his feet reached the floor only with
+  // his legs near straight, as a man stood, from review; lower, his knees bend as a man's on a high stool, "the hero can
+  // sit on the bar stools", Kenneth's round 3)
+  for (const z of BAR_STOOLS) {
+    const barStool = stool(g, T, BAR_STOOL_X, z, BAR_STOOL_HIGH);
+    const rung = new THREE.Mesh(new THREE.TorusGeometry(0.118, 0.011, 6, 20).rotateX(Math.PI / 2), T.timber);
+    rung.position.set(BAR_STOOL_X, BAR_STOOL_RUNG, z);
+    rung.castShadow = true;
+    barStool.group.add(rung);
+    // (sat on facing the bar, whichever side he comes from: his back to the bar, he looked out at the room, "should sit
+    // the other way, facing the counter", Kenneth's round 4)
+    // (come close to to sit, as the bar's keep-out stands between it and the bar)
+    b.seats.push({ ...stoolSeatOf(barStool, BAR_STOOL_X, z), faces: { x: 1, z: 0 }, near: 0.06 });
+  }
   const east = onWall(g, id, 'east');
   const bottles: THREE.Matrix4[] = [], tints: THREE.Color[] = [];
   const glassTints = [0x2a5a2a, 0x6a2a14, 0x1a3a5a, 0x8a6a2a, 0x3a1a3a];
@@ -159,6 +174,9 @@ export function build(group: THREE.Group): Room {
   candle(g, M, px + 0.45, 0.76, pz - 0.3, 0.18, CANDLE);
   tankard(g, M, px - 0.5, 0.76, pz + 0.2);
   tankard(g, M, px - 0.2, 0.76, pz - 0.5, true);
+  // (what stands on the tables, kept off by a mug a hero puts down: world/tavernTables.ts)
+  TOP_THINGS.length = 0;
+  TOP_THINGS.push({ x: px + 0.45, z: pz - 0.3 }, { x: px - 0.5, z: pz + 0.2 }, { x: px - 0.2, z: pz - 0.5 });
   // --- a long table with benches, west by the front ---
   const [lx, lz] = [-hx + 1.6, 1.4];
   inn(lx, lz, 0.9, 2.2);
@@ -170,6 +188,7 @@ export function build(group: THREE.Group): Room {
   }
   candle(g, M, lx, 0.76, lz - 0.2, 0.2, CANDLE);
   for (const [dx, dz] of [[-0.25, 0.6], [0.2, -0.7], [0.25, 0.3]]) tankard(g, M, lx + dx, 0.76, lz + dz, dz < 0);
+  TOP_THINGS.push({ x: lx, z: lz - 0.2 }, ...[[-0.25, 0.6], [0.2, -0.7], [0.25, 0.3]].map(([dx, dz]) => ({ x: lx + dx, z: lz + dz })));
   // --- a small table in the middle ---
   inn(0.3, -0.2, 0.9, 0.9, true);
   for (const a of [0.6, 2.2, 3.9]) {
@@ -177,6 +196,7 @@ export function build(group: THREE.Group): Room {
     b.seats.push(stoolSeatOf(stool(g, T, sx, sz), sx, sz));
   }
   candle(g, M, 0.3, 0.76, -0.2, 0.16, CANDLE);
+  TOP_THINGS.push({ x: 0.3, z: -0.2 });
   // --- barrels by the door, the party board beside it ---
   barrel(g, M, -hx + 0.5, 0, hz - 0.5);
   barrel(g, M, -hx + 1.15, 0, hz - 0.45);
@@ -206,7 +226,12 @@ export function build(group: THREE.Group): Room {
   // (under the ridge beam and hung from it, as the house of records' is: at 0.4 off it, the beam ran through its wheel)
   chandelier(g, M, -0.4, high - CHANDELIER_DROP, 0.05, high - RIDGE_UNDER);
   rug(g, M, 0.2, 2.2, 2.0, 1.4, ['#3a2414', '#a07030', '#5a1a14'], 77);
-  return finish(id, b);
+  // (its keeper behind the bar, his cask, his mugs and his ale: world/tavernKeeper.ts)
+  const keep = tavernKeeper(b, () => keeperTalk.talking);
+  return finish(id, b, {
+    *seatFolk() { yield* keep.seatSteps(); },
+    keeper: keep.keeper, serveAle: keep.serve, always: keep.always, tavern: () => keep,
+  });
 }
 
 /** The map spread on the party's table: the village, its two ways out, the roads, inked on parchment. */

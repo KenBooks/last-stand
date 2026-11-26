@@ -1956,7 +1956,7 @@ function* dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, 
 }
 
 /** Geometries merged into one (their positions, normals, uvs and colours). */
-function mergeAll(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
+export function mergeAll(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   const pos: number[] = [], nor: number[] = [], uv: number[] = [], col: number[] = [], idx: number[] = [];
   let base = 0;
   for (const g of geos) {

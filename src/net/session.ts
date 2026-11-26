@@ -40,6 +40,7 @@ import { lookOf as heroLookOf, type HeroLook } from '../data/heroLooks';
 import { buildableLook, readyLook } from '../game/looks';
 
 import { PROTOCOL } from './protocol';
+import { setTavernLink } from './tavernLink';
 export { PROTOCOL };
 /** how often a public room's host sends its card again, besides as it changes (ms: the relay drops one not sent within
  *  75 s, `server/relay/rooms.mjs`) */
@@ -1117,6 +1118,22 @@ export function readyingOf(p: Player): number | null {
 }
 
 /** A guest's choice in the run, for the host. */
+/** A tavern message sent to `to`, or to every game. */
+export function sendTavern(m: Record<string, unknown>, to?: string): void { send('ctl', m, to); }
+/** This game's own id in the room ('' alone), and the host's. */
+export const selfId = (): string => link?.self ?? '';
+export const hostOf = (): string => session.hostId;
+/** The partners' players standing in the tavern now, by id. */
+export function partnersInTavern(): { id: string; player: Player }[] {
+  const tavern = ROOM_IDS.indexOf('tavern') + 1, out: { id: string; player: Player }[] = [];
+  for (const peer of session.peers.values()) if (peer.player && !peer.inRun && peer.room === tavern) out.push({ id: peer.id, player: peer.player });
+  return out;
+}
+/** A partner's player by id. */
+export const partnerPlayer = (id: string): Player | null => session.peers.get(id)?.player ?? null;
+// (the keeper's way to the party: net/tavernLink.ts)
+setTavernLink({ send: sendTavern, self: selfId, host: hostOf, inTavern: partnersInTavern, partner: partnerPlayer });
+
 export function sendControl(m: Record<string, unknown>): void { if (session.hostId) send('ctl', m, session.hostId); }
 
 /** The partners in the room, whether or not they're in the arena with us. */

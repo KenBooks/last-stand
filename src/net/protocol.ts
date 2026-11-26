@@ -22,6 +22,7 @@ const PARTS = [
   'rarity-1: the rarity of an item can be Ultimate, a tier above Ascendant (data/items.ts)',
   'rootmother-3: the Rootmother vines, burrow, heart, pods and great pods, thorns, cracks, eruptions, spores, thrown branches and their bramble, root cage and its great root, enemy fx (entities/bosses/rootmother.ts)',
   'sit-1: how far a hero is sat on a seat, StateMsg sw, sh, sf, sb, sa (entities/sitting.ts)',
+  'tavern-1: the tavern\'s keeper and mugs, ctl tv (the host\'s ledger and keeper) and tv? (a guest\'s asks) (world/tavernKeeper.ts)',
   'ward-1: the Hedgeward rising, struck and breaking, the enemy fx `ward` (combat/skills/hedgeward.ts)',
 ];
 

@@ -327,6 +327,11 @@ function drawEdge(gl: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget, look
   u.uColor.value.copy(look.color);
   u.uStrength.value = look.strength;
   const within = boxOnCanvas(look.targets, glow + BOX_MARGIN);
+  // (a thing wholly off the canvas has a box of no size at its edge, which WebGPU throws on as a scissor, "Scissor rect
+  // (x: 1921, y: 959, width: 0, height: 0) is not contained in the render area", from play on #704, a mug of the tavern
+  // outlined off the screen's edge: kept to a pixel inside the canvas, where the mask is empty and the edge draws
+  // nothing, the pass still run as it may be the one that clears the canvas)
+  if (within && (within.z <= 0 || within.w <= 0)) area.set(0, 0, 1, 1);
   const autoClear = gl.autoClear;
   // (kept as `drawOverFrame` set it: this pass may be the one that clears the canvas)
   gl.setRenderTarget(null);

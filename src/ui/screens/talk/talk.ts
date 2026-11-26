@@ -6,12 +6,13 @@
 // was asked, and how many times they've talked, is kept in the hero's profile (`Profile.talk`): a first meeting and
 // a visit after start differently, and a node asked again may be answered otherwise. It's stepped by the game's frame
 // (`stepTalk`), so a harness's fixed clock reveals it as a player's does.
-import { said, SPEAKERS, type Speaker, type TalkContext, type TalkReply } from '../../../data/talk';
+import { said, SPEAKERS, type Speaker, type TalkAct, type TalkContext, type TalkReply } from '../../../data/talk';
 import { sfx } from '../../../core/audio';
 import { wasPressed } from '../../../core/input';
 import { G } from '../../../state';
 import { saveProfile } from '../../../loot/profile';
 import { scholarTalk } from '../../../world/houses/library';
+import { keeperTalk } from '../../../world/tavernKeeper';
 import { closedFrom, villageObject } from '../../../game/village';
 import { screen } from '../../screenKit';
 import { dialog } from '../../dialogs';
@@ -39,13 +40,13 @@ let wait = 0;
 /** the node's replies offered now, and which has the keys' focus */
 let replies: TalkReply[] = [];
 let focus = 0;
-/** told as the talk opens (true) and ends (false) */
-let changed: (on: boolean) => void = () => undefined;
+/** told as a talk with `id` opens (true) and ends (false) */
+let changed: (on: boolean, id: string) => void = () => undefined;
 /** told as each of his lines shows (the speaker's model nods to it) */
 let spoke: () => void = () => undefined;
 
 /** The card's handlers bound: `onChange` told as a talk opens and ends, `onLine` as each line he says shows. */
-function initTalk(onChange: (on: boolean) => void, onLine: () => void = () => undefined): void {
+function initTalk(onChange: (on: boolean, id: string) => void, onLine: () => void = () => undefined): void {
   changed = onChange;
   spoke = onLine;
   const list = $('#talk .tk-replies');
@@ -88,7 +89,7 @@ export function openTalk(id: string): void {
   face().show(speaker.portrait ?? null);
   card.classList.remove('hidden');
   go(speaker.start(context));
-  changed(true);
+  changed(true, speaker.id);
 }
 
 /** his portrait in the oval (ui/folkFace.ts): the picture of his model, a spinner while it comes */
@@ -99,11 +100,12 @@ const face = (): FolkFace => (faceOf ??= new FolkFace($('#talk .tk-portrait')));
 export function closeTalk(): void {
   if (!talkOpen()) return;
   $('#talk').classList.add('hidden');
+  const id = speaker?.id ?? '';
   speaker = null;
   face().show(null);
   context = null;
   memory = null;
-  changed(false);
+  changed(false, id);
 }
 
 /** The talk's frame: his next line shown once the last has had its time. */
@@ -215,7 +217,12 @@ function pick(i: number): void {
   const r = replies[i];
   if (!r || shown < lines.length) return;
   sfx.click();
-  if (!r.to) { closeTalk(); return; }
+  if (!r.to) {
+    closeTalk();
+    if (r.act) acted(r.act);
+    return;
+  }
+  if (r.act) acted(r.act);
   go(r.to);
 }
 
@@ -228,11 +235,18 @@ villageUse('talk', {
   shows: () => talkOpen(),
 });
 
-/** A talk opened or ended: the scholar looks up from his book while it's on, and his use is put away as it ends. */
-function talkChanged(on: boolean): void {
-  scholarTalk.talking = on;
-  if (!on) closedFrom(villageObject('scholar'));
+/** What a reply picked does: the tavern's keeper pours the ale asked of him. */
+function acted(act: TalkAct): void {
+  if (act === 'ale' && G.player) G.arena.rooms?.tavern?.serveAle?.(G.player);
+}
+
+/** A talk with `id` opened or ended: the one talked to holds the hero in his eye while it's on (the scholar looks up
+ *  from his book, the keeper from his work), and his use is put away as it ends. */
+function talkChanged(on: boolean, id: string): void {
+  if (id === 'scholar') scholarTalk.talking = on;
+  if (id === 'keeper') keeperTalk.talking = on;
+  if (!on) closedFrom(villageObject(id));
 }
 
 // (a screen of its own, started by ui/screens.ts; each line he says shown, a nod to it)
-screen({ init: () => initTalk(talkChanged, () => { scholarTalk.lines++; }) });
+screen({ init: () => initTalk(talkChanged, () => { if (speaker?.id === 'scholar') scholarTalk.lines++; }) });

@@ -1,5 +1,10 @@
 // The player character: input -> movement/skills, resources, damage, animation.
 import { countCast } from '../game/chronicle';
+import { aleLifeShare } from '../game/aleBoost';
+import { clickTaken } from '../game/keyTakers';
+import { drinkChoice } from '../game/drinkChoice';
+/** the share of his pace he walks at with a mug of the tavern's ale in his hand */
+const ALE_CARRY_PACE = 0.55;
 import * as THREE from 'three';
 import { gaitRate, legLength, LookAt, type LegIK } from './models/ik';
 import { stepVelocity } from './movement';
@@ -15,6 +20,7 @@ import type { ChannelSkill, SkillImpl } from '../combat/skills/types';
 import { computeStats, gearOf } from '../loot/items';
 import { BLOCK, COOP, FIST_GUARD, FRENZY, FULL_DRAW, PVP } from '../data/balance';
 import { tickFrenzy } from '../combat/frenzy';
+import { ALE } from '../data/tavern';
 import { recorder } from '../perf/recorder';
 import { SCHOOLS } from '../data/schools';
 import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, forStyle, type Loadout } from '../loot/loadout';
@@ -533,6 +539,8 @@ export class Player {
     const prevLifePct = this.stats ? this.life / this.stats.maxLife : 1;
     this.equipped = equipped;
     this.stats = computeStats(this.cls.base, this.gearless ? {} : equipped);
+    // (the tavern's ale, drunk before the run: his own hero's life's most a share more, game/aleBoost.ts)
+    if (this.local) this.stats.maxLife *= aleLifeShare();
     this.gear = gearOf(this.cls, equipped);
     this.fitToGear();
     this.model.setGear?.(this.gear);
@@ -704,7 +712,9 @@ export class Player {
     const keyLeft = this.sitting.keyLeft;
     const sitKey = this.local && wasPressed('e') && !keyLeft && !this.downedNear() && !this.sitting.ask();
     // (sat or getting up: any key gets him up, and nothing else is done until he's up; a key still held then acts)
-    const acted = sitKey || len > 0 || SKILL_KEYS.some((k) => isDown(k) || wasPressed(k));
+    // (a click that took the tavern's mug is the mug's: sat at the bar, he stays sat)
+    const clickedThing = clickTaken();
+    const acted = sitKey || len > 0 || SKILL_KEYS.some((k) => !(k === 'mouse0' && clickedThing) && (isDown(k) || wasPressed(k)));
     if (this.sitting.update(this, dt, this.freeToSit(), acted)) {
       this.goal.set(0, 0, 0);
       this.vel.set(0, 0, 0);
@@ -713,7 +723,10 @@ export class Player {
       return;
     }
     let speed = this.stats.moveSpeed;
-    if (this.casting && !this.casting.skill.def.freeMove) speed *= 0.45;
+    // (the tavern's ale held while he chooses to drink it or put it down: carried about at a walk, Kenneth's round 4)
+    const carryingAle = !!this.casting?.skill.def.ale && drinkChoice.shown;
+    if (this.casting && !this.casting.skill.def.freeMove && !carryingAle) speed *= this.casting.skill.def.still ? 0 : 0.45;
+    if (carryingAle) speed *= ALE_CARRY_PACE;
     if (this.channel) speed *= this.channel.skill.def.moveMult ?? 0.4;
     if (this.rooted || this.stunned) speed = 0;
     if (this.chilledUntil > G.time) speed *= PVP.chill;
@@ -843,6 +856,8 @@ export class Player {
     // (over a cast or a channel only a skill cast over one, which leaves it going: Bull Rush as Steel Tempest spins; in
     // a dash only as an open one lets, and no charge or blink)
     if ((this.casting || (this.channel && !this.channel.skill.def.block)) && !s.def.overCast) return false;
+    // (nothing over a cast he stands still through: the tavern's ale is drunk to its end)
+    if (this.casting?.skill.def.still) return false;
     if (this.dash && (this.dashShut() || s.impl.dashes)) return false;
     if (!this.sandbox && this.energy < s.def.cost) { this.lowEnergy(); this.refused = 'energy'; return false; }
     const target = at.clone();
@@ -853,7 +868,8 @@ export class Player {
     if (this.channel?.skill.def.block && !s.def.overCast) this.stopChannel();
     // (the house of records' favourite skill: the local hero's casts in a run)
     if (this.local) countCast(s.def.impl);
-    const dur = s.def.castTime / this.haste;
+    // (a cast he stands still through is the time it takes whatever his casting speed: the ale is drunk in its 5 s)
+    const dur = s.def.still ? s.def.castTime : s.def.castTime / this.haste;
     const nockT = this.nockTime(s), n = nockT ? { n: nockT } : {};
     // (casting anything else forgets a queued shot)
     if (this.queued?.skill !== s) this.queued = null;
@@ -931,6 +947,17 @@ export class Player {
     return q && isBowShot(s) && this.nocked < (s.def.missiles ?? 1) ? q.fetch / this.haste : 0;
   }
 
+  /** A skill he knows by its id: his class's, or the tavern's ale every hero knows off his bar (data/tavern.ts). */
+  skillOf(id: string): KnownSkill | undefined {
+    return this.known.get(id) ?? (id === ALE.impl ? { def: ALE, impl: SKILL_IMPLS.ale } : undefined);
+  }
+
+  /** The ale the tavern's keeper slid across to him, drunk facing `at` (the bar): false if he's busy, out or dead. */
+  drinkAle(at: THREE.Vector3): boolean {
+    const ale = this.skillOf(ALE.impl);
+    return !!ale && this.tryCast(ale, undefined, at);
+  }
+
   replay(a: PlayerAction): void {
     if (a.t === 'che') { this.stopChannel(); return; }
     if (a.t === 'chh') { this.hands = a.h; return; }
@@ -939,7 +966,7 @@ export class Player {
     if (a.t === 'stun') { this.stun(a.d); return; }
     if (a.t === 'halt') { this.haltDash(); return; }
     if (a.t === 'held') { this.heldUntil = G.time + a.s; this.heldFrozen = a.f === 1; return; }
-    const s = this.known.get(a.s);
+    const s = this.skillOf(a.s);
     // (a hidden partner's casts let go: away, banked or out of the hall of heroes, its spells were drawn all the same)
     if (!s || !this.alive || !this.obj.visible) return;
     if (a.t === 'cast') {
@@ -1266,7 +1293,9 @@ export class Player {
     const look = lookFacing();
     // (between one attack or cast and the next, the body stays on its aim a moment rather than wheeling round to the way it
     // goes and back: held attacks while backing off or moving sideways would swing the body half round at every blow)
-    const fighting = (this.casting && !this.casting.skill.def.freeMove) || this.channel;
+    // (the tavern's ale isn't fighting: held on his aim through it, he was never free to sit with a mug in hand, and E
+    // on a stool did nothing, Kenneth's round 5)
+    const fighting = (this.casting && !this.casting.skill.def.freeMove && !this.casting.skill.def.ale) || this.channel;
     this.aimHold = fighting ? AIM_HOLD : Math.max(0, this.aimHold - dt);
     this.facesWay = false;
     // (sat, or going down or up: the sit turns him)
@@ -1394,7 +1423,7 @@ export class Player {
     else if (d?.ride) action = { name: d.ride.anim ?? 'charge', t: Math.min(1, d.ride.t / d.ride.dur) };
     else if (this.casting) {
       const c = this.casting, impl = c.skill.impl;
-      action = { name: impl.anim || 'cast', t: c.t / c.dur };
+      action = { name: impl.anim || 'cast', t: c.t / c.dur, ...(c.skill.def.ale ? { ale: true } : {}) };
       if (!impl.channel) impl.pose?.(this, c.skill.def, action);
       if (impl.anim === 'bow' && !impl.channel) {
         // how far the bow is drawn (a drawn shot by its time to full draw, any other by its firing time), and since when it's loosed
@@ -1474,7 +1503,8 @@ export class Player {
    *  he is. Through the eyes too: the camera rides his head down onto the seat (#720's review: "Why does he exit 1st
    *  person view when sitting? He should not"). */
   private freeToSit(): boolean {
-    return this.sits && this.glances && this.local && this.alive && !this.idle && !this.casting
+    // (the tavern's ale drunk sat, as at its bar stools: "drink while seated", Kenneth's round 3)
+    return this.sits && this.glances && this.local && this.alive && !this.idle && (!this.casting || !!this.casting.skill.def.ale)
       && !this.channel && !this.dash && !this.aiming && this.aimHold <= 0 && !this.staggered && !this.rooted
       && this.hitT <= 0 && !foeNear(this.pos.x, this.pos.z);
   }

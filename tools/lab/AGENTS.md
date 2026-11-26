@@ -52,7 +52,7 @@ the lab loads whole, as it neared 120k characters. Read a command's entry there 
 changing it; a new command's line there is its module's `summary`, and its entry in full goes in
 `commands/<name>.md`. The largest entries are
 notes of their own in [`commands/`](commands) (`eyes`, `ui`, `gait`, `held`, `coop`, `swing`, `rush`, `check`,
-`traces`, `range`, `hood`, `village`, `fire`, `perf`, `hall`, `cast`, `photo`, `sit`, `join`), a line in `COMMANDS.md` pointing to each, as
+`traces`, `range`, `hood`, `village`, `fire`, `perf`, `hall`, `cast`, `photo`, `sit`, `join`, `tavern`), a line in `COMMANDS.md` pointing to each, as
 `COMMANDS.md` neared 120k in turn: an entry that grows past some 4k characters
 moves there too.
 
