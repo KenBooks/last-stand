@@ -18,7 +18,7 @@ import { inObstacle } from '../world/collision';
 import { setDealtSink, DAMAGE_TYPES, type DealtHit } from '../combat/damage';
 import { flingFrom, flingRow } from '../combat/fling';
 import { setPropSink, setPropLife } from '../world/destructible';
-import { runHooks, vote, playerOut, showCleared, startNextWave, gainLoot, localOut, endRun, bankedAway, type RunPhase } from '../game/run';
+import { runHooks, vote, refreshDecision, playerOut, showCleared, startNextWave, gainLoot, localOut, endRun, bankedAway, type RunPhase } from '../game/run';
 import { on, emit } from '../events';
 import { sfx } from '../core/audio';
 
@@ -108,6 +108,26 @@ export function setToHost(fn: typeof toHost): void { toHost = fn; }
  */
 let leaving: { t: 'bank' | 'abandon'; at: number } | null = null;
 const LEAVE_AGAIN_MS = 1000;
+/**
+ * Guest: its Continue at the choice on its way to the host: when it was first and last sent (ms), while the host's
+ * snapshots don't count it yet. It's sent again every `LEAVE_AGAIN_MS`, its button spinning (`RunState.sending`), and
+ * given up after `CONTINUE_WAIT_MS`, the button back for the player to press again (from the owner: "show a spinner on
+ * the button, while its being sent to host... and if it failed, just show the button again without spinner, so player
+ * can retry"). One lost on the way left the party waiting on it with nothing said (from play: "when trying to continue
+ * the wave... the continuing button did not work").
+ */
+let continuing: { first: number; at: number } | null = null;
+const CONTINUE_WAIT_MS = 4000;
+
+/** Guest: its Continue counted by the host, given up, or no longer wanted: the spinner gone, the choice drawn again. */
+function continueSettled(counted: boolean): void {
+  continuing = null;
+  const r = G.run;
+  if (!r) return;
+  if (!counted) r.votes.delete(G.player.slot);
+  r.sending = null;
+  refreshDecision();
+}
 
 /** A foe's spawn report, made from the foe as it stands (the host's: as it spawns, and for a guest that asks). */
 const spawnOf = (e: Enemy): SpawnEvent => ({
@@ -132,6 +152,13 @@ export function initSync(): void {
       leaving = { t: o === 'banked' ? 'bank' : 'abandon', at: performance.now() };
     }
   };
+  // (a guest's own Continue, sent by main.ts as it chose: said again until the host's snapshots count it)
+  runHooks.voted = (p) => {
+    if (!p.local || role.current !== 'guest' || !G.run) return;
+    const now = performance.now();
+    continuing = { first: now, at: now };
+    G.run.sending = 'host';
+  };
   runHooks.down = (p) => push({ k: 'down', s: p.slot });
   runHooks.raised = (p) => push({ k: 'raise', s: p.slot });
   runHooks.over = () => push({ k: 'over' });
@@ -152,12 +179,22 @@ function forget(): void {
   asked.clear();
   unseen.clear();
   leaving = null;
+  continuing = null;
 }
 
-/** Guest, each frame: its leaving of the run said to the host again while the host hasn't said it back. */
-function leaveAgain(): void {
-  if (!leaving || G.run?.phase === 'over') return;
+/** Guest, each frame: its leaving of the run, or its Continue, said to the host again while the host hasn't taken
+ *  it (no word of the leaving back, the Continue not in its snapshots). */
+function sayAgain(): void {
   const now = performance.now();
+  if (continuing && (G.run?.phase !== 'cleared' || !G.player.active)) continueSettled(true);
+  else if (continuing && now - continuing.first >= CONTINUE_WAIT_MS) {
+    netLog('our Continue was never counted by the host: given up, to be pressed again');
+    continueSettled(false);
+  } else if (continuing && now - continuing.at >= LEAVE_AGAIN_MS) {
+    continuing.at = now;
+    toHost?.({ t: 'vote' });
+  }
+  if (!leaving || G.run?.phase === 'over') return;
   if (now - leaving.at < LEAVE_AGAIN_MS) return;
   leaving.at = now;
   toHost?.({ t: leaving.t });
@@ -298,7 +335,7 @@ export function onWorld(m: WorldMessage): void {
 export function playWorld(at: number, dt: number): void {
   if (role.current !== 'guest' || G.mode !== 'run' || !G.run || Number.isNaN(at)) return;
   shownAt = at;
-  leaveAgain();
+  sayAgain();
   for (const m of world.due(at)) {
     if (m.x) for (const ev of m.x) apply(ev);
     if (m.s && G.run) applySnapshot(m.s);
@@ -413,6 +450,9 @@ function applySnapshot(s: Snapshot): void {
   // the wave starts when the host's countdown runs out (the other turns of the run come as events)
   if (PHASES[phase] === 'fighting' && r.phase === 'countdown') { r.phase = 'fighting'; sfx.waveStart(); emit('waveStarted', r.wave); }
   r.votes = new Set(s.v);
+  // (our Continue counted by the host at last, or still on its way: counted here meanwhile, the choice still waiting)
+  if (continuing && r.votes.has(G.player.slot)) continueSettled(true);
+  else if (continuing) r.votes.add(G.player.slot);
   for (const [slot, bleed, revive] of s.p) {
     const p = bySlot(slot);
     if (!p) continue;
@@ -449,8 +489,24 @@ function applySnapshot(s: Snapshot): void {
  */
 export function onGuestControl(p: Player, m: Record<string, unknown>): void {
   if (!G.run || G.mode !== 'run') return;
-  if (m.t === 'vote' && G.run.phase === 'cleared' && p.active) vote(p);
+  if (m.t === 'vote') guestContinues(p);
   else if (m.t === 'bank' || m.t === 'abandon') guestLeaves(p, m.t === 'bank' ? 'banked' : 'dead');
+}
+
+/**
+ * Host: a guest's Continue at the choice, taken from any guest still in the run here: one this game showed down or
+ * away (its own game had him standing at the choice) was dropped with nothing said, and the party waited on him. One
+ * that comes again (our snapshots hadn't counted it yet as it was sent) is counted once.
+ */
+function guestContinues(p: Player): void {
+  const r = G.run!;
+  if (r.phase !== 'cleared' || p.out) {
+    netLog(`slot ${p.slot}'s Continue passed over: ${p.out ? `out (${p.out})` : `the run ${r.phase}`}`);
+    return;
+  }
+  if (r.votes.has(p.slot)) return;
+  if (!p.active) netLog(`slot ${p.slot}'s Continue taken, shown ${p.away ? 'away' : 'down'} here`);
+  vote(p);
 }
 
 /** Host: a guest has left the run on its own game: out here too, or, out already, its word said back again. */

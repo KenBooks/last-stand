@@ -64,6 +64,8 @@ body.touch .bar .txt { font-size: 13px; }
 body.touch .bar .bar-label { display: none; }
 body.touch #buffs { left: $touch-beside; top: touch(76px); bottom: auto; transform-origin: left top; }
 body.touch #decision .k { display: none; }
+// (but Continue's while it's sent: its spinner, `_hud.scss`)
+body.touch #decision .cont.sending .k { display: inline-block; }
 /* the choice after a wave clear of the bars (on a 1024x700 touch screen it lay over them): between them while that
    leaves it $choice-least, else under them (an upright tablet's bars leave a few px). It's scaled by --hud, the bars
    by --touch, so the room between them is over its own scale; clamp() of the room short times 1000 is 0 or the bars'

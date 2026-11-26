@@ -91,6 +91,9 @@ export interface RunState {
   /** players in the run as the wave started (it sizes the wave), and who chose Continue after it */
   party: number;
   votes: Set<number>;
+  /** the local player's Continue on its way: a guest's to the host until its snapshots count it (net/sync.ts), or
+   *  held while the next wave's boss readies (main.ts); its button shows a spinner meanwhile (null: none) */
+  sending: 'host' | 'boss' | null;
   /** the local player's summary has been shown (the lobby waits for it to be closed) */
   summarized: boolean;
   /** the local player's summary was shown with the run going on for others: it goes with the run's end
@@ -126,6 +129,7 @@ export const runHooks = {
   nextWave(): void {},
   loot(_p: Player, _item: Item): void {},
   out(_p: Player, _kind: 'banked' | 'dead'): void {},
+  voted(_p: Player): void {},
   down(_p: Player): void {},
   raised(_p: Player): void {},
   over(): void {},
@@ -201,7 +205,7 @@ const blankRun = (wave: number, training: boolean): RunState => ({
   training, duel: null, wave, phase: 'countdown', timer: RUN.countdown, held: false, waveTime: 0,
   bag: [], score: 0, multiplier: 1, multKills: 0, multTimer: 0, kills: 0,
   queue: [], nextGroupT: 0, packs: [], dealt: 0, boss: null, bossT: 0,
-  pending: 0, remaining: 0, party: 1, votes: new Set(), summarized: false, watched: false,
+  pending: 0, remaining: 0, party: 1, votes: new Set(), sending: null, summarized: false, watched: false,
   started: G.time, tallied: false, first: wave,
 });
 
@@ -499,9 +503,15 @@ export function continueRun(): void {
   vote(G.player);
 }
 
+/** The choice after a wave drawn again for the local player, where it shows (a Continue sent, counted or given up). */
+export function refreshDecision(): void {
+  if (G.run?.phase === 'cleared' && G.player.active) ui.showDecision();
+}
+
 /** A player's Continue (the host counts them all). */
 export function vote(p: Player): void {
   G.run!.votes.add(p.slot);
+  runHooks.voted(p);
   if (G.player.active) ui.showDecision();   // shows who is still deciding
 }
 

@@ -110,6 +110,19 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   the run (from play, three at wave 38: "everyone pressed bank, it instead went into spectate mode"). A Bank the host
   takes outside the choice or from a guest it showed down or away is said in the network log. `npm run lab -- coop
   --scenarios banks --party 3` (`--canary`: every guest's Bank lost, the host left waiting).
+- `sync.ts`: a guest's Continue at the choice is sent again every second until the host's snapshots count it
+  (`continuing`, `sayAgain`), counted on its own game meanwhile, its key cap a spinner, its labels as they were
+  (`RunState.sending`, `#decision .cont.sending`; from the owner: "replace key with spinner while sending"), given
+  up after 4 s (`CONTINUE_WAIT_MS`), the button back for the player to press again (from the owner: "show a spinner
+  on the button, while its being sent to host... and if it failed, just show the button again without spinner, so
+  player can retry"). The host takes it from any guest still in the run at the
+  choice (`guestContinues`), one it showed down or away too, and says one it passes over in the network log. A
+  Continue lost on the way left the party waiting on it with nothing said, the guest's button given back by the next
+  snapshot as if it had never been pressed (from play: "the continuing button did not work"). Into a boss wave the
+  key spins as the boss readies, and a readying that fails says so and gives the button back (`bossNotReady` in
+  `main.ts`). `lab coop --scenarios banks --party 3` continues a wave with the last guest's
+  first Continue lost, and with every one lost till it's given up (`--pictures`: `continue-sending-guest.png`,
+  `continue-given-back-guest.png`).
 - `wardTouch.ts`: a hero's wall (the Hedgeward) broken in the village by a partner walking into it, the protocol's
   part `ward-touch-1`: the toucher's own game judges the touch (`touchedByPartner` in `combat/skills/hedgeward.ts`),
   breaks its copy and sends where it stood on `ctl` (`wardTouch`, to every game, as a ping goes); each game breaks its
