@@ -5,8 +5,9 @@
 //     joined from its row (the list then counting two), left, and gone from the list once its host has left;
 //   a password room, listed as locked, its password never in the list; joined with a wrong password (turned away,
 //     the dialog asking for it), then with the right one where the dialog asks;
-//   a private room for two, never listed, joined by its code: first as the host's own name tag (as a second tab of
-//     one browser keeps it), turned away and asked for another, then at once as its own, which must let it in.
+//   a private room for two, never listed: its invite link opened in the partner's page while a bare socket fills
+//     the room, then with the host's own name tag (as a second tab of one browser keeps it), each turned away with
+//     Join's field keeping the room's code, then Join pressed with its own tag alone, which must let it in at once.
 // The relay's own list is read beside the browser's (as a page of the game's origin reads it). `--canary` starts the
 // relay with the faults it must catch: any password let in, private rooms listed, and a joiner that left on purpose
 // held for the grace. Pictures of each step in
@@ -27,6 +28,8 @@ const FRAMES_A_READ = 2;
  *  within it, as a player's does */
 const GRACE_MS = 8000;
 const TAGS = { host: 'Brannoch', guest: 'Ysolde' };
+/** frames the refused joiner's dialog runs before its code is read (its renders after the refusal) */
+const KEPT_FRAMES = 60;
 const PUBLIC = { kind: 'public', name: 'Crypt crawl, all welcome', password: '', max: 3 };
 const LOCKED = { kind: 'password', name: 'Friends only', password: 'ember-gate', max: 4 };
 const PRIVATE = { kind: 'private', name: 'Quiet room', password: '', max: 2 };
@@ -244,12 +247,21 @@ async function privateRoom(games, found, relay, dir) {
   const listed = rooms.some((r) => r.code === code);
   found.say(`private room: ${listed ? 'listed' : 'not listed'}`);
   found.expect(!listed, 'the private room is listed', 'listPrivate');
-  // (the host's own tag first, as a second tab of one browser has it: turned away, its place must go with it)
-  await games[1].call('roomsJoinCode', { tag: TAGS.host, code });
+  // (the invite link opened in a second tab of one browser while the room is full: turned away, Join's field must
+  // keep the room's code to try again. From play: "it cleared the room code... it should not")
+  const server = relay.url.replace(/^http/, 'ws');
+  await games[0].call('roomsFill', { server, code, on: true });
+  await games[1].call('roomsInvited', { tag: TAGS.host, code });
+  const [, full] = await until(games, (h, g) => g.session === 'failed', 'a join of the full room was let in');
+  await codeKept(games, found, code, `the room full ("${full.status}")`);
+  await games[0].call('roomsFill', { server, code, on: false });
+  // (again, the tag the second tab keeps, the host's own: turned away, its place must go with it, and the code kept
+  // to join as another: a player types the tag alone and presses Join)
+  await games[1].call('roomsRetag', { tag: TAGS.host });
   const [, refused] = await until(games, (h, g) => g.session === 'failed', 'a join as the host\'s own tag was let in');
-  found.say(`joined as the host's own tag: "${refused.status}"`);
+  await codeKept(games, found, code, `the host's own tag ("${refused.status}")`);
   const turned = Date.now();
-  await games[1].call('roomsJoinCode', { tag: TAGS.guest, code });
+  await games[1].call('roomsRetag', { tag: TAGS.guest });
   const settled = (h, g) => (g.session === 'joined' && h.partners === 1) || g.session === 'failed';
   const [, joined] = await until(games, settled, 'the private room was never joined by its code');
   const after = ((Date.now() - turned) / 1000).toFixed(1);
@@ -258,6 +270,14 @@ async function privateRoom(games, found, relay, dir) {
   const fullAgain = 'a joiner turned away for its tag found the room full trying again';
   found.expect(joined.session === 'joined', fullAgain, 'holdLeft');
   await bothLeave(games, relay.url, relay.origin, code);
+}
+
+/** The guest's Join field read once its dialog has rendered the refusal: it must hold the room's `code`. */
+async function codeKept(games, found, code, why) {
+  await games[1].call('roomsStep', { frames: KEPT_FRAMES });
+  const { codeTyped } = await games[1].state();
+  found.say(`turned away for ${why}: Join's field holds "${codeTyped}"`);
+  found.expect(codeTyped === code, `the room's code was cleared from Join's field when turned away for ${why}`);
 }
 
 /** The create page pictured on the host's screen, each kind picked. */
