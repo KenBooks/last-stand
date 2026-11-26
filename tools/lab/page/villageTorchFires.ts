@@ -4,8 +4,10 @@
 // fire's flames by it (a mesh `buildFire` marks, `fireFlames`), and over two seconds each torch's lamp, as the lit
 // shaders' list holds it (`lampList`), moves by at least `LEAST_SWAY` of its middle. And from above in the hall the
 // porch torches' fires, outside its front wall, change no pixel: their baskets go with the wall as it opens over him,
-// and shown they hung in the air past the room (from play). `canary` holds every torch's flicker still (a light of
-// its own in each one's place that no fire moves) and shows the porch's fires from above.
+// and shown they hung in the air past the room (from play). And from below a torch its flames change none of its
+// basket's pixels: only their box is depth-tested, and with no bowl told them the flames were drawn over the basket.
+// `canary` holds every torch's flicker still (a light of its own in each one's place that no fire moves), shows the
+// porch's fires from above and takes the torch's bowl away.
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
@@ -46,6 +48,87 @@ async function porchFromAbove(lab: Lab, canary: boolean): Promise<number | null>
     return changedShare(asShown, without);
   } finally {
     await viewBy(lab, view);
+  }
+}
+
+/** from below a torch: the close-up's camera's distance and how far under the fire's bed it's framed on (m), how much
+ *  a channel must change for a pixel to count, and the most of the basket's pixels its flames may change */
+const BELOW = { distance: 1.8, under: 0.15 };
+const CHANGED = 8;
+const MOST_OVER_BASKET = 0.02;
+/** a bowl the flames' shader knows as none (its rim under its foot), as `noBowl` in world/fire.ts */
+const NO_BOWL = (): THREE.Vector2[] => [new THREE.Vector2(0, 0), new THREE.Vector2(0, 0), new THREE.Vector2(-1, 0)];
+
+/** A canvas's pixels. */
+function pixelsOf(canvas: HTMLCanvasElement): Uint8ClampedArray {
+  return canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
+}
+
+/** Whether pixel `i` differs between two pictures by more than `CHANGED` in a channel. */
+function differs(a: Uint8ClampedArray, b: Uint8ClampedArray, i: number): boolean {
+  const most = Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2]));
+  return most > CHANGED;
+}
+
+/** how far under a fire's bed its basket's middle is (m: `BASKET_BELOW` in world/torchFire.ts, about half) */
+const BASKET_MIDDLE = 0.13;
+
+/** The mesh drawing the torch's basket under a fire's flames: the first a ray meets from the aisle (`from`, the
+ *  torch's light) in to the basket's middle. Its own mesh or the still meshes' merge that took it, with whatever else
+ *  of the hall's iron that merge holds (the arms and bands under it: flames drawn over those are as wrong). */
+function basketUnder(flames: THREE.Object3D, from: THREE.Vector3): THREE.Object3D | undefined {
+  const middle = flames.getWorldPosition(new THREE.Vector3());
+  middle.y -= BASKET_MIDDLE;
+  const start = new THREE.Vector3(from.x, middle.y, from.z);
+  const ray = new THREE.Raycaster(start, middle.clone().sub(start).normalize(), 0, start.distanceTo(middle) + 0.2);
+  const shown = (object: THREE.Object3D): boolean => object.visible && (object.parent ? shown(object.parent) : true);
+  const hit = ray.intersectObject(G.scene, true).find((met) => met.object !== flames && shown(met.object));
+  return hit?.object;
+}
+
+/** The first column torch's flames (by its lamp's place) and that place, or none. */
+function firstTorchFlames(): { flames: THREE.Object3D; light: THREE.Vector3 } | undefined {
+  const light = torches()[0].at;
+  let flames: THREE.Object3D | undefined;
+  G.scene.traverse((object) => {
+    if (!object.userData.fireFlames) return;
+    if (object.getWorldPosition(new THREE.Vector3()).distanceTo(light) < FIRE_NEAR) flames ??= object;
+  });
+  return flames && { flames, light };
+}
+
+/** From below a column torch, the share of its basket's pixels its flames change (the canary takes the basket away
+ *  from what the flames' march stops at, as before: from play, "looks like draw order... fire ignores geometry"), or
+ *  null where no torch has a basket. */
+function flamesOverBasket(lab: Lab, canary: boolean): number | null {
+  const torch = firstTorchFlames();
+  const basket = torch && basketUnder(torch.flames, torch.light);
+  if (!torch || !basket) return null;
+  const flames = torch.flames;
+  const uniforms = flames.userData.flames as { uBowl: { value: THREE.Vector2[] } };
+  const bowl = uniforms.uBowl.value;
+  if (canary) uniforms.uBowl.value = NO_BOWL();
+  const at = flames.getWorldPosition(new THREE.Vector3());
+  at.y -= BELOW.under;
+  const below = (): Uint8ClampedArray => pixelsOf(lab.drawn(['below'], { at, distance: BELOW.distance })[0].canvas);
+  try {
+    const whole = below();
+    flames.visible = false;
+    const noFlames = below();
+    basket.visible = false;
+    const neither = below();
+    let basketPixels = 0;
+    let over = 0;
+    for (let i = 0; i < whole.length; i += 4) {
+      if (!differs(noFlames, neither, i)) continue;
+      basketPixels++;
+      if (differs(whole, noFlames, i)) over++;
+    }
+    return basketPixels > 0 ? over / basketPixels : null;
+  } finally {
+    flames.visible = true;
+    basket.visible = true;
+    uniforms.uBowl.value = bowl;
   }
 }
 
@@ -119,8 +202,11 @@ export async function hallTorchesBurn(lab: Lab, canary: boolean): Promise<Lights
     const sways = list.map((_, k) => (highest[k] - lowest[k]) / Math.max((highest[k] + lowest[k]) / 2, 1e-6));
     const still = sways.filter((sway) => sway < LEAST_SWAY).length;
     const least = Math.min(...sways);
+    const over = flamesOverBasket(lab, canary);
     const porch = await porchFromAbove(lab, canary);
     const lines = [
+      over === null ? 'from below a torch: no basket under its fire'
+        : `from below a torch its flames change ${(over * 100).toFixed(1)}% of its basket's pixels`,
       `hall's torches: ${list.length - unlit.length} of ${list.length} with a fire by them`,
       `their lamps over ${FRAMES} frames: the least moved by ${(least * 100).toFixed(1)}% of its middle,`
         + ` ${still} under ${LEAST_SWAY * 100}%`,
@@ -132,7 +218,11 @@ export async function hallTorchesBurn(lab: Lab, canary: boolean): Promise<Lights
     if (unlit.length > 0) problems.push(`${unlit.length} torches with no fire by them`);
     if (still > 0) problems.push(`${still} torches' light steady, no flicker`);
     if (porch !== null && porch > MOST_PORCH) problems.push('the porch\'s fires hang in the air from above in the hall');
-    if (canary) return { lines, problems: [], caught: still > 0 && (porch ?? 1) > MOST_PORCH, moments: [] };
+    if (over !== null && over > MOST_OVER_BASKET) problems.push('from below a torch its flames are drawn over its basket');
+    if (canary) {
+      const caught = still > 0 && (porch ?? 1) > MOST_PORCH && (over ?? 1) > MOST_OVER_BASKET;
+      return { lines, problems: [], caught, moments: [] };
+    }
     return { lines, problems, caught: null, moments: [] };
   } finally {
     putBack?.();

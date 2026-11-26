@@ -10,9 +10,15 @@ import type { Updater } from './props';
 /** A torch's fire: its bed's radius and its flames' height (m), how much the bed is dished, and its smoke and embers
  *  (a second) */
 const FLAME = { radius: 0.11, height: 0.45, dish: 0.03, smoke: 0, embers: 2 };
-/** its basket's outline from its foot up (radius, height, m), and how far under the bed its foot is */
-const BASKET: [number, number][] = [[0.03, 0], [0.05, 0.1], [0.12, 0.26], [0.14, 0.3], [0, 0.22]];
+/** its basket's outline from its foot up (radius, height, m), and how far under the bed its foot is (closed at its
+ *  foot: begun at a ring 3 cm across, from below it was open) */
+const BASKET: [number, number][] = [[0, 0], [0.03, 0], [0.05, 0.1], [0.12, 0.26], [0.14, 0.3], [0, 0.22]];
 const BASKET_BELOW = 0.26;
+/** the basket as the flames' shader knows a bowl (`FireSpec.bowl`: its foot, belly and rim, each a height from the bed
+ *  and a radius): the flames' march stops at it, as a depth test would. Only the box round the flames is
+ *  depth-tested, and with no bowl, from below the flames were drawn over the basket (from play, "looks like draw
+ *  order... fire ignores geometry, we had this issue with braziers before", #291) */
+const BOWL: [number, number][] = [[-BASKET_BELOW, 0.03], [0, 0.12], [0.3 - BASKET_BELOW, 0.14]];
 /** the flames' light, a share of a fire's own: a torch is passed close by, at a man's eye or over his head */
 const GLOW = 0.8;
 
@@ -31,7 +37,7 @@ export function torchFire(group: THREE.Object3D, fires: THREE.Object3D, iron: TH
   const flicker = new THREE.PointLight(0xffffff, 1);
   flicker.position.copy(at);
   buildFire(fires, {
-    at, radius: FLAME.radius, height: FLAME.height, dish: FLAME.dish, light: flicker, intensity: 1,
+    at, radius: FLAME.radius, height: FLAME.height, dish: FLAME.dish, light: flicker, intensity: 1, bowl: BOWL,
     smoke: FLAME.smoke, smokeColour: 0x2a2826, embers: FLAME.embers, glow: GLOW,
   }, updaters);
   return { flicker };
