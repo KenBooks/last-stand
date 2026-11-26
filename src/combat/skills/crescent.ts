@@ -111,7 +111,8 @@ const skill: InstantSkill = {
           hit.add(e);
           // (one that sees it coming may blink out of its way: behind it, or off its sides)
           if (evades(e, player, { kind: 'wave', x: pos.x, z: pos.z, way: dir, half: R })) continue;
-          hitEnemy(e, def.damage, { by: player, skill: def, tags: def.tags, type: 'lightning', knock: 1.5, from: pos, blow: { dir, lift: 0.25 } });
+          hitEnemy(e, def.damage, { by: player, skill: def, tags: def.tags, type: 'lightning', knock: 1.5, from: pos,
+            flight: dir, blow: { dir, lift: 0.25 } });
           // (a body it killed is thrown by its blow, not swept on again)
           if (e.corpse) swept.add(e.corpse);
           const at = new THREE.Vector3(e.pos.x, e.height * 0.6, e.pos.z);

@@ -25,7 +25,8 @@ function launch(
     trail: { color: def.color, colorEnd: def.trailEnd, size: gen ? 0.22 : 0.34, rate: gen ? 50 : 90, life: 0.3 },
     onHit: (target, proj) => {
       const enemy = target as Enemy;   // friendly projectiles only hit enemies
-      hitEnemy(enemy, damage, { by: player, skill: def, tags: def.tags, type: 'arcane', knock: 1.2, from: proj.pos, at: proj.pos, blow: { dir: { x: proj.vel.x, z: proj.vel.z }, lift: 0.25, on: { x: proj.pos.x, z: proj.pos.z } } });
+      hitEnemy(enemy, damage, { by: player, skill: def, tags: def.tags, type: 'arcane', knock: 1.2, from: proj.pos,
+        at: proj.pos, flight: proj.vel, blow: { dir: { x: proj.vel.x, z: proj.vel.z }, lift: 0.25, on: { x: proj.pos.x, z: proj.pos.z } } });
       burst(proj.pos, { count: gen ? 8 : 14, color: def.color, speed: 4, life: 0.35, size: 0.28 });
       sfx.boltBurst(gen === 0);
       if (gen === 0) {

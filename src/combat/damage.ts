@@ -65,6 +65,8 @@ export interface HitOpts {
   type?: DamageType;
   knock?: number;
   from?: XZ;
+  /** Horizontal projectile velocity at contact, when the impact follows its flight. */
+  flight?: XZ;
   chill?: number;
   freeze?: number;
   /** suppress the damage number (crits are still shown) */
@@ -136,7 +138,7 @@ export function hitEnemy(enemy: Enemy, base: number, opts: HitOpts): number {
   // entities/bossKit.ts)
   const amount = (enemy.marks.length ? rolled * (1 + Math.max(...enemy.marks)) : rolled) * damageTaken(enemy)
     * spotTaken(enemy, opts.at);
-  const dealt = enemy.takeDamage(amount, { type, crit, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, by, blow: opts.blow });
+  const dealt = enemy.takeDamage(amount, { type, crit, knock: opts.knock, from: opts.from, flight: opts.flight, chill: opts.chill, freeze: opts.freeze, by, blow: opts.blow });
   const fling = enemy.alive ? undefined : enemy.fling ?? undefined;
   // (a duel's rival is no foe of the host's: its hits go to the hero it stands for, entities/rival.ts)
   if (!enemy.standIn) dealtSink?.(enemy, { amount: dealt, crit, type, knock: opts.knock, from: opts.from, chill: opts.chill, freeze: opts.freeze, fling });

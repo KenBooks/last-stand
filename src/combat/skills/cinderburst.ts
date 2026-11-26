@@ -34,7 +34,8 @@ function burstAt(player: Player, def: Def, at: THREE.Vector3, struck: Enemy | nu
     const x = Math.max(0, d) / def.radius, k = 1 - (1 - def.edge) * x * x * (3 - 2 * x);
     // (the foe it met is driven on along its flight, the others out from the burst)
     const blow = e === struck ? { dir: way, lift: 0.35, on: { x: at.x, z: at.z } } : { lift: 0.6 };
-    hitEnemy(e, def.damage * k, { by: player, skill: def, tags: def.tags, type: 'fire', knock: 3 * k, from: at, blow });
+    hitEnemy(e, def.damage * k, { by: player, skill: def, tags: def.tags, type: 'fire', knock: 3 * k, from: at,
+      flight: e === struck ? way : undefined, blow });
     if (e.alive && Math.random() < def.burn.chance) igniteEnemy(e, def.burn.perSecond, def.burn.seconds, player, def);
   }
   blastCorpses(at, def.radius, 4, { lift: 0.7 });

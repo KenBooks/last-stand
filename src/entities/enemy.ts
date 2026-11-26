@@ -81,6 +81,8 @@ export interface DamageInfo {
   crit?: boolean;
   knock?: number;
   from?: XZ;
+  /** Horizontal projectile velocity at contact. */
+  flight?: XZ;
   chill?: number;
   freeze?: number;
   /** the player whose hit it is (the kill, and the loot, go to them) */
@@ -597,8 +599,8 @@ export class Enemy {
     if (!frozen) this.facing = this.def.turn ? turnAtMost(this.facing, this.targetFacing, this.def.turn * dt) : angleDamp(this.facing, this.targetFacing, this.action ? 6 : 9, dt);
     const speedK = Math.hypot(this.vel.x, this.vel.z) / Math.max(this.speed, 1e-3);
     this.stepPhase(dt);
-    // frozen enemies hold their pose: animate with the time they were frozen at
-    this.animate(frozen ? 0 : dt, frozen ? this.frozenAt : t, Math.min(1, speedK));
+    // Frozen enemies hold their pose. A practice dummy's mechanical spring still moves.
+    this.animate(frozen && !this.meter ? 0 : dt, frozen ? this.frozenAt : t, Math.min(1, speedK));
     if (!frozen) this.frozenAt = t;
     return this.updateLooks(dt, t, frozen);
   }
@@ -745,6 +747,10 @@ export class Enemy {
       this.knock.x += (dx / d) * k; this.knock.z += (dz / d) * k;
     }
     if (this.meter) {
+      if (amount > 0) {
+        const source = info.from ?? info.by?.pos ?? this.pos;
+        this.model.impact?.(info.flight?.x ?? this.pos.x - source.x, info.flight?.z ?? this.pos.z - source.z);
+      }
       this.meter.record(amount);
       emit('dummyHit');
       debris({ x: this.pos.x, y: this.height * 0.6, z: this.pos.z }, { count: 3, color: 0xc9a54e, speed: 3, size: 0.07, life: 0.7 });

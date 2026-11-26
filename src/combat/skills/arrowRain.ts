@@ -194,7 +194,8 @@ const skill: ChannelSkill<RainState> = {
             const seen = hit && !s.judged.has(hit) && s.judged.add(hit);
             if (seen && evades(hit, player, { kind: 'area', x: s.center.x, z: s.center.z, half: def.radius })) continue;
             if (hit) {
-              hitEnemy(hit, def.damage, { by: player, skill: def, tags: def.tags, type: 'physical', from: { x: f.from.x, z: f.from.z }, blow: arrowBlow(hit, _a, vel, 0.7) });
+              hitEnemy(hit, def.damage, { by: player, skill: def, tags: def.tags, type: 'physical',
+                from: { x: f.from.x, z: f.from.z }, flight: vel, blow: arrowBlow(hit, _a, vel, 0.7) });
               intoFoe(hit, _a, vel);
               burst(_a, { count: 6, color: 0xd3bf8d, speed: 2, life: 0.2, size: 0.07 });
               sfx.arrowHit(0.8);
