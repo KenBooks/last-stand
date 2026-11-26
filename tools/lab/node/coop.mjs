@@ -20,6 +20,7 @@ import { partnerThroughWall } from './coopWallTouch.mjs';
 import { drinkTogether, tavernRecovery } from './coopTavern.mjs';
 import { fightDuel } from './coopDuel.mjs';
 import { fightPartyDuel } from './coopDuelParty.mjs';
+import { everyoneBanks } from './coopBanks.mjs';
 import { runsEnds } from './coopEnds.mjs';
 import { tradeTogether } from './coopTrade.mjs';
 import * as heroColours from '../../../src/data/heroColours.ts';
@@ -765,7 +766,9 @@ export async function runCoop(side, options) {
   if (scenarios?.includes('looks') && scenarios.length !== 1) {
     throw labError('coop: looks runs alone, without combat');
   }
-  if (canary && party !== 2) throw labError('coop: --canary is a pair\'s alone (no --party)');
+  const banks = scenarios?.includes('banks');
+  if (banks && scenarios.length !== 1) throw labError('coop: banks runs alone');
+  if (canary && party !== 2 && !banks) throw labError('coop: --canary is a pair\'s alone (no --party)');
   if (party < 2 || party > PARTY_MOST) throw labError(`coop: --party is 2 to ${PARTY_MOST}`);
   const partners = [];
   for (let index = 1; index < party; index++) partners.push(await side.openPartner(side.heroClass));
@@ -865,6 +868,11 @@ export async function runCoop(side, options) {
         await pair.until((host, guest) => guest.phase === 'fighting', 90, 'the guest never received the wave start');
         lines.push('worker ticks started the wave and spawned a foe on the hidden host; the guest received the start');
       }
+      return { text: lines.join('\n'), problems };
+    }
+    if (banks) {
+      // (the choice after a wave, every player banking: node/coopBanks.mjs)
+      problems.push(...await everyoneBanks(pair, callPage, lines, { tags: PARTY_TAGS.slice(0, party), canary }));
       return { text: lines.join('\n'), problems };
     }
     if (scenarios?.length === 1 && scenarios[0] === 'ends') {

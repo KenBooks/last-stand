@@ -69,6 +69,7 @@ export {
   coopWorldAngle,
 } from './coopEnd';
 import { togetherNow, type Together } from './coopEnds';
+export { coopBanksSeen } from './coopBanks';
 export { coopCode, coopFall, coopLeaveAgain, coopQuitCanary } from './coopEnds';
 
 /** Let the host's worker drive the fight while its animation frames and its page timer are held. */
@@ -924,6 +925,20 @@ const wire = {
   channels: new Set<LabChannel>(),
   /** the canary's: this page's look messages dropped as sent (`coopPickLook`'s `quiet`) */
   dropLooks: false,
+  /** this page's Bank dropped on its way to the host: every one (the canary's) or the first alone (`coopDropBanks`) */
+  dropBanks: false as false | 'every' | 'first',
+};
+
+/** `banks`: this guest's Bank lost on its way to the host, as a link may lose it: every one sent (`every`, the
+ *  canary's), the first alone (`first`, said again after it), or none. */
+export function coopDropBanks(_lab: Lab, { lose }: { lose: false | 'every' | 'first' }): void {
+  wire.dropBanks = lose;
+}
+
+/** A guest's Bank on its way to the host (`sendControl({ t: 'bank' })` in main.ts). */
+const isBank = (data: unknown): boolean => {
+  const packet = data as { ch?: string; data?: { t?: string } } | null;
+  return packet?.ch === 'ctl' && packet.data?.t === 'bank';
 };
 
 function wireTime(): number {
@@ -946,6 +961,10 @@ class LabChannel {
 
   postMessage(data: unknown): void {
     if (wire.dropLooks && (data as Packet | null)?.ch === 'look') return;
+    if (wire.dropBanks && isBank(data)) {
+      if (wire.dropBanks === 'first') wire.dropBanks = false;
+      return;
+    }
     wire.outbox.push({ at: wireTime(), name: this.name, data: structuredClone(data) });
   }
 
