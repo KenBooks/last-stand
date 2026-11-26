@@ -3,6 +3,9 @@
 // (`arc` across) and his reach, or the mage himself with none there (alone, always). It rises `ARCH` above the level
 // so it reads apart from every spell cast straight at a foe.
 // Judged as a hit on a player is: a hero is healed by his own game, as it shows the beam on him (`healsHere`).
+// It heals a flat `heal` raised by the healer's All Damage and `healPct` of the healed one's most Health, so it still
+// counts at wave 40's 5 to 6 thousand; held on one ally it grows by its `ramp` (`Ramp`), every game following it from
+// whom its own copy of the beam lands on, so the healed one's game, the one that heals, ramps as its screen shows.
 import * as THREE from 'three';
 import { G } from '../../state';
 import { additive } from '../../core/materials';
@@ -11,12 +14,60 @@ import { particles, col } from '../../fx/particles';
 import { flash, release } from '../../fx/lights';
 import { rand } from '../../util';
 import { sfx } from '../../core/audio';
-import { floatText } from '../../ui/floaters';
+import { anchorLabel, floatText, removeLabel, textArt } from '../../ui/floaters';
+import { ORDER, type Label } from '../../ui/overlay/layer';
+import { OUTLINE, type TextStyle } from '../../ui/overlay/paint';
 import type { ChannelSkill, Needs } from './types';
 import type { Player } from '../../entities/player';
 import type { LightSlot } from '../../fx/lights';
+import type { SkillDef } from '../../types';
 
 type Def = Needs<'heal' | 'range' | 'arc' | 'color'>;
+type RampDef = NonNullable<SkillDef['ramp']>;
+
+/** The beam's heal a second on `on` from `healer` before its ramp: its flat part raised by the healer's All Damage, and
+ *  its share of `on`'s most Health, which gear doesn't raise. */
+export function threadHeal(def: Pick<SkillDef, 'heal' | 'healPct'>, damagePct: number, maxLife: number): number {
+  return (def.heal ?? 0) * (1 + damagePct / 100) + maxLife * (def.healPct ?? 0);
+}
+
+/** How long the beam has stayed on one ally: what its heal is raised by. */
+export interface Ramp {
+  /** whom it is ramping on (null: none yet) */
+  on: Player | null;
+  /** how long it has been held on him (s) */
+  held: number;
+  /** how long the beam has been off him since (s): past the ramp's `grace` it begins again on whom it is on */
+  off: number;
+}
+
+/** A ramp begun on no one. */
+export const freshRamp = (): Ramp => ({ on: null, held: 0, off: 0 });
+
+/** The ramp's multiplier of a beam held `held` seconds on one ally. */
+export const rampOf = (ramp: RampDef | undefined, held: number): number =>
+  ramp ? Math.min(ramp.most, 1 + ramp.perSecond * held) : 1;
+
+/**
+ * The ramp followed through a frame of `dt` with the beam on `on`, and what this frame's heal is raised by. On the
+ * same ally it grows; off him (a partner stepping out of the cone for a moment, the beam falling back on the healer)
+ * it's kept for `grace` and grows no more, the beam healing whom it's on unraised meanwhile; past it, it begins again
+ * on whom the beam is on. A frame's flick away and back loses nothing, a real switch costs the grace at most.
+ */
+export function followRamp(st: Ramp, ramp: RampDef | undefined, on: Player, dt: number): number {
+  if (st.on === null || st.on === on) {
+    st.on = on;
+    st.off = 0;
+    st.held += dt;
+    return rampOf(ramp, st.held);
+  }
+  st.off += dt;
+  if (st.off <= (ramp?.grace ?? 0)) return 1;
+  st.on = on;
+  st.off = 0;
+  st.held = dt;
+  return rampOf(ramp, st.held);
+}
 
 /** how often what it has healed is shown as a number over the healed (s): the heal itself lands every frame, the
  *  Health rising smoothly (from play: "should be smooth, not 1 tick per second") */
@@ -31,6 +82,15 @@ const ALONG = 24, ROUND = 6, RADIUS = 0.03;
 interface ThreadState {
   beam: THREE.Mesh; core: THREE.Mesh; geo: THREE.BufferGeometry; mats: THREE.Material[];
   due: number; healed: number; t: number; on: Player; light: LightSlot;
+  /** how long it has been held on whom: let go, the channel's state goes and the next hold begins it again */
+  ramp: Ramp;
+  /** whom what it healed this second landed on here, the number shown over him (down a chain, not whom it's on) */
+  shown?: Player;
+  /** the healers whose beams it carries on (`linksInto`), as the count at his aim shows it */
+  links: number;
+  /** the count of them at his own aim (his own game alone), and where it stands */
+  linkLabel?: Label;
+  linkAt: THREE.Vector3 | null;
   /** its held sound let fade */
   hush?: () => void;
 }
@@ -100,6 +160,90 @@ export function threadTarget(player: Player, def: Pick<Def, 'range' | 'arc'>): P
   return best;
 }
 
+/** Whom `healer` holds his own Lifethread on, someone else: what reaches him full goes on to that one. */
+export function passesTo(healer: Player): Player | null {
+  const channel = healer.channel;
+  if (!channel || channel.skill.impl !== skill) return null;
+  const on = (channel.state as ThreadState).on;
+  return on === healer ? null : on;
+}
+
+/** Whether a hero takes no more healing: his Health at his most (half a point short counts, as it's shown whole). */
+const isFull = (p: Player): boolean => p.life >= p.stats.maxLife - 0.5;
+
+/**
+ * Where a frame's heal goes, beginning at `on`, and what each one healed here was given: a hero takes what he has room
+ * for, and a full one holding Lifethread on another passes the rest on to him, and so on down the chain (a healer
+ * healing a healer: from the owner, "the healing power transfers to the player they are healing"), each one's share of
+ * the heal `heal(hisMostLife)` reckoned at his own most Health. Each game heals only its own hero (`healsHere`), and
+ * reads the others' Health as their reports bring it, so the one at a chain's end is healed by his own game, from its
+ * copy of the full healer's Health and beam. A ring of healers ends where it comes round. Each healer it passes adds
+ * `bonus` of the heal (from the owner: "10% healing bonus per chain link"), added, not compounded: two links +20%.
+ */
+export function flowHeal(on: Player, heal: (maxLife: number) => number, bonus = 0): [Player, number][] {
+  const given: [Player, number][] = [];
+  const seen = new Set<Player>();
+  let next: Player | null = on;
+  // (the share of the frame's heal still to give, and the healers it has passed)
+  let left = 1;
+  let links = 0;
+  while (next && left > 1e-9 && !seen.has(next)) {
+    seen.add(next);
+    const amount = heal(next.stats.maxLife) * (1 + bonus * links) * left;
+    const room = Math.max(0, next.stats.maxLife - next.life);
+    const takes = isFull(next) ? 0 : Math.min(amount, room);
+    if (takes > 0 && healsHere(next)) {
+      const before = next.life;
+      next.heal(takes, true);
+      given.push([next, next.life - before]);
+    }
+    left *= amount > 0 ? 1 - takes / amount : 0;
+    next = passesTo(next);
+    links++;
+  }
+  return given;
+}
+
+/** how much thicker a beam is for each healer whose beam it carries on, up to `LINKS_SHOWN` of them */
+const LINK_THICKER = 0.45;
+const LINKS_SHOWN = 3;
+/** the count of the beams it carries, at his aim: the heal's own green, a size under a crit's number */
+const LINK_STYLE: TextStyle = {
+  face: 'display', weight: 700, size: 22, color: '#6dff7a',
+  shadows: [...OUTLINE, { x: 0, y: 0, blur: 10, color: 'rgba(0, 50, 10, .9)' }],
+};
+/** how far over his aim the count stands (m) */
+const LINK_ABOVE = 0.6;
+
+/**
+ * The healers whose beams `healer`'s carries on: while he's full, each one holding Lifethread on him and those
+ * passing theirs on to that one, and so on (a ring counted once). Each game counts from its own copies, as it heals.
+ */
+export function linksInto(healer: Player, seen = new Set<Player>()): number {
+  if (!isFull(healer)) return 0;
+  seen.add(healer);
+  let links = 0;
+  for (const p of G.players) {
+    if (seen.has(p) || !p.alive || passesTo(p) !== healer) continue;
+    links += 1 + linksInto(p, seen);
+  }
+  return links;
+}
+
+/** The count of the beams his carries on, at his own aim (where the cursor or the crosshair is): his own game alone,
+ *  painted only as it changes. */
+function showLinks(player: Player, st: ThreadState, links: number): void {
+  const shown = player.local ? links : 0;
+  if (shown && !st.linkLabel) {
+    st.linkLabel = anchorLabel(ORDER.float, () => st.linkAt);
+    st.linkLabel.ax = 0.5;
+    st.linkLabel.ay = 1;
+  }
+  if (shown !== st.links && shown) st.linkLabel!.show(textArt(`Linked ×${shown}`, LINK_STYLE));
+  st.links = shown;
+  st.linkAt = shown ? (st.linkAt ?? new THREE.Vector3()).copy(player.aim).setY(player.aim.y + LINK_ABOVE) : null;
+}
+
 const skill: ChannelSkill<ThreadState> = {
   anim: 'point',
   channel: true,
@@ -116,7 +260,7 @@ const skill: ChannelSkill<ThreadState> = {
     G.scene.add(beam, core);
     return {
       hush: player.quiet ? undefined : sfx.thread(),
-      beam, core, geo, mats: [outer, inner], due: HEAL_SHOWN, healed: 0, t: 0, on: player,
+      beam, core, geo, mats: [outer, inner], due: HEAL_SHOWN, healed: 0, t: 0, on: player, ramp: freshRamp(), links: 0, linkAt: null,
       light: flash({ color: def.color, intensity: 3, distance: 4, life: 1, hold: 999 }),
     };
   },
@@ -126,8 +270,12 @@ const skill: ChannelSkill<ThreadState> = {
     const on = st.on = threadTarget(player, def);
     const from = player.castPoint;
     const to = _q.set(on.pos.x, on.pos.y + CHEST, on.pos.z).clone();
-    bend(st.geo, from, to, 1.6, st.t);
-    bend(st.core.geometry, from, to, 0.55, st.t);
+    // (a beam carrying another healer's on is thicker, by each it carries: seen by everyone)
+    const links = linksInto(player);
+    const thick = 1 + LINK_THICKER * Math.min(links, LINKS_SHOWN);
+    bend(st.geo, from, to, 1.6 * thick, st.t);
+    bend(st.core.geometry, from, to, 0.55 * thick, st.t);
+    showLinks(player, st, links);
     st.light.light.position.copy(to);
     // motes of its light rising off whom it heals
     const want = 14 * dt, n = Math.floor(want) + (Math.random() < want % 1 ? 1 : 0);
@@ -139,20 +287,26 @@ const skill: ChannelSkill<ThreadState> = {
         color: col(0xffffff, 2.5), colorEnd: col(def.color, 1.5), drag: 0.5, gravity: 0,
       });
     }
-    // (healed by his own game, as its screen shows the beam on him: every frame, what it gave summed for the number)
-    if (healsHere(on)) {
-      const before = on.life;
-      on.heal(def.heal * (1 + player.stats.damagePct / 100) * dt, true);
-      st.healed += on.life - before;
+    // (followed on every game, from whom its beam lands on, so the healed one's game ramps as it shows the beam)
+    const raised = followRamp(st.ramp, def.ramp, on, dt);
+    // (healed by each one's own game, as its screen shows the beam on him: every frame, what it gave summed for the
+    // number; what a full healer can't take goes on down his own beam, `flowHeal`)
+    const healOf = (into: number): number => threadHeal(def, player.stats.damagePct, into) * raised * dt;
+    for (const [to, gave] of flowHeal(on, healOf, def.passBonus)) {
+      st.healed += gave;
+      st.shown = to;
     }
     st.due -= dt;
     if (st.due > 0) return;
     st.due += HEAL_SHOWN;
-    if (st.healed >= 1) floatText(on.pos.x, 2.4, on.pos.z, `+${Math.round(st.healed)}`, 'heal', '#6dff7a');
+    const at = st.shown ?? on;
+    if (st.healed >= 1) floatText(at.pos.x, 2.4, at.pos.z, `+${Math.round(st.healed)}`, 'heal', '#6dff7a');
     st.healed = 0;
+    st.shown = undefined;
   },
   stop(_player, _def, st) {
     st.hush?.();
+    removeLabel(st.linkLabel);
     G.scene.remove(st.beam, st.core);
     st.geo.dispose();
     st.core.geometry.dispose();

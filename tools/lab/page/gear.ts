@@ -39,6 +39,8 @@ interface ClassGear {
   gearRegen: number;
   draught: number;
   damage: number;
+  /** his All Damage (%), on average: what the healing beam's flat part is raised by (skills/lifethread.ts) */
+  allDamage: number;
 }
 
 /** One full set for `cls`: every slot its loot rolls, an off-hand left empty by a two-handed weapon. */
@@ -77,19 +79,20 @@ function draughtOf(cls: ClassDef, stats: DerivedStats): number {
 function classGear(cls: ClassDef, tier: GearTier, sets: number, seed: number): ClassGear {
   window.__labSeed(seed);
   const bare = computeStats(cls.base, {} as Profile['equipped']);
-  const sum = { life: 0, regen: 0, draught: 0, damage: 0 };
+  const sum = { life: 0, regen: 0, draught: 0, damage: 0, allDamage: 0 };
   for (let set = 0; set < sets; set++) {
     const stats = computeStats(cls.base, rollSet(cls, tier));
     sum.life += stats.maxLife;
     sum.regen += stats.lifeRegen;
     sum.draught += draughtOf(cls, stats);
     sum.damage += damageMultiple(cls, stats, bare);
+    sum.allDamage += stats.damagePct;
   }
   const life = sum.life / sets;
   const regen = sum.regen / sets;
   return {
     cls, life, gearLife: life - cls.base.life, regen, gearRegen: regen - cls.base.lifeRegen,
-    draught: sum.draught / sets, damage: sum.damage / sets,
+    draught: sum.draught / sets, damage: sum.damage / sets, allDamage: sum.allDamage / sets,
   };
 }
 
@@ -100,7 +103,7 @@ function classLine(gear: ClassGear, first: ClassGear): string {
   return `  ${gear.cls.id}: Health ${base.life} + ${gear.gearLife.toFixed(0)} = ${gear.life.toFixed(0)} `
     + `(gear's ${against} times the ${first.cls.id}'s), regeneration ${base.lifeRegen.toFixed(1)} + `
     + `${gear.gearRegen.toFixed(1)} = ${gear.regen.toFixed(1)} a second, draught ${gear.draught.toFixed(0)}, `
-    + `damage ${gear.damage.toFixed(2)} times`;
+    + `damage ${gear.damage.toFixed(2)} times (All Damage +${gear.allDamage.toFixed(0)}%)`;
 }
 
 /** The classes out of their own Health's order in `measure`, as a problem, or null. */

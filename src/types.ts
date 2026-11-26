@@ -122,11 +122,18 @@ export interface SkillDef {
   duration?: number;
   pull?: number;
   absorbPct?: number;
-  /** a healing beam (no `healPct`): the Health it restores a second, before the healer's All Damage.
+  /** a healing beam: the Health it restores a second, before the healer's All Damage, and `healPct` of the healed
+   *  one's most Health a second on top (which the healer's gear doesn't raise), both raised by its `ramp`.
    *  A draught: the Health it restores, a fixed amount and a share of the hero's most on top (the fixed part keeps a
    *  small Health pool's draught from shrinking with it) */
   heal?: number;
   healPct?: number;
+  /** a healing beam held on one ally: its heal grows by `perSecond` of itself a second up to `most` times, kept while
+   *  the beam is off him for no longer than `grace` (s) and begun again past it (skills/lifethread.ts) */
+  ramp?: { perSecond: number; most: number; grace: number };
+  /** a healing beam's heal passed on by a full healer down his own beam: how much stronger for each healer it passes
+   *  (0.1: one +10%, two +20%) */
+  passBonus?: number;
   /** a strike that may set what it hits alight (combat/burn.ts): how likely, its fire damage a second, for how long */
   burn?: { chance: number; perSecond: number; seconds: number };
   /** a charged strike let go at once: its share of the full charge's damage and reach */
