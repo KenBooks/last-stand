@@ -1,6 +1,7 @@
 // Keyboard + mouse state. `pressed` holds keys that went down this frame. Touch controls
 // (ui/touch.ts) feed the same state: a move stick, held skill keys and an aim point.
 import * as THREE from 'three';
+import { DUMMY_SACK_BOTTOM } from '../data/foes/dummy';
 import { keyDeliveryDelay } from './keyDelivery';
 import { G } from '../state';
 import { CAMERA } from '../data/balance';
@@ -220,7 +221,16 @@ function aimAlong(far: number, offHero = false): void {
   // (no headshot, #750; `lab headshots`)
   if (what === 'body' && on && offHero && met && onHead(on, met)) _best.addScaledVector(r.direction, AIM_INTO);
   else if (what === 'body' && on) {
-    _middle.set(on.pos.x, on.obj.position.y + on.height / 2, on.pos.z).sub(_best);
+    _middle.set(on.pos.x, on.obj.position.y + on.height / 2, on.pos.z);
+    if (on.def.dummy && _best.y - on.obj.position.y < DUMMY_SACK_BOTTOM) {
+      // Keep the cursor's height on the narrow wooden post, even while the dummy rocks.
+      const axis = on.model.head?.parent?.matrixWorld.elements;
+      if (axis && Math.abs(axis[5]) > 1e-6) {
+        const along = (_best.y - axis[13]) / axis[5];
+        _middle.set(axis[12] + axis[4] * along, _best.y, axis[14] + axis[6] * along);
+      }
+    }
+    _middle.sub(_best);
     _best.addScaledVector(_middle, Math.min(1, AIM_INTO / Math.max(_middle.length(), 1e-6)));
   }
   ray.far = Infinity;
