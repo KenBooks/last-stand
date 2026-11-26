@@ -100,7 +100,8 @@ const skill: InstantSkill = {
           // (what it kills burns, and goes round with it)
           for (const e of inside) {
             const blow = { dir: swingWay(pos, e.pos, 1, 1, -0.3), lift: 0.6, style: 'burn' as const };
-            hitEnemy(e, def.damage * TICK, { by: player, skill: def, tags: def.tags, type: 'lightning', silent: true, blow });
+            hitEnemy(e, def.damage * TICK, { by: player, skill: def, tags: def.tags, type: 'lightning', silent: true,
+              from: pos, blow });
           }
           if (inside.length && lash >= LASH_EVERY) {
             lash = 0;

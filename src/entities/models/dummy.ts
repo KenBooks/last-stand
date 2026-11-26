@@ -174,16 +174,20 @@ export function buildDummy(): Model {
 
   for (const joint of [root, sway, head, target]) mergeAlike(joint);
 
-  // spring wobble: lean back when struck, sway a little sideways; at rest it stands still (a sway of 0.01 rad, 2 cm
+  // Spring wobble around the base; at rest it stands still (a sway of 0.01 rad, 2 cm
   // at its head, moved every part each frame: on WebGPU each moved part's draw is refreshed in full)
-  let lean = 0, leanV = 0, tilt = 0, tiltV = 0, prevHit = 0;
+  let lean = 0, leanV = 0, tilt = 0, tiltV = 0;
+  function impact(x: number, z: number): void {
+    const length = Math.hypot(x, z);
+    if (length < 1e-6) return;
+    const cos = Math.cos(root.rotation.y), sin = Math.sin(root.rotation.y);
+    const kick = 2.2 / length;
+    // Convert the world vector to the post's axes. Tilting around Z moves its head towards negative X.
+    leanV = (x * sin + z * cos) * kick;
+    tiltV = (z * sin - x * cos) * kick;
+  }
   function animate(st: AnimState): void {
     const dt = st.dt;
-    if (st.hit > prevHit + 0.2) {
-      leanV -= 2.2 * (st.hit - prevHit);
-      tiltV += (Math.random() - 0.5) * 2.4;
-    }
-    prevHit = st.hit;
     if (lean === 0 && leanV === 0 && tilt === 0 && tiltV === 0) return;
     leanV += (-STIFFNESS * lean - DAMPING * leanV) * dt; lean += leanV * dt;
     tiltV += (-STIFFNESS * tilt - DAMPING * tiltV) * dt; tilt += tiltV * dt;
@@ -196,5 +200,5 @@ export function buildDummy(): Model {
 
   shareGeometries(root);
   root.userData.crowdKind = 'dummy';
-  return { root, kit, animate, head, height: 1.95, dispose() { kit.dispose(); } };
+  return { root, kit, animate, impact, head, height: 1.95, dispose() { kit.dispose(); } };
 }

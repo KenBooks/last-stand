@@ -636,6 +636,8 @@ export interface Model {
   /** the joint its head and all on it ride, where it has no `joints` (the training dummy): a hit on what rides it is
    *  a headshot (combat/strikes.ts `onHead`; with `joints`, theirs) */
   head?: THREE.Object3D;
+  /** A horizontal impact in world space for models that physically react to a hit. */
+  impact?(x: number, z: number): void;
   /** a hero's hands (models/hands.ts: the lab's `hands` builds one alone from them) */
   readonly hands?: { L: Hand; R: Hand };
   /** its arms' build, where what dresses its forearms is sized on it (models/build.ts) */
