@@ -173,6 +173,62 @@ test('a room holds as many as its host said, and no more', async () => {
   host.ws.close();
 });
 
+test('a joiner who left on purpose frees its place at once', async () => {
+  // (from play, two tabs of one PC: the second's name tag was the first's, the host refused it, and joining again as
+  // another tag at once said "That room is full": the one turned away still held its place for the grace. A relay of
+  // its own with a long grace, so the next joiner comes well within it)
+  await withGrace(LONG_GRACE, async () => {
+    const closes = [['left', (ws) => ws.close(1000, 'left')], ['an older game\'s close', (ws) => ws.close()]];
+    for (const [why, close] of closes) {
+      const { code, host } = await openRoom({ max: 2 });
+      const first = connect(code, 'f1');
+      await first.t('hi');
+      await host.t('join');
+      close(first.ws);
+      await first.closed;
+      assert.equal((await host.t('leave')).p, 'f1', `${why}: the host never heard the joiner leave`);
+      const again = connect(code, 'f2');
+      assert.deepEqual((await again.t('hi')).peers, [`h${code}`], `${why}: the next joiner was turned away`);
+      again.ws.close();
+      host.ws.close();
+    }
+  });
+});
+
+test('a joiner whose socket dropped keeps its place for the grace', async () => {
+  await withGrace(LONG_GRACE, async () => {
+    const { code, host } = await openRoom({ max: 2 });
+    const first = connect(code, 'd1');
+    await first.t('hi');
+    first.ws.terminate();
+    await sleep(20);
+    const other = connect(code, 'd2');
+    assert.equal((await other.t('denied')).why, 'full', 'a dropped peer lost its place before the grace was out');
+    const back = connect(code, 'd1');
+    assert.deepEqual((await back.t('hi')).peers, [`h${code}`]);
+    back.ws.close();
+    host.ws.close();
+  });
+});
+
+/** a grace far longer than a check's waits: what happens within it can't be the grace running out */
+const LONG_GRACE = 10_000;
+
+/** `check` run against a relay of its own holding a dropped peer for `grace` (ms). */
+async function withGrace(grace, check) {
+  const shared = base;
+  const own = await startRelay({ port: 0, origins: ORIGINS, grace, log: quiet });
+  base = `127.0.0.1:${own.address().port}`;
+  try {
+    await check();
+  } finally {
+    base = shared;
+    own.closeAllConnections?.();
+    for (const client of own.clients ?? []) client.terminate();
+    await new Promise((resolve) => own.close(resolve));
+  }
+}
+
 test('a host can\'t open a room another host holds', async () => {
   const { code, host } = await openRoom({ pub: true });
   const other = connect(code, 'other', { host: true, pub: true });

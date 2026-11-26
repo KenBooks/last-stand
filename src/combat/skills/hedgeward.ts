@@ -12,6 +12,8 @@
 // game hears `waveCleared`).
 // Every game raises it where it was let go (the cast's point, `settle`), and its health as the fight's owner deals it
 // is told to every game by where it stands (enemyAI's `ward` fx).
+// In the village, where the others can't cast to break it, a partner walking into it breaks it (`touchedByPartner`,
+// told to every game: net/wardTouch.ts); its caster's own touch and a fight leave it standing.
 // The wall itself is entities/models/hedgeward.ts.
 import * as THREE from 'three';
 import { G } from '../../state';
@@ -24,8 +26,10 @@ import { addShake } from '../../core/renderer';
 import { additive } from '../../core/materials';
 import { groundHeight } from '../../world/arena';
 import { floorPatch, lay } from '../../fx/floorPatch';
-import { addWard, circlesAlong, removeWard, type Ward } from '../../world/wards';
-import { lowerProp, raiseProp } from '../../world/destructible';
+import { addWard, circlesAlong, nearestOnWard, removeWard, wardAt, type Ward } from '../../world/wards';
+import { breakProp, lowerProp, raiseProp } from '../../world/destructible';
+import { onMessages } from '../../net/messages';
+import { tellWardTouched } from '../../net/wardTouch';
 import { fx } from '../../entities/enemyAI';
 import {
   buildHedgeward, disposeHedgeward, hedgewardOutline, steppedOver, HEDGE_HEIGHT, HEDGE_WIDTH,
@@ -50,6 +54,9 @@ const IN_THE_WAY = 0.5;
 /** half its thickness (m: the stakes, the weave either side and the bramble), and how far its line stands out from
  *  its foot towards the foes (its stakes lean out) */
 const HALF = 0.25, LINE_OUT = 0.08;
+/** how near a partner's body must come to its circles to break it by touch in the village (m: kept off them, his
+ *  body stops a hair from them) */
+const TOUCH = 0.08;
 /** how far inside the arena's edge its ends are kept (m) */
 const EDGE_IN = 1;
 /** rising out of the ground (s), coming apart as its time runs out and as it breaks (s), and how far it sinks as it
@@ -237,6 +244,37 @@ function raycastWall(root: THREE.Object3D, solid: THREE.Mesh, ray: THREE.Raycast
   solid.raycast(ray, hits);
 }
 
+// --- broken by a partner's touch -------------------------------------------------------------
+const _nearest = { x: 0, z: 0 };
+/** the lab's canary (`lab coop --scenarios wall-touch --canary`): a touch breaks this game's copy alone, never told */
+let touchUntold = false;
+
+/** The lab's canary: a wall broken by touch is never told to the other games while `hold`. */
+export function holdTouchWord(hold: boolean): void {
+  touchUntold = hold;
+}
+
+/**
+ * Whether this game's own hero, not the wall's caster, touches `ward` in the village: there he can't cast to break it,
+ * so a wall raised across a way, a door or a portal shut him out for good (from the owner: "its currently possible to
+ * troll other players in coop by denying them entry with ranger's vines skill that cannot be destroyed... lets make it
+ * possiible to destroy the vines for other players by touching them"). In a fight it stays an ordinary prop, broken by
+ * hits alone: a partner brushing it there would take the ranger's shelter away.
+ */
+function touchedByPartner(caster: Player, ward: Ward): boolean {
+  const hero = G.player;
+  if (G.mode !== 'menu' || caster.local || !hero.local) return false;
+  return nearestOnWard(ward, hero.pos.x, hero.pos.z, _nearest) <= HALF + hero.radius + TOUCH;
+}
+
+// (a partner's game broke its copy by its hero's touch, and says where it stood: this game's copy breaks too)
+onMessages(['wardTouch'], (m) => {
+  const x = Number(m.x), z = Number(m.z);
+  if (!Number.isFinite(x) || !Number.isFinite(z) || G.mode !== 'menu') return;
+  const ward = wardAt(x, z);
+  if (ward) breakProp(ward.prop);
+});
+
 // --- the wall standing ------------------------------------------------------------------
 /** every wall standing, whoever's: how each is taken down as its wave is cleared */
 const everyWall = new Set<() => void>();
@@ -291,6 +329,11 @@ function raise(player: Player, def: Def, at: Placement): void {
     update(dt) {
       t += dt;
       if (endedAt < 0 && def.duration && t >= def.duration) end(false);
+      // (walked into in the village by a partner: broken here, every other game told where it stood)
+      if (endedAt < 0 && touchedByPartner(player, ward)) {
+        breakProp(prop);
+        if (!touchUntold) tellWardTouched(middle.x, middle.z);
+      }
       // (a hit taken: it flashes, and knocks as wood does)
       if (endedAt < 0 && prop.life < life) {
         life = prop.life;

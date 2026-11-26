@@ -26,6 +26,7 @@ const PARTS = [
   'stag-1: the Stag of Ash lane, run, fire, gore, crash, antler gore, stamp, kick, breath, burning wood, toss and embers, enemy fx (entities/bosses/stag.ts)',
   'tavern-1: the tavern\'s keeper and mugs, ctl tv (the host\'s ledger and keeper) and tv? (a guest\'s asks) (world/tavernKeeper.ts)',
   'ward-1: the Hedgeward rising, struck and breaking, the enemy fx `ward` (combat/skills/hedgeward.ts)',
+  'ward-touch-1: a hero\'s wall broken in the village by a partner\'s touch, ctl wardTouch (net/wardTouch.ts)',
 ];
 
 /** FNV-1a of the parts, as a number the relay keeps on a room's card (it reads `v` as a count under a million) */

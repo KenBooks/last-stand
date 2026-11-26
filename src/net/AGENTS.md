@@ -101,3 +101,9 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   host removes the guest's pending orders and returns their held mug to the top it came from. An ale left mid-drink
   is returned dirty for washing. `lab coop --scenarios tavern-recovery` joins a third page with a full mug held,
   disconnects the holder and has the remaining guest retake that mug.
+- `wardTouch.ts`: a hero's wall (the Hedgeward) broken in the village by a partner walking into it, the protocol's
+  part `ward-touch-1`: the toucher's own game judges the touch (`touchedByPartner` in `combat/skills/hedgeward.ts`),
+  breaks its copy and sends where it stood on `ctl` (`wardTouch`, to every game, as a ping goes); each game breaks its
+  own copy found there (`wardAt`), in the village alone. No host rules it: in the village every game runs its own
+  world. Set by the session as a ping's way is (`setWardTouchNet`), so the wall never imports the session.
+  `npm run lab -- coop --class ranger --scenarios wall-touch` (`--canary`: the touch never told).

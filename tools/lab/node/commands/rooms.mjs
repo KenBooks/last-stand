@@ -9,8 +9,9 @@ export default {
     + 'own clicks and typing (a public room opened from the create page, listed in the partner\'s browser with its '
     + 'host, name, map and size, joined from its row, the relay counting two, gone once its host left; a password '
     + 'room listed locked, its password nowhere in the list, a wrong password turned away with the dialog asking for '
-    + 'it, the right one let in; a private room never listed, joined by its code; both pages pictured at `--screen` '
-    + 'in `out/rooms/<screen>`; `--canary` starts the relay letting any password in and listing private rooms)',
+    + 'it, the right one let in; a private room for two never listed, joined by its code, first as the host\'s own tag '
+    + '(turned away) and at once as its own (let in); both pages pictured at `--screen` in `out/rooms/<screen>`; '
+    + '`--canary` starts the relay letting any password in, listing private rooms and holding a joiner that left)',
   help: 'Play together\'s rooms end to end against a co-op relay of the lab\'s own (server/relay on localhost): a '
     + 'public room opened from the create page, listed in a partner\'s browser and joined from its row, gone once '
     + 'its host left; a password room listed locked, a wrong password turned away and the right one let in; a '

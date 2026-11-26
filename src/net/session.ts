@@ -26,6 +26,7 @@ import { changedColour, colourOf, freeColour, ownColour, saveColour, savedColour
 import type { HeroColourId } from '../data/heroColours';
 import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGround, type GroundDrop } from '../game/groundItems';
 import { setPingNet, clearPings } from '../game/ping';
+import { setWardTouchNet } from './wardTouch';
 import {
   answerPlace, duelQuit, duelSetup, duelWord, readSetup, setDuelNet, setupNow, takeSetup, wantPlace,
   type AskRefusal, type DuelPart, type DuelSetup,
@@ -410,6 +411,7 @@ export function leaveRoom(): void {
   session.biome = null;
   role.current = 'solo';
   setPingNet(null);
+  setWardTouchNet(null);
   clearPings();
   // (back in the colour picked, or the hero's own)
   wearRoomColour(null);
@@ -465,6 +467,8 @@ function wire(l: Link): void {
   });
   // a ping has no gameplay effect: every game sends its own to every other (game/ping.ts)
   setPingNet((m) => send('ctl', { t: 'ping', ...m }));
+  // a hero's wall broken in the village by touch: the toucher's game tells every other (net/wardTouch.ts)
+  setWardTouchNet((x, z) => send('ctl', { t: 'wardTouch', x, z }));
   // chat has no gameplay effect: every game sends its own to every other (net/chat.ts)
   setChatNet((text) => send('ctl', { t: 'chat', text }));
   // a trade between two players in the lobby: straight between them, the host ruling it done or off (net/trade.ts)

@@ -10,6 +10,7 @@
 //   GET /rooms?app=<app>                          the public rooms of the page's site (rooms.mjs)
 //   ws(s)://host/agent/open, /agent/join          an agent invited into a preview's game (agents.mjs): never co-op's
 // A peer whose socket drops and comes back with the same id within GRACE is the same peer: the others never see it go.
+// One whose game closed it on purpose (`LEFT`) is gone at once.
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
@@ -41,6 +42,10 @@ const RATE = { msgs: 400, bytes: 1 << 20 };
 const NAME = /^[\w.-]{1,48}$/;
 /** how long a joiner of a locked room has to give its password (ms) */
 const PASS_WAIT = 15000;
+/** the close codes of a socket its game closed on purpose, leaving its room for good (1000: the game's own leave, with
+ *  its reason `left`; 1005: no code, as an older game's leave closed it): its place is let go at once, not held for
+ *  the grace. A dropped socket (1006) or a page gone (1001: a reload comes back with a new id anyway) is held. */
+const LEFT = new Set([1000, 1005]);
 
 /**
  * Starts a relay on `port` (0: any free one). `origins` the pages it takes, `grace` how long a dropped peer is held
@@ -191,15 +196,20 @@ export function startRelay({
       const out = JSON.stringify({ ch: m.ch, d: m.d, from: id });
       if (typeof m.to === 'string') { const p = peers.get(m.to); if (p) send(p, out); } else others(room, id, out);
     });
-    ws.on('close', () => {
+    ws.on('close', (code) => {
       if (peer.ws !== ws) return;
       peer.ws = null;
-      peer.gone = setTimeout(() => {
+      const leave = () => {
         peers.delete(id);
         log('leave', key, id, `(${peers.size} in the room)`);
         others(room, id, JSON.stringify({ t: 'leave', p: id }));
         dropIfEmpty(key, room);
-      }, grace);
+      };
+      // (closed by its game on purpose, it's gone at once: held for the grace, a joiner its host had turned away (a
+      // name tag taken) kept its place, and its next try as another tag found the room full. A dropped socket is
+      // held for the grace, to come back unseen)
+      if (LEFT.has(code) && !faults.holdLeft) leave();
+      else peer.gone = setTimeout(leave, grace);
     });
   }
 
