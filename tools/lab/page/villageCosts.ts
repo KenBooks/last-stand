@@ -109,6 +109,7 @@ export const VILLAGE_COSTS: Readonly<Record<string, number>> = {
   hallWallsFlush: 1,
   hallTorchesBurn: 1,
   hallWindowsSeeThrough: 1,
+  cameraStaysInHall: 1,
   windowsLetSunIn: 1,
   windowsLightTheHall: 3,
   propHoleWhereHidden: 1,

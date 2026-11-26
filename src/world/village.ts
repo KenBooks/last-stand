@@ -1625,6 +1625,10 @@ function hallSideWall(scene: THREE.Object3D, wall: Wall, M: Mats, sideX: number,
     // (glass lets the sun through: casting nothing and taking no shadow, as the engine takes a still mesh that takes
     // one for a caster, `TUNE.castAll`, and the panes shut every window to the sun)
     mesh.castShadow = mesh.receiveShadow = false;
+    // (in the wall as what's flown into: see-through, the wall leaves it out, and over the shoulder the camera backed
+    // out through the window, from play "it should not zoom out outside the window in 3rd person")
+    mesh.updateWorldMatrix(true, false);
+    wall.addGeometry(pane, mesh.matrixWorld, true, 'beyond', undefined, 'hallGlass');
   }
   // (each an opening the sky lights the hall through, on the wall's inner face, facing in)
   return windowsAlong().map((z) => ({ at: new THREE.Vector3(sideX - s * thick / 2, y0 + sill + high / 2, z), way: -s }));
