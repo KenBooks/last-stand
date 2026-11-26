@@ -137,6 +137,10 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   // Trees, Leaves and Grass: out of what's drawn everywhere at once, held through a biome change, no program made.
   const programs = (): number => PIPELINES.made;
   const markedCosts: string[] = [];
+  // (the sun's shadow drawn every frame while it reads: kept between its turns, the frame after a click could read the
+  // map from before it, and the lobby's leaves, seen in their shadow alone, read the same triangles both ways)
+  const shadowTurns = RUST.tune.shadowTurns;
+  RUST.tune.shadowTurns = 0;
   for (const [mark, key] of MARKED_PARTS) {
     const marked = bearing(mark);
     const box = `#dev-panel [data-part="${key}"]`;
@@ -182,25 +186,35 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
     await clickBox('after a biome change', false);
     await chooseBiome(lobbyBiome);
   }
+  RUST.tune.shadowTurns = shadowTurns;
   lines.push(`Trees, leaves, grass: ${markedCosts.join('; ')}; no program made`);
 
   // Profile this spot: each checkbox's part timed in the panel, the pause menu left closed.
   panelProfile.clock = window.__labClock.realNow;
   panelProfile.nextFrame = window.__labClock.realFrame;
-  panelProfile.turns = { rounds: 1, frames: 1, settle: 1 };
+  // (rounds enough for each part's ±, which says whether its time is told apart from nothing)
+  panelProfile.turns = { rounds: 3, frames: 1, settle: 1 };
   await action('profile');
   // (its note is cleared as it starts and written as it ends: the button reads Profile this spot before its first
   // progress too, and read by it, the times were read before any was taken)
   const profiled = (): boolean => (element('.dv-prof-note').textContent ?? '') !== '';
   for (let i = 0; !profiled() && i < 600; i++) await realWait(20);
   check(profiled(), 'Profile this spot did not finish');
-  const times = [...document.querySelectorAll<HTMLElement>('[data-ms]')];
-  const timed = times.filter((ms) => / ms$/.test(ms.textContent ?? ''));
-  check(times.length >= 11 && timed.length === times.length, `Profile this spot timed ${timed.length} of ${times.length} parts`);
+  const times = [...document.querySelectorAll<HTMLElement>('#dev-panel [data-ms]')];
+  // (a time, or ≈0 where it isn't told apart from nothing, each with its ± in its title; none, untimed, where
+  // nothing of it is in the scene: the lobby has no spent arrows down)
+  const timed = times.filter((ms) => /( ms|≈0)$/.test(ms.textContent ?? '') && /±/.test(ms.title));
+  const noneHere = times.filter((ms) => ms.textContent === 'none').map((ms) => ms.dataset.ms);
+  const readings = times.length - noneHere.length;
+  const allTimed = times.length >= 11 && timed.length === readings;
+  check(allTimed, `Profile this spot timed ${timed.length} of ${readings} parts`);
+  check(noneHere.join() === 'the spent arrows', `Profile this spot said none of ${noneHere.join() || 'nothing'}`);
   check(!G.menuOpen, 'Profile this spot opened the pause menu');
   check(parts.every((part) => part.checked && !part.disabled), 'Profile this spot left a part out or a checkbox disabled');
   moments.push(await lab.screen('dev-profiled', [], '#dev-panel .dv-parts'));
-  lines.push(`Profile this spot: ${timed.length} parts timed in the panel, pause menu closed`);
+  const faint = times.filter((ms) => ms.textContent === '≈0').length;
+  const said = `${timed.length} parts timed in the panel (${faint} ≈0), none of: ${noneHere.join()}`;
+  lines.push(`Profile this spot: ${said}`);
 
   // The checkbox must apply to +1 and elite batches even with no run at all.
   const spawn = async (count: number) => {

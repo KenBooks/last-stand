@@ -23,7 +23,7 @@ import { cheats, flyFree, setFrozen, stepFrozen, time, type DevHooks } from './i
 import { initDevHelp } from './help';
 import { changeDevBiome } from './biome';
 import { frameCounts } from './frameCounts';
-import { markOf, panelParts, partKey, partLabel } from './panelParts';
+import { markOf, panelParts, partKey, partLabel, shownCost } from './panelParts';
 import type { RarityId, Slot } from '../types';
 import './dev.scss';
 
@@ -327,6 +327,8 @@ function putPartsBack(all = false): void {
 }
 
 // --- each part timed (Profile this spot) ---------------------------------------------------------------------------
+/** what a part with nothing of it here shows in place of a time */
+const NONE_HERE = { text: 'none', title: 'Nothing of it in the scene here: not timed', faint: true };
 /** whether the panel's profile is running, and whether it was asked to stop (its button again) */
 let profiling = false;
 let stopProfiling = false;
@@ -351,16 +353,23 @@ async function profileSpot(): Promise<void> {
   note.textContent = '';
   refreshPanel();
   try {
+    // (a part with nothing of it here isn't timed: it'd read the GPU's wander as its cost)
+    const parts = panelParts();
+    const empty = new Set(parts.filter((part) => part.empty).map((part) => part.name));
     const found = await profile({
-      ...panelProfile, parts: panelParts(), cancelled: () => stopProfiling,
+      ...panelProfile, parts: parts.filter((part) => !part.empty), cancelled: () => stopProfiling,
       onProgress: (at) => { button.textContent = `Stop (${Math.floor((100 * at.done) / at.total)}%)`; },
     });
-    const takes = new Map(found.parts.map((cost) => [partKey(cost.name), cost.on - cost.off]));
+    const costs = new Map(found.parts.map((cost) => [partKey(cost.name), cost]));
     shownMs.forEach((ms) => {
-      const part = takes.get(ms.dataset.ms!);
-      ms.textContent = part === undefined ? '' : `${part.toFixed(1)} ms`;
+      const cost = costs.get(ms.dataset.ms!);
+      const shown = cost ? shownCost(cost) : empty.has(ms.dataset.ms!) ? NONE_HERE : null;
+      ms.textContent = shown?.text ?? '';
+      ms.title = shown?.title ?? '';
+      ms.classList.toggle('faint', Boolean(shown?.faint));
     });
-    note.textContent = `The frame here: ${found.frame.toFixed(1)} ms drawn. Beside each part, the frame with it less without.`;
+    note.textContent = `The frame here: ${found.frame.toFixed(1)} ms drawn. Beside each part, the frame with it less `
+      + 'without; ≈0 where it can\'t be told apart from nothing (its ± in its tooltip).';
   } catch (error) {
     if (!(error instanceof ProfileCancelled)) throw error;
     note.textContent = 'Profiling stopped.';

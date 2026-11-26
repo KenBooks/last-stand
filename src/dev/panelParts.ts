@@ -5,6 +5,8 @@
 // categories... most of them probably 0ms anyway"). Here each checkbox is one or more of the profiler's parts at once
 // (the sun's and the lamps' shadows are Shadows), or a mark of the panel's own (`marked.ts`: Trees, Leaves, Grass).
 import { frameParts, type ScenePart } from '../perf/sceneParts';
+import { costKnown } from '../perf/profileReport';
+import type { PartCost } from '../perf/profiler';
 import { setMarkedShown, type Mark } from './marked';
 
 /** A part's name without the count it's given (`the particles (3)`), which changes as the scene does. */
@@ -12,10 +14,10 @@ export const partKey = (name: string): string => name.replace(/ \(\d+\)$/, '');
 
 /** A checkbox of the panel: its key (the profiler's part's name where it's one, kept so `join set part:<key>` and the
  *  lab name it as before), its label, and the profiler's parts it takes out together, or the mark it hides. */
-interface PanelPart { key: string; label: string; parts?: string[]; mark?: Mark }
+interface Checkbox { key: string; label: string; parts?: string[]; mark?: Mark }
 
 /** the panel's parts, in its order (two to a row) */
-const PANEL_PARTS: PanelPart[] = [
+const PANEL_PARTS: Checkbox[] = [
   { key: 'half the scene\'s pixels', label: 'Full resolution', parts: ['half the scene\'s pixels'] },
   { key: 'the point lights and the lamps', label: 'Point lights', parts: ['the point lights and the lamps'] },
   {
@@ -42,10 +44,18 @@ export const markOf = (key: string): Mark | undefined => PANEL_PARTS.find((part)
 /** The label of the part `key`. */
 export const partLabel = (key: string): string => PANEL_PARTS.find((part) => part.key === key)?.label ?? key;
 
+/** A checkbox's part, and whether there's nothing of it in the scene here (its profiler's parts each hide none: the
+ *  spent arrows with no arrow down), which the panel doesn't time: timed, nothing read 0.4 ms of a 1.2 ms frame. */
+export interface PanelPart extends ScenePart { empty?: boolean }
+
+/** A profiler's part holds no object (`the spent arrows (0)`: `shownPart` counts what it shows and hides). */
+const holdsNone = (part: ScenePart): boolean => / \(0\)$/.test(part.name);
+
 /** One checkbox's part: its profiler's parts changed together, each put back as it found it (`restore`). */
-function joined(key: string, parts: ScenePart[]): ScenePart {
+function joined(key: string, parts: ScenePart[]): PanelPart {
   return {
     name: key,
+    empty: parts.every(holdsNone),
     change: (on) => {
       for (const part of parts) part.change(on);
     },
@@ -57,9 +67,9 @@ function joined(key: string, parts: ScenePart[]): ScenePart {
 
 /** The parts the panel takes out and times, in its order, as the scene stands now: a checkbox whose parts the
  *  profiler can't time here (`untimed`) or doesn't have is left out. */
-export function panelParts(): ScenePart[] {
+export function panelParts(): PanelPart[] {
   const found = new Map(frameParts().map((part) => [partKey(part.name), part]));
-  const parts: ScenePart[] = [];
+  const parts: PanelPart[] = [];
   for (const { key, parts: names, mark } of PANEL_PARTS) {
     if (mark) {
       parts.push({ name: key, change: (on) => setMarkedShown(mark, on) });
@@ -70,4 +80,19 @@ export function panelParts(): ScenePart[] {
     parts.push(joined(key, own as ScenePart[]));
   }
   return parts;
+}
+
+/** A part's time as the panel shows it beside its checkbox: what it takes (ms), or `≈0` where its rounds can't tell
+ *  it apart from nothing (under twice its `±`, `costKnown`), and in full in its title. On an idle desktop GPU the
+ *  frame's own time wanders from round to round, and a part that draws nothing read 0.4 ms with nothing said of it. */
+export function shownCost(cost: PartCost): { text: string; title: string; faint: boolean } {
+  const takes = cost.on - cost.off;
+  const known = cost.error === undefined ? '' : ` ±${cost.error.toFixed(1)}`;
+  const frames = `the frame ${cost.on.toFixed(2)} ms with it, ${cost.off.toFixed(2)} without`;
+  const title = `${takes.toFixed(2)}${known} ms: ${frames}`;
+  if (costKnown(cost) && takes > 0) return { text: `${takes.toFixed(1)} ms`, title, faint: false };
+  // (a part of the panel's is a thing drawn, never another way of drawing: one that reads the frame faster with it
+  // than without, past its ±, read the GPU's wander: Fire's -0.4 ms on 3 rounds)
+  const why = takes > 0 ? 'not told apart from nothing' : 'the frame no slower with it';
+  return { text: '≈0', title: `${title}, ${why}`, faint: true };
 }
