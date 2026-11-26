@@ -121,6 +121,10 @@ const GRACE = 8000;
 const RECONNECT = 30_000;
 /** a ping to the server every so often, for the round trip (the scoreboard graphs it) */
 const PING_MS = 1000;
+/** the close code of a room left on purpose: the relay lets its place go at once (`LEFT` in server/relay/relay.mjs),
+ *  where a dropped socket's is held for its grace. Held, a joiner the host turned away for a name tag taken kept its
+ *  place, and its next try as another tag found a room of two full. */
+const LEFT_CODE = 1000;
 function serverLink(code: string, server: string, as: LinkAs): Promise<Link> {
   const self = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => (b % 36).toString(36)).join('');
   const opening = as.host;
@@ -149,7 +153,7 @@ function serverLink(code: string, server: string, as: LinkAs): Promise<Link> {
       onMessage(fn) { onMsg = fn; },
       onJoin(fn) { join = fn; },
       onLeave(fn) { gone = fn; },
-      leave() { left = true; clearInterval(pinger); for (const t of missing.values()) clearTimeout(t); missing.clear(); netLog('left the room'); ws?.close(); },
+      leave() { left = true; clearInterval(pinger); for (const t of missing.values()) clearTimeout(t); missing.clear(); netLog('left the room'); ws?.close(LEFT_CODE, 'left'); },
     };
     /** a message for the relay itself (a host's password and card, a joiner's password) */
     const toServer = (m: unknown) => { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)); };

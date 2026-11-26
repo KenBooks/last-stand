@@ -5,9 +5,11 @@
 //     joined from its row (the list then counting two), left, and gone from the list once its host has left;
 //   a password room, listed as locked, its password never in the list; joined with a wrong password (turned away,
 //     the dialog asking for it), then with the right one where the dialog asks;
-//   a private room, never listed, joined by its code.
+//   a private room for two, never listed, joined by its code: first as the host's own name tag (as a second tab of
+//     one browser keeps it), turned away and asked for another, then at once as its own, which must let it in.
 // The relay's own list is read beside the browser's (as a page of the game's origin reads it). `--canary` starts the
-// relay with the faults it must catch: any password let in, and private rooms listed. Pictures of each step in
+// relay with the faults it must catch: any password let in, private rooms listed, and a joiner that left on purpose
+// held for the grace. Pictures of each step in
 // `out/rooms/<screen>/`.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -21,8 +23,9 @@ const STEP_MS = 20000;
 /** how often a waited-for step is read again (ms), and the game frames run between reads */
 const READ_MS = 150;
 const FRAMES_A_READ = 2;
-/** the relay holds a dropped peer this long here (ms; the deploy's is 8 s): a host gone leaves the list soon */
-const GRACE_MS = 400;
+/** the relay holds a dropped peer this long here (ms), the deploy's: a joiner turned away and back at once comes well
+ *  within it, as a player's does */
+const GRACE_MS = 8000;
 const TAGS = { host: 'Brannoch', guest: 'Ysolde' };
 const PUBLIC = { kind: 'public', name: 'Crypt crawl, all welcome', password: '', max: 3 };
 const LOCKED = { kind: 'password', name: 'Friends only', password: 'ember-gate', max: 4 };
@@ -241,9 +244,19 @@ async function privateRoom(games, found, relay, dir) {
   const listed = rooms.some((r) => r.code === code);
   found.say(`private room: ${listed ? 'listed' : 'not listed'}`);
   found.expect(!listed, 'the private room is listed', 'listPrivate');
+  // (the host's own tag first, as a second tab of one browser has it: turned away, its place must go with it)
+  await games[1].call('roomsJoinCode', { tag: TAGS.host, code });
+  const [, refused] = await until(games, (h, g) => g.session === 'failed', 'a join as the host\'s own tag was let in');
+  found.say(`joined as the host's own tag: "${refused.status}"`);
+  const turned = Date.now();
   await games[1].call('roomsJoinCode', { tag: TAGS.guest, code });
-  await until(games, (h, g) => g.session === 'joined' && h.partners === 1, 'the private room was never joined by its code');
-  found.say('joined by its code');
+  const settled = (h, g) => (g.session === 'joined' && h.partners === 1) || g.session === 'failed';
+  const [, joined] = await until(games, settled, 'the private room was never joined by its code');
+  const after = ((Date.now() - turned) / 1000).toFixed(1);
+  found.say(joined.session === 'joined' ? `joined by its code as its own tag, ${after} s after it was turned away`
+    : `joined by its code as its own tag ${after} s after it was turned away: "${joined.status}"`);
+  const fullAgain = 'a joiner turned away for its tag found the room full trying again';
+  found.expect(joined.session === 'joined', fullAgain, 'holdLeft');
   await bothLeave(games, relay.url, relay.origin, code);
 }
 
@@ -266,7 +279,7 @@ async function createPictures(games, dir) {
 export async function runRooms(side, { canary = false } = {}) {
   const { startRelay } = await import('../../../server/relay/relay.mjs');
   const origin = new URL(side.url).origin;
-  const faults = canary ? { anyPassword: true, listPrivate: true } : {};
+  const faults = canary ? { anyPassword: true, listPrivate: true, holdLeft: true } : {};
   const relayLog = [];
   const log = (...words) => relayLog.push(`${new Date().toISOString()} ${words.join(' ')}`);
   const server = await startRelay({ port: 0, origins: origin, grace: GRACE_MS, faults, log });
@@ -287,7 +300,7 @@ export async function runRooms(side, { canary = false } = {}) {
     await lockedRoom(games, found, relay, dir);
     await privateRoom(games, found, relay, dir);
     if (canary) {
-      for (const fault of ['anyPassword', 'listPrivate']) {
+      for (const fault of ['anyPassword', 'listPrivate', 'holdLeft']) {
         const seen = found.faultsSeen.has(fault);
         found.say(`canary: ${fault} ${seen ? 'caught' : 'went unseen'}`);
         if (!seen) found.problems.push(`rooms: the canary's ${fault} went unseen`);
