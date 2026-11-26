@@ -5,6 +5,9 @@ import type { FoeFile } from '../enemies';
 
 declare module '../enemies' { interface EnemyIds { dummy: true } }
 
+/** Height where the sack starts and the exposed post ends, above the dummy's floor. */
+export const DUMMY_SACK_BOTTOM = 0.86;
+
 export const FOES: FoeFile = {
   // lobby target practice; never part of a wave
   dummy: {

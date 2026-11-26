@@ -2,8 +2,8 @@
 
 The ranger's headshots (#750; `page/headshots.ts`): an arrow that strikes a foe's head is always a critical hit
 (`HitOpts.head`, `combat/damage.ts`), judged where the shot met the body (`combat/strikes.ts` `onHead`: the piece it
-met rides the model's head joint, a rigid mesh under it or a skinned triangle that joint moves the most), and only
-over the shoulder or through the eyes (`aimsForHeads` in `skills/ranger.ts`: the owner's choice).
+met rides the model's head joint, a rigid mesh under it or a skinned triangle that joint moves the most). This rule
+applies in every camera view.
 
 Every kind of foe (the bosses, the Ossuary Twins and the training dummy among them) is stood alone before the hero,
 turned to face him, in its idle pose (it thinks as the dummy does and doesn't evade). His own chance of a critical
@@ -12,10 +12,9 @@ Shot; `--skills`) is drawn to full at its head, then the foe is turned side-on a
 the front the Mossback's head juts out before its chest, and the game rightly called that shot a headshot). The aim
 follows the point each frame until the shot is loosed, as a player's would.
 
-- **Close views** (`third` by default, `first` with `--views`): every head shot must strike and crit, every chest
-  shot strike and not.
-- **Top-down** (`top`): the first skill alone, and no shot may crit; a miss says nothing there, but at least
-  three quarters of its head shots must strike, or "none crit" measured nothing.
+- **Views** (`third,top` by default, `first` with `--views`): every head shot must strike and crit. In close views
+  every chest shot must strike without a crit. Top-down checks the dummy by default, and all its chest shots must
+  land. With additional `--foes`, a missed chest shot is allowed in top-down, where the camera may obscure the torso.
 - `--canary`: the first foe's head joint taken to be the joint its trunk hangs from (its chest, the dummy's sway): its
   chest shot must be found a headshot.
 - `--trace`: how high each shot was aimed and struck (shares of the foe's height), what a straight line from the bow
@@ -43,9 +42,8 @@ his draw until the crosshair is on the head: loosed as the draw was full, the ca
 Rift Witch's small heads were passed by now and then, the game's aim on the floor beyond. A chest shot is loosed as
 drawn: held, the husk's thin chest side on swayed off the line.
 
-The A/B against main (`--foes dummy,husk,colossus --skills nockShot --views third --ab`): on main every head shot
-is a body hit (and the dummy has no head joint), here every one a headshot. Over the shoulder every foe takes about
-3 min 20 s here, top-down 1 min 15 s.
+To check the top-down training dummy with all three aimed shots, run
+`npm run lab -- headshots --class ranger --foes dummy --views top`.
 
 ## The berserker's punches (`--class warrior`)
 

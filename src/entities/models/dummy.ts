@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createKit } from '../../core/materials';
+import { DUMMY_SACK_BOTTOM } from '../../data/foes/dummy';
 import { ashlar, burlap, pbrMaterialMaps, wood } from '../../core/textures';
 import type { AnimState, Model } from '../../types';
 import { mulberry } from '../../util';
@@ -135,7 +136,7 @@ export function buildDummy(): Model {
   const profile = [
     [0.05, 0], [0.2, 0.02], [0.28, 0.12], [0.31, 0.3], [0.3, 0.48], [0.25, 0.62], [0.14, 0.7], [0.06, 0.72],
   ].map(([x, y]) => new THREE.Vector2(x, y));
-  part(new THREE.LatheGeometry(profile, 20), sack, sway, 0, 0.7, 0);
+  part(new THREE.LatheGeometry(profile, 20), sack, sway, 0, DUMMY_SACK_BOTTOM - sway.position.y, 0);
   for (const y of [0.76, 1.3]) part(new THREE.TorusGeometry(y < 1 ? 0.23 : 0.21, 0.018, 6, 20).rotateX(Math.PI / 2), rope, sway, 0, y, 0);
   // straw spilling out below the sack, and out of the sleeves' tied ends
   const spilt = strawOnce();

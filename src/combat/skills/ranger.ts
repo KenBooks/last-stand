@@ -25,7 +25,7 @@ import { wallHit } from '../../world/wall';
 import { clamp, rand } from '../../util';
 import { tunable } from '../../core/tuning';
 import { FULL_DRAW } from '../../data/balance';
-import { viewMode } from '../../core/renderer';
+import { DUMMY_SACK_BOTTOM } from '../../data/foes/dummy';
 import type { Obstacle } from '../../types';
 import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
@@ -64,10 +64,22 @@ export const streakMat = streakOf(0xe6efc4, 2.2);
  *  aimed at (`y` its height over the floor under it): the floor, a log, a foe's head, whatever was under the aim (aimed at
  *  a man's chest over the floor, a log was shot over and a shot at the floor flew on). No steeper than MAX_PITCH (out of
  *  the draw's reach it falls short) and no further down than MIN_PITCH (the pose's reach). */
-export function launchPitch(from: THREE.Vector3, target: THREE.Vector3, v: number): number {
+export function launchPitch(from: THREE.Vector3, target: THREE.Vector3, v: number, minPitch = MIN_PITCH): number {
   const d = Math.max(NEAR, Math.hypot(target.x - from.x, target.z - from.z)), h = groundHeight(target.x, target.z) + target.y - from.y;
   const v2 = v * v, disc = v2 * v2 - GRAVITY * (GRAVITY * d * d + 2 * h * v2);
-  return disc < 0 ? MAX_PITCH : clamp(Math.atan((v2 - Math.sqrt(disc)) / (GRAVITY * d)), MIN_PITCH, MAX_PITCH);
+  return disc < 0 ? MAX_PITCH : clamp(Math.atan((v2 - Math.sqrt(disc)) / (GRAVITY * d)), minPitch, MAX_PITCH);
+}
+
+/** Aim the released arrow and its preview exactly at an exposed dummy post, even up close. */
+function releaseAngles(player: Player, origin: THREE.Vector3, target: THREE.Vector3, speed: number): {
+  yaw: number; pitch: number;
+} {
+  const dummyPost = player.aimFoe?.def.dummy && target.y > 0 && target.y < DUMMY_SACK_BOTTOM;
+  const yaw = dummyPost
+    ? Math.atan2(target.x - origin.x, target.z - origin.z)
+    : player.shotHeading(origin, target);
+  const pitch = launchPitch(origin, target, speed, dummyPost ? -Math.PI / 2 : MIN_PITCH);
+  return { yaw, pitch };
 }
 
 /**
@@ -230,7 +242,7 @@ const warmArrows = (): THREE.Object3D[] => [arrowMesh(), ...warmStuck(), new THR
 /** the aim preview's flight is stepped as the arrow's is, a frame at 60 fps (swept, as its collisions are) */
 const PREVIEW_DT = 1 / 60;
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _w = new THREE.Vector3(), _c = new THREE.Vector3(), _wn = new THREE.Vector3();
-const _tip = new THREE.Vector3(), _f = new THREE.Vector3();
+const _tip = new THREE.Vector3();
 
 
 /**
@@ -238,67 +250,69 @@ const _tip = new THREE.Vector3(), _f = new THREE.Vector3();
  * `dir` at `v`, falling, until it sticks in the ground, meets a prop it doesn't clear or the arena's edge, or (unless it
  * goes on through them) a foe. Returns its points and where it strikes (null if it only runs out).
  */
-function flightPath(origin: THREE.Vector3, dir: THREE.Vector3, v: number, radius: number, level: boolean, pierce: boolean): { pts: THREE.Vector3[]; end: THREE.Vector3 | null } {
+function flightPath(origin: THREE.Vector3, dir: THREE.Vector3, v: number, radius: number, pierce: boolean): { pts: THREE.Vector3[]; end: THREE.Vector3 | null } {
   const pts = [origin.clone()], pos = _a.copy(origin), vel = _w.copy(dir).multiplyScalar(v), passed = new Set<Obstacle>();
+  const contact = (end: THREE.Vector3) => {
+    pts.push(end);
+    return { pts, end };
+  };
   while (pts.length < LASER_POINTS) {
-    // (in the projectile's order: it moves, then falls, as `fly` follows its move)
     const px = pos.x, py = pos.y, pz = pos.z;
     pos.addScaledVector(vel, PREVIEW_DT);
-    vel.y -= GRAVITY * PREVIEW_DT;
-    const dx = pos.x - px, dz = pos.z - pz;
-    // the first thing the step meets: the ground (the point half an arrow ahead), the edge, a prop, a foe
-    let t = 2;
-    _b.copy(vel).normalize().multiplyScalar(ARROW / 2).add(pos);
-    if (_b.y <= groundHeight(_b.x, _b.z)) {
-      // (where between the step's ends the point went under)
-      const g0 = py + (_b.y - pos.y) - groundHeight(px, pz), g1 = _b.y - groundHeight(_b.x, _b.z);
-      t = g0 > 0 ? g0 / (g0 - g1) : 0;
+    // Bodies and props are tested with the tip before gravity turns the arrow this frame.
+    const ahead = _e.copy(vel).setLength(ARROW / 2);
+    _c.set(px, py, pz).add(ahead);
+    _b.copy(pos).add(ahead);
+    let first = Infinity;
+    if (!pierce) {
+      for (const en of G.enemies) {
+        if (!en.alive || en.invulnerable) continue;
+        const hit = strikesBody(en, _c, _b, radius * 0.5);
+        if (hit >= 0) first = Math.min(first, hit);
+      }
+      if (first <= 1) return contact(new THREE.Vector3().lerpVectors(_c, _b, first));
     }
-    if (inWater(_b)) {
-      const g0 = py + (_b.y - pos.y) - FOUNTAIN.water, g1 = _b.y - FOUNTAIN.water;
-      t = Math.min(t, g0 > 0 ? g0 / (g0 - g1) : 0);
-    }
-    // (the wall where it's drawn, by the arrow's point as `fly` has it: out through a gate the path just ends)
-    _c.set(px, py, pz).addScaledVector(_e.copy(vel).normalize(), ARROW / 2);
-    if (throughGate(_c, _b)) return { pts, end: null };
-    if (G.arena.wall.cast(_c, _b, _hit)) t = Math.min(t, _hit.t);
-    // (a prop by the arrow's point, `_c` to `_b`, as the arrow meets it: before its flight puts the point in the ground)
     const low = _b.y - radius * 0.5, tx = _b.x - _c.x, tz = _b.z - _c.z;
+    let propEnd: THREE.Vector3 | null = null;
     for (const o of G.arena.obstacles) {
       if (o.h <= low || passed.has(o)) continue;
       const k = entry(_c.x, _c.z, tx, tz, o.x, o.z, o.r + radius * 0.5);
-      if (k < 0 || k >= t) continue;
-      // (as the arrow has it: past a prop whose line misses what it draws, a log's end, between a cluster's caps)
+      if (k < 0 || k >= first) continue;
       const c = Math.max(0, entry(_c.x, _c.z, tx, tz, o.x, o.z, o.r));
-      const at = _tip.set(_c.x + tx * c, _c.y + (_b.y - _c.y) * c, _c.z + tz * c);
-      if (!propSurface(o, at, _e.copy(vel).normalize(), _wn)) { passed.add(o); continue; }
-      t = k;
+      const surface = propSurface(o, _tip.lerpVectors(_c, _b, c), _e.copy(vel).normalize(), _wn);
+      if (!surface) { passed.add(o); continue; }
+      first = k;
+      propEnd = surface;
     }
-    // (a foe as the projectile strikes it: an arrow where its point meets its body, `strikesBody`)
-    if (!pierce) for (const en of G.enemies) {
-      if (!en.alive || en.invulnerable) continue;
-      const k = level ? strikesBody(en, _c.set(px, py, pz).add(_tip.subVectors(_b, pos)), _f.copy(pos).add(_tip), radius * 0.5) : entry(px, pz, dx, dz, en.pos.x, en.pos.z, en.radius + radius);
-      if (k < 0 || k >= t) continue;
-      t = k;
+    if (propEnd) return contact(propEnd);
+
+    // Ground, water and walls follow the flight update, as they do in fly().
+    vel.y -= GRAVITY * PREVIEW_DT;
+    ahead.copy(vel).setLength(ARROW / 2);
+    _c.set(px, py, pz).add(ahead);
+    _b.copy(pos).add(ahead);
+    const floor = groundHeight(_b.x, _b.z);
+    if (_b.y <= floor || inWater(_b)) {
+      const water = _b.y > floor;
+      const g0 = _c.y - (water ? FOUNTAIN.water : groundHeight(_c.x, _c.z));
+      const g1 = _b.y - (water ? FOUNTAIN.water : floor);
+      return contact(new THREE.Vector3().lerpVectors(_c, _b, g0 > 0 ? g0 / (g0 - g1) : 0));
     }
-    if (t <= 1) {
-      const end = new THREE.Vector3(px + dx * t, py + (pos.y - py) * t, pz + dz * t);
-      pts.push(end);
-      return { pts, end };
-    }
-    pts.push(pos.clone());
+    if (throughGate(_c, _b)) return { pts, end: null };
+    if (G.arena.wall.cast(_c, _b, _hit)) return contact(_hit.point.clone());
+    pts.push(_b.clone());
   }
   return { pts, end: null };
 }
 
 /** The aim preview of a drawn shot on the local hero's own screen: each arrow's path if it were loosed now
  *  (no weaker than the least draw, as it would leave), shown through `fx/aimLaser`. */
-function previewShot(player: Player, def: BowDef, k: number, radius: number, level: boolean, pierce: boolean): void {
+function previewShot(player: Player, def: BowDef, k: number, radius: number, pierce: boolean): void {
   if (!player.local) return;
   const origin = loosedFrom(player).clone(), target = player.aim, v = arrowSpeed(def, Math.max(k, def.minDraw ?? 0));
-  const yaw = player.shotHeading(origin, target), pitch = launchPitch(origin, target, v);
+  const { yaw, pitch } = releaseAngles(player, origin, target, v);
   const paths = [];
-  for (let i = 0; i < def.missiles; i++) paths.push(flightPath(origin, shotDir(yaw + (i - (def.missiles - 1) / 2) * def.spread, pitch), v, radius, level, pierce));
+  for (let i = 0; i < def.missiles; i++) paths.push(flightPath(origin, shotDir(yaw + (i - (def.missiles - 1) / 2) * def.spread, pitch), v, radius, pierce));
   showLaser(paths);
 }
 
@@ -356,14 +370,6 @@ export function reloadSound(player: Player, after: number): void {
 /** a drawn shot's damage drawn less than full: the square of the draw (`cast`) */
 const SHORT_DRAW = 'less drawn short';
 
-/**
- * Whether `player`'s shot loosed now can headshot (#750): an arrow striking a foe's head is always a critical hit, but
- * only aimed by the crosshair, over the shoulder or through the eyes (the owner's choice). Top-down the cursor over a
- * foe aims at the first of it it meets from above, its head or shoulders, and nearly every shot would be one. Judged
- * by his own game, which deals his hits (net/role.ts): a partner's arrows here deal nothing.
- */
-const aimsForHeads = (player: Player): boolean => player === G.player && viewMode() !== 'top';
-
 export const bowShot: InstantSkill = {
   anim: 'bow', warm: warmArrows,
   pitch: (player, def, k, target) => launchPitch(shotFrom(player), target, arrowSpeed(def as BowDef, k)),
@@ -373,7 +379,7 @@ export const bowShot: InstantSkill = {
     return [{ per: 'arrow', base: def.damage, least: 0, type: 'physical', note: `${arrows}at full draw, ${SHORT_DRAW}` }];
   },
   charging(player, def, k) {
-    previewShot(player, def as BowDef, k, 0.22, true, false);
+    previewShot(player, def as BowDef, k, 0.22, false);
     drawGlint(player, k);
     drawSound(player, def as BowDef, k);
   },
@@ -382,9 +388,9 @@ export const bowShot: InstantSkill = {
     drawnTo.delete(player);
     // (the string gives the arrow the energy the bow stored, which goes with the square of the draw: that is its blow)
     const damage = def.damage * pull * pull, knock = (def.knock ?? 0) * pull;
-    const yaw = player.shotHeading(origin, target), pitch = launchPitch(origin, target, v);
+    const { yaw, pitch } = releaseAngles(player, origin, target, v);
     // (a volley seen coming as one: entities/evade.ts)
-    const judged = new Set<Enemy>(), heads = aimsForHeads(player);
+    const judged = new Set<Enemy>();
     for (let i = 0; i < def.missiles; i++) {
       const dir = shotDir(yaw + (i - (def.missiles - 1) / 2) * def.spread, pitch);
       const mesh = arrowMesh(); mesh.quaternion.setFromUnitVectors(FWD, dir);
@@ -393,7 +399,7 @@ export const bowShot: InstantSkill = {
         onHit(enemy, proj) {
           intoFoe(enemy as Enemy, proj.pos, proj.vel);
           // (one that strikes the head is a headshot, always a critical hit: #750)
-          hitEnemy(enemy as Enemy, damage, { by: player, skill: def, tags: def.tags, type: 'physical', knock, head: heads && proj.onHead,
+          hitEnemy(enemy as Enemy, damage, { by: player, skill: def, tags: def.tags, type: 'physical', knock, head: proj.onHead,
           at: proj.pos,
             from: { x: proj.pos.x - proj.vel.x, z: proj.pos.z - proj.vel.z }, flight: proj.vel,
             blow: arrowBlow(enemy as Enemy, proj.pos, proj.vel, 0.9) });
@@ -422,7 +428,7 @@ export const piercingShot: InstantSkill = {
     return [{ per: 'foe', base: def.damage * (1 + bonus), least: 0, type: 'physical', note }];
   },
   charging(player, def, k) {
-    previewShot(player, def as BowDef, k, 0.24, false, true);
+    previewShot(player, def as BowDef, k, 0.24, true);
     drawGlint(player, k);
     drawSound(player, def as BowDef, k);
   },
@@ -431,10 +437,10 @@ export const piercingShot: InstantSkill = {
     const full = power >= FULL_DRAW;
     drawnTo.delete(player);
     const damage = def.damage * pull * pull * (full ? 1 + (def.fullBonus ?? 0) : 1), knock = (def.knock ?? 0) * pull;
-    const dir = shotDir(player.shotHeading(origin, target), launchPitch(origin, target, v));
+    const { yaw, pitch } = releaseAngles(player, origin, target, v);
+    const dir = shotDir(yaw, pitch);
     const mesh = arrowMesh(); mesh.quaternion.setFromUnitVectors(FWD, dir);
     let through = 0;
-    const heads = aimsForHeads(player);
     const pr = spawnProjectile({
       // (through everything on its line, short foes too: it flies near level, and over the nearest heads a line shot missed them)
       pos: origin, dir, speed: v, radius: 0.24, life: 3, mesh, color: 0xd3bf8d, swept: true, pierce: true, tip: ARROW / 2, tick: fly, edge: ARROW_EDGE, onProp: arrowProp, by: player,
@@ -442,7 +448,7 @@ export const piercingShot: InstantSkill = {
       onHit(enemy, proj) {
         const share = def.falloff[Math.min(through++, def.falloff.length - 1)];
         hitEnemy(enemy as Enemy, damage * share, { by: player, skill: def, tags: def.tags, type: 'physical', knock: knock * share,
-          head: heads && proj.onHead, at: proj.pos,
+          head: proj.onHead, at: proj.pos,
           from: { x: proj.pos.x - proj.vel.x, z: proj.pos.z - proj.vel.z }, flight: proj.vel,
           blow: arrowBlow(enemy as Enemy, proj.pos, proj.vel, full ? 1.3 : 1) });
         burst(proj.pos, { count: 8, color: 0xd3bf8d, speed: 2.4, life: 0.22, size: 0.07 });
