@@ -268,6 +268,7 @@ it: the struck hero down on both screens, the score the same on both and on the 
 before the duel (less in it, with no gear). `--canary`: the struck hero's life put back every frame on its own game,
 so no round is won, which must be found. `--pictures`: both screens at the menu, the count, a fight, the result and
 back in the village (`out/coop/duel-*.png`).
+
 With `--party 3` or `4` it plays a party's duel instead (`node/coopDuelParty.mjs`), first to 1: each player takes his
 own place in the menu by a click (three: host against guest, the third watching; four: host and guest against the
 other two), the guests who fight ready and the host begins. Judged on every game: the same places, each fighter's
@@ -276,6 +277,11 @@ watching bar up) and no other foe; in a 2 v 2 the round must go on with one of t
 both; the match's score and winner the same on every game, "Victory", "Defeat" or "The duel is over" each player's
 own, no hero of the side that struck down, and every game back in the village with no hero left out
 (`out/coop/duel3-*.png`, `duel4-*.png`: the host's and the guest's screens).
+
+`duel-damage` runs alone on a pair. It starts a gearless duel and each side sends fixed arcane hits through
+the ordinary duel link. The receiving hero must take half of the small hit (#878) and at most 60% of max health
+from the large one, with resistance applied to both. The applied-damage counter excludes passive regeneration.
+`--canary` temporarily restores the old 25% rate on the host's small hit, which the check must catch.
 
 `wall` (`--class ranger`): the guest raises its Hedgeward between it and a Sporecaller shooting at it, the host
 standing off. The wall must stand on both screens in one place (its middle within a few centimetres), a breakable

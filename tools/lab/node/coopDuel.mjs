@@ -9,6 +9,7 @@
 // found; and the host loses the guest's picks of a place and its answers, which every step must find.
 import { labError } from './errors.mjs';
 import { takePlaces } from './coopDuelPlaces.mjs';
+import { checkDuelDamage } from './coopDuelDamage.mjs';
 
 /** the duel the check sets up: not the menu's own choices, so the guest's menu is seen to follow the host's */
 const SET_UP = { ground: 'forest', wins: 3, gear: false };
@@ -31,13 +32,14 @@ const scoreOf = (state) => (state.duel ? state.duel.score.join(' : ') : 'no duel
  * Plays the duel on `pair` (its room open already, `callPage` the page's functions by name). Returns the problems
  * found, its lines added to `lines`.
  */
-export async function fightDuel(pair, callPage, lines, { canary = false, pictures = false } = {}) {
+export async function fightDuel(pair, callPage, lines, { canary = false, pictures = false, damageOnly = false } = {}) {
   const problems = [];
   const both = (fn, args) => Promise.all(ROLES.map((role, index) => callPage(pair.pages[index], fn, args?.(role))));
   const picture = async (name) => { if (pictures) lines.push(`pictured ${(await pair.picture(`duel-${name}`)).join(', ')}`); };
 
   // --- the places: each player's own, a held one asked for (node/coopDuelPlaces.mjs) -------------------
-  problems.push(...await takePlaces(pair, callPage, lines, { canary, pictures }));
+  if (damageOnly) await callPage(pair.host, 'coopDuelParts', { host: '0', guest: '1' });
+  else problems.push(...await takePlaces(pair, callPage, lines, { canary, pictures }));
 
   // --- the menu -----------------------------------------------------------------------------------
   await callPage(pair.host, 'coopDuelSetUp', SET_UP);
@@ -76,6 +78,12 @@ export async function fightDuel(pair, callPage, lines, { canary = false, picture
     const n = index + 1;
     const fought = (host, guest) => [host, guest].every((state) => state.duel?.round === n && state.duel.phase === 'fight');
     await pair.until(fought, COUNT_FRAMES, `round ${n} was never fought on both games`);
+    if (damageOnly) {
+      // Let the ordinary position reports reach the rivals before measuring fixed hits.
+      await both('coopDuelRound', (role) => ({ role, strikes: false, weak: false, faceAway: true }));
+      await pair.run(60);
+      return [...problems, ...await checkDuelDamage(pair, callPage, lines, { canary })];
+    }
     const loser = winner === 'host' ? 'guest' : 'host';
     await both('coopDuelRound', (role) => ({ role, strikes: role === winner, weak: role === loser, heldWhole: canary && role === loser }));
     if (canary) {

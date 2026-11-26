@@ -43,7 +43,7 @@ export {
 } from './coopTrade';
 export {
   coopDuelAnswer, coopDuelFit, coopDuelGo, coopDuelLosePicks, coopDuelMenu, coopDuelMouseBack, coopDuelParts,
-  coopDuelPart, coopDuelPlace, coopDuelRound, coopDuelSetUp,
+  coopDuelDeal, coopDuelPart, coopDuelPlace, coopDuelRound, coopDuelSetUp, coopDuelTaken,
 } from './coopDuel';
 import { joinNow, watchJoin, type JoinState } from './coopJoin';
 export { coopHideJoining, coopJoinAfresh, coopJoinSeen, coopReadyingShare, coopShowJoining } from './coopJoin';
