@@ -32,6 +32,17 @@ export function waitingMug(tv: TavernKeeper, reach = 1.3): number {
   return best;
 }
 
+/** The mug's position in CSS pixels, for a click or a tap on the canvas. */
+export function mugOnPage(tv: TavernKeeper, id: number): { x: number; y: number } {
+  G.camera.updateMatrixWorld();
+  const at = tv.mugAt(id).project(G.camera);
+  const box = G.renderer.domElement.getBoundingClientRect();
+  return {
+    x: Math.round(box.left + (at.x + 1) * box.width / 2),
+    y: Math.round(box.top + (1 - at.y) * box.height / 2),
+  };
+}
+
 /** Mug `id` (the nearest waiting one by default) taken up by E with the pointer on it (the lab's aim, which puts the
  *  mouse over a point every frame), held there a moment as the camera settles from the talk's view first. Whether a
  *  mug waited to be taken. */

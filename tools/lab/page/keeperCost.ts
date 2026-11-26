@@ -7,6 +7,7 @@ import type { Keeper } from '../../../src/entities/models/keeper';
 import type { TavernKeeper } from '../../../src/world/tavernKeeper';
 import { MUG_COUNT } from '../../../src/data/tavern';
 import { countedFrame } from './villageHallCull';
+import { G } from '../../../src/state';
 
 /** His pose's times (ms), each frame's, as he works. */
 export class PoseTimes {
@@ -33,16 +34,25 @@ export class PoseTimes {
 }
 
 /** The room's frame drawn with his mugs and him, without the mugs, and without him too: the draws each adds. */
-export function drawsSaid(lab: Lab, tv: TavernKeeper, keeper: Keeper): string {
+export function drawsSaid(lab: Lab, tv: TavernKeeper, keeper: Keeper, problems: string[]): string {
+  if (G.arena.room !== 'tavern' || !keeper.root.visible) throw new Error('lab: tavern: costs require the keeper in the room');
   const mugs = Array.from({ length: MUG_COUNT }, (_, id) => tv.mugMesh(id));
+  const shown = mugs.map((mug) => mug.visible);
   const whole = countedFrame(lab);
-  for (const mug of mugs) mug.visible = false;
-  const noMugs = countedFrame(lab);
-  keeper.root.visible = false;
-  const noKeeper = countedFrame(lab);
-  keeper.root.visible = true;
-  for (const mug of mugs) mug.visible = true;
-  return `the room's frame: ${whole.draws} draws, ${whole.triangles} triangles; his ${MUG_COUNT} mugs ${whole.draws - noMugs.draws} `
-    + `draws and ${whole.triangles - noMugs.triangles} triangles of it, he ${noMugs.draws - noKeeper.draws} draws and `
-    + `${noMugs.triangles - noKeeper.triangles} triangles`;
+  try {
+    for (const mug of mugs) mug.visible = false;
+    const noMugs = countedFrame(lab);
+    keeper.root.visible = false;
+    const noKeeper = countedFrame(lab);
+    const mugDraws = whole.draws - noMugs.draws;
+    const keeperDraws = noMugs.draws - noKeeper.draws;
+    if (mugDraws <= 0) problems.push('the sampled tavern frame did not draw any mugs');
+    if (keeperDraws <= 0) problems.push('the sampled tavern frame did not draw the keeper');
+    return `the room's frame: ${whole.draws} draws, ${whole.triangles} triangles; its mugs ${mugDraws} `
+      + `draws and ${whole.triangles - noMugs.triangles} triangles of it, he ${keeperDraws} draws and `
+      + `${noMugs.triangles - noKeeper.triangles} triangles`;
+  } finally {
+    keeper.root.visible = true;
+    mugs.forEach((mug, index) => { mug.visible = shown[index]; });
+  }
 }

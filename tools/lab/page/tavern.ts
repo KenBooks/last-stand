@@ -9,8 +9,8 @@
 // its end the hero sets the mug down on the bar, and the keeper must clear it, wash it, dry it and stand it back with
 // the clean ones. Then every mug left dirty on the bar and another asked for: he must wash one first and serve it; and
 // every mug out in heroes' hands: he serves none until one comes back. Every frame, the mugs must add up to their count,
-// none may jump or go from sight but into a hero's hand, and his planted feet must not slide. No program may compile
-// from the room's coming in to the end. `--canary`: the ale made a cast he may walk through, which must be caught.
+// none may jump or go from sight but into a hero's hand, and his planted feet must not slide. Frames drawn during the
+// check must request no engine pipelines. `--canary` includes letting the hero walk while drinking.
 import * as THREE from 'three';
 import type { Frame, Lab, Pictured, Report, ViewName } from './lab';
 import { G } from '../../../src/state';
@@ -49,11 +49,14 @@ import { tavernLink } from '../../../src/net/tavernLink';
 import { solePoints } from './soles';
 import { talkAnswerable } from '../../../src/ui/screens/talk/talk';
 import { footShape, type FootShape } from '../../../src/entities/models/ik';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
+import { tavernTouch } from './tavernTouch';
 
 /** `--canary`: the ale made a cast he may walk through; `--looks`: him pictured from Kenneth's angles alone. */
 export interface TavernOptions {
   canary: boolean;
   looks?: boolean;
+  parts?: ('eyes' | 'touch' | 'cost')[];
   /** with `looks`: round 5's moments alone, as the player sees them (with `canary`, as they were before it) */
   round5?: boolean;
 }
@@ -112,7 +115,6 @@ const TASK_IN = 1500, SERVE_IN = 900, CLEAR_IN = 2400;
 /** how far under the head's `mouth` point the lower lip is (m: models/flask.ts `ALE_DRINK.lowerLip`) */
 const LOWER_LIP = 0.006;
 
-const programs = (): number => G.renderer.info.programs?.length ?? 0;
 const _lips = new THREE.Vector3(), _rim = new THREE.Vector3(), _foot = new THREE.Vector3(), _axis = new THREE.Vector3();
 const _turn = new THREE.Quaternion();
 
@@ -316,6 +318,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
   const moments: Pictured[] = [];
   await toVillage(lab);
   await viewAs(lab, 'third');
+  const before = PIPELINES.made;
   enterRoom('tavern');
   await lab.until(() => G.arena.room === 'tavern', 600, 'the tavern never opened');
   const room = G.arena.rooms!.tavern, tv = room.tavern?.(), keeper = tv?.keeper();
@@ -324,7 +327,6 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     const looks = await keeperLooks(lab, tv, keeper, !!options.round5, !!options.canary);
     return { text: `looks: ${looks.moments.length} pictured`, problems: looks.problems, moments: looks.moments };
   }
-  const before = programs();
   const watch = new Watch(tv);
   const poseTimes = new PoseTimes(keeper);
   // (no boost of an ale before this one's: his life's most as his gear has it)
@@ -332,7 +334,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
   aleBoost.waves = 0;
   G.player.recomputeStats(G.player.equipped);
   const lifeBase = G.player.stats.maxLife;
-  if (options.canary) { plant(true); shiftBelly(keeper, 0.3); watch.cloth.spin = true; }
+  if (options.canary && !options.parts) { plant(true); shiftBelly(keeper, 0.3); watch.cloth.spin = true; }
   /** frames stepped, each read by the watch; until `done` or `most` frames, which it returns (-1: never done) */
   /** the mug waiting taken up by E and drunk by E, as a player does (`takeAle.ts`); whether his drink began */
   const takeAndDrink = async (): Promise<boolean> => {
@@ -357,7 +359,9 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     if (chosen < 0) lines.push(`  (offered ${tv.doing().offered}, mug ${waiting} at ${tv.mugs.get(waiting).place.at}, ${Math.hypot(mugAt.x - feet.x, mugAt.z - feet.z).toFixed(2)} m from his feet, casting ${G.player.casting?.skill.def.name ?? 'nothing'}, mode ${G.mode})`);
     lines.push(`taken up by E: the choice ${chosen < 0 ? 'NEVER shown' : `shown, his drink held at ${(held * 100).toFixed(0)}%`}`);
     if (chosen < 0) problems.push('the mug taken up by E, its choice (drink or put down) never showed');
-    if (held > HELD_AT + 0.02) problems.push(`with the choice up, his drink went on to ${(held * 100).toFixed(0)}%`);
+    if (Math.abs(held - HELD_AT) > 0.02) {
+      problems.push(`with the choice up, his drink did not hold at 16% (read ${(held * 100).toFixed(0)}%)`);
+    }
     await pickAle(lab, 'down', watched);
     await frames(CHOICE_IN);
     const back = tv.mugs.get(waiting);
@@ -567,6 +571,45 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     return `left hand ${off(b.left, 0)} from its goal, right ${off(b.right, 1)}`;
   };
 
+  const him = villageObject('keeper')!;
+  const standAtBar = () => stand(lab, him.stand,
+    Math.atan2(him.at[0] - him.stand[0], him.at[1] - him.stand[1]));
+  const eyesCase = async (hideMug = false): Promise<void> => {
+    await standAtBar();
+    watch.forget();
+    moments.push(...await throughTheEyes(lab, {
+      frames, drinkShare, tv, keeper: him, hideMug,
+      serve: () => room.serveAle?.(G.player),
+      take: () => takeMug(lab, tv, waitingMug(tv), watched),
+      drink: async () => await frames(CHOICE_IN, choosingAle) >= 0 && await pickAle(lab, 'drink', watched),
+    }, lines, problems));
+    watch.forget();
+  };
+  const costCase = async (): Promise<void> => {
+    await viewWatched('third');
+    await standAtBar();
+    lines.push(poseTimes.said(), drawsSaid(lab, tv, keeper, problems));
+    watch.forget();
+  };
+  const checkPipelines = (): void => {
+    const compiled = PIPELINES.made - before;
+    lines.push(`engine pipelines requested since tavern entry: ${compiled}`);
+    if (compiled) problems.push(`${compiled} engine pipelines requested since tavern entry`);
+  };
+  if (options.parts) {
+    if (options.parts.includes('cost')) await costCase();
+    if (options.parts.includes('eyes')) await eyesCase(options.canary);
+    if (options.parts.includes('touch')) {
+      await viewAs(lab, 'top');
+      await standAtBar();
+      const touch = await tavernTouch(lab, tv, options.canary);
+      lines.push(touch.text);
+      problems.push(...touch.problems);
+    }
+    checkPipelines();
+    return { text: lines.join('\n'), problems, moments };
+  }
+
   // --- his tasks, the hero by the door ---
   await stand(lab, BY_DOOR, Math.PI / 2);
   watch.forget();
@@ -581,12 +624,12 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
   }
 
   // --- the hero at the bar: he comes to the tap ---
-  const him = villageObject('keeper')!;
-  await stand(lab, him.stand, Math.atan2(him.at[0] - him.stand[0], him.at[1] - him.stand[1]));
+  await standAtBar();
   watch.forget();
   const came = await frames(TASK_IN, () => tv.doing().step === 'attend');
   lines.push(`a hero at the bar: he came to the tap in ${came < 0 ? 'never' : `${(came / 60).toFixed(1)} s`}`);
   if (came < 0) problems.push(`a hero at the bar, he never came to the tap (doing ${tv.doing().job}: ${tv.doing().step})`);
+  const roomDraws = drawsSaid(lab, tv, keeper, problems);
 
   // --- talked to by E: the card up within the window, a free beer its first reply ---
   await useByE(lab, him, problems);
@@ -629,7 +672,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     // (timed from where his choice let it go on: the drink's share before it was held at the lift)
     const startShare = Math.max(0, drinkShare()), drinkLong = ALE.castTime * (1 - startShare);
     let moved = 0, worstRim = 0, mostTilt = 0, f = 0;
-    const tilts: number[] = [], gulps = [0.3, 0.46, 0.62], shots = [...PICTURED];
+    const tilts: number[] = [], gulps = [...ALE_BEATS.gulps], shots = [...PICTURED];
     while (drinkShare() >= 0 && f < 600) {
       await lab.step(1, () => (f < HELD_W ? { keys: ['w'] } : { keys: [] }));
       watch.read();
@@ -641,6 +684,9 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
       if (mug.shown && k > 0.2 && k < 0.75) mostTilt = Math.max(mostTilt, mug.tilt);
       if (gulps.length && k >= gulps[0]) {
         gulps.shift();
+        if (!mug.shown || !mug.flaskHidden) {
+          problems.push(`at the ${(k * 100).toFixed(0)}% swallow, the mug did not replace the flask in his hand`);
+        }
         worstRim = Math.max(worstRim, mug.rimOff);
         tilts.push(mug.tilt);
         lines.push(`swallow at ${(k * 100).toFixed(0)}%: the rim ${(mug.rimOff * 100).toFixed(1)} cm from his lower lip, tipped ${mug.tilt.toFixed(0)}° from upright`);
@@ -655,6 +701,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     if (moved > STILL_WITHIN) problems.push(`he moved ${(moved * 100).toFixed(1)} cm while drinking, W held`);
     if (worstRim > RIM_NEAR) problems.push(`the rim stood ${(worstRim * 100).toFixed(1)} cm from his lower lip at a swallow`);
     if (mostTilt > MOST_TILT) problems.push(`the mug tipped ${mostTilt.toFixed(0)}° from upright, past ${MOST_TILT}`);
+    if (gulps.length) problems.push(`the drink never reached its last ${gulps.length} swallow(s)`);
     if (tilts.some((t, i) => i > 0 && t <= tilts[i - 1])) problems.push(`the swallows' tilts don't grow: ${tilts.map((t) => t.toFixed(0)).join(', ')}`);
 
     // --- set down on the bar; cleared, washed, dried, stood back with the clean ones ---
@@ -662,6 +709,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     const down = taken >= 0 ? tv.mugs.get(taken) : undefined;
     lines.push(`set down: mug ${taken} ${down?.place.at ?? 'nowhere'}${down?.dirty ? ', dirty' : ''}`);
     if (!down || down.place.at !== 'bar' || !down.dirty) problems.push(`the empty mug wasn't set down dirty on the bar (${down?.place.at})`);
+    if (taken < 0) return { text: lines.join('\n'), problems, moments };
     moments.push(lab.picture('set-down', ['left'], ['the empty mug set down on the bar'], { at: tv.mugAt(taken), distance: 1.6 }));
     const seen = new Set<string>();
     const back = await frames(CLEAR_IN, () => {
@@ -743,10 +791,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
   // (his hands empty first: washing the mug come back, he served the beer after the case's wait for it)
   await frames(CLEAR_IN, () => !tv.mugs.mugs.some((m) => m.place.at === 'keeper'));
   for (const m of tv.mugs.mugs) if (m.place.at !== 'keeper') tv.mugs.move(m.id, { at: 'shelf', slot: m.id }, { full: 0, dirty: false });
-  await stand(lab, him.stand, Math.atan2(him.at[0] - him.stand[0], him.at[1] - him.stand[1]));
-  watch.forget();
-  moments.push(...await throughTheEyes(lab, { frames, drinkShare, serve: () => room.serveAle?.(G.player), take: takeAndDrink, tv, keeper: him }, lines, problems));
-  watch.forget();
+  await eyesCase();
 
   // --- round 5: the tub's water from above, a mug left at every table's sides, put down by every top, E with a mug in
   // hand on a stool, and his day with a hero in his way (`keeperRound5.ts`, `tubSeen.ts`); each canary set for its own
@@ -801,7 +846,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
   const ways = plannedWays(tv, room.seats);
   lines.push(...ways.lines);
   problems.push(...ways.problems);
-  lines.push(poseTimes.said(), drawsSaid(lab, tv, keeper));
+  lines.push(poseTimes.said(), roomDraws);
   const boost = boostRead(lifeBase);
   lines.push(...boost.lines);
   problems.push(...boost.problems);
@@ -811,9 +856,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
   if (watch.worstStep > BODY_STEP) problems.push(`his body jumped ${(watch.worstStep * 100).toFixed(1)} cm in a frame (${watch.stepAt})`);
   if (watch.worstSlide > FOOT_SLIDE) problems.push(`a planted foot slid ${(watch.worstSlide * 100).toFixed(1)} cm in a frame`);
   if (crossedShot) moments.push(crossedShot);
-  const compiled = programs() - before;
-  lines.push(`programs compiled from the room to the end: ${compiled}`);
-  if (compiled) problems.push(`${compiled} programs compiled meanwhile`);
+  checkPipelines();
   if (options.canary) {
     plant(false);
     shiftBelly(keeper, -0.3);

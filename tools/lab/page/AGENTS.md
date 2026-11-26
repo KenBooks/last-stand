@@ -140,6 +140,10 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   backdrop). The backdrop is read as the engine draws it, its mean over an empty studio and its grain's reach as the
   slack. The `faces` look is a front material and a back-faces twin of each mesh: chosen by `gl_FrontFacing` in a
   patch of three's shader, every face drew alike, and the fist read as seen through from every side.
+- `tavern.ts`: read the engine's `PIPELINES.made` before room entry and sample draws while still inside.
+  Calling the draw sampler after the carry left the room measured the village. The first-person 10% beat
+  comes before confirming Drink because the choice holds the cast at 16%. On touch, position the mug clear of
+  the movement pad and put it down from an open edge within reach of the bar.
 - `throws.ts`: the vine's shot lets the bow go `SHOT.loosedAfter` frames into the hold, drawn as far as it is: held for its whole draw and the quiver's fetch from the throw, the arrow left a frame after the vine let him go (on main too).
 - `trail.ts`: the trail is read with the engine's bloom out (`TUNE.bloom` 0): the game's `holdBloom` holds three's
   passes alone, and the trail was read with its glow.

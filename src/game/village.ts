@@ -349,10 +349,10 @@ function bindPointer(): void {
     canvas.style.cursor = o ? 'var(--cursor-hand)' : '';
   });
   window.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || e.defaultPrevented) return;
     // (a thrown item's name over an object is the floor's to take: both hear the press, and the object, used, opened
     // over the name before the press lifted, so the item was never picked up)
-    // (nor what another claims there first: the tavern's mug before Bertram behind it)
+    // (nor a tavern mug in front of Bertram. Its listener may already have taken the mug and consumed the press)
     const o = dropNameAt(e.clientX, e.clientY) || pointClaimed(e.clientX, e.clientY) ? null : over(e);
     if (!o) return;
     e.preventDefault();

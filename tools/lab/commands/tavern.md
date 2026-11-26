@@ -8,6 +8,18 @@ options every command takes) for its size.
 `src/game/mugs.ts`, `src/game/aleBoost.ts`, `src/entities/models/keeper.ts`,
 `src/entities/models/flask.ts`, `src/combat/skills/ale.ts`), any `--class`.
 
+Use `--parts eyes,touch,cost` to run a subset without the full tavern sequence:
+
+- `eyes` runs the first-person serving and drink. It must reach each recorded beat, starting at 10% before the
+  choice is answered. Its canary hides the mug at 10%, and the later beats must still pass.
+- `touch` taps a served mug on the canvas, taps Put down and takes the same full mug again, then taps Drink and
+  verifies the same mug returns dirty. Both rendered buttons must fit and be hittable. Its canary disables
+  pickup for the first tap and then re-enables it for the full sequence.
+- `cost` samples draws and triangles from inside the tavern with the keeper in frame, subtracting the frames
+  with the mugs and then the keeper hidden. A sample must draw both the keeper and mugs.
+
+For a landscape phone viewport, run `npm run lab -- tavern --parts touch --screen 844x390@3`.
+
 **His day.** Into the Ember & Oak by its door, the hero by the door while the keeper's tasks are set and run to their
 work in turn (the bar wiped in passes along its length, sweeping, the fire stoked, the small table wiped), each
 pictured, his hands against their goals (`handsOff`: a held thing's own place against its goal). Then the hero at the
@@ -56,7 +68,8 @@ at once, `placings`):
 - his trunk, head and elbows (balls round their joints) no more than 2 cm into the bar, the back counter or a table,
   walking or leaning (`BodyClear`; from Victor's review, "him walking inside the counter sometimes").
 
-No program may compile from the room's coming in to the end.
+The engine's pipeline counter starts before the room opens. Frames drawn during the check must request no new
+pipelines.
 
 **Pictures**: the tasks, the talk card, each step of a mug's round once (taken, filled, slid, collected, washed, dried,
 shelved: from the keeper's sides along the aisle behind the bar, the hero hidden), frame strips of the table wiped,
