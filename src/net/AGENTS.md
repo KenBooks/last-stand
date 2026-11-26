@@ -101,6 +101,15 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   host removes the guest's pending orders and returns their held mug to the top it came from. An ale left mid-drink
   is returned dirty for washing. `lab coop --scenarios tavern-recovery` joins a third page with a full mug held,
   disconnects the holder and has the remaining guest retake that mug.
+- `sync.ts`: a guest's leaving of the run (Bank, Leave the run) is its own game's, which banks its spoils (or lets
+  them go) and watches at once, so the host takes it whenever that guest is still in the run on the host's game
+  (`guestLeaves`), whatever it held of him meanwhile, and says it back (`out`) again if it comes again; the guest
+  sends it again every second until that word comes (`leaving`, `leaveAgain`). The host took a Bank only at the
+  choice and from a guest it showed standing and present, and dropped any other unsaid; a Bank lost on the way, or
+  refused, left the guest out on its own screen while the host counted him in, and the party's own Banks never ended
+  the run (from play, three at wave 38: "everyone pressed bank, it instead went into spectate mode"). A Bank the host
+  takes outside the choice or from a guest it showed down or away is said in the network log. `npm run lab -- coop
+  --scenarios banks --party 3` (`--canary`: every guest's Bank lost, the host left waiting).
 - `wardTouch.ts`: a hero's wall (the Hedgeward) broken in the village by a partner walking into it, the protocol's
   part `ward-touch-1`: the toucher's own game judges the touch (`touchedByPartner` in `combat/skills/hedgeward.ts`),
   breaks its copy and sends where it stood on `ctl` (`wardTouch`, to every game, as a ping goes); each game breaks its
