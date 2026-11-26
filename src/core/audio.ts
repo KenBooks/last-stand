@@ -175,7 +175,7 @@ function env(g: GainNode, t: number, a: number, peak: number, decay: number): vo
 }
 
 interface NoiseOpts { dur?: number; freq?: number; q?: number; type?: BiquadFilterType; gain?: number; sweep?: number | null; attack?: number }
-function noise({ dur = 0.3, freq = 1200, q = 1, type = 'bandpass', gain = 0.5, sweep = null, attack = 0.005 }: NoiseOpts): void {
+export function noise({ dur = 0.3, freq = 1200, q = 1, type = 'bandpass', gain = 0.5, sweep = null, attack = 0.005 }: NoiseOpts): void {
   const c = ctx!;
   const t = c.currentTime;
   const src = c.createBufferSource(); src.buffer = noiseBuf;

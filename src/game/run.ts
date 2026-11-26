@@ -140,6 +140,7 @@ export function initRun(uiHooks: RunUI): void {
     const line = boss.def.bossKit?.phases[phase]?.banner;
     if (line) ui.banner(boss.name, line);
   });
+  on('bossCall', (boss, line) => ui.banner(boss.name, line));
 }
 
 function cleanupWorld(): void {
@@ -155,6 +156,8 @@ function cleanupWorld(): void {
   clearTimers();
   forgetFields();
   forgetFrustum();
+  // (the canopy a boss closed over the battleground open again: the Rootmother's second phase)
+  G.arena.setShade(0, true);
 }
 
 /** Start at `wave`: banked waves in the arena, reached waves in Training grounds.
@@ -365,8 +368,11 @@ function spawnGroup(group: SpawnUnit[]): void {
       const u = group[next++];
       const def = ENEMIES[u.type];
       portal.pulse();
-      // (an encounter's guard rises at its rung's spot for it, where it has one: rising at a gate, it came anywhere)
-      const pos = u.at ? new THREE.Vector3(u.at[0], 0, u.at[1]) : riseSpot(portal, def.radius * (u.hero ? HERO.scale : 1), !!def.boss);
+      // (an encounter's guard rises at its rung's spot for it, where it has one: rising at a gate, it came anywhere; a
+      // boss that comes on in the arena's middle grows up out of it: the Rootmother)
+      const pos = u.at ? new THREE.Vector3(u.at[0], 0, u.at[1])
+        : def.bossKit?.comes === 'middle' ? new THREE.Vector3(0, 0, 0)
+        : riseSpot(portal, def.radius * (u.hero ? HERO.scale : 1), !!def.boss);
       if (pair) {
         // (the twins abreast, rising together)
         pos.addScaledVector(new THREE.Vector3(-portal.dir.z, 0, portal.dir.x), (j ? 1 : -1) * 3.5);
@@ -644,6 +650,8 @@ function onEnemyKilled(e: Enemy): void {
   const r = G.run;
   if (!r || isGuest()) return;
   if (r.training || e.training) return;
+  // (what a boss brings into its fight is no foe: a seed pod popped or hatched counts for nothing)
+  if (e.def.broughtBy) return;
   r.kills++;
   r.score += e.score * RUN.scorePerKill * r.multiplier;
   r.multTimer = 0;

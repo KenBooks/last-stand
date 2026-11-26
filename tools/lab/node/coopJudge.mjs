@@ -911,6 +911,150 @@ function describeBelt(host, guest) {
   return { line: `${line}\n  ${line2}\n  ${line3}`, problems };
 }
 
+/** The Rootmother's branches on both screens: where each came down on the guest's against the host's, the guest hurt
+ *  as one landed at its feet, the host (standing off) never. */
+function describeRootmother(host, guest) {
+  const landed = (samples) => samples.flatMap((sample, frame) => (sample.branched ?? []).map((at) => ({ at, frame })));
+  // (a branch the host's screen shows land in its last frames reaches the guest's after the scenario ends: left out)
+  const allHost = landed(host), onGuest = landed(guest);
+  const onHost = allHost.filter(({ frame }) => frame < host.length - LANDED_LAG);
+  const apart = onGuest.map(({ at }) => Math.min(Infinity, ...onHost.map((other) => distance(at, other.at))));
+  const most = apart.length ? Math.max(...apart) : 0;
+  const hurt = onGuest.filter(({ at, frame }) => distance(at, guest[frame].self) < ROOT_AT_FEET && hurtNear(guest, frame, LANDED_HURT));
+  const atFeet = onGuest.filter(({ at, frame }) => distance(at, guest[frame].self) < ROOT_AT_FEET);
+  const hostHurt = host.some((sample, frame) => frame > 0 && host[frame - 1].life - sample.life > LIFE_DROP);
+  const line = `the Rootmother's branches: ${onGuest.length} came down on the guest's screen, ${onHost.length} on the `
+    + `host's (the most ${cm(most)} apart), ${atFeet.length} at the guest's feet, ${hurt.length} of them hurting it; `
+    + `the host ${hostHurt ? 'hurt' : 'never hurt'}`;
+  const problems = [];
+  if (!onGuest.length) problems.push('no branch came down on the guest\'s screen');
+  if (onGuest.length < onHost.length || onGuest.length > allHost.length) {
+    problems.push(`${onGuest.length} branches on the guest's screen, ${onHost.length} on the host's`);
+  }
+  if (most > LANDED_APART) problems.push(`a branch came down ${cm(most)} apart on the two screens`);
+  if (atFeet.length && hurt.length < atFeet.length) {
+    problems.push(`${atFeet.length - hurt.length} branches landed at the guest's feet and didn't hurt it`);
+  }
+  if (hostHurt) problems.push('the host, standing off, was hurt');
+  return { line, problems };
+}
+/** the frames a branch landing on the host's screen may take to land on the guest's (the link's) */
+const LANDED_LAG = 30;
+/** how near the guest's feet a branch comes down to be one that hurts it (m: within its burst) */
+const ROOT_AT_FEET = 1;
+
+/** how far apart the cage's middle and its roots may stand on the two screens (m), and the frames a root's life told
+ *  by the host may take to reach the guest's screen */
+const CAGE_APART = 0.05;
+const ROOT_LAG = 30;
+
+/**
+ * The Rootmother's root cage on both screens (`rootcage`): where it shut on each, its roots' feet, each root's life on
+ * the guest's against the host's (the host's, the fight's own, told to the guest), the root the host broke broken on
+ * both, the guest out of it and unhurt by her blow, which lands on both.
+ */
+function describeRootCage(host, guest) {
+  const shutOf = (samples) => samples.findIndex((sample) => sample.cage?.shut);
+  const hostShut = shutOf(host), guestShut = shutOf(guest);
+  const problems = [];
+  if (hostShut < 0 || guestShut < 0) {
+    return { line: `the root cage: shut on the host's screen ${hostShut >= 0}, on the guest's ${guestShut >= 0}`,
+      problems: ['the cage never shut on both screens'] };
+  }
+  const hostCage = host[hostShut].cage, guestCage = guest[guestShut].cage;
+  const apart = distance(hostCage.at, guestCage.at);
+  const rootsApart = Math.max(0, ...hostCage.roots.map((root, i) => {
+    const other = guestCage.roots[i];
+    return other ? distance([root.x, root.z], [other.x, other.z]) : Infinity;
+  }));
+  // (each root's life on the guest's screen against the host's, `ROOT_LAG` frames before, frame by frame)
+  let disagree = 0, compared = 0;
+  for (let frame = ROOT_LAG; frame < guest.length; frame++) {
+    const own = guest[frame].cage, told = host[frame - ROOT_LAG]?.cage, now = host[frame]?.cage;
+    if (!own?.shut || !told?.shut || !now?.shut) continue;
+    own.roots.forEach((root, i) => {
+      compared++;
+      const lives = [told.roots[i]?.life, now.roots[i]?.life];
+      if (!lives.some((life) => life !== undefined && Math.abs(life - root.life) < 1e-6)) disagree++;
+    });
+  }
+  // (the most seen broken at once: a later cage, shut whole, comes within the run)
+  const brokenOf = (sample) => (sample.cage?.roots ?? []).filter((root) => root.broken).length;
+  const brokenOn = (samples) => Math.max(0, ...samples.map(brokenOf));
+  const caged = guest.filter((sample) => sample.cage?.caged).length;
+  const blowAt = (samples) => samples.findIndex((sample) => sample.cage?.blow);
+  const hostBlow = blowAt(host), guestBlow = blowAt(guest);
+  const outBefore = guestBlow >= 0 && !guest[guestBlow].cage.caged
+    && distance(guest[guestBlow].self, guestCage.at) > CAGE_REACH;
+  const hurtAtBlow = guestBlow > 0 && guest[guestBlow - 1].life - guest[guestBlow].life > LIFE_DROP;
+  const line = `the root cage: shut at (${guestCage.at.map((v) => v.toFixed(1)).join(', ')}) with the guest at `
+    + `(${guest[guestShut].self.map((v) => v.toFixed(1)).join(', ')}), on the guest's screen at frame ${guestShut}, `
+    + `the host's ${hostShut} `
+    + `(${cm(apart)} apart, its roots ${cm(rootsApart)}); the roots' lives on the guest's screen apart from the host's `
+    + `${disagree} of ${compared} times; roots broken, the host's ${brokenOn(host)}, the guest's `
+    + `${brokenOn(guest)}; the guest caged ${caged} frames, ${outBefore ? 'out' : 'not out'} as her blow landed `
+    + `(frame ${guestBlow} on its screen, ${hostBlow} on the host's), ${hurtAtBlow ? 'hurt' : 'unhurt'} by it`;
+  if (apart > CAGE_APART) problems.push(`the cage shut ${cm(apart)} apart on the two screens`);
+  if (rootsApart > CAGE_APART) problems.push(`a root stood ${cm(rootsApart)} apart on the two screens`);
+  if (disagree) problems.push(`the roots' lives on the guest's screen apart from the host's ${disagree} times`);
+  if (!brokenOn(host)) problems.push('the host broke no root');
+  if (brokenOn(guest) !== brokenOn(host)) {
+    problems.push(`${brokenOn(host)} roots broken on the host's screen, ${brokenOn(guest)} on the guest's`);
+  }
+  if (!caged) problems.push('the guest was never caged on its own screen');
+  if (hostBlow < 0 || guestBlow < 0) problems.push('her blow never landed on both screens');
+  if (!outBefore) problems.push('the guest was still in the cage as her blow landed');
+  if (hurtAtBlow) problems.push('the guest was hurt by her blow, out of the cage');
+  return { line, problems };
+}
+/** how far apart the spot she rises on may be on the two screens (m), the frames her sink may lag on the guest's
+ *  (the link's), and the frames her depth may differ by more than `DEPTH_APART` m once lagged */
+const RISE_APART = 0.05;
+const SINK_LAG = 30;
+const DEPTH_APART = 0.5;
+/** her depth wholly under the floor (m: `ROOTMOTHER.burrow.depth`'s 8, less a hair) */
+const DEEPEST = 7.99;
+
+/**
+ * The Rootmother's burrow on both screens (`rootburrow`): her sink seen on each (the first frame she's under the
+ * floor), the spot she rose on on each, her depth on the guest's screen against the host's (the guest's lagged by the
+ * link), and struck-proof on both while under.
+ */
+function describeRootBurrow(host, guest) {
+  const sankOf = (samples) => samples.findIndex((sample) => (sample.burrow?.depth ?? 0) > 0.01);
+  const hostSank = sankOf(host), guestSank = sankOf(guest);
+  if (hostSank < 0 || guestSank < 0) {
+    return { line: `the burrow: seen on the host's screen ${hostSank >= 0}, on the guest's ${guestSank >= 0}`,
+      problems: ['her burrow was not seen on both screens'] };
+  }
+  const lag = guestSank - hostSank;
+  const last = (samples) => [...samples].reverse().find((sample) => sample.burrow?.to)?.burrow;
+  const hostTo = last(host)?.to, guestTo = last(guest)?.to;
+  const apart = hostTo && guestTo ? distance(hostTo, guestTo) : Infinity;
+  let off = 0, compared = 0, openHost = 0, openGuest = 0;
+  for (let frame = hostSank; frame < host.length; frame++) {
+    const own = host[frame].burrow, copy = guest[frame + lag]?.burrow;
+    if (!own || !copy) continue;
+    compared++;
+    if (Math.abs(own.depth - copy.depth) > DEPTH_APART) off++;
+    // (wholly under, at her depth: rising, she may be struck as she comes up)
+    if (own.depth >= DEEPEST && !own.proof) openHost++;
+    if (copy.depth >= DEEPEST && !copy.proof) openGuest++;
+  }
+  const line = `the burrow: her sink seen on the guest's screen ${lag} frames after the host's; her rise spot `
+    + `${cm(apart)} apart on the two screens; her depth apart by more than ${DEPTH_APART} m ${off} of ${compared} `
+    + `frames (the guest's lagged); open to hits wholly under ${openHost} frames on the host's, ${openGuest} on the guest's`;
+  const problems = [];
+  if (lag < 0 || lag > SINK_LAG) problems.push(`her sink ${lag} frames apart on the two screens`);
+  if (!(apart <= RISE_APART)) problems.push(`her rise spot ${cm(apart)} apart on the two screens`);
+  if (off > compared * 0.05) problems.push(`her depth apart on the two screens ${off} of ${compared} frames`);
+  if (openHost || openGuest) problems.push(`open to hits wholly under: the host's ${openHost}, the guest's ${openGuest} frames`);
+  return { line, problems };
+}
+
+/** how far from the cage's middle the guest stands to be out of its blow (m: its ring and the blow's reach) */
+const CAGE_REACH = 2.1;
+
 function describeThrows(host, guest) {
   const t = judgeThrows(host, guest);
   const most = t.apart.length ? Math.max(...t.apart) : 0;
@@ -1054,6 +1198,9 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
   if (name === 'shoot') add(describeShots(host, guest, frameMs));
   if (name === 'evade') add(describeEvades(host, guest));
   if (name === 'throws') add(describeThrows(host, guest));
+  if (name === 'rootburrow') add(describeRootBurrow(host, guest));
+  if (name === 'rootcage') add(describeRootCage(host, guest));
+  if (name === 'rootmother') add(describeRootmother(host, guest));
   if (name === 'dodge') add(describeBlows(guest, frameMs));
   if (name === 'down') add(describeDown(host, guest, frameMs));
   if (name === 'blink') add(describeBlinks(host, guest, frameMs));

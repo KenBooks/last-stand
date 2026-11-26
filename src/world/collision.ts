@@ -237,11 +237,11 @@ export function separateEnemies(ownOnly = false): void {
   }
   for (let i = 0; i < list.length; i++) {
     const a = list[i];
-    // (a foe thrown through the air flies over the others and the players)
-    if (!a.alive || a.spawning || a.tossed) continue;
+    // (a foe thrown through the air flies over the others and the players; one under the floor meets none of them)
+    if (!a.alive || a.spawning || a.tossed || a.buried) continue;
     for (let j = i + 1; j < list.length; j++) {
       const b = list[j];
-      if (!b.alive || b.spawning || b.tossed || (!moves(a) && !moves(b))) continue;
+      if (!b.alive || b.spawning || b.tossed || b.buried || (!moves(a) && !moves(b))) continue;
       const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z;
       const min = a.radius + b.radius;
       const d2 = dx * dx + dz * dz;

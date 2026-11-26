@@ -6,6 +6,7 @@ import { BOSS_AI, ENEMIES, HERO, SCALING, type EnemyId } from '../../data/enemie
 import { TWINS } from '../../data/foes/twins';
 import { BELL_WARDEN } from '../../data/foes/bellwarden';
 import { CANTOR } from '../../data/foes/cantor';
+import { ROOTMOTHER } from '../../data/foes/rootmother';
 import { WAVES } from '../../data/waves';
 import { DAMAGE_COLORS, partyScale, COOP } from '../../data/balance';
 import { AI_NOTES, FOE_NOTES, type FoeNote } from '../../data/guide';
@@ -51,8 +52,11 @@ const asGuard = (def: EnemyDef): EnemyDef => ({
 });
 
 /** Where `id` is met first: the first biome whose pool or boss has it, and the first wave there (and the boss it
- *  guards, where it comes on its ladder as a guard alone). */
+ *  guards, where it comes on its ladder as a guard alone); a foe a boss brings (`broughtBy`: the Rootmother's seed
+ *  pods, in no pool) where its boss is. */
 function metAt(id: EnemyId): { biome: BiomeId; from: number; guards?: EnemyId } | null {
+  const by = ENEMIES[id].broughtBy as EnemyId | undefined;
+  if (by && by !== id) return metAt(by);
   for (const biome of BIOME_IDS) {
     const first = bossWavesOf(biome, id)[0];
     if (first) {
@@ -150,6 +154,7 @@ function attacks(foe: Foe): string[] {
   if (d.ai === 'twins') out.push(...twinsAttacks(foe));
   if (d.ai === 'bellWarden') out.push(...bellWardenAttacks(foe));
   if (d.ai === 'cantor') out.push(...cantorAttacks(foe));
+  if (d.ai === 'rootmother') out.push(...rootmotherAttacks(foe));
   if (d.boss && d.ai === 'boss') {
     const radius = d.slamRadius ?? 5;
     out.push(`<b>Slam:</b> up close (within ${metres(d.range + BOSS_AI.slamReach)}) it slams all round itself: ${hit} ${typed(d)} damage within ${metres(radius)}, marked by a ring ${secs(d.windup)} before it lands.`);
@@ -234,6 +239,29 @@ function choirLine(foe: Foe, hit: number): string {
   if (!from) return '';
   const warn = kit.attacks?.choir?.warn ?? foe.def.windup;
   return `<b>The choir's ring</b> (under ${pct(from.below)}, every ${secs(c.every)} at most): ${c.singers} ghostly singers rise in a ring ${metres(c.radius)} round it over ${secs(warn)}; then for ${secs(c.lasts)} the ground outside the ring deals ${whole(hit * c.hurt)} ${typed(foe.def)} damage every ${secs(c.tick)}, as the ring tightens to ${metres(c.least)}. The ring stays where it rose, and it floats to its middle: fight it up close inside.`;
+}
+
+/** The Rootmother's fight, each with its figures (data/enemies.ts `ROOTMOTHER` and her boss kit). */
+function rootmotherAttacks(foe: Foe): string[] {
+  const d = foe.def, r = ROOTMOTHER, kit = d.bossKit!, hit = damage(d, foe.from);
+  const warn = (name: string): number => kit.attacks?.[name]?.warn ?? d.windup;
+  const [, late, rage] = kit.phases;
+  const B = r.branch, chase = r.rage.chase;
+  const brood = ENEMIES[(d.summon ?? 'thornling') as EnemyId].name;
+  const spot = kit.weak?.spot?.taken ?? 1;
+  return [
+    `<b>Creeping vines:</b> her arms drawn back for ${secs(warn('vines'))}, then ${r.vines.count[0]} to ${r.vines.count[1]} vines crawl out from her roots along the floor at ${num(r.vines.speed)} m/s, each after a hero, turning slowly. Any of it that touches you holds you for ${secs(r.vines.hold)}; a dash or a blink tears you free, and one arrow cuts a vine whole.`,
+    `<b>Thrown branches:</b> at a hero ${metres(B.near)} or more from her, or one a vine holds, her hand grows a thorned branch, her arm goes back for ${secs(warn('branch'))} and she hurls it end over end to where you will be: she reads which way you run and how you turn, and leads you up to ${metres(B.lead.most)}. Its landing is ringed on the floor while it flies. It deals ${whole(hit * B.hurt * B.phaseHurt[0])} damage ${metres(B.splash)} round where it lands; stop, turn or step off the ring as it leaves her hand, or raise a shield towards her.`,
+    `<b>A pair:</b> two branches, ${secs(warn('pair'))} after her arm goes back: one where you stand and one where you're running to, ${secs(B.pair.later)} apart, ${whole(hit * B.pair.hurt * B.phaseHurt[0])} each. Keep running and the second finds you, stop and the first does: turn back.`,
+    `<b>Root cage:</b> at a hero who has stood within ${metres(r.cage.still.radius)} of one spot for ${secs(r.cage.still.time)}, at most every ${secs(r.cage.every)}, the earth cracks in a ring ${metres(r.cage.radius)} round him for ${secs(warn('cage'))}: walk out before it shuts. Then ${r.cage.roots} roots burst up and close over the ring for ${secs(r.cage.life)}; each breaks in ${r.cage.hits} hits (an arrow or a swing is one; Bull Rush breaks one outright), and one broken is a gap to step out by. A blink passes through, a charge breaks out, and a partner outside can cut you free. A great root rises beside it and falls across it ${secs(warn('crush'))} after it shuts, for ${whole(hit * r.cage.blow.hurt)} damage to whoever is still inside; a shield raised towards her blocks it as any blow.`,
+    `<b>Her burrow:</b> she never walks. When the hero she goes for has been ${metres(r.burrow.far)} or more off for ${secs(r.burrow.farFor)}, or between sets of her attacks at most every ${secs(r.burrow.every)}, she drives her roots into the earth and sinks after them over ${secs(r.burrow.sink)}. A ridge of soil travels over her way under the floor at ${num(r.burrow.speed)} m/s; the ground where she will rise bulges and cracks for ${secs(r.burrow.warn)}, then her roots burst out and she rises over ${secs(r.burrow.rise)}, ${metres(r.burrow.ring[0])} to ${metres(r.burrow.ring[1])} from you, never on you. Rising harms no one. From half under until she rises nothing strikes her, and she attacks nothing.`,
+    `<b>Seed pods:</b> she flings ${r.seeds.count} pods across the arena; each one left ${secs(r.seeds.hatch)} bursts into ${r.seeds.brood} ${brood}s. One hit of anything pops a pod.`,
+    `<b>Great pods:</b> from her second phase ${r.seeds.great.byPhase[1]} of each volley is a great pod, ${r.seeds.great.byPhase[2]} as she rages: twice the size, glowing amber. Each left ${secs(r.seeds.great.hatch)} bursts into a ${ENEMIES[r.seeds.great.hatches as EnemyId].name}, and it takes ${ENEMIES.bigpod.hits} hits to pop, whatever each deals.`,
+    `<b>Thorns:</b> while you stand within ${metres(r.thorns.near)} of her, her arms rise for ${secs(warn('thorns'))} and thorns burst from the earth out to ${metres(r.thorns.radius)} for ${secs(r.thorns.last)}, dealing ${whole(hit * r.thorns.hurt)} ${typed(d)} damage every ${secs(r.thorns.tick)} to whoever stands in them.`,
+    `<b>Her heart:</b> ${secs(r.heart.first)} after she rises and every ${secs(r.heart.every)} after, it opens in her trunk for ${secs(r.heart.open)}. Shots that strike it deal ${num(spot)}× damage; she attacks nothing meanwhile, flinging ${r.heart.pods} pods round the arena instead.`,
+    late ? `<b>Under ${pct(late.below)}:</b> the canopy closes. Spore clouds ${metres(r.spores.radius)} wide drift over the floor, dealing ${whole(hit * r.spores.hurt)} damage every ${secs(r.spores.tick)} to whoever stands in one, and the earth cracks where a hero will be in ${secs(warn('erupt'))}, read from how he runs, before spikes burst from it, ${metres(r.erupt.radius)} round, for ${whole(hit * r.erupt.hurt)} damage. Her branches come three at a time, ${metres(B.apart)} apart across where you're running to, ${whole(hit * B.fanHurt * B.phaseHurt[1])} each, and she rains them: ${B.rain.count} one after another, ${secs(B.rain.every)} apart, each aimed as it leaves her hand, some where you'll be and one where you stand, ${whole(hit * B.rain.hurt * B.phaseHurt[1])} each: change pace and way between them. Her branches hit harder in each phase, and she pauses less between attacks.` : '',
+    rage ? `<b>Under ${pct(rage.below)}, she rages:</b> her attacks come quicker; a line of ${5} branches lands across her line to you, ${whole(hit * B.lineHurt * B.phaseHurt[2])} each, and stays ${secs(B.bramble)} as bramble that hurts ${whole(hit * B.brambleHurt)} every ${secs(B.brambleTick)}; and the earth bursts under you ${chase.count} times running, each ${secs(chase.warn)} after it cracks where you stand, for ${whole(hit * chase.hurt)}: keep running.` : '',
+  ].filter(Boolean);
 }
 
 /** Elites: any common foe may come as one, from the wave they start to show. */

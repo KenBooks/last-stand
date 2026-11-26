@@ -60,6 +60,10 @@ function buildSteps(id: BiomeId): { build: number; seal: number; bake: number } 
 
 export type Arena = Awaited<ReturnType<typeof buildArena>>;
 
+/** the canopy's shade at its fullest (`setShade`): how much of the sky's light, the sun's and the surroundings' it
+ *  takes away, and how long it takes to close or open (s: slow, nothing large changes faster than the flash rule) */
+const SHADE = { sky: 0.55, sun: 0.72, around: 0.5, ease: 2.5 };
+
 /** how finely the sun's place is read for its kept shadow to be drawn again (a step's 1/n m, of its 60 m off or so) */
 const SUN_STEPS = 8;
 
@@ -291,6 +295,17 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   let hour = FIRST_HOUR;
 
   /** `id` the run's biome (shown if a run is on: the lobby stands in the village). */
+  /** the canopy's shade over a battleground (`setShade`: the Rootmother's second phase), 0 to 1, and where it eases */
+  let shade = 0, shadeTo = 0;
+  /** A battleground's sky, sun and surroundings dimmed by the shade: their strengths alone, so nothing compiles, and
+   *  the light the grade adapts to is only ever less (core/AGENTS.md: it compresses light above its base). */
+  function applyShade(): void {
+    if (hallShown || shown === 'village') return;
+    const L = active.look;
+    hemi.intensity = L.hemi.intensity * (1 - SHADE.sky * shade);
+    moon.intensity = L.moon.intensity * (1 - SHADE.sun * shade);
+    scene.environmentIntensity = L.envIntensity * (1 - SHADE.around * shade);
+  }
   function setBiome(id: BiomeId): void {
     const changed = id !== biome;
     biome = id;
@@ -307,6 +322,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     hallGroup.visible = false;
     if (place === 'village') village.daylight(hour, villageLook);
     setLook(place === 'village' ? villageLook : active.look);
+    applyShade();
   }
   function setLook(L: BiomeLook): void {
     setColours(L);
@@ -422,7 +438,19 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       calm = v;
       for (const id of builtBiomes()) placeOf(id).b.setCalm(v);
     },
+    /** The canopy closing over the battleground (`to` 1: the Rootmother's second phase) or opening again (0), eased
+     *  over a couple of seconds (`at once`: a new run, the lobby). */
+    setShade(to: number, atOnce = false) {
+      shadeTo = to;
+      if (atOnce) { shade = to; applyShade(); }
+    },
+    /** how far the canopy has closed (0 to 1) */
+    get shade() { return shade; },
     update(dt: number, t: number) {
+      if (shade !== shadeTo) {
+        shade = shadeTo > shade ? Math.min(shadeTo, shade + dt / SHADE.ease) : Math.max(shadeTo, shade - dt / SHADE.ease);
+        applyShade();
+      }
       if (import.meta.env.DEV) checkPlaces();
       if (room) rooms[room].update(dt, t);
       else if (hallShown) hall.update(dt, t); else active.update(dt, t);

@@ -20,6 +20,7 @@ const PARTS = [
   'lobby-1: a room has no lobby of its own (the village is every game\'s): none in hello, refuse or a room\'s card',
   'party-room-1: welcome carries the host\'s house (rm) so joiners spawn in the same building',
   'rarity-1: the rarity of an item can be Ultimate, a tier above Ascendant (data/items.ts)',
+  'rootmother-3: the Rootmother vines, burrow, heart, pods and great pods, thorns, cracks, eruptions, spores, thrown branches and their bramble, root cage and its great root, enemy fx (entities/bosses/rootmother.ts)',
   'sit-1: how far a hero is sat on a seat, StateMsg sw, sh, sf, sb, sa (entities/sitting.ts)',
   'ward-1: the Hedgeward rising, struck and breaking, the enemy fx `ward` (combat/skills/hedgeward.ts)',
 ];

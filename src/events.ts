@@ -8,6 +8,8 @@ export interface GameEvents {
   enemyKilled: [enemy: Enemy];
   /** a boss entered phase `phase` of its fight (entities/bossKit.ts), on every game */
   bossPhase: [enemy: Enemy, phase: number];
+  /** a boss calls out a moment of its fight on every game (its line on the banner: the Rootmother's heart opening) */
+  bossCall: [enemy: Enemy, line: string];
   playerDied: [player: Player];
   playerHurt: [amount: number];
   lootGained: [item: Item];

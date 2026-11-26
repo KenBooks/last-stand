@@ -151,6 +151,9 @@ export class Enemy {
   alive = true;
   spawning = RISE_TIME;
   invulnerable = true;
+  /** wholly under the floor (the Rootmother's burrow, entities/rootBurrow.ts): no body above it for a foe or a hero to
+   *  be pushed off (`separateEnemies`) */
+  buried = false;
   /** attack cooldown */
   cd = rand(0.3, 1.2);
   action: EnemyAction | null = null;
@@ -574,7 +577,8 @@ export class Enemy {
     if (this.carried || this.tossed) return this.updateCarried(dt, t, frozen);
     if (this.lure && (this.lure.until <= t || !lures.includes(this.lure))) this.lure = null;
     if (!frozen && !dazed && this.ducked <= 0 && this.pickTarget()) {
-      if (this.lure) lured(this, this.lure);
+      // (a foe a lure never draws fights on: the Rootmother)
+      if (this.lure && !this.def.ignoresLures) lured(this, this.lure);
       else AI[this.def.ai](this, dt);
       this.tickAction(dt);
       this.cd -= dt;
@@ -591,7 +595,7 @@ export class Enemy {
     this.keepInWorld();
 
     if (!frozen) this.facing = this.def.turn ? turnAtMost(this.facing, this.targetFacing, this.def.turn * dt) : angleDamp(this.facing, this.targetFacing, this.action ? 6 : 9, dt);
-    const speedK = Math.hypot(this.vel.x, this.vel.z) / this.speed;
+    const speedK = Math.hypot(this.vel.x, this.vel.z) / Math.max(this.speed, 1e-3);
     this.stepPhase(dt);
     // frozen enemies hold their pose: animate with the time they were frozen at
     this.animate(frozen ? 0 : dt, frozen ? this.frozenAt : t, Math.min(1, speedK));
@@ -625,7 +629,7 @@ export class Enemy {
     const a = this.action;
     if (a) { a.t += dt; if (a.t >= a.dur) this.action = null; }
     this.stepPhase(dt);
-    this.animate(frozen ? 0 : dt, frozen ? this.frozenAt : t, Math.min(1, Math.hypot(this.vel.x, this.vel.z) / this.speed));
+    this.animate(frozen ? 0 : dt, frozen ? this.frozenAt : t, Math.min(1, Math.hypot(this.vel.x, this.vel.z) / Math.max(this.speed, 1e-3)));
     if (!frozen) this.frozenAt = t;
     return this.updateLooks(dt, t, frozen);
   }
@@ -725,6 +729,8 @@ export class Enemy {
   takeDamage(amount: number, info: DamageInfo = {}): number {
     if (!this.alive) return 0;
     const before = this.life;
+    // (a foe that falls in so many hits, whatever each deals: each takes its share of its most life)
+    if (this.def.hits && amount > 0) amount = this.maxLife / this.def.hits + 1e-6;
     if (!this.meter) this.life -= amount;
     // (a boss sharing its life: its partner's follows it, entities/bossKit.ts)
     if (this.def.shares && !this.meter) shareHit(this, amount);

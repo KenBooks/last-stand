@@ -34,7 +34,7 @@ const FALL = 22;
 /** the chunk's look: its lava, smoke and size (m) */
 const LAVA = { color: 0xff6a2a, smoke: 0x1a1210, ring: 0xff6a20, size: 0.42 };
 /** the vine's bark and sap, and how long it lies and withers once grown (s) */
-const VINE = { bark: 0x3d4d23, sap: 0x9cff3a, lies: 1.5, withers: 0.5 };
+export const VINE = { bark: 0x3d4d23, sap: 0x9cff3a, lies: 1.5, withers: 0.5 };
 /** what an arrow must come within of a vine to cut it: across its line (m), and over the floor (m) */
 export const VINE_CUT = { reach: 0.35, high: 0.6 };
 /** how fast a cut vine withers (s) */
@@ -67,8 +67,8 @@ const keep = (t: Thrown): Thrown => {
   return t;
 };
 
-/** A vine on the floor, for an arrow to cut (`cutVineAlong`). */
-interface LyingVine {
+/** A vine on the floor, for an arrow to cut (`cutVineAlong`): the Hulk's, or a piece of the Rootmother's. */
+export interface LyingVine {
   ox: number;
   oz: number;
   dx: number;
@@ -79,6 +79,9 @@ interface LyingVine {
   cut(at: THREE.Vector3): void;
 }
 const lying = new Set<LyingVine>();
+/** A vine laid on the floor for an arrow to cut, and taken up again (withered, cut, gone). */
+export const layVine = (v: LyingVine): void => { lying.add(v); };
+export const liftVine = (v: LyingVine): void => { lying.delete(v); };
 
 /** The closest points of segments a→b and c→d on the floor: each one's share along it, and how far apart they are. */
 function closestOnFloor(ax: number, az: number, bx: number, bz: number, cx: number, cz: number, ex: number, ez: number):
@@ -285,7 +288,7 @@ export function vineAt(kind: EnemyId, ox: number, oz: number, angle: number, len
 /** The coils round a hero the vine caught: erupting from the floor under him in a burst of earth and winding up his
  *  legs, kept at his feet, and fallen off as he's let go (his own game's hold, which a dash ends; a partner's copy's
  *  by the time it holds), or the vine is `cut`. */
-function coilRound(p: Player, hold: number, cut: () => boolean): void {
+export function coilRound(p: Player, hold: number, cut: () => boolean): void {
   const c: Vine = coils(COILS.high, VINE.bark, VINE.sap);
   G.scene.add(c.mesh);
   const until = G.time + hold;

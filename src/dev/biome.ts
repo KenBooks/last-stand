@@ -14,7 +14,7 @@ import { renderMenu } from '../ui/menus';
 /** The rosters use corresponding roles in corresponding positions; a boss maps to the other biome's boss on the same
  *  rung of its ladder (round again past its end). */
 export function biomeCounterpart(type: EnemyId, to: BiomeId): EnemyId {
-  if (ENEMIES[type].dummy) return type;
+  if (ENEMIES[type].dummy || ENEMIES[type].broughtBy) return type;
   if (ENEMIES[type].boss) {
     const rung = Math.max(0, BIOME_IDS.map((id) => BIOMES[id].bosses.findIndex((b) => b.id === type)).find((i) => i >= 0) ?? 0);
     const ladder = BIOMES[to].bosses;
