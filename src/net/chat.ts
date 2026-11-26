@@ -7,8 +7,9 @@ import { CHAT } from '../data/balance';
 import type { Player } from '../entities/player';
 import { onMessages } from './messages';
 
-/** A line of the chat: who wrote it (none: the game's own word), what, and when it came (s, the page's clock). */
-export interface ChatLine { by: Player | null; text: string; at: number }
+/** A line of the chat: who wrote it (none: the game's own word, or `who`'s), what, and when it came (s, the page's
+ *  clock); `who` names a speaker who is no player (an agent joined to a solo game, src/dev), `tag` a word after it. */
+export interface ChatLine { by: Player | null; text: string; at: number; who?: string; tag?: string }
 
 /** the lines kept, oldest first */
 export const chatLines: ChatLine[] = [];
@@ -17,16 +18,24 @@ let sendChat: (text: string) => void = () => {};
 /** How a message of ours goes to the party (set by net/session.ts while a room is open). */
 export function setChatNet(send: ((text: string) => void) | null): void { sendChat = send ?? (() => {}); }
 
+/** A chat of a solo game, with someone who is no player (src/dev's joined agent, its one user): the chat shows
+ *  without a room, and what the player says goes to `send` alone, never over co-op's link. */
+export interface ChatAside { placeholder: string; send(text: string): void }
+let aside: ChatAside | null = null;
+/** The solo game's chat opened with `to` (null: shut, the chat co-op's alone again). */
+export function setChatAside(to: ChatAside | null): void { aside = to; }
+export const chatAside = (): ChatAside | null => aside;
+
 const listeners: ((line: ChatLine | null) => void)[] = [];
 /** Runs `fn` with each line as it comes (ui/chat.ts shows it), and with null as they're all cleared. */
 export function onChatLine(fn: (line: ChatLine | null) => void): void { listeners.push(fn); }
 
 /** each player's messages' times (s), within `CHAT.per`: our own under `null` */
-const sent = new Map<Player | null, number[]>();
+const sent = new Map<Player | string | null, number[]>();
 const now = (): number => performance.now() / 1000;
 
 /** Whether `by` may say another now (and if so it's counted): at most `CHAT.burst` within `CHAT.per` s. */
-function allowed(by: Player | null): boolean {
+function allowed(by: Player | string | null): boolean {
   const t = now(), times = (sent.get(by) ?? []).filter((at) => t - at < CHAT.per);
   if (times.length >= CHAT.burst) {
     sent.set(by, times);
@@ -53,14 +62,25 @@ function add(line: ChatLine): void {
 /** What saying `text` now does: 'sent', 'empty' (nothing left once cleaned) or 'tooFast' (over the burst). */
 export type ChatSent = 'sent' | 'empty' | 'tooFast';
 
-/** The local player says `text` to the party: shown here and sent, unless it's empty or too fast. */
+/** The local player says `text` to the party (or to the solo chat's other end, `aside`): shown here and sent, unless
+ *  it's empty or too fast. */
 export function say(me: Player, text: string): ChatSent {
   const clean = cleanChat(text);
   if (!clean) return 'empty';
   if (!allowed(null)) return 'tooFast';
   add({ by: me, text: clean, at: now() });
-  sendChat(clean);
+  if (aside) aside.send(clean);
+  else sendChat(clean);
   return 'sent';
+}
+
+/** A line of `who`'s, who is no player (the solo chat's other end), cleaned and held to the burst as a partner's;
+ *  `tag` a word after it. Whether it was shown. */
+export function chatFrom(who: string, text: string, tag?: string): boolean {
+  const clean = cleanChat(text);
+  if (!clean || !allowed(who)) return false;
+  add({ by: null, who, text: clean, at: now(), tag });
+  return true;
 }
 
 /** A partner's message, as its game sent it (`m.text`: checked, cleaned and held to the burst again here). */

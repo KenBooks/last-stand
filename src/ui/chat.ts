@@ -8,7 +8,7 @@ import { CHAT } from '../data/balance';
 import { wasPressed } from '../core/input';
 import { sfx } from '../core/audio';
 import { isCoop } from '../net/role';
-import { chatLines, chatNote, onChatLine, say, type ChatLine } from '../net/chat';
+import { chatAside, chatLines, chatNote, onChatLine, say, type ChatLine } from '../net/chat';
 import { nameOf } from './coop';
 import { heroColour } from '../data/heroColours';
 import { isTouch } from './touch';
@@ -78,23 +78,30 @@ function lineCame(line: ChatLine | null): void {
   if (!root) return;
   if (!line) { log.replaceChildren(); return; }
   const el = document.createElement('div');
-  el.className = line.by ? 'chat-line' : 'chat-line note';
-  if (line.by) {
+  // (one who is no player, the solo chat's other end, is a speaker of its own: `aside`)
+  el.className = line.by ? 'chat-line' : line.who ? 'chat-line aside' : 'chat-line note';
+  if (line.by || line.who) {
     // (`Name: text`, the name in its player's colour)
     const who = document.createElement('span');
     who.className = 'chat-name';
-    who.textContent = `${nameOf(line.by)}:`;
+    who.textContent = `${line.by ? nameOf(line.by) : line.who}:`;
     const colour = nameColour(line);
     if (colour) who.style.color = colour;
     el.append(who, ' ');
   }
   // (text alone: a message is never markup)
   el.append(line.text);
+  if (line.tag) {
+    const tag = document.createElement('span');
+    tag.className = 'chat-tag';
+    tag.textContent = ` (${line.tag})`;
+    el.append(tag);
+  }
   log.appendChild(el);
   while (log.childElementCount > CHAT.keep) log.firstElementChild!.remove();
   if (open) log.scrollTop = log.scrollHeight;
   lastActive = now();
-  if (line.by && !line.by.local) sfx.chat();
+  if ((line.by && !line.by.local) || line.who) sfx.chat();
 }
 
 /** The box opened to type in, the lines kept all shown. */
@@ -126,14 +133,24 @@ function send(): void {
 /** Whether the box is open (the game's keys aren't the player's while it is). */
 export const chatOpen = (): boolean => open;
 
+/** The box's prompt: the party's, or the solo chat's (`chatAside`), written only as it changes. */
+function prompt(): void {
+  const text = chatAside()?.placeholder ?? 'Say to the party…';
+  if (field.placeholder === text) return;
+  field.placeholder = text;
+  field.setAttribute('aria-label', text.replace(/…$/, ''));
+}
+
 /**
- * Every frame: the chat shown in a room (`allowed`: a run or the lobby, no menu, hall or saves over it), Enter opening
- * the box, the touch button shown on touch; out of a room or with something over it, all of it hidden and shut.
+ * Every frame: the chat shown in a room, or in a solo game whose chat is open (`chatAside`: src/dev's joined agent)
+ * (`allowed`: a run or the lobby, no menu, hall or saves over it), Enter opening the box, the touch button shown on
+ * touch; out of a room or with something over it, all of it hidden and shut.
  */
 export function updateChat(allowed: boolean): void {
   make();
-  const inRoom = isCoop();
+  const inRoom = isCoop() || chatAside() !== null;
   const can = inRoom && allowed;
+  prompt();
   root!.classList.toggle('hidden', !can);
   root!.classList.toggle('touch', isTouch());
   button.classList.toggle('hidden', !(can && isTouch()));

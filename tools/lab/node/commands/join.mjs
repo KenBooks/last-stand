@@ -11,12 +11,15 @@ export default {
     + 'from a camera placed with `--at`, in `out/join`), `join set name=value...` (what the developer panel sets; bare, its controls), `join eval '
     + '<code>` (run in the game\'s page, `G`, `THREE` and `dev` in scope), `join make <name> --file thing.ts` (a '
     + 'module built into the scene as he watches, and built again in its place each time it is sent; `join makes`, '
-    + '`join unmake`), `join status` and `join leave` go through '
+    + '`join unmake`), `join hear` (a background task that ends as the player says a line in the game\'s chat, '
+    + 'printing it) and `join say <text>` (an answer of a line or two in his chat, `--more` saying the rest is in '
+    + 'the session), `join status` and `join leave` go through '
     + 'it (never production: the relay opens agent rooms for previews and dev builds alone)',
   help: 'the game the owner is playing on a PR preview or a dev build, joined as he invited it (F8, Invite agent): '
     + 'join <code> holds the link (a background task) until the game ends it; then join look, join picture [--at '
     + 'x,y,z --to x,y,z], join set name=value..., join eval <code>, join make <name> --file thing.ts [--resend], '
-    + 'join makes, join unmake [name], join status, join leave run on that live game '
+    + 'join makes, join unmake [name], join hear (a background task: ends with the player\'s next chat line), '
+    + 'join say <text> [--more], join status, join leave run on that live game '
     + '(pictures in tools/lab/out/join; tools/lab/commands/join.md)',
   argument: 'code or step',
   options: {
@@ -47,7 +50,12 @@ export default {
     },
     turn: { kind: 'number', usage: 'rad', help: 'make: the thing turned this far round' },
     resend: { kind: 'switch', help: 'make: sent again each time its file is saved, until stopped' },
-    timeout: { kind: 'number', usage: 's', help: 'how long a step waits for the game\'s answer (30)' },
+    more: { kind: 'switch', help: 'say: the line says the rest of the answer is in the session (more in the session)' },
+    timeout: {
+      kind: 'number',
+      usage: 's',
+      help: 'how long a step waits for the game\'s answer (30); hear: how long it waits for a line (until one comes)',
+    },
   },
   async run(options) {
     // (imported as it runs: the command line reads every command's module on each run)

@@ -5,6 +5,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { callPage } from './inviteCheck.mjs';
 import { OUT, REPO } from './paths.mjs';
 
 const LAB = join(REPO, 'tools', 'lab', 'lab.mjs');
@@ -62,6 +63,42 @@ async function resentOnSave(game, found) {
     if (sender.exited === null) sender.kill();
     await game.whileStepping(runJoin(['unmake']));
   }
+}
+
+/** the line the player says to `join hear`, the answer `join say` gives, and one past the chat's 200 characters */
+const HEARD = 'what is that glow by the well?';
+const SAID = 'A lamp of the village: its light, not a fault.';
+const TOO_LONG = 'y'.repeat(201);
+
+/**
+ * `join hear` started as a process, as a session starts it in the background: it ends, printing the line, once the
+ * player says one in the game's chat (by the keyboard). Then `join say` answers in his chat, and one past the chat's
+ * limit is refused.
+ */
+async function chatByCommandLine(game, found) {
+  const hearer = startJoin(['hear']);
+  try {
+    const page = (fn, args) => callPage(game.page, 'inviteChat', fn, args);
+    await page('chatOpenByKey');
+    await page('chatType', { text: HEARD });
+    await page('chatSubmit');
+    const exit = await game.whileStepping(hearer.ended);
+    found.say(`lab join hear: exited ${exit} as the player said a line, printing "${hearer.text.trim()}"`);
+    found.expect(exit === 0 && hearer.text.trim() === `player: ${HEARD}`, `lab join hear printed "${hearer.text}"`);
+  } finally {
+    if (hearer.exited === null) hearer.kill();
+  }
+  const said = await game.whileStepping(runJoin(['say', ...SAID.split(' '), '--more']));
+  const shown = (await callPage(game.page, 'inviteChat', 'chatState')).lines.at(-1);
+  found.say(`lab join say: printed "${said.text}"; the chat shows "${shown?.name} ${shown?.text} ${shown?.tag}"`);
+  const printed = `said: ${SAID} (more in the session)`;
+  found.expect(said.code === 0 && said.text === printed, `lab join say printed "${said.text}"`);
+  const asAgent = shown?.name === 'Agent:' && shown.text === SAID;
+  found.expect(asAgent, 'lab join say\'s answer isn\'t in the chat as the agent\'s');
+  const long = await game.whileStepping(runJoin(['say', TOO_LONG]));
+  found.say(`lab join say of ${TOO_LONG.length} characters: exits ${long.code}`);
+  const refused = long.code !== 0 && /chat holds 200/.test(long.text);
+  found.expect(refused, `lab join say past the limit printed "${long.text}"`);
 }
 
 /**
@@ -122,6 +159,7 @@ export async function joinCommandChecked(game, found, server, code) {
     found.expect(unmade.text === 'nothing is made' && groups.length === 0, 'lab join unmake left the thing in the scene');
 
     await resentOnSave(game, found);
+    await chatByCommandLine(game, found);
 
     const left = await game.whileStepping(runJoin(['leave']));
     const exit = await game.whileStepping(holder.ended);

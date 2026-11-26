@@ -178,3 +178,20 @@ body.profiling :is(#dev-panel, #dev-tab, #dev-fly) { display: none !important; }
   &.hidden { display: none; }
   &.on { color: $panel; background: $highlight; border-color: $highlight; }
 }
+
+// the agent's lines in the game's chat (agentChat.ts): its name in the badge's gold, and the word that says the rest of
+// an answer is in the coding session's chat
+#chat .chat-line.aside .chat-name { color: $highlight; }
+#chat .chat-tag { color: #b8b2a6; font-style: italic; }
+// (while he draws, the chat stays his to use, over the drawing as the badge is: drawn round a thing, he says what it is;
+// its lines still let every touch through, `_chat.scss`)
+body:has(#dev-agent-draw.on) :is(#chat, #btn-chat) { z-index: 61; }
+// (with the panel open, the chat and its touch button stand right of it, as the lobby's panels put it right of theirs:
+// at the screen's left edge they lay over its controls)
+$dev-panel-width: min(360px * var(--ui, 1), 100vw);
+body:has(#dev-panel:not(.hidden)) {
+  #chat { left: calc(#{$dev-panel-width} + 14px); max-width: calc(100vw - #{$dev-panel-width} - 28px); }
+  #chat.open { width: min(hud(360px), calc(100vw - #{$dev-panel-width} - 28px)); }
+  &.touch #chat.open { width: min(touch(320px), calc(100vw - #{$dev-panel-width} - 28px)); }
+  #btn-chat { left: calc(#{$dev-panel-width} + 8px); }
+}

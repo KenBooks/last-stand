@@ -35,6 +35,9 @@ export class AgentLink {
     this.pending = new Map();
     this.isAccepted = false;
     this.endedWhy = null;
+    /** the player's lines in the game's chat not yet heard (`hear`), oldest first, and who waits for the next */
+    this.unheard = [];
+    this.listeners = [];
     /** why the relay said it ends, before the socket closes */
     this.why = null;
     /** resolves once the game's player has let the agent in; rejects if the link ends first */
@@ -56,9 +59,39 @@ export class AgentLink {
       this.onAccepted();
     } else if (message.t === 'end') {
       this.why = message.why;
+    } else if (message.d?.t === 'chat') {
+      this.said(message.d);
     } else if (message.d && typeof message.d === 'object') {
       this.answered(message.d);
     }
+  }
+
+  /** A line the player said in the game's chat: kept to be heard, and handed to whoever waits for one. */
+  said(line) {
+    if (typeof line.text !== 'string' || !this.isAccepted) return;
+    this.unheard.push({ text: line.text, at: typeof line.at === 'number' ? line.at : Date.now() });
+    const waiting = this.listeners.splice(0);
+    for (const listener of waiting) listener();
+  }
+
+  /**
+   * The player's lines in the game's chat not yet heard, oldest first, once there is one (each heard once): at once if
+   * some came already, else as the next comes, or none after `ms`. Throws once the link has ended.
+   */
+  async hear(ms = STEP_MS) {
+    if (!this.unheard.length && this.endedWhy === null) {
+      await new Promise((resolve) => {
+        const timer = setTimeout(done, ms);
+        function done() {
+          clearTimeout(timer);
+          resolve();
+        }
+        this.listeners.push(done);
+        this.ended.then(done);
+      });
+    }
+    if (!this.unheard.length && this.endedWhy !== null) throw labError(`the link ended: ${endedText(this.endedWhy)}`);
+    return this.unheard.splice(0);
   }
 
   answered(reply) {
