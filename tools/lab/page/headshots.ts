@@ -88,9 +88,9 @@ function headJoint(foe: Enemy): THREE.Object3D | null {
   return foe.model.joints?.head ?? foe.model.head ?? null;
 }
 
-/** The joint the trunk hangs from, the canary's stand-in for the head: the chest's, or the head's parent's parent
- *  (the dummy's sway, from which its sack hangs). */
+/** The joint the trunk hangs from, the canary's stand-in for the head. */
 export function trunkJoint(foe: Enemy): THREE.Object3D | null {
+  if (foe.type === 'stag') return foe.obj.getObjectByName('stag-trunk') ?? null;
   return foe.model.joints?.chest ?? foe.model.head?.parent ?? null;
 }
 
@@ -209,7 +209,7 @@ export async function turnFoe(lab: Lab, foe: Enemy, side: number): Promise<void>
 
 /** Where its chest shot is aimed: its chest joint, or a share of its height over its middle. */
 export function chestPoint(foe: Enemy): THREE.Vector3 {
-  const chest = foe.model.joints?.chest;
+  const chest = foe.type === 'stag' ? trunkJoint(foe) : foe.model.joints?.chest;
   if (chest) return chest.getWorldPosition(new THREE.Vector3());
   return foe.pos.clone().setY(foe.obj.position.y + foe.height * CHEST_SHARE);
 }

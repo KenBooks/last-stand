@@ -183,6 +183,7 @@ export function buildStag(): Model {
 
   // --- its body ----------------------------------------------------------------------------------------------
   const body = joint(root, 0, BODY_Y, 0);
+  body.name = 'stag-trunk';
   // (barrel, chest and haunches: three swells of char, the chest deep, the belly drawn up between)
   S.add(made(() => organic(new THREE.SphereGeometry(1, 28, 18), 0.06, 3, 1)), char, body, [0, BARREL.y0, 0], [0, 0, 0], [BARREL.x, BARREL.y, BARREL.z]);
   // (the chest deep and forward, the shoulders over it; the haunches round and high; the belly drawn up between)
@@ -797,7 +798,7 @@ export function buildStag(): Model {
   root.userData.stride.hoofs = hoofs;
 
   return {
-    root, kit, animate, height: 7.2,
+    root, kit, animate, head, height: 7.2,
     reset() {
       galloping = lowered = reeling = sag = covered.walk = covered.gallop = 0;
       last = null;
