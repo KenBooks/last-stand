@@ -11,7 +11,8 @@
 //   a new invitation, joined and let in, then a co-op room opened: the agent sent away, and none offered in the room.
 //   (between the steps and the kick, inviteMakes.mjs: a thing made in the scene and seen drawn, made again in its
 //   place, a broken module refused with the thing left standing, unmade; one left through the kick, for the panel's
-//   Remove)
+//   Remove; inviteDraw.mjs, what the owner draws; inviteChat.mjs, the chat with the agent both ways, and shut by the
+//   kick; the room's chat its own again once co-op sent the agent away)
 // `--canary` starts the relay with the fault it must catch, a used code left good, so a second agent gets in; and
 // with its hold on an unaccepted agent's messages off, so the step sent before the answer reaches the page, whose own
 // hold must then be what stops it.
@@ -22,6 +23,7 @@ import { joinCommandChecked } from './joinCommandCheck.mjs';
 import { picturedBesideTheFrame } from './inviteApart.mjs';
 import { madeInTheScene, removedByThePanel } from './inviteMakes.mjs';
 import { drawingEnded, drawnForTheAgent } from './inviteDraw.mjs';
+import { chatEnded, chattedWithTheAgent } from './inviteChat.mjs';
 import { labError } from './errors.mjs';
 import { OUT } from './paths.mjs';
 
@@ -46,6 +48,8 @@ const CANARY_FAULTS = {
   unseen: 'a made thing left undrawn',
   leak: 'the frame of the player drawn from the camera of the agent',
   plain: 'the drawing of the owner left out of the picture',
+  unheard: 'a line typed with the chat shut',
+  unnamed: 'an answer shown as the game\'s own word',
 };
 
 /** Calls `fn` of the page module `module` (under tools/lab/page) with `args`; a failure names the call. */
@@ -278,6 +282,9 @@ async function coopSendsAway(game, found, server) {
   found.expect(why === 'game', `co-op ended the agent's link as "${why}"`);
   found.expect(!state.badge, 'the badge stayed up in a co-op room');
   found.expect(!state.canInvite, 'an agent can be invited in a co-op room');
+  const chat = await callPage(game.page, 'inviteChat', 'chatState');
+  found.say(`the room's chat: its prompt "${chat.prompt}", ${chat.kept} lines kept`);
+  found.expect(chat.prompt === 'Say to the party…', `the room's chat is still the agent's: "${chat.prompt}"`);
   await callPage(game.page, 'rooms', 'roomsLeave');
   await game.until((s) => s.session === 'off', 'the co-op room was never left');
   // (offered again as the game's next frame reads the room gone)
@@ -317,8 +324,10 @@ export async function runInvite(side, { canary = false } = {}) {
     await picturedBesideTheFrame(game, found, link);
     await madeInTheScene(game, found, link, dir);
     await drawnForTheAgent(game, found, link, dir);
+    await chattedWithTheAgent(game, found, link, dir);
     await kicked(game, found, server, link, code, dir);
     await drawingEnded(game, found);
+    await chatEnded(game, found);
     await removedByThePanel(game, found);
     await joinCommandChecked(game, found, server, await invited(game, found, server));
     await coopSendsAway(game, found, server);

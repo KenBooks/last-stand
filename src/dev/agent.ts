@@ -14,6 +14,7 @@ import { signedIn } from '../loot/cloud';
 import { initSteps, runStep, stepsFrame, type AgentStep, type StepHooks } from './agentSteps';
 import { madeCount, makesFrame, unmake } from './agentMakes';
 import { clearDrawing, drawingOn, drawnStrokes, endDrawing, initDraw, setDrawing } from './agentDraw';
+import { closeAgentChat, openAgentChat } from './agentChat';
 
 type Phase = 'off' | 'opening' | 'invited' | 'asking' | 'connected';
 const link = {
@@ -38,7 +39,7 @@ const ENDS: Record<string, string> = {
   refused: 'The agent was refused.',
   cancelled: 'The invitation was withdrawn.',
 };
-const WHAT_IT_MAY = 'It can look at the game, take pictures of it, set what this panel sets, build things into the scene and run code in this page.';
+const WHAT_IT_MAY = 'It can look at the game, take pictures of it, set what this panel sets, build things into the scene, talk with you in the chat and run code in this page.';
 const CLOUD = 'You are signed in to cloud saves here: code run in this page can read that sign-in and this site\'s saves.';
 const inCoop = (): boolean => session.status !== 'off';
 /** the command the owner pastes to his session (the relay named where it isn't the build's own) */
@@ -114,14 +115,18 @@ function end(note: string): void {
   link.code = '';
   link.note = note;
   endDrawing();
+  closeAgentChat();
   if (ws && ws.readyState <= WebSocket.OPEN) ws.close();
   render();
 }
 
 function accept(): void {
   if (link.phase !== 'asking' || !link.ws) return;
-  link.ws.send(JSON.stringify({ t: 'accept' }));
+  const ws = link.ws;
+  ws.send(JSON.stringify({ t: 'accept' }));
   link.phase = 'connected';
+  // (the chat a line to the agent's session: what the player says goes on this link alone)
+  openAgentChat((line) => { if (link.ws === ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ d: line })); });
   render();
 }
 

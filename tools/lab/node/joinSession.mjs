@@ -1,8 +1,9 @@
 // `lab join`: a coding session's place in the game its owner is playing (#529). `join <code>` joins the game that
 // showed the code and holds the link, in a process of its own, for as long as the game keeps it; every other `join`
-// (`look`, `picture`, `set`, `eval`, `status`, `leave`) is a step sent through that process to the live game, as the
-// lab's steps go to a headless one. The holder listens on this machine alone, on a port and a token it notes in
-// `out/join/session.json`: the code is good for one join, so the link can't be opened again for each step.
+// (`look`, `picture`, `set`, `eval`, `say`, `status`, `leave`) is a step sent through that process to the live game,
+// as the lab's steps go to a headless one; `hear` waits, through it, for the player's next line in the game's chat.
+// The holder listens on this machine alone, on a port and a token it notes in `out/join/session.json`: the code is
+// good for one join, so the link can't be opened again for each step.
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -16,7 +17,10 @@ import { isAlive, stopWhenAsked } from './running.mjs';
 const DIR = join(OUT, 'join');
 const NOTE = join(DIR, 'session.json');
 /** the steps a held game takes; anything else after `join` is a code */
-export const STEPS = ['look', 'picture', 'set', 'eval', 'make', 'makes', 'unmake', 'status', 'leave'];
+export const STEPS = ['look', 'picture', 'set', 'eval', 'make', 'makes', 'unmake', 'say', 'hear', 'status', 'leave'];
+/** how long the holder holds one `hear` request open before it answers with nothing (ms): a request held for minutes
+ *  is cut by Node's fetch (its headers' timeout, 5 min), so `hear` asks again in rounds */
+const HEAR_ROUND_MS = 50_000;
 
 /** The held session's note, if its process is alive. */
 function heldSession() {
@@ -47,6 +51,13 @@ function bodyOf(request) {
   });
 }
 
+/** What `status` says of `link`: joined (with the player's lines not yet heard), or waiting for the player. */
+function statusOf(link) {
+  if (!link.isAccepted) return 'waiting for the game\'s player to let it in';
+  const count = link.unheard.length;
+  return count ? `joined; ${count} line${count === 1 ? '' : 's'} of the player's unheard: join hear` : 'joined';
+}
+
 /** The holder's server on this machine alone: each request with its token is a step for `link`, or its leave. */
 function serveSteps(link, token) {
   const server = createServer(async (request, response) => {
@@ -66,7 +77,11 @@ function serveSteps(link, token) {
         return;
       }
       if (step === 'status') {
-        reply(200, { result: link.isAccepted ? 'joined' : 'waiting for the game\'s player to let it in' });
+        reply(200, { result: statusOf(link) });
+        return;
+      }
+      if (step === 'hear') {
+        reply(200, { result: await link.hear(Math.min(ms, HEAR_ROUND_MS)) });
         return;
       }
       reply(200, { result: await link.step(step, args, ms) });
@@ -91,7 +106,9 @@ async function hold(code, server) {
   writeFileSync(NOTE, JSON.stringify({ pid: process.pid, port: steps.address().port, token, server }));
   stopWhenAsked('join', () => link.close());
   link.accepted.then(
-    () => console.log('join: let in. Steps: npm run lab -- join look | picture | set name=value | eval <code> | leave'),
+    () => console.log('join: let in. Steps: npm run lab -- join look | picture | set name=value | eval <code> | '
+      + 'say <text> | hear | leave. Start `join hear` as a background task: it ends as the player says a line in the '
+      + 'game\'s chat'),
     () => {},
   );
   const why = await link.ended;
@@ -152,6 +169,11 @@ async function argsOf(step, words, options) {
   if (step === 'make') return makeArgs(words[0], options.file, options);
   if (step === 'unmake') return words[0] ? { name: words[0] } : {};
   if (step === 'set') return { values: valuesOf(words) };
+  if (step === 'say') {
+    // (held to the chat's limit by the game, which says so: a line or two, the rest in the session)
+    if (!words.length) throw labError('say needs its text: npm run lab -- join say "a line or two" [--more]');
+    return { text: words.join(' '), more: Boolean(options.more) };
+  }
   if (step === 'eval') {
     // (code of several lines comes from a file: through `npm run` on Windows an argument ends at its first newline,
     // and the game ran the first line alone, answering null)
@@ -185,6 +207,7 @@ function savePicture(result) {
 function textOf(step, args, result) {
   if (step === 'picture') return savePicture(result);
   if (step === 'make') return `${result.replaced ? 'made again' : 'made'}: ${madeLine(result)}`;
+  if (step === 'say') return `said: ${result.said}${result.more ? ' (more in the session)' : ''}`;
   if (step === 'makes' || step === 'unmake') return result.length ? result.map(madeLine).join('\n') : 'nothing is made';
   if (step === 'set') {
     // (with nothing set, every control; else those named)
@@ -195,12 +218,10 @@ function textOf(step, args, result) {
   return typeof result === 'string' ? result : JSON.stringify(result, null, 2);
 }
 
-/** Sends `step` to the held session and prints its result. Returns the exit code. */
-async function send(step, words, options) {
-  const held = heldSession();
-  if (!held) throw labError('no game is joined: npm run lab -- join <code> (the code from F8, Invite agent)');
-  const args = await argsOf(step, words, options);
-  const ms = options.timeout ? options.timeout * 1000 : STEP_MS;
+const NOT_JOINED = 'no game is joined: npm run lab -- join <code> (the code from F8, Invite agent)';
+
+/** `step` sent to the held session `held`; its result, or throws with the game's error. */
+async function ask(held, step, args, ms) {
   const answer = await fetch(`http://127.0.0.1:${held.port}/`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-join-token': held.token },
@@ -208,8 +229,43 @@ async function send(step, words, options) {
   });
   const { result, error } = await answer.json();
   if (error) throw labError(error);
-  console.log(textOf(step, args, result));
+  return result;
+}
+
+/** Sends `step` to the held session and prints its result. Returns the exit code. */
+async function send(step, words, options) {
+  const held = heldSession();
+  if (!held) throw labError(NOT_JOINED);
+  const args = await argsOf(step, words, options);
+  const ms = options.timeout ? options.timeout * 1000 : STEP_MS;
+  console.log(textOf(step, args, await ask(held, step, args, ms)));
   return 0;
+}
+
+/** A line the player said, as `hear` prints it. */
+export const heardLine = (line) => `player: ${line.text}`;
+
+/**
+ * `join hear`: waits for the player's next line in the game's chat and prints it (every line unheard, oldest first),
+ * then exits 0; run as a background task, its end wakes the session. Waits until a line comes, the link ends (exits
+ * 1) or `--timeout` s pass (exits 0, printing that none came). Asks the holder in rounds (`HEAR_ROUND_MS`).
+ */
+async function hear(options) {
+  const until = options.timeout ? Date.now() + options.timeout * 1000 : Infinity;
+  for (;;) {
+    const held = heldSession();
+    if (!held) throw labError(NOT_JOINED);
+    const left = until - Date.now();
+    if (left <= 0) {
+      console.log('join hear: the player said nothing');
+      return 0;
+    }
+    const lines = await ask(held, 'hear', {}, Math.min(left, HEAR_ROUND_MS));
+    if (lines.length) {
+      console.log(lines.map(heardLine).join('\n'));
+      return 0;
+    }
+  }
 }
 
 /** how often a file sent on each save is looked at (ms) */
@@ -266,6 +322,7 @@ async function sendOnSave(words, options) {
 export function runJoin(options) {
   const [first, ...words] = options._;
   if (first === 'make' && options.resend) return sendOnSave(words, options);
+  if (first === 'hear') return hear(options);
   if (STEPS.includes(first)) return send(first, words, options);
   if (words.length) throw labError(`join takes a code, or one of ${STEPS.join(', ')}`);
   return hold(first, options.server ?? AGENT_SERVER);

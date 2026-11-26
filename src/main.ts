@@ -1281,8 +1281,6 @@ function update(dt: number): void {
     updateHud();
   }
   updateScoreboard(dt);
-  // co-op chat: in a run or the lobby, with no menu, hall or saves over it
-  updateChat(!G.menuOpen && !heroSelectOpen() && !hallOpen() && !savesOpen());
   // (top-down only: a close view shifted off its middle would leave the crosshair off the aim)
   const vs = heroSelectOpen() ? heroSelectShift() : view === 'top' ? lobbyViewShift() : { x: 0, y: 0 };
   setViewShift(vs.x, vs.y);
@@ -1402,6 +1400,9 @@ function frame(timestamp: number): void {
     update(simDt);
   }
   framePart('update');
+  // the chat (co-op's, or a joined agent's in a solo game): in a run or the lobby, with no menu, hall or saves over
+  // it; every frame, the game's step or none (the developer mode's freeze stops the step, not the chat)
+  if (revealed) updateChat(!G.menuOpen && !heroSelectOpen() && !hallOpen() && !savesOpen());
   // (the guide open: its pictures made first, whatever else is building or warming, ui/guide/portraits.ts)
   // (and a card's face while it waits for it, whatever holds the build behind the lobby: a room's warm-up)
   if (guideOpen()) stepPortraits();
