@@ -26,7 +26,6 @@ import { clamp, rand } from '../../util';
 import { tunable } from '../../core/tuning';
 import { FULL_DRAW } from '../../data/balance';
 import { DUMMY_SACK_BOTTOM } from '../../data/foes/dummy';
-import { viewMode } from '../../core/renderer';
 import type { Obstacle } from '../../types';
 import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
@@ -371,14 +370,6 @@ export function reloadSound(player: Player, after: number): void {
 /** a drawn shot's damage drawn less than full: the square of the draw (`cast`) */
 const SHORT_DRAW = 'less drawn short';
 
-/**
- * Whether `player`'s shot loosed now can headshot (#750): an arrow striking a foe's head is always a critical hit, but
- * only aimed by the crosshair, over the shoulder or through the eyes (the owner's choice). Top-down the cursor over a
- * foe aims at the first of it it meets from above, its head or shoulders, and nearly every shot would be one. Judged
- * by his own game, which deals his hits (net/role.ts): a partner's arrows here deal nothing.
- */
-const aimsForHeads = (player: Player): boolean => player === G.player && viewMode() !== 'top';
-
 export const bowShot: InstantSkill = {
   anim: 'bow', warm: warmArrows,
   pitch: (player, def, k, target) => launchPitch(shotFrom(player), target, arrowSpeed(def as BowDef, k)),
@@ -399,7 +390,7 @@ export const bowShot: InstantSkill = {
     const damage = def.damage * pull * pull, knock = (def.knock ?? 0) * pull;
     const { yaw, pitch } = releaseAngles(player, origin, target, v);
     // (a volley seen coming as one: entities/evade.ts)
-    const judged = new Set<Enemy>(), heads = aimsForHeads(player);
+    const judged = new Set<Enemy>();
     for (let i = 0; i < def.missiles; i++) {
       const dir = shotDir(yaw + (i - (def.missiles - 1) / 2) * def.spread, pitch);
       const mesh = arrowMesh(); mesh.quaternion.setFromUnitVectors(FWD, dir);
@@ -408,7 +399,7 @@ export const bowShot: InstantSkill = {
         onHit(enemy, proj) {
           intoFoe(enemy as Enemy, proj.pos, proj.vel);
           // (one that strikes the head is a headshot, always a critical hit: #750)
-          hitEnemy(enemy as Enemy, damage, { by: player, skill: def, tags: def.tags, type: 'physical', knock, head: heads && proj.onHead,
+          hitEnemy(enemy as Enemy, damage, { by: player, skill: def, tags: def.tags, type: 'physical', knock, head: proj.onHead,
           at: proj.pos,
             from: { x: proj.pos.x - proj.vel.x, z: proj.pos.z - proj.vel.z }, flight: proj.vel,
             blow: arrowBlow(enemy as Enemy, proj.pos, proj.vel, 0.9) });
@@ -450,7 +441,6 @@ export const piercingShot: InstantSkill = {
     const dir = shotDir(yaw, pitch);
     const mesh = arrowMesh(); mesh.quaternion.setFromUnitVectors(FWD, dir);
     let through = 0;
-    const heads = aimsForHeads(player);
     const pr = spawnProjectile({
       // (through everything on its line, short foes too: it flies near level, and over the nearest heads a line shot missed them)
       pos: origin, dir, speed: v, radius: 0.24, life: 3, mesh, color: 0xd3bf8d, swept: true, pierce: true, tip: ARROW / 2, tick: fly, edge: ARROW_EDGE, onProp: arrowProp, by: player,
@@ -458,7 +448,7 @@ export const piercingShot: InstantSkill = {
       onHit(enemy, proj) {
         const share = def.falloff[Math.min(through++, def.falloff.length - 1)];
         hitEnemy(enemy as Enemy, damage * share, { by: player, skill: def, tags: def.tags, type: 'physical', knock: knock * share,
-          head: heads && proj.onHead, at: proj.pos,
+          head: proj.onHead, at: proj.pos,
           from: { x: proj.pos.x - proj.vel.x, z: proj.pos.z - proj.vel.z }, flight: proj.vel,
           blow: arrowBlow(enemy as Enemy, proj.pos, proj.vel, full ? 1.3 : 1) });
         burst(proj.pos, { count: 8, color: 0xd3bf8d, speed: 2.4, life: 0.22, size: 0.07 });

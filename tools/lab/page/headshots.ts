@@ -2,8 +2,8 @@
 // stood alone before the ranger and held still, shot with each of his aimed shots drawn to full, once at the middle of
 // its head and once at its chest. An arrow that strikes a foe's head is always a critical hit (`HitOpts.head`,
 // combat/strikes.ts `onHead`); here the hero's own chance of one is put to nothing, so a critical hit is the game
-// having judged a headshot. Each head shot must strike and crit, each chest shot strike and not. Where the head is,
-// is read off the foe as drawn (the middle of the vertices its head joint moves), not off the game's test.
+// having judged a headshot. Head shots must strike and crit; landed body controls must be ordinary hits. Where the
+// head is, is read off the foe as drawn (the middle of the vertices its head joint moves), not off the game's test.
 import * as THREE from 'three';
 import type { Fixture, Frame, Lab, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
@@ -20,9 +20,9 @@ import { drawAt, letGo } from './shots';
 
 export interface HeadshotsOptions {
   fixture: Fixture;
-  /** the kinds of foe shot at (every kind by default) */
+  /** the kinds of foe shot at (every kind in close views and the dummy in top-down by default) */
   foes: string[];
-  /** the views shot in: a close view's head shots must be headshots, top-down's none (the owner's choice) */
+  /** the views shot in */
   views: ViewMode[];
   /** the shots: their keys, behaviours or names (the ranger's aimed shots by default) */
   skills: string[];
@@ -32,7 +32,7 @@ export interface HeadshotsOptions {
   trace?: boolean;
 }
 
-/** the views shot in by default: over the shoulder the head shots are headshots, top-down none */
+/** the views shot in by default */
 const SHOT_VIEWS: ViewMode[] = ['third', 'top'];
 /** the ranger's aimed shots, the ones that can headshot (Hailfletch's rain can't) */
 const AIMED = ['nockShot', 'fanShot', 'piercingShot'];
@@ -214,6 +214,26 @@ export function chestPoint(foe: Enemy): THREE.Vector3 {
   return foe.pos.clone().setY(foe.obj.position.y + foe.height * CHEST_SHARE);
 }
 
+/** Top-down, the head can cover the chest's center on screen. Aim at a visible part of the torso. */
+function topChestPoint(foe: Enemy): THREE.Vector3 {
+  const middle = chestPoint(foe);
+  const eye = G.camera.position;
+  const right = new THREE.Vector3().setFromMatrixColumn(G.camera.matrixWorld, 0);
+  const up = new THREE.Vector3().setFromMatrixColumn(G.camera.matrixWorld, 1);
+  const offsets = [0, -0.1, 0.1, -0.2, 0.2, -0.3, 0.3];
+  let fallback = middle;
+  for (const offset of offsets) {
+    for (const side of offsets) {
+      const point = middle.clone().addScaledVector(up, offset).addScaledVector(right, side);
+      const part = metFrom(foe, eye, point);
+      if (part === null || part === 'head' || metFrom(foe, G.player.castPoint, point) !== part) continue;
+      if (fallback === middle) fallback = point;
+      if (aroundOnScreen(point).every((near) => metFrom(foe, eye, near) === part)) return point;
+    }
+  }
+  return fallback;
+}
+
 /** A foe of `kind` risen before the hero, standing in its idle pose: it thinks as the training dummy does (it neither
  *  moves, turns nor attacks) and doesn't evade. (Dazed, it reeled, and its head moved off a shot's line as it flew.) */
 async function standFoe(lab: Lab, kind: EnemyId): Promise<Enemy> {
@@ -344,25 +364,15 @@ function said(landed: Landed): string {
 }
 
 /** What's wrong with a pair, if anything: a head shot not judged one, a chest shot judged one, or either missing. */
-/** What's wrong with a pair, if anything. Over the shoulder: a head shot that missed or was no headshot, a chest shot
- *  that missed or was one. Top-down a shot that crit (none may be a headshot there); a miss there says nothing of
- *  headshots, and the view's shots are held to have struck at all (`struckAny`). */
-function faultsOf(pair: Pair, close: boolean): string[] {
+function faultsOf(pair: Pair, top: boolean): string[] {
   const faults: string[] = [];
-  if (!close) {
-    if (pair.head.crit) faults.push('the head shot was a headshot top-down, where none may be');
-    if (pair.chest.crit) faults.push('the chest shot was a headshot top-down, where none may be');
-    return faults;
-  }
   if (!pair.head.struck) faults.push('the head shot missed it');
   else if (!pair.head.crit) faults.push('the head shot struck it but was no headshot');
-  if (!pair.chest.struck) faults.push('the chest shot missed it');
-  else if (pair.chest.crit) faults.push('the chest shot was taken for a headshot');
+  // The dummy must take the control in every view. Other torsos can be hard to reach from top-down.
+  if (!pair.chest.struck && (!top || pair.kind === 'dummy')) faults.push('the chest shot missed it');
+  if (pair.chest.crit) faults.push('the chest shot was taken for a headshot');
   return faults;
 }
-
-/** the least share of a top-down view's head shots that must strike, so its "no headshot" is a measure */
-const TOP_STRUCK = 0.75;
 
 /** Every kind of foe a wave or the yard can bring, or those named. */
 export function kindsOf(named: string[]): EnemyId[] {
@@ -372,7 +382,9 @@ export function kindsOf(named: string[]): EnemyId[] {
 }
 
 /** One kind's pairs, a pair a skill; with `canary`, its head taken to be its trunk for every shot. */
-async function shootKind(lab: Lab, kind: EnemyId, skills: BoundSkill[], canary: boolean): Promise<Pair[] | string> {
+async function shootKind(
+  lab: Lab, kind: EnemyId, skills: BoundSkill[], canary: boolean, aimChest: Target,
+): Promise<Pair[] | string> {
   const foe = await standFoe(lab, kind);
   const trunk = trunkJoint(foe);
   const undo = canary && trunk ? plantHead(foe, trunk) : null;
@@ -389,7 +401,7 @@ async function shootKind(lab: Lab, kind: EnemyId, skills: BoundSkill[], canary: 
       // (side on: a head jutting forward from under a hump, the Mossback's, is before its chest from the front)
       await turnFoe(lab, foe, 1);
       // (loosed as drawn: held, a thin chest side on swayed off the line, the game's aim never on it)
-      const onChest = await shootAt(lab, skill, foe, chestPoint, landed, false);
+      const onChest = await shootAt(lab, skill, foe, aimChest, landed, false);
       pairs.push({ kind, skill: skill.def.name, head: onHead, chest: onChest, canary, height: foe.height });
     }
   } finally {
@@ -401,20 +413,21 @@ async function shootKind(lab: Lab, kind: EnemyId, skills: BoundSkill[], canary: 
   return pairs;
 }
 
-/** One view's shots: every foe's pairs, as lines and problems. Top-down the first skill alone: none headshots. */
+/** One view's shots: every foe's pairs, as lines and problems. */
 async function shotsIn(lab: Lab, view: ViewMode, options: HeadshotsOptions, first: boolean): Promise<Report> {
   await lab.setup({ at: SPOT, ...options.fixture, view });
   const named = options.skills.length ? options.skills : AIMED;
   for (const name of named) bindKnown(name);
   G.player.stats.crit = 0;
-  const close = view !== 'top';
-  const skills = named.map(skillNamed).slice(0, close ? undefined : 1);
+  const skills = named.map(skillNamed);
   const lines = [`${view}:`];
   const problems: string[] = [];
   const heads: Landed[] = [];
-  for (const [i, kind] of kindsOf(options.foes).entries()) {
+  const top = view === 'top';
+  const foes = top && !options.foes.length ? ['dummy'] : options.foes;
+  for (const [i, kind] of kindsOf(foes).entries()) {
     const canary = options.canary && first && i === 0;
-    const result = await shootKind(lab, kind, skills, canary);
+    const result = await shootKind(lab, kind, skills, canary, top && !canary ? topChestPoint : chestPoint);
     if (typeof result === 'string') {
       lines.push(`  ${result}`);
       problems.push(result);
@@ -433,14 +446,11 @@ async function shotsIn(lab: Lab, view: ViewMode, options: HeadshotsOptions, firs
         if (!caught) problems.push(`the canary went unseen: ${pair.kind}'s chest shot with its trunk as its head`);
         continue;
       }
-      for (const fault of faultsOf(pair, close)) problems.push(`${view}: ${pair.kind}, ${pair.skill}: ${fault}`);
+      for (const fault of faultsOf(pair, top)) problems.push(`${view}: ${pair.kind}, ${pair.skill}: ${fault}`);
     }
   }
   const struck = heads.filter((landed) => landed.struck).length;
   lines.push(`  ${struck} of ${heads.length} head shots struck`);
-  if (!close && struck < heads.length * TOP_STRUCK) {
-    problems.push(`${view}: ${struck} of ${heads.length} head shots struck: too few to say none headshots`);
-  }
   return { text: lines.join('\n'), problems };
 }
 

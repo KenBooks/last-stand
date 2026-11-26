@@ -6,17 +6,17 @@ import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
 export default {
   summary: 'the bow\'s and the fists\' headshots (#750: every kind of foe, bosses and the dummy too, stood before the '
     + 'ranger and shot with each aimed shot at the middle of its head and at its chest, his own crit chance put to '
-    + 'nothing: over the shoulder every head shot must strike and crit, every chest shot strike and not; top-down none '
-    + 'crits; `--class warrior` punches them with Savage Fists: through the eyes the head punches crit, from outside '
+    + 'nothing: head shots must crit, and body hits must not; top-down checks the dummy by default; '
+    + '`--class warrior` punches them with Savage Fists: through the eyes the head punches crit, from outside '
     + 'none) (in full: [`commands/headshots.md`](commands/headshots.md))',
   help: 'the ranger\'s headshots: every kind of foe (the bosses and the training dummy among them) stood alone before '
     + 'him in its idle pose, thinking nothing, and each of his aimed shots (Nockshot, Briarflight, Lancewood Shot) '
     + 'drawn to '
     + 'full at the middle of its head as drawn (the vertices its head joint moves) and at its chest; his own chance '
     + 'of a critical hit is put to nothing, so a crit is the game judging a headshot. A head shot that misses or '
-    + 'doesn\'t crit, and a chest shot that misses or crits, are problems; so is a canary missed. Top-down none '
-    + 'headshots (the cursor over a foe meets its head from above): there a head shot that crits is the problem '
-    + '(--class ranger). With --class warrior, both hands empty, each foe is punched with Savage Fists, the crosshair '
+    + 'doesn\'t crit and a chest shot that crits are problems. Chest shots must land in close views and on the '
+    + 'dummy in every view. A missed canary is also a problem. '
+    + 'With --class warrior, both hands empty, each foe is punched with Savage Fists, the crosshair '
     + 'on its head and on its chest: through the eyes the head punch must strike and crit, the chest punch strike and '
     + 'not; from outside the fist\'s line is at the chest and none may crit',
   options: {
@@ -24,13 +24,13 @@ export default {
       kind: 'list',
       usage: 'a,b',
       choices: ['top', 'third', 'first'],
-      help: 'the views: over the shoulder\'s and through the eyes\' head shots must be headshots, top-down\'s none '
-        + '(third,top by default); a punch\'s through the eyes alone (first,third by default)',
+      help: 'the views: aimed arrows can headshot in every view (third,top by default); punches through the eyes '
+        + 'alone (first,third by default)',
     },
     foes: {
       kind: 'list',
       usage: 'a,b',
-      help: 'the kinds of foe, by id (every kind by default)',
+      help: 'the kinds of foe, by id (every kind in close views and the dummy in top-down by default for ranger)',
     },
     skills: {
       kind: 'list',
