@@ -7,6 +7,7 @@ import { TWINS } from '../../data/foes/twins';
 import { BELL_WARDEN } from '../../data/foes/bellwarden';
 import { CANTOR } from '../../data/foes/cantor';
 import { ROOTMOTHER } from '../../data/foes/rootmother';
+import { STAG } from '../../data/foes/stag';
 import { WAVES } from '../../data/waves';
 import { DAMAGE_COLORS, partyScale, COOP } from '../../data/balance';
 import { AI_NOTES, FOE_NOTES, type FoeNote } from '../../data/guide';
@@ -155,6 +156,7 @@ function attacks(foe: Foe): string[] {
   if (d.ai === 'bellWarden') out.push(...bellWardenAttacks(foe));
   if (d.ai === 'cantor') out.push(...cantorAttacks(foe));
   if (d.ai === 'rootmother') out.push(...rootmotherAttacks(foe));
+  if (d.ai === 'stag') out.push(...stagAttacks(foe));
   if (d.boss && d.ai === 'boss') {
     const radius = d.slamRadius ?? 5;
     out.push(`<b>Slam:</b> up close (within ${metres(d.range + BOSS_AI.slamReach)}) it slams all round itself: ${hit} ${typed(d)} damage within ${metres(radius)}, marked by a ring ${secs(d.windup)} before it lands.`);
@@ -261,6 +263,21 @@ function rootmotherAttacks(foe: Foe): string[] {
     `<b>Her heart:</b> ${secs(r.heart.first)} after she rises and every ${secs(r.heart.every)} after, it opens in her trunk for ${secs(r.heart.open)}. Shots that strike it deal ${num(spot)}× damage; she attacks nothing meanwhile, flinging ${r.heart.pods} pods round the arena instead.`,
     late ? `<b>Under ${pct(late.below)}:</b> the canopy closes. Spore clouds ${metres(r.spores.radius)} wide drift over the floor, dealing ${whole(hit * r.spores.hurt)} damage every ${secs(r.spores.tick)} to whoever stands in one, and the earth cracks where a hero will be in ${secs(warn('erupt'))}, read from how he runs, before spikes burst from it, ${metres(r.erupt.radius)} round, for ${whole(hit * r.erupt.hurt)} damage. Her branches come three at a time, ${metres(B.apart)} apart across where you're running to, ${whole(hit * B.fanHurt * B.phaseHurt[1])} each, and she rains them: ${B.rain.count} one after another, ${secs(B.rain.every)} apart, each aimed as it leaves her hand, some where you'll be and one where you stand, ${whole(hit * B.rain.hurt * B.phaseHurt[1])} each: change pace and way between them. Her branches hit harder in each phase, and she pauses less between attacks.` : '',
     rage ? `<b>Under ${pct(rage.below)}, she rages:</b> her attacks come quicker; a line of ${5} branches lands across her line to you, ${whole(hit * B.lineHurt * B.phaseHurt[2])} each, and stays ${secs(B.bramble)} as bramble that hurts ${whole(hit * B.brambleHurt)} every ${secs(B.brambleTick)}; and the earth bursts under you ${chase.count} times running, each ${secs(chase.warn)} after it cracks where you stand, for ${whole(hit * chase.hurt)}: keep running.` : '',
+  ].filter(Boolean);
+}
+
+/** The Stag of Ash's fight, each with its figures (data/enemies.ts `STAG` and its boss kit). */
+function stagAttacks(foe: Foe): string[] {
+  const d = foe.def, s = STAG, kit = d.bossKit!, hit = damage(d, foe.from);
+  const warn = (name: string): number => kit.attacks?.[name]?.warn ?? d.windup;
+  const [, late] = kit.phases;
+  const taken = kit.weak?.taken ?? 2;
+  return [
+    `<b>Charge:</b> at a hero ${metres(s.charge.near)} off or more, it paws the ground for ${secs(warn('charge'))}, turning after you; for its last ${secs(s.charge.lock)} a lane burns onto the floor towards where you are going, fixed once it shows (stop or turn and step out of it). It charges every ${secs(s.charge.every)} at most, every ${secs(s.charge.far)} while you keep away from it. Then it runs down it at ${num(s.charge.speed)} m/s, to ${metres(s.charge.over)} past where you stood, goring whoever is still in it for ${whole(hit * s.charge.hurt)} ${typed(d)} damage; a charge that misses wheels straight round into another. The lane it ran burns for ${secs(s.fire.life)}, dealing ${whole(hit * s.fire.hurt)} damage every ${secs(s.fire.tick)} to whoever stands in it.`,
+    `<b>The crash:</b> a charge that runs into a rock, a tree, the wall or a raised shield stops dead: it is stunned for ${secs(s.charge.stun)} and takes ${num(taken)}× damage.`,
+    `<b>Up close:</b> it never stops attacking, a moment between each. Every third attack, if you stand before its head, it drops its antlers to the earth for ${secs(warn('toss'))}, lunging ${metres(s.toss.lunge)} after you through the last of it, then scoops you up and throws you ${metres(s.toss.far)} across the arena (never through a tree or the wall) for ${whole(hit * s.toss.hurt)} damage as you land, nothing else touching you in the air; a step aside, a dash or a raised shield saves you, a step back does not. Otherwise, turning after you as it winds up, it draws its head up and back for ${secs(warn('gore'))} and rakes its antlers down through you to the ground at its feet for ${whole(hit * s.gore.hurt)} damage; if you stand under it, it rears for ${secs(warn('stamp'))} and stamps both fore hooves down on you for ${whole(hit * s.stamp.hurt)}. Step to its side as it winds up; a raised shield takes either. If you stand behind it, within ${metres(s.kick.reach)}, it throws its weight onto its fore legs for ${secs(warn('kick'))} and kicks back with both hind legs for ${whole(hit * s.kick.hurt)} damage, knocking you far; no shield takes it, so stand at its flank.`,
+    `<b>Breath:</b> at a hero ${metres(s.breath.least)} to ${metres(s.breath.most)} off, every ${secs(s.breath.every)} at most, it draws breath for ${secs(warn('breath'))}, its head raised and turned to one side, where a line burns on the ground; then it sweeps a cone of fire across before it to the other side over ${secs(s.breath.time)}, out to ${metres(s.breath.reach)}, for ${whole(hit * s.breath.hurt)} damage, and the ground it sweeps burns ${secs(s.breath.burn)}. A rock between you takes it, and so does a raised shield. The stumps, logs and young trees it touches burn ${secs(s.forestFire.life)} (${s.forestFire.most} at most at once), dealing ${whole(hit * s.forestFire.hurt)} damage every ${secs(s.forestFire.tick)} to whoever stands within ${metres(s.forestFire.near)} of one.`,
+    late ? `<b>Under ${pct(late.below)}:</b> it rears for ${secs(warn('shed'))} and smashes its antlers into the ground before it (${whole(hit * s.shed.hurt)} damage within ${metres(s.shed.near)}); they break off into ${s.shed.stakes} burning stakes stuck in the floor, which block your way and your shots, burn you for ${whole(hit * s.shed.hurtTouch)} every ${secs(s.shed.tick)} if you touch one, and stand ${secs(s.shed.life)} unless broken. From then on it can no longer gore or toss you: it rears briefly for ${secs(warn('strike'))} and strikes down with its fore hooves for ${whole(hit * s.strike.hurt)} damage. A charge that misses turns straight round into two more, not one, its fire burns ${secs(s.fire.late)}, and every ${secs(s.embers.every)} ${s.embers.count} embers fall round the heroes, each marked by a ring ${secs(s.embers.fall)} before it lands, for ${whole(hit * s.embers.hurt)} damage.` : '',
   ].filter(Boolean);
 }
 

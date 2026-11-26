@@ -23,11 +23,14 @@ import { G } from '../../../src/state';
 import { BIOMES, BIOME_IDS, bossOfWave } from '../../../src/data/biomes';
 import { ENEMIES, SCALING } from '../../../src/data/enemies';
 import { WAVES } from '../../../src/data/waves';
+import { damageTaken, forgetBeats } from '../../../src/entities/bossKit';
+import { fx } from '../../../src/entities/enemyAI';
 import { startNextWave } from '../../../src/game/run';
 import { pressing } from './cast';
 import { ARENA } from '../../../src/data/balance';
 import { inObstacle } from '../../../src/world/collision';
 import { lineClear } from '../../../src/world/navigation';
+import { PIPELINES } from '../../../src/engine/pipelinesAside';
 import { heart, pods, rootCompiles, rootLook, rootPhases, rootPictures, rootTtkLines, vines } from './bossRootmother';
 import { rootBurrow, rootBurrowPictures } from './bossRootBurrow';
 import { threat } from './bossThreat';
@@ -36,23 +39,38 @@ import { rootCage, rootCagePictures } from './bossRootCage';
 import { rootSurvive, rootThreat } from './bossRootThreat';
 import { comboPictures, combos } from './bossRootCombos';
 import { podPictures } from './bossRootPods';
+import { stagAttackPictures } from './bossStagAttacks';
+import { stagBreath } from './bossStagBreath';
+import { stagShed } from './bossStagShed';
+import { stagCost } from './bossStagCost';
+import { stagReach } from './bossStagReach';
+import { stagStride, stagStrideCost, stagStridePictures } from './bossStagStride';
+import {
+  stagCharge, stagClose, stagCompiles, stagCrash, stagMoves, stagPhase2, stagPictures, stagToss, stagTtkLines,
+} from './bossStag';
 
 /** The parts the command runs, in order. */
-/** the Rootmother's parts that are judged */
+/** the Rootmother's and the Stag of Ash's parts that are judged */
 type RootPart = 'rootPhases' | 'vines' | 'pods' | 'heart' | 'rootBurrow' | 'branches' | 'rootCage' | 'threat'
   | 'rootThreat' | 'rootSurvive' | 'combos';
+type StagPart = 'stagCharge' | 'stagCrash' | 'stagPhase2' | 'stagToss' | 'stagClose' | 'stagReach' | 'stagBreath'
+  | 'stagShed' | 'stagStride';
 /** the parts that picture moments for the eye alone, asked for by name */
 type PicturePart = 'rootPictures' | 'rootLook' | 'rootBurrowPictures' | 'branchPictures' | 'rootCost'
-  | 'rootCagePictures' | 'comboPictures' | 'podPictures';
-export type BossPart = 'ladder' | 'stand' | 'ttk' | EncounterPart | RootPart | PicturePart;
-// (`compiles` is one part for every boss: the encounter's and the Rootmother's, after both)
+  | 'rootCagePictures' | 'comboPictures' | 'podPictures' | 'stagPictures' | 'stagMoves' | 'stagStridePictures'
+  | 'stagStrideCost' | 'stagAttackPictures' | 'stagCost';
+export type BossPart = 'ladder' | 'stand' | 'ttk' | EncounterPart | RootPart | StagPart | PicturePart;
+// (`compiles` is one part for every boss: the encounter's, the Rootmother's and the Stag's, after them all)
 export const BOSS_PARTS: BossPart[] = [
   'ladder', 'stand', ...ENCOUNTER_PARTS.filter((part) => part !== 'compiles'),
-  'rootPhases', 'vines', 'pods', 'heart', 'rootBurrow', 'branches', 'combos', 'rootCage', 'compiles', 'ttk',
+  'rootPhases', 'vines', 'pods', 'heart', 'rootBurrow', 'branches', 'combos', 'rootCage', 'compiles',
+  'ttk', 'stagCharge', 'stagCrash', 'stagPhase2', 'stagToss', 'stagClose', 'stagReach', 'stagBreath',
+  'stagShed', 'stagStride',
 ];
 const PICTURE_PARTS: BossPart[] = [
-  'rootPictures', 'rootLook', 'rootBurrowPictures', 'branchPictures', 'rootCost', 'rootCagePictures', 'comboPictures',
-  'podPictures',
+  ...ENCOUNTER_PICTURES, 'rootPictures', 'rootLook', 'rootBurrowPictures', 'branchPictures', 'rootCost',
+  'rootCagePictures', 'comboPictures', 'podPictures', 'stagPictures', 'stagMoves', 'stagStridePictures',
+  'stagStrideCost', 'stagAttackPictures', 'stagCost',
 ];
 
 export interface BossOptions {
@@ -110,6 +128,8 @@ export async function standIn(lab: Lab, fixture: Fixture, biome: BiomeId): Promi
   if (G.arena.biome !== biome) G.arena.setBiome(biome);
   const facing = Math.atan2(-SPOT[0], -SPOT[1]);
   await lab.setup({ at: SPOT, facing, ...fixture });
+  // (each set-up starts the game's clock at one time: the last case's warned hits forgotten, or they refuse this one's)
+  forgetBeats();
 }
 
 /** Boss `kind` risen `away` m from the hero towards the arena's middle, facing him; dazed (thinking nothing) unless
@@ -265,15 +285,20 @@ async function ttk(lab: Lab, options: BossOptions, lines: string[], problems: st
   lines.push(`ttk: the Colossus at wave 5 (${fixed(colossus, 0)} life): ${fixed(colossus / dps, 0)} s`);
   encounterTtk(dps, colossus / dps, lines);
   lines.push(...rootTtkLines(dps));
+  lines.push(...stagTtkLines(dps));
 }
 
-/** Every effect of the Cantor's encounter and of the Rootmother's fight drawn: no pipeline made. */
+/** Every effect of the Cantor's encounter, of the Rootmother's fight and of the Stag's drawn: no pipeline made. */
 async function compiles(lab: Lab, options: BossOptions, lines: string[], problems: string[]): Promise<void> {
   await encounterPart('compiles', lab, options, lines, problems);
   const rooted = await rootCompiles(lab, options);
   lines.push(`compiles: ${rooted} pipelines made drawing the Rootmother's vine, pods, thorns, cracks, eruption, `
     + 'spores, heart, canopy and root cage');
   if (rooted > 0) problems.push(`compiles: ${rooted} pipelines made in the Rootmother's fight`);
+  const ash = await stagCompiles(lab, options);
+  lines.push(`compiles: ${ash} programs compiled drawing the Stag of Ash's lane, gallop, fire, gore, crash, sweep, `
+    + 'toss, embers and phase');
+  if (ash > 0) problems.push(`compiles: ${ash} programs compiled in the Stag of Ash's fight`);
 }
 
 /**
@@ -307,8 +332,10 @@ export async function drawOdd(lab: Lab, at: THREE.Vector3, multiplied = false): 
 export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
-  const run: Record<'ladder' | 'stand' | 'ttk' | 'compiles' | RootPart, typeof ladder> = {
-    ladder, stand, rootPhases, vines, pods, heart, rootBurrow, branches, rootCage, compiles, ttk, threat,
+  const run: Record<'ladder' | 'stand' | 'ttk' | 'compiles' | RootPart | StagPart, typeof ladder> = {
+    ladder, stand, rootPhases, vines, pods, heart, rootBurrow, branches, rootCage,
+    compiles, ttk, stagCharge, stagCrash, stagPhase2, stagToss, stagClose, stagReach,
+    stagBreath, stagShed, stagStride, threat,
     rootThreat, rootSurvive, combos,
   };
   const moments: Pictured[] = [];
@@ -323,6 +350,12 @@ export async function boss(lab: Lab, options: BossOptions): Promise<Report> {
       else if (part === 'rootCagePictures') moments.push(...await rootCagePictures(lab, options, lines));
       else if (part === 'comboPictures') moments.push(...await comboPictures(lab, options, lines));
       else if (part === 'podPictures') moments.push(...await podPictures(lab, options, lines));
+      else if (part === 'stagStridePictures') moments.push(...await stagStridePictures(lab, options, lines));
+      else if (part === 'stagStrideCost') await stagStrideCost(lab, options, lines);
+      else if (part === 'stagCost') await stagCost(lab, options, lines);
+      else if (part === 'stagPictures') moments.push(...await stagPictures(lab, options, lines, problems));
+      else if (part === 'stagMoves') moments.push(...await stagMoves(lab, options));
+      else if (part === 'stagAttackPictures') moments.push(...await stagAttackPictures(lab, options, lines));
       else if (part in run) await run[part as keyof typeof run](lab, options, lines, problems);
       else moments.push(...await encounterPart(part as EncounterPart, lab, options, lines, problems));
     }

@@ -54,7 +54,7 @@ changing it; a new command's line there is its module's `summary`, and its entry
 notes of their own in [`commands/`](commands) (`eyes`, `ui`, `gait`, `held`, `coop`, `swing`, `rush`, `check`,
 `traces`, `range`, `hood`, `village`, `fire`, `perf`, `hall`, `cast`, `photo`, `sit`, `join`, `tavern`), a line in `COMMANDS.md` pointing to each, as
 `COMMANDS.md` neared 120k in turn: an entry that grows past some 4k characters
-moves there too.
+moves there too, as `boss`'s has.
 
 ## Writing a measure
 

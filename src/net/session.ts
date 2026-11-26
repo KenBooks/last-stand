@@ -810,6 +810,23 @@ function onLook(from: string, look: Look): void {
   hooks.changed();
 }
 
+/** where this game's hero was at its last report, and when (s, the game's clock) */
+const lastSent = { x: 0, z: 0, t: -Infinity };
+
+/** The velocity this game's hero reports: his own walk's, but while something else moves him (seized, thrown,
+ *  knocked: placed by what holds him, his own velocity none) how fast he went since his last report, or a partner's
+ *  copy of him stood still between reports and caught up at each, up to 47 cm a frame as a Stag of Ash's toss threw
+ *  him (`lab coop --scenarios stag`). */
+function reportedVelocity(p: Player): [number, number] {
+  const since = G.time - lastSent.t;
+  const moved = since > 0 && since < 1 ? [(p.pos.x - lastSent.x) / since, (p.pos.z - lastSent.z) / since] : null;
+  lastSent.x = p.pos.x;
+  lastSent.z = p.pos.z;
+  lastSent.t = G.time;
+  const carried = p.seized || p.flying || p.knock.lengthSq() > 0.25;
+  return carried && moved ? [moved[0], moved[1]] : [p.vel.x, p.vel.z];
+}
+
 /** A player's own state: its clock (ms), where it is, the way it goes and faces, its aim, whether it's in the run and
  *  holding the revive key, its energy's share and its life, and how far it's sat on a seat (`entities/sitting.ts`: its
  *  share, its hips' height and its feet's way ahead, m). */
@@ -820,6 +837,9 @@ interface StateMsg {
   fz?: number;
   /** 1 while the player is away from the game (net/afk.ts): its page hidden or no input for a minute */
   afk?: 1;
+  /** how high he's held up or thrown over the ground (m, `Player.lift`: the Stag of Ash's toss, the Bell-Warden's
+   *  ghosts), so his partners' copies of him are up there too; none: on the ground */
+  hl?: number;
 }
 /** A player's actions since its last frame, stamped with its clock (ms). */
 interface ActionsMsg { t: number; a: PlayerAction[] }
@@ -928,6 +948,7 @@ function playState(p: Player, pose: Pose, m: StateMsg): void {
   p.reviving = m.rv === 1;
   p.energy = m.e * p.stats.maxEnergy;
   p.frenzy = m.fz ?? 0;
+  p.lift = m.hl ?? 0;
   if (p.alive) p.life = m.l;
 }
 
@@ -1173,12 +1194,14 @@ export function updateSession(dt: number, reviving: boolean): void {
     sendT = 1 / COOP.sendRate;
     const p = G.player, s = p.stats, sat = p.sitting.pose;
     const r2 = (v: number) => Math.round(v * 100) / 100;
+    const [vx, vz] = reportedVelocity(p);
     send('pl', {
-      t, x: r2(p.pos.x), z: r2(p.pos.z), vx: r2(p.vel.x), vz: r2(p.vel.z), f: r2(p.facing), ax: r2(p.aim.x), az: r2(p.aim.z),
+      t, x: r2(p.pos.x), z: r2(p.pos.z), vx: r2(vx), vz: r2(vz), f: r2(p.facing), ax: r2(p.aim.x), az: r2(p.aim.z),
       run: G.mode === 'run' ? 1 : 0, rv: reviving ? 1 : 0, e: r2(p.energy / s.maxEnergy), l: r2(p.life), av: portraitOf(p), rm: roomIndex(),
       sw: r2(sat?.w ?? 0), sh: r2(sat?.hip ?? 0), sf: r2(sat?.foot ?? 0), sb: r2(sat?.before ?? 0), sa: r2(sat?.after ?? 0),
       ...(p.frenzy ? { fz: p.frenzy } : {}),
       ...(awayToSay() ? { afk: 1 as const } : {}),
+      ...(p.lift > 0.01 ? { hl: r2(p.lift) } : {}),
     } satisfies StateMsg);
   }
   // the fight's events go out every frame, its snapshot at the send rate

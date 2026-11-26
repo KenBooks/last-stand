@@ -21,6 +21,9 @@ follows the point each frame until the shot is loosed, as a player's would.
 - `--trace`: how high each shot was aimed and struck (shares of the foe's height), what a straight line from the bow
   to the point meets first (by the joint it rides), and how far the game's own aim was from the point.
 
+`npm run lab -- headshots --foes stag --views third,first,top` checks the Stag of Ash. Its torso control uses
+the centre of its barrel because the antlers are part of the model's overall height.
+
 Where the head is, is read off the foe as drawn, not off the game's test: the skull is the half of the vertices its
 head joint itself moves nearest that joint (the middle of them all lay in the air between the Hulk's branch antlers),
 posed as now (`skeleton.update()`: the lab's frames draw nothing, so a skinned mesh's bone matrices are where the last

@@ -178,6 +178,8 @@ export interface Sample {
   cage?: import('./coopRootCage').CageSample;
   /** in `rootburrow`: the Rootmother's burrow as this game shows it (page/coopRootBurrow.ts) */
   burrow?: import('./coopRootBurrow').BurrowSample;
+  /** in `stag`: what this game shows of the Stag of Ash's new attacks (page/coopStag.ts) */
+  stag?: import('./coopStag').StagSample;
   /** in `chat`: the chat as this game's page shows it (page/coopChat.ts); the first sample also carries what the
    *  scenario says and when it presses Esc */
   chat?: ChatSample;
@@ -283,6 +285,9 @@ interface Scenario {
   hostInput(frame: number): Frame;
   guestInput(frame: number): Frame;
 }
+
+/** how far past the Stag's body the guest walks back up to it in `stag` (m: within its toss's reach) */
+const STAG_CLOSE = 1.6;
 
 /** the frame of `ghosts` (after it settled) the host kills its foes on */
 export const GHOSTS_KILLED_AT = 60;
@@ -465,6 +470,10 @@ let wallNow: (() => import('./coopWall').WallSample | null) | null = null;
 let belt: typeof import('./coopBelt') | null = null;
 let rootCage: typeof import('./coopRootCage') | null = null;
 let rootBurrow: typeof import('./coopRootBurrow') | null = null;
+/** the Stag's scenario's module, loaded for it alone (a tree without the Stag still plays the others), and the
+ *  canary's plant on this game to take off again */
+let stagPlay: typeof import('./coopStag') | null = null;
+let stagUndo: (() => void) | null = null;
 
 /** The guest in `blink`: every so often it holds the blink aimed at its other spot and lets go, its cooldown and
  *  energy made ready first (a blink every few seconds, where its own cooldown would allow one in seven). */
@@ -740,6 +749,31 @@ const SCENARIOS: Record<string, Scenario> = {
       return {};
     },
     guestInput: () => ({}),
+  },
+  stag: {
+    about: 'the Stag of Ash at the guest up close, a log behind the guest along its facing: its toss throws the guest '
+      + 'at the log (short of it), its breath over the log sets it alight; at half its life on the host\'s word it '
+      + 'sheds its antlers as stakes, and the host\'s game strikes one: both screens show the guest thrown up, the '
+      + 'stakes in one place with one life each, and the same wood alight',
+    frames: 1300,
+    host: [-17, 15],
+    // (a fallen log at (0.4, -11): the stag rising facing +z, the guest before its head and the log behind him)
+    guest: [0.4, -14.2],
+    foes: [{ type: 'stag', at: [0.4, -17.6] }],
+    pictures: [120, 640, 960],
+    hostInput: (frame) => {
+      stagPlay?.stagHostFrame(frame);
+      return {};
+    },
+    // (walking back up to it when it threw or knocked him off: its toss comes up close alone)
+    guestInput: () => {
+      const stag = G.enemies.find((e) => e.type === 'stag' && e.alive);
+      const self = G.player;
+      const dx = stag ? stag.pos.x - self.pos.x : 0, dz = stag ? stag.pos.z - self.pos.z : 0;
+      const far = stag && Math.hypot(dx, dz) > stag.radius + STAG_CLOSE && !self.flying;
+      stickToward(far ? dx : 0, far ? dz : 0);
+      return {};
+    },
   },
   wall: {
     about: 'the guest, a ranger, raises its Hedgeward between it and a Sporecaller shooting at it, the host standing '
@@ -1283,6 +1317,11 @@ export async function coopScenario(lab: Lab, { name, canary }: { name: string; c
   rootCage?.deafOnThisGame(Boolean(canary) && play.role === 'guest');
   // (the canary's: the guest's game never shows a skull lying where it landed)
   belt?.unlayOnThisGame(Boolean(canary) && play.role === 'guest');
+  // (the Stag's too; its canary: the guest deaf to its stakes' life)
+  stagUndo?.();
+  stagUndo = null;
+  stagPlay = name === 'stag' ? await import('./coopStag') : null;
+  if (stagPlay && canary && play.role === 'guest') stagUndo = stagPlay.deafToStakes();
   play.scenario = name;
   play.frame = 0;
   play.samples = [];
@@ -1402,6 +1441,7 @@ function sampleNow(): Sample {
     sample.afk = afkNow();
     if (!play.samples.length) Object.assign(sample, { afkHiddenAt: AFK_HIDDEN_AT, afkShownAt: AFK_SHOWN_AT });
   }
+  if (play.scenario === 'stag' && stagPlay) sample.stag = stagPlay.stagNow();
   if (play.scenario === 'chat') {
     sample.chat = chatNow();
     if (!play.samples.length) Object.assign(sample, { said: SAID, escAt: ESC_AT, quiet: QUIET });

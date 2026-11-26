@@ -173,6 +173,8 @@ export function hurtPlayer(
   p: Player, amount: number, type: DamageType = 'physical', from: THREE.Vector3 | null = null, by: Attacker | null = null,
 ): number {
   if (!p.active || !p.local) return 0;
+  // (thrown through the air: nothing lands on him till he's down, his landing hurt by what threw him once he is)
+  if (p.flying) return 0;
   if (G.run?.training || by?.foe?.training) {
     if (!G.run) sparSink?.(p, from, by?.foe ?? null);
     return 0;
