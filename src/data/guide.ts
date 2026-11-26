@@ -197,7 +197,7 @@ export const CLASS_NOTES: Record<string, ClassNote> = {
       splinterBolt: 'Bolts seek on their own: keep moving and keep firing.',
       cinderburst: 'Aim at the middle of a pack, not at a single foe.',
       stormcall: 'Hold for a full charge on a big target; tap only to finish.',
-      lifethread: 'Aim near the ally you want: it picks the one nearest your aim.',
+      lifethread: 'Aim near the ally you want: it picks the one nearest your aim. Keep it on them: it heals more the longer it stays.',
       starfall: 'The crystals land scattered round your aim: best on a pack.',
       voidLance: 'Slow to move while channelling: start it from a safe spot.',
       glacialNova: 'Cast it as they reach you, then walk away or hit them while frozen.',

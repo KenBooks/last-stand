@@ -170,7 +170,11 @@ function schoolTable(cols: { title: string; colour: string; spell?: SkillDef }[]
   const cast = (d?: SkillDef): string => (!d ? '—' : d.channel ? 'held, a beam' : d.draw ? `held up to ${secs(d.draw)}` : secs(d.castTime));
   const what = (d?: SkillDef): string => {
     if (!d) return '—';
-    if (d.heal && !d.damage) return `<span class="gd-heal">heals ${whole(d.heal)}/s</span>`;
+    if (d.heal && !d.damage) {
+      const share = d.healPct ? ` + ${num(d.healPct * 100)}% of most Health` : '';
+      const ramp = d.ramp ? `, up to ×${num(d.ramp.most)} held` : '';
+      return `<span class="gd-heal">heals ${whole(d.heal)}/s${share}${ramp}</span>`;
+    }
     return `${whole(hits(d))}<span class="gd-cell-bar" style="--v:${(hits(d) / most) * 100}%"></span>`;
   };
   return compare(cols.map((c) => `<span style="color:${c.colour}">${c.title.replace('School of ', '')}</span>`), [

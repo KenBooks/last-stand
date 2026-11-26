@@ -5,16 +5,17 @@
 //   the skill's time, a foe further out for less, an elite not at all.
 // - Fire (combat/burn.ts): a dummy set alight is bitten twice a second for the burn's time and no longer, each bite
 //   the burn's pace, and shows its flames only meanwhile.
-// - Healing (Lifethread, skills/lifethread.ts): whom the beam lands on (an ally in the cone before him, the one
-//   nearest the aim of two, himself with none there, out of reach or outside the cone), and its heal on himself:
-//   every frame, at the pace its tooltip states.
+// - Healing (Lifethread, skills/lifethread.ts; page/staffsThread.ts): whom the beam lands on, its heal on himself
+//   every frame from its flat part and his share of his most Health, its ramp up to its most and begun again on a
+//   switch, and its chain through full healers, more for each.
 // - Void Lance with a staff, and with none from its first key (the left hand), its second (the right) and both
 //   together: a strand from every finger of the hands casting it and none from the other's, each hand's damage and
 //   Energy a second a staff's, both hands' half as much again.
 // - The charge mark (src/ui/chargeMark.ts), for any class with a drawn skill on the left button (`--class ranger`
 //   runs this part alone): the cursor filling from the bottom up in the top-down view and the ring round the
 //   crosshair in third person, each as far as the charge, neither for a tap, both gone once it's let go.
-// `--canary` makes a tap strike as a full charge does, which the first part must catch.
+// `--canary` makes a tap strike as a full charge does, which the first part must catch, and takes the beam's ramp's
+// most and grace and its chain's bonus away, which its checks must catch.
 import * as THREE from 'three';
 import type { Fixture, Frame, Lab, Pictured, Report } from './lab';
 import type { InstantSkill } from '../../../src/combat/skills/types';
@@ -25,7 +26,8 @@ import { G } from '../../../src/state';
 import { input } from '../../../src/core/input';
 import { igniteEnemy, BURN_TICK } from '../../../src/combat/burn';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
-import { threadTarget } from '../../../src/combat/skills/lifethread';
+import { ahead, emptyFound, skillOf, type Found } from './staffsKit';
+import { thread, threadCanary } from './staffsThread';
 import { holdingAll, pressing } from './cast';
 import { foeKind } from './death';
 
@@ -37,12 +39,6 @@ export interface StaffsOptions {
   canary: boolean;
 }
 
-/** What a part found: its lines, its problems and its pictures. */
-interface Found {
-  lines: string[];
-  problems: string[];
-  moments: Pictured[];
-}
 
 /** a struck foe is frozen for this long (s) and given this much life: it stands and outlives every blow */
 const HELD_STILL = 999;
@@ -59,25 +55,6 @@ const TRAVEL_FRAMES = 6;
 const SLACK = 0.25;
 /** the frames a tap holds its key */
 const TAP_FRAMES = 2;
-
-const emptyFound = (): Found => ({ lines: [], problems: [], moments: [] });
-
-/** The point `metres` ahead of the hero and `right` to his right. */
-function ahead(lab: Lab, metres: number, right = 0): THREE.Vector3 {
-  const { pos, facing } = lab.player;
-  return new THREE.Vector3(
-    pos.x + Math.sin(facing) * metres - Math.cos(facing) * right,
-    0,
-    pos.z + Math.cos(facing) * metres + Math.sin(facing) * right,
-  );
-}
-
-/** The hero's skill of behaviour `impl`, as his gear has it. */
-function skillOf(lab: Lab, impl: string): SkillDef {
-  const known = lab.player.known.get(impl);
-  if (!known) throw new Error(`lab: staffs: the ${lab.player.cls.id} has no ${impl}`);
-  return known.def;
-}
 
 /** Every blow a foe takes from here on, in turn: its damage and the frame it landed in (`frame` says which). */
 function blowsOn(foe: Enemy, frame: () => number): { amount: number; frame: number }[] {
@@ -111,8 +88,14 @@ interface Strike {
 /** where the foes stand from the strike's middle (m to the side), by name; `elite` is a hero foe */
 const SPOTS: [string, number][] = [['middle', 0], ['near', 2], ['far', 3.6], ['beyond', 6.5], ['elite', -1.4]];
 
-async function strike(lab: Lab, fixture: Fixture, full: boolean): Promise<Strike> {
+async function strike(lab: Lab, fixture: Fixture, full: boolean, canary = false): Promise<Strike> {
   await lab.setup({ ...fixture, gear: 'lightning', view: 'top' });
+  // (the canary: a tap as strong and as wide as a full charge; planted after the set-up, whose gear's refit makes the
+  // hero's skills afresh: planted before it, the plant was gone by the tap and the canary went unseen)
+  if (canary) {
+    const known = lab.player.known.get('stormcall')!;
+    known.def = { ...known.def, least: 1 };
+  }
   // (no crits: a crit's share would read as a charge's)
   lab.player.stats.crit = 0;
   let frame = 0;
@@ -175,10 +158,7 @@ async function charge(lab: Lab, options: StaffsOptions): Promise<Found> {
   await lab.setup({ ...options.fixture, gear: 'lightning', view: 'top' });
   const def = skillOf(lab, 'stormcall');
   const least = def.least ?? 1;
-  // (the canary: a tap as strong and as wide as a full charge)
-  if (options.canary) lab.player.known.get('stormcall')!.def = { ...def, least: 1 };
-  const tap = await strike(lab, options.fixture, false);
-  if (options.canary) lab.player.known.get('stormcall')!.def = def;
+  const tap = await strike(lab, options.fixture, false, options.canary);
   const charged = await strike(lab, options.fixture, true);
   for (const [name, round] of [['a tap', tap], ['a full charge', charged]] as const) {
     const each = round.struck.map((hit) => `${hit.name} ${whole(taken(hit))}`).join(', ');
@@ -264,74 +244,6 @@ async function burn(lab: Lab, options: StaffsOptions): Promise<Found> {
   if (Math.abs(seconds(alightFrames) - lit.seconds) > 0.3) {
     found.problems.push(`the dummy showed alight for ${seconds(alightFrames).toFixed(2)} s, not ${lit.seconds}`);
   }
-  return found;
-}
-
-/** A stand-in for a partner at `at`, for the beam's choice of whom to land on. */
-const ally = (at: THREE.Vector3, alive = true): Player => ({ pos: at, alive, away: false }) as unknown as Player;
-
-/** Whom the beam lands on with `allies` in the room (taken out again at once: no frame runs with them there). */
-function landsOn(lab: Lab, def: SkillDef, allies: Player[]): Player {
-  G.players.push(...allies);
-  try {
-    return threadTarget(lab.player, { range: def.range ?? 0, arc: def.arc ?? 0 });
-  } finally {
-    G.players.length -= allies.length;
-  }
-}
-
-/** The healing beam: whom it lands on, and its heal on the hero himself frame by frame. */
-async function thread(lab: Lab, options: StaffsOptions): Promise<Found> {
-  const found = emptyFound();
-  await lab.setup({ ...options.fixture, gear: 'healing', view: 'top' });
-  const def = skillOf(lab, 'lifethread');
-  const hero = lab.player;
-  const aim = ahead(lab, AIM_AHEAD);
-  hero.aim.copy(aim);
-  const range = def.range ?? 0;
-  const before = ally(ahead(lab, 5, 0.5));
-  const nearer = ally(ahead(lab, AIM_AHEAD - 0.5, -0.3));
-  const cases: [string, Player[], Player][] = [
-    ['an ally in the cone', [before], before],
-    ['two allies, one nearer the aim', [before, nearer], nearer],
-    ['an ally 40° off the aim', [ally(ahead(lab, 5 * Math.cos(0.7), 5 * Math.sin(0.7)))], hero],
-    ['an ally past his reach', [ally(ahead(lab, range + 2))], hero],
-    ['a fallen ally in the cone', [ally(ahead(lab, 5), false)], hero],
-    ['no ally', [], hero],
-  ];
-  for (const [name, allies, expected] of cases) {
-    const got = landsOn(lab, def, allies);
-    const who = (player: Player) => (player === hero ? 'himself' : `the ally ${allies.indexOf(player) + 1}`);
-    found.lines.push(`  beam, ${name}: lands on ${who(got)}`);
-    if (got !== expected) found.problems.push(`the beam with ${name} landed on ${who(got)}, not ${who(expected)}`);
-  }
-  // his own heal: Health held low each frame, so each frame's gain is the frame's heal
-  lab.lifeShare = 0.3;
-  const low = hero.stats.maxLife * lab.lifeShare;
-  const frameSeconds = window.__labClock.frame / 1000;
-  const gains: number[] = [];
-  let beamSeen = false;
-  await lab.step(90, () => pressing('mouse0', aim, true), () => {
-    gains.push(hero.life - low);
-    beamSeen ||= Boolean(G.scene.getObjectByName('Lifethread: beam'));
-  });
-  await lab.step(10, () => ({ aim }));
-  lab.lifeShare = 1;
-  const flowing = gains.slice(10);
-  const perSecond = flowing.reduce((sum, gain) => sum + gain, 0) / (flowing.length * frameSeconds);
-  const stated = (def.heal ?? 0) * (1 + hero.stats.damagePct / 100) + hero.stats.lifeRegen;
-  const dry = flowing.filter((gain) => gain <= 0).length;
-  const pace = `${perSecond.toFixed(1)} Health a second (its heal and his regeneration: ${stated.toFixed(1)})`;
-  found.lines.push(`  beam on himself: ${pace}, `
-    + `${dry} of ${flowing.length} frames healing nothing`);
-  if (!beamSeen) found.problems.push('the beam was never drawn while its key was held');
-  if (G.scene.getObjectByName('Lifethread: beam')) {
-    found.problems.push('the beam was still drawn after its key was let go');
-  }
-  if (Math.abs(perSecond - stated) > stated * 0.1) {
-    found.problems.push(`the beam healed ${perSecond.toFixed(1)} a second, not ${stated.toFixed(1)}`);
-  }
-  if (dry > 0) found.problems.push(`the beam healed nothing in ${dry} frames: it must heal every frame`);
   return found;
 }
 
@@ -550,9 +462,13 @@ export async function staffs(lab: Lab, command: StaffsOptions): Promise<Report> 
   const parts: [string, Found][] = [];
   if (mage) {
     parts.push(['Stormcall, a tap and a full charge', await charge(lab, options)]);
+    const healing = async (): Promise<void> => {
+      await lab.setup({ ...options.fixture, gear: 'healing', view: 'top' });
+    };
+    if (options.canary) parts.push(['Lifethread, its faults planted', await threadCanary(lab, healing)]);
     if (!options.canary) {
       parts.push(['the fire staff\'s burn', await burn(lab, options)]);
-      parts.push(['Lifethread, the healing beam', await thread(lab, options)]);
+      parts.push(['Lifethread, the healing beam', await thread(lab, healing)]);
       parts.push(['Void Lance, with a staff and from each hand with none', await lance(lab, options)]);
     }
   }

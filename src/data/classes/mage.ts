@@ -62,9 +62,11 @@ const mage: ClassDef = {
     },
     {
       key: 'mouse0', impl: 'lifethread', name: 'Lifethread',
-      desc: 'Hold to send an arching beam of light from the staff onto the ally nearest your aim, healing them for as long as it is held. With no ally before you, it heals you. Costs no Energy.',
+      desc: 'Hold to send an arching beam of light from the staff onto the ally nearest your aim, healing them for as long as it is held, and 1% of their most Health a second on top. Held on the same ally, it heals 25% more each second, up to twice as much after 4 seconds; turning it onto another starts it again. On a healer at full Health holding their own Lifethread on another, what they cannot take flows on down their beam, 10% stronger for each healer it passes. With no ally before you, it heals you. Costs no Energy.',
       tags: ['healing'], cost: 0, cooldown: 0, castTime: 0, channel: true, school: 'healing',
-      heal: 60, range: 14, arc: Math.PI / 3, moveMult: 0.7,
+      // (a share of the healed one's most Health keeps it worth holding at wave 40, where heroes have 5 to 6 thousand:
+      // 60 a second alone was "nothing" there, from play; 2.5% was thought too strong)
+      heal: 60, healPct: 0.01, ramp: { perSecond: 0.25, most: 2, grace: 0.5 }, passBonus: 0.1, range: 14, arc: Math.PI / 3, moveMult: 0.7,
       color: 0xff3a48,
       icon: { glyph: '✚', color: '#ff5b6a' },
     },

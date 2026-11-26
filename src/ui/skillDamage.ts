@@ -4,6 +4,7 @@
 import { SKILL_IMPLS } from '../combat/skills';
 import { DAMAGE_ROLL, damageBonuses, damageScale } from '../combat/damage';
 import { NUMBER_COLORS } from '../data/balance';
+import { threadHeal } from '../combat/skills/lifethread';
 import type { SkillHit } from '../combat/skills/types';
 import type { DerivedStats, SkillDef } from '../types';
 
@@ -14,6 +15,8 @@ const BARE: DerivedStats = {
 };
 
 const whole = (v: number): string => String(Math.round(v));
+/** a share as a percentage, to a tenth where it has one (0.01: 1, 0.025: 2.5) */
+const pctOf = (share: number): string => String(Number((share * 100).toFixed(1)));
 /** `v` rolled from its low to its high share, as `low–high` */
 const rolled = (v: number): string => `${whole(v * DAMAGE_ROLL.low)}–${whole(v * DAMAGE_ROLL.high)}`;
 /** a time in s, to two places at most */
@@ -73,12 +76,23 @@ export function skillDamageHTML(def: SkillDef, stats: DerivedStats | null): stri
 /** A healing skill's figure for a hero of `stats`: what it restores now (empty without a hero: its text says how). */
 export function skillHealHTML(def: SkillDef, stats: DerivedStats | null): string {
   if (!stats || !def.heal) return '';
-  // (a healing beam: a second's healing, raised by the healer's All Damage, as skills/lifethread.ts heals)
+  // (a healing beam: a second's healing, its flat part raised by the healer's All Damage and its share of the healed
+  // one's most Health not, then by its ramp held on one ally, as skills/lifethread.ts heals)
   if (def.channel) {
-    const each = def.heal * (1 + stats.damagePct / 100);
+    const each = threadHeal({ heal: def.heal }, stats.damagePct, 0);
     const by = stats.damagePct ? ` · +${whole(stats.damagePct)}% all damage` : '';
-    return `<div class="tt-dmg"><div class="tt-hit">Restores <b class="tt-heal">${whole(each)}</b> Health a second</div>`
-      + `<div class="tt-note">Base ${def.heal} a second${by}</div></div>`;
+    const pct = def.healPct ?? 0;
+    const share = pct ? ` and <b class="tt-heal">${pctOf(pct)}%</b> of their most Health` : '';
+    const onSelf = pct ? ` (${whole(each + stats.maxLife * pct)} a second on you)` : '';
+    const ramp = def.ramp;
+    const grows = ramp
+      ? `<div class="tt-note">Held on one ally, +${pctOf(ramp.perSecond)}% a second, up to ×${ramp.most} after `
+        + `${Number(((ramp.most - 1) / ramp.perSecond).toFixed(1))} s; another ally starts it again</div>`
+      : '';
+    const bonus = def.passBonus ? `, +${pctOf(def.passBonus)}% for each healer it passes` : '';
+    const passes = `<div class="tt-note">A healer at full Health passes it on down their own beam${bonus}</div>`;
+    return `<div class="tt-dmg"><div class="tt-hit">Restores <b class="tt-heal">${whole(each)}</b> Health a second`
+      + `${share}${onSelf}</div>${grows}${passes}<div class="tt-note">Base ${def.heal} a second${by}</div></div>`;
   }
   const pct = def.healPct ?? 0;
   const healed = def.heal + stats.maxLife * pct;

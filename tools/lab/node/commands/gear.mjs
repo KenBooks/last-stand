@@ -22,10 +22,10 @@ function gearTier(text) {
 /** `lab gear`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
 export default {
   summary: 'full sets of gear rolled for every class at each tier (the Health, regeneration and draught they give, '
-    + 'and the damage they multiply)',
+    + 'the damage they multiply, and their All Damage, which the healing beam\'s flat part reads)',
   help: 'full sets rolled for every class as its loot rolls them, at each rarity and item level, and what a set '
     + 'gives on average: Health (his own and gear\'s), regeneration a second, the draught\'s heal and how much it '
-    + 'multiplies his damage; a class whose Health or regeneration from gear is out of the order of his own Health '
+    + 'multiplies his damage, and his All Damage; a class whose Health or regeneration from gear is out of the order of his own Health '
     + 'is a problem',
   options: {
     tiers: {
