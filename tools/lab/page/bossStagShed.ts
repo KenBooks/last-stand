@@ -25,6 +25,7 @@ import { hurtProp } from '../../../src/world/destructible';
 import { lineClear } from '../../../src/world/navigation';
 import { pastWall } from '../../../src/world/edge';
 import { PIPELINES } from '../../../src/engine/pipelinesAside';
+import { strikesBody } from '../../../src/combat/strikes';
 import { fixed, standIn, type BossOptions } from './boss';
 import { noting, onLane, openLane, type Hurt } from './bossStag';
 
@@ -43,23 +44,66 @@ const _n = new THREE.Vector3();
 
 /** The stag risen before the hero, its life taken under its second phase's share, and let shed its antlers: its stakes
  *  standing, and the pipelines made meanwhile. */
-async function shedding(lab: Lab, options: BossOptions): Promise<{ boss: Enemy; began: boolean; made: number }> {
+async function shedding(
+  lab: Lab, options: BossOptions, lines: string[], problems: string[],
+): Promise<{ boss: Enemy; began: boolean; made: number }> {
   await standIn(lab, options.fixture, 'forest');
   const boss = await onLane(lab, options, openLane());
+  checkParts(boss, 'before', false, lines, problems);
   boss.dazed = 0;
   boss.cd = 0;
+  const drawing = lab.drawing;
+  lab.drawing = true;
   const before = PIPELINES.made;
-  boss.takeDamage(boss.life - LATE * boss.maxLife, {});
   let began = false;
-  await lab.until(() => {
-    began ||= boss.action?.name === 'shed';
-    return STAKES_STANDING.length >= STAKES;
-  }, SHED_FRAMES, 'its stakes never stood', () => {
-    boss.brain.chargeT = 99;
-    boss.brain.breathT = 99;
-    return {};
-  });
+  try {
+    boss.takeDamage(boss.life - LATE * boss.maxLife, {});
+    await lab.until(() => {
+      began ||= boss.action?.name === 'shed';
+      return STAKES_STANDING.length >= STAKES;
+    }, SHED_FRAMES, 'its stakes never stood', () => {
+      boss.brain.chargeT = 99;
+      boss.brain.breathT = 99;
+      return {};
+    });
+  } finally {
+    lab.drawing = drawing;
+  }
   return { boss, began, made: PIPELINES.made - before };
+}
+
+/** Strike the posed skull and torso from the side through the same mesh test a projectile uses. */
+function checkParts(boss: Enemy, phase: 'before' | 'after', canary: boolean, lines: string[], problems: string[]): void {
+  // The muzzle's parent locates the skull independently of the head registration being tested.
+  const root = boss.model.root;
+  const skull = (root.userData.mouth as THREE.Object3D | undefined)?.parent;
+  const trunk = root.getObjectByName('stag-trunk');
+  if (!skull || !trunk) throw new Error('lab: stagShed: missing skull or torso anchor');
+  const hit = (joint: THREE.Object3D, y: number, z: number): string => {
+    const from = joint.localToWorld(new THREE.Vector3(-3, y, z));
+    const to = joint.localToWorld(new THREE.Vector3(3, y, z));
+    const struck = { head: false };
+    if (strikesBody(boss, from, to, 0, struck) < 0) return 'miss';
+    return struck.head ? 'headshot' : 'body';
+  };
+  const head = hit(skull, 0.08, 0.15);
+  const torso = hit(trunk, 0.1, 0);
+  lines.push(`stagShed: ${phase} the shed, skull ${head}, torso ${torso}`);
+  if (head !== 'headshot' || torso !== 'body') {
+    problems.push(`stagShed: ${phase} the shed, expected a skull headshot and torso body hit`);
+  }
+  if (!canary) return;
+  const registered = boss.model.head;
+  try {
+    boss.model.head = undefined;
+    const unregistered = hit(skull, 0.08, 0.15);
+    const caught = head === 'headshot' && unregistered === 'body';
+    lines.push(`stagShed: missing head registration canary ${caught ? 'caught' : 'went unseen'}`);
+    // This failure must escape the boss command's usual reporting of expected canary faults.
+    if (!caught) throw new Error('lab: stagShed: removing head registration did not change the same skull hit to body');
+  } finally {
+    boss.model.head = registered;
+  }
 }
 
 /** The shed's lines and problems: its smash warned, its antlers shed, its stakes standing where they should. */
@@ -131,8 +175,9 @@ export async function stagShed(lab: Lab, options: BossOptions, lines: string[], 
     w.life = 1e9;
   }
   try {
-    const { boss, began, made } = await shedding(lab, options);
+    const { boss, began, made } = await shedding(lab, options, lines, problems);
     judgeShed(boss, began, made, lines, problems);
+    checkParts(boss, 'after', options.canary, lines, problems);
     const stakes = [...STAKES_STANDING];
     if (!stakes.length) return;
     const hurts = await besideStake(lab, stakes[0]);

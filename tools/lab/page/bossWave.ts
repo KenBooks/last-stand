@@ -1,38 +1,51 @@
 // A boss readied at its wave (src/game/bossReady.ts; from the owner: "if its not boss wave, why load the boss info"):
 // booted cold, no boss's code is loaded and none is warm. A run in the Crypt (its portal used in the village, Enter
 // clicked on its card) cleared at wave 4,
-// Continue shows the fight's bar readying the Colossus, then the wave begins with him loaded and warm, and he rises
-// with no program compiled from the wave's start until after he rises; the same from wave 14 into the Ossuary Twins
-// at 15 (two bosses in one chunk). Every other need is warmed first (the lab's own boot would ready the bosses too), so
-// no warm-up behind the run compiles meanwhile.
-// A canary: the Twins loaded and one spawned in wave 14 without their warm-up, which must be found loaded before
-// their wave, and a material of its own drawn as wave 15 begins, which must be found compiled.
+// Continue shows the readying bar, then the boss rises warm. The Thornwood checks the same path for its own ladder.
+// The canary loads the last selected boss early and draws a new pipeline after the wave begins.
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
 import type { EnemyId } from '../../../src/data/enemies';
+import type { BiomeId } from '../../../src/data/biomes';
 import { updateRun } from '../../../src/game/run';
 import { foeWarm } from '../../../src/game/warmup';
 import { hurry, isAllWarm, isReadying, readyingLabel, readyingShare } from '../../../src/game/warm';
 import { goUse, villageObject } from '../../../src/game/village';
 import { groundHeight } from '../../../src/world/ground';
 import { clearEnemies } from '../../../src/entities/enemy';
-import { spawnEnemy } from '../../../src/entities/spawner';
 import { foeLoaded, loadFoe } from '../../../src/entities/bosses';
 import { lateCompiles, programsCompiledInGame } from '../../../src/core/shaders';
+import { stageCamera } from '../../../src/core/renderer';
 
-/** `--canary`: the Twins loaded and spawned unwarmed in wave 14, which must be found. */
+/** The battleground, an optional single wave, and the early-load and late-pipeline canaries. */
 export interface BossWaveOptions {
+  biome: BiomeId;
+  wave?: number;
   canary: boolean;
 }
 
-/** Each boss wave met: the wave before it, the wave, its bosses and what the bar says. */
-const WAVES: { before: number; wave: number; bosses: EnemyId[]; label: string }[] = [
-  { before: 4, wave: 5, bosses: ['colossus'], label: 'Readying Colossus' },
-  // (an encounter: the Cantor and its two guards, both of its kind risen)
-  { before: 9, wave: 10, bosses: ['cantor', 'bellwarden', 'bellwarden'], label: 'Readying Ossuary Cantor' },
-  { before: 14, wave: 15, bosses: ['twinslab', 'twinreliquary'], label: 'Readying Ossuary Twins' },
-];
+interface Encounter {
+  wave: number;
+  bosses: EnemyId[];
+  label: string;
+  /** Other models that must be ready at entry but do not rise with the encounter. */
+  brought?: EnemyId[];
+}
+
+/** Expected encounters and their readying text, independent of the game's boss selection. */
+const WAVES: Record<BiomeId, Encounter[]> = {
+  crypt: [
+    { wave: 5, bosses: ['colossus'], label: 'Readying Colossus' },
+    { wave: 10, bosses: ['cantor', 'bellwarden', 'bellwarden'], label: 'Readying Ossuary Cantor' },
+    { wave: 15, bosses: ['twinslab', 'twinreliquary'], label: 'Readying Ossuary Twins' },
+  ],
+  forest: [
+    { wave: 5, bosses: ['thornheart'], label: 'Readying Thornheart' },
+    { wave: 10, bosses: ['rootmother'], label: 'Readying Rootmother', brought: ['seedpod', 'bigpod'] },
+    { wave: 15, bosses: ['stag'], label: 'Readying Stag of Ash' },
+  ],
+};
 
 /** how long a warm-up, a readying or a wave's countdown may take, each, by the browser's clock (ms): a warm-up's
  *  links are waited for in real time, which the lab's frames, run as fast as the page can, don't pass */
@@ -129,18 +142,25 @@ function barSays(): string {
   return bar.textContent?.trim() ?? '';
 }
 
-/** The bosses of `bosses` standing in the arena. */
-const risen = (bosses: EnemyId[]): number => G.enemies.filter((foe) => bosses.includes(foe.type) && foe.alive).length;
+/** The bosses and their guards that have finished rising in the arena. */
+const standing = () => G.enemies.filter((foe) => foe.boss && foe.alive && foe.spawning <= 0);
+
+/** Draw each risen boss in frame so a boss outside the player's initial view cannot pass untested. */
+async function drawEncounter(lab: Lab, bosses: ReturnType<typeof standing>): Promise<void> {
+  try {
+    for (const foe of bosses) {
+      const look = foe.obj.position.clone().add(new THREE.Vector3(0, foe.height * 0.45, 0));
+      const pos = look.clone().add(new THREE.Vector3(foe.height, foe.height, foe.height));
+      stageCamera({ pos, look, fov: 45 }, true);
+      await lab.step(2);
+    }
+  } finally {
+    stageCamera(null, true);
+  }
+}
 
 /** frames the canary's plants are drawn for */
 const CANARY_FRAMES = 30;
-
-/** The canary's first plant: the Twins loaded and one spawned now, never warmed, found loaded before its wave. */
-async function spawnUnwarmed(lab: Lab): Promise<void> {
-  await loadFoe('twinslab');
-  spawnEnemy('twinslab', new lab.THREE.Vector3(0, 0, -20), { wave: G.run!.wave });
-  await lab.step(CANARY_FRAMES);
-}
 
 /**
  * The canary's second: a box of a material nothing else draws (a program key of its own) before the hero, as an unwarmed
@@ -148,9 +168,9 @@ async function spawnUnwarmed(lab: Lab): Promise<void> {
  * stands for a boss's own material: the Twins spawned unwarmed compiled nothing new).
  */
 async function drawUnwarmed(lab: Lab): Promise<void> {
-  const material = new lab.THREE.MeshBasicMaterial({ color: 0xff00ff });
-  // (a program of its own, whatever the game compiled before: a sheen and iridescence of the hero's gear shared one)
-  material.customProgramCacheKey = () => 'bosswave-canary';
+  const material = new lab.THREE.MeshBasicMaterial({
+    color: 0xff00ff, blending: THREE.AdditiveBlending, side: THREE.BackSide, depthWrite: true,
+  });
   const box = new lab.THREE.Mesh(new lab.THREE.BoxGeometry(0.5, 0.5, 0.5), material);
   const way = new lab.THREE.Vector3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing));
   box.position.copy(G.player.pos).addScaledVector(way, 2).setY(0.5);
@@ -164,16 +184,16 @@ async function drawUnwarmed(lab: Lab): Promise<void> {
   }
 }
 
-/** The Crypt's portal used where the hero stands for it: its card shown, the Crypt the run's battleground. */
-async function useCryptPortal(lab: Lab): Promise<void> {
-  const portal = villageObject('crypt');
-  if (!portal) throw new Error('lab: bosswave: the village has no portal to the Crypt');
+/** The chosen portal used where the hero stands for it, its run card shown. */
+async function usePortal(lab: Lab, biome: BiomeId): Promise<void> {
+  const portal = villageObject(biome);
+  if (!portal) throw new Error(`lab: bosswave: the village has no portal to ${biome}`);
   const [x, z] = portal.stand;
   G.player.walkTo = null;
   G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
   await lab.step(CARD_FRAMES);
   goUse(portal);
-  await stepUntil(lab, () => G.arena.biome === 'crypt', 'the Crypt as the portal\'s battleground');
+  await stepUntil(lab, () => G.arena.biome === biome, `${biome} as the portal's battleground`);
   await lab.step(CARD_FRAMES);
 }
 
@@ -196,7 +216,8 @@ async function readiedAtTheirWave(lab: Lab, options: BossWaveOptions): Promise<R
   if (G.mode !== 'menu') throw new Error('lab: bosswave: the fresh page must begin in the lobby');
 
   hearErrors();
-  const everyBoss = WAVES.flatMap((w) => w.bosses);
+  const encounters = WAVES[options.biome];
+  const everyBoss = [...new Set(encounters.flatMap(({ bosses, brought = [] }) => [...bosses, ...brought]))];
   const loadedAtBoot = everyBoss.filter(foeLoaded);
   if (loadedAtBoot.length) problems.push(`at boot ${loadedAtBoot.join(', ')} already loaded`);
   lines.push(`at boot: ${loadedAtBoot.length ? loadedAtBoot.join(', ') : 'no boss'} loaded`);
@@ -204,21 +225,28 @@ async function readiedAtTheirWave(lab: Lab, options: BossWaveOptions): Promise<R
   // (every need warmed but the bosses, so no warm-up compiles behind the run: `__dev.hurry` readies the bosses too)
   hurry();
   await stepUntil(lab, isAllWarm, 'every need warm');
-  await useCryptPortal(lab);
-  await lab.clickOn(element('#btn-start'));
+  await usePortal(lab, options.biome);
+  const start = element('#btn-start');
+  if (!start.checkVisibility()) throw new Error(`lab: bosswave: the ${options.biome} portal never offered entry`);
+  await lab.clickOn(start);
   await stepUntil(lab, () => G.mode === 'run' && G.run !== null, 'the run');
 
   /** what the canary was found by: loaded before its wave, compiled late */
   const caughtBy = new Set<string>();
-  for (const { before, wave, bosses, label } of WAVES) {
-    const canaryHere = options.canary && wave === 15;
-    if (canaryHere) await spawnUnwarmed(lab);
-    const early = bosses.filter(foeLoaded);
+  const selected = encounters.filter(({ wave }) => options.wave === undefined || options.wave === wave);
+  const last = selected.at(-1);
+  for (const encounter of selected) {
+    const { wave, bosses, brought = [], label } = encounter;
+    const before = wave - 1;
+    const needed = [...new Set([...bosses, ...brought])];
+    const canaryHere = options.canary && encounter === last;
+    await clearAt(lab, before);
+    if (canaryHere) await loadFoe(bosses[0]);
+    const early = needed.filter(foeLoaded);
     if (early.length) {
       if (canaryHere) caughtBy.add('loaded early');
       else problems.push(`at wave ${before} ${early.join(', ')} already loaded, before ${wave}`);
     }
-    await clearAt(lab, before);
     await lab.clickOn(element('#decision .cont'));
     let said = '';
     await stepUntil(lab, () => {
@@ -226,27 +254,37 @@ async function readiedAtTheirWave(lab: Lab, options: BossWaveOptions): Promise<R
       return G.run!.wave === wave;
     }, `wave ${wave} after Continue`);
     if (!said.includes(label)) problems.push(`Continue into wave ${wave}: the bar said "${said}", not "${label}"`);
-    const cold = bosses.filter((id) => !foeLoaded(id) || !foeWarm(id));
+    const cold = needed.filter((id) => !foeLoaded(id) || !foeWarm(id));
     if (cold.length) problems.push(`wave ${wave} began with ${cold.join(', ')} not loaded and warm`);
     // (every program from here counts: the boss's warm-up is done, and no other runs)
-    const compiledBefore = programsCompiledInGame();
+    let compiledBefore = programsCompiledInGame();
+    if (canaryHere) {
+      await drawUnwarmed(lab);
+      const afterPlant = programsCompiledInGame();
+      if (afterPlant > compiledBefore) caughtBy.add('compiled late');
+      compiledBefore = afterPlant;
+    }
     const describedBefore = lateCompiles.length;
-    if (canaryHere) await drawUnwarmed(lab);
-    await stepUntilInGame(lab, () => risen(bosses) === bosses.length, `wave ${wave}'s ${bosses.join(' and ')}`);
+    await stepUntilInGame(lab, () => standing().length >= bosses.length, `wave ${wave}'s boss encounter`);
     await lab.step(60);
+    const risen = standing();
+    const actual = risen.map((foe) => foe.type).sort();
+    if (actual.join() !== [...bosses].sort().join()) {
+      problems.push(`wave ${wave}: expected ${bosses.join(', ')} but saw ${actual.join(', ')}`);
+    }
+    await drawEncounter(lab, risen);
     const compiled = programsCompiledInGame() - compiledBefore;
     if (compiled) {
       const described = lateCompiles.slice(describedBefore, describedBefore + 3).join('; ');
-      if (canaryHere) caughtBy.add('compiled late');
-      else problems.push(`wave ${wave}: ${compiled} programs compiled as it began${described ? `: ${described}` : ''}`);
+      problems.push(`wave ${wave}: ${compiled} programs compiled as it began${described ? `: ${described}` : ''}`);
     }
-    lines.push(`wave ${before} -> ${wave}: the bar said "${said}", ${bosses.join(' and ')} rose, `
+    lines.push(`wave ${before} -> ${wave}: the bar said "${said}", ${actual.join(' and ')} rose, `
       + `${compiled} programs compiled meanwhile`);
   }
-  if (options.canary) {
+  if (options.canary && last) {
     const missed = ['loaded early', 'compiled late'].filter((check) => !caughtBy.has(check));
     if (missed.length) problems.push(`canary: its plants were not found ${missed.join(' or ')}`);
-    lines.push(`canary (the Twins spawned unwarmed in wave 14, a material of its own in 15): found `
+    lines.push(`canary (${last.bosses[0]} loaded early, a new pipeline after Continue): found `
       + `${[...caughtBy].join(' and ') || 'by nothing'}`);
   }
   return { text: lines.join('\n'), problems };

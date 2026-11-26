@@ -2,6 +2,12 @@
 
 The rest of the commands are in [`COMMANDS.md`](../COMMANDS.md).
 
+`npm run lab -- bosswave --biome forest --wave 15` boots cold, uses the Thornwood portal, and clicks Continue from
+the wave 14 clear. The Stag must be unloaded until then. The bar must name it, and exactly one Stag must finish
+rising with its models warm and no late pipeline. The fixture skips the preceding fights. Omit `--wave` for the
+chosen biome's first three boss waves. `--canary` loads the final selected boss early and draws a new pipeline after
+Continue. It must catch both plants independently of the encounter's own pipeline count.
+
 - `boss`: the bosses' fights (`page/boss.ts`; `src/entities/bossKit.ts`), in parts (`--parts`, all by default).
   `ladder`: in each battleground, boss waves 5, 10, 15 and 20 set off from their countdown as the run sets one off
   (its wave and timer), the boss the run holds for it (`RunState.boss`) against its ladder's rung (`data/biomes.ts`
@@ -72,9 +78,11 @@ The rest of the commands are in [`COMMANDS.md`](../COMMANDS.md).
   every tick, out after its life, and four pieces set alight at once burning three, the oldest put out. Its canary
   narrows its cone to none; `stagShed` (`page/bossStagShed.ts`): its life taken under its second phase's share, its
   shed a warned smash, its model's antlers shed, its four stakes standing among the obstacles inside the wall, apart,
-  each blocking a line across it, no pipeline made; a hero beside one burnt about once a tick; one struck its hits
+  each blocking a line across it, no pipeline made while drawing the shed; skull hits are headshots and torso hits
+  are body hits before and after the shed; a hero beside one burnt about once a tick; one struck its hits
   broken and out of the obstacles; up close after it no gore or toss, its hoof strike; the stakes gone after their
-  life. Its canary keeps the stakes whole for good; `stagToss` also has a hero before a prop (thrown short of it), one
+  life. Its canary keeps the stakes whole for good and removes the head joint registration to check that the skull
+  hit becomes a body hit; `stagToss` also has a hero before a prop (thrown short of it), one
   stepping back through its warning (tossed all the same: it lunges after him), and in every toss the hero airborne
   through his flight and a hit sent at him in the air landing nothing; `compiles` draws its every effect and `ttk` adds it at wave 15,
   struck throughout and with every charge crashed. Its canary's faults: a fire that reaches no one, a crash that stuns nothing, its second
