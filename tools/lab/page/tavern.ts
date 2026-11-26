@@ -40,7 +40,8 @@ import { takeWays } from './keeperTakeWays';
 import { KEEPER_WIPES } from '../../../src/world/tavernKeeper';
 import { drawsSaid, PoseTimes } from './keeperCost';
 import { aleBoost, ALE_STACKS } from '../../../src/game/aleBoost';
-import { throughTheEyes } from './tavernEyes';
+import { seenBy, throughTheEyes } from './tavernEyes';
+import { armsCamera } from '../../../src/core/renderer';
 import { keeperLooks } from './keeperLooks';
 import { caskWiped, ePriority, putDowns, Round5Watch, stuckRuns, tablePickups } from './keeperRound5';
 import { tubSeen } from './tubSeen';
@@ -51,12 +52,13 @@ import { talkAnswerable } from '../../../src/ui/screens/talk/talk';
 import { footShape, type FootShape } from '../../../src/entities/models/ik';
 import { PIPELINES } from '../../../src/engine/pipelinesAside';
 import { tavernTouch } from './tavernTouch';
+import { boostThroughRun } from './keeperBoostRun';
 
 /** `--canary`: the ale made a cast he may walk through; `--looks`: him pictured from Kenneth's angles alone. */
 export interface TavernOptions {
   canary: boolean;
   looks?: boolean;
-  parts?: ('eyes' | 'touch' | 'cost')[];
+  parts?: ('eyes' | 'seated' | 'touch' | 'cost' | 'boost')[];
   /** with `looks`: round 5's moments alone, as the player sees them (with `canary`, as they were before it) */
   round5?: boolean;
 }
@@ -418,14 +420,19 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
       let stood = 0, most = 0;
       const drank = waited >= 0 && await takeAndDrink();
       // (the rim at his lips at each swallow, as stood: rested on his thigh, his drinking hand kept the mug in his lap)
-      const sips = view !== 'first' ? [0.3, 0.46, 0.62] : [];
+      const sips = [...ALE_BEATS.gulps];
       let worstRim = 0;
+      let hidden = 0;
       const drinking = (): boolean => {
         if (!satWhole(G.player.sitting.pose)) stood++;
         most = Math.max(most, drinkShare());
         if (sips.length && drinkShare() >= sips[0]) {
           sips.shift();
-          worstRim = Math.max(worstRim, mugInHand().rimOff);
+          if (view === 'first') {
+            const mug = G.player.model.root.getObjectByName('flask')?.getObjectByName('mug');
+            const visible = mug && seenBy(mug, armsCamera(), MUG.rimR + 0.02);
+            if (!visible?.shown || !visible.drawn || !visible.inView || visible.clear <= 0) hidden++;
+          } else worstRim = Math.max(worstRim, mugInHand().rimOff);
         }
         return drinkShare() < 0;
       };
@@ -445,6 +452,8 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
       lines.push(`drunk sat${seen}: ${!drank ? 'NOT taken up and drunk' : `drunk to ${(most * 100).toFixed(0)}%, ${stood ? `up for ${stood} frames` : 'sat all the while'}`}`);
       if (!drank || most < ALE_BEATS.setDown) problems.push(`sat on a bar stool${seen}, his ale was never drunk`);
       if (stood) problems.push(`sat on a bar stool${seen}, his drink got him up (${stood} frames)`);
+      if (sips.length) problems.push(`sat on a bar stool${seen}, the drink missed ${sips.length} swallows`);
+      if (hidden) problems.push(`sat on a bar stool through the eyes, the mug was out of view at ${hidden} swallows`);
       if (view !== 'first') {
         lines.push(`drunk sat${seen}: the rim at most ${(worstRim * 100).toFixed(1)} cm from his lower lip at a swallow`);
         if (worstRim > RIM_NEAR) problems.push(`sat on a bar stool${seen}, the rim stood ${(worstRim * 100).toFixed(1)} cm from his lower lip at a swallow`);
@@ -456,6 +465,12 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
       G.player.sitting.clear();
       await frames(30);
     }
+  };
+  const seatedCases = async (): Promise<void> => {
+    await drinkSeated('top');
+    await drinkSeated('third');
+    await drinkSeated('first');
+    await viewWatched('third');
   };
   /** Sat on a stool by the party table (as `lab sit` lets him sit idle), E opens Play together and leaves him sat, a
    *  mug's take never in the way (#889's `useWhileSatBy` and the tavern's mug sharing E: `game/keyTakers.ts`). */
@@ -599,6 +614,23 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
   if (options.parts) {
     if (options.parts.includes('cost')) await costCase();
     if (options.parts.includes('eyes')) await eyesCase(options.canary);
+    if (options.parts.includes('seated')) {
+      const beforeSit = SIT_FREE.drink;
+      const startProblems = problems.length;
+      try {
+        if (options.canary) SIT_FREE.drink = false;
+        await seatedCases();
+      } finally {
+        SIT_FREE.drink = beforeSit;
+      }
+      if (options.canary) {
+        const found = problems.splice(startProblems);
+        const rim = found.filter((problem) => problem.includes('the rim stood'));
+        problems.push(...found.filter((problem) => !rim.includes(problem) && !problem.includes('the mug was out of view')));
+        if (!rim.length) problems.push('seated canary: a resting drinking hand went unseen');
+        else lines.push('seated canary: caught the drinking hand resting on the thigh');
+      }
+    }
     if (options.parts.includes('touch')) {
       await viewAs(lab, 'top');
       await standAtBar();
@@ -607,6 +639,11 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
       problems.push(...touch.problems);
     }
     checkPipelines();
+    if (options.parts.includes('boost')) {
+      const boost = await boostThroughRun(lab, options.canary);
+      lines.push(boost.text);
+      problems.push(...boost.problems);
+    }
     return { text: lines.join('\n'), problems, moments };
   }
 
@@ -760,11 +797,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     // --- sat on a bar stool: asked from it, the mug taken up by E and drunk, sat all the while (note 11) ---
     // (from above first: the eyes' case after holds the view's heading on the keeper alone, and come into the eyes from
     // above its pitch left the bar below the frame)
-    await drinkSeated('top');
-    await drinkSeated();
-    // (through the eyes too, as #890 lets him sit there: his ale's cast kept him standing in that view before)
-    await drinkSeated('first');
-    await viewWatched('third');
+    await seatedCases();
     // --- sat by the party table, E is its (#889's use while sat), not a mug's ---
     await partyTableSat();
 

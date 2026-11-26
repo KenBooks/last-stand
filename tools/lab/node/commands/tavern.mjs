@@ -13,7 +13,7 @@ export default {
     + 'frame, taken empty, set down, collected, washed, dried and shelved, running out of clean mugs and of all of them; '
     + 'his planted feet never sliding, his hands never jumping, his body never in a counter, no mug in the air; the '
     + 'drink through the eyes, the mug in view at every beat; engine pipeline requests on the frames drawn; '
-    + '`--parts eyes,touch,cost` for focused checks; `--canary` plants regressions; '
+    + '`--parts eyes,seated,touch,cost,boost` for focused checks; `--canary` plants regressions; '
     + 'in co-op `coop --scenarios tavern`; in full in `commands/tavern.md`)',
   help: "the tavern's keeper and his ale: his tasks, the beer poured, slid across and drunk standing still, every mug "
     + 'accounted for every frame, his feet, hands and body against the counters, and the drink through the eyes',
@@ -27,8 +27,8 @@ export default {
     parts: {
       kind: 'list',
       usage: 'a,b',
-      choices: ['eyes', 'touch', 'cost'],
-      help: 'run only the named checks: first-person drinking, touch pickup and buttons, or room rendering costs',
+      choices: ['eyes', 'seated', 'touch', 'cost', 'boost'],
+      help: 'run only the named checks: first-person or seated drinking, touch buttons, room costs, or ale in a run',
     },
     ...COMMON_OPTIONS,
   },

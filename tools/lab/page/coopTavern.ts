@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { G } from '../../../src/state';
 import { villageObject } from '../../../src/game/village';
-import { partnersInTavern, selfId } from '../../../src/net/session';
+import { leaveRoom as leaveParty, partnersInTavern, selfId } from '../../../src/net/session';
 import { MUG_COUNT } from '../../../src/data/tavern';
 import { leaveRoom } from '../../../src/game/rooms';
 import { choosingAle, pickAle, takeMug, waitingMug } from './takeAle';
@@ -55,6 +55,16 @@ export async function coopTavernTake(lab: Lab, { id = -1 }: { id?: number } = {}
 /** This game's hero leaves the tavern for the village, whatever he holds. */
 export function coopTavernLeave(): void {
   leaveRoom(true);
+}
+
+/** Disconnect from the party while leaving the local hero and his input alone. */
+export function coopTavernDisconnect(): void {
+  leaveParty();
+}
+
+/** A copy of this game's full ledger, including holder, fill and precise position. */
+export function coopTavernLedger() {
+  return G.arena.rooms?.tavern?.tavern?.()?.mugs.snapshot() ?? [];
 }
 
 /** This game's hero drinks the mug in his hand by E, its choice answered. */

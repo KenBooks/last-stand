@@ -113,5 +113,10 @@ export async function tavernTouch(lab: Lab, tv: TavernKeeper, canary: boolean): 
   } else {
     lines.push(`touch: drank mug ${id} and returned it to the bar dirty`);
   }
+  await lab.step(1);
+  const notice = document.querySelector('#ale-fortified');
+  const box = notice?.getBoundingClientRect();
+  if (!notice?.checkVisibility() || !box || box.left < 0 || box.top < 0
+    || box.right > innerWidth || box.bottom > innerHeight) problems.push('touch: the pending ale notice did not fit');
   return { text: lines.join('\n'), problems };
 }
