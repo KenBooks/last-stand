@@ -6,6 +6,11 @@ options every command takes) for its size.
 A state is a module of its own, `page/uiStates/<state>.ts` (`page/AGENTS.md`): adding one touches no shared list, its
 `order` line placing it in the run and in `--states`.
 
+`pauseAdvancedGraphics` and `pauseAdvancedGraphicsTouch` open the Settings disclosure with mouse and touch input.
+They check the selected buttons and the typed cookie values for all six choices, then switch presets and restore
+Auto. Bloom, lamp shadows and particle output are checked in the running game. The canary plants the wrong selected
+Bloom button.
+
 Production, every state (#595): no state may reach production's host (`node/production.mjs`: the saves service, the
 co-op relay, the traces service). Each state's report ends with what it asked there, refused by the lab's guard (`asked
 of production: nothing`), and each ask is a problem of that state's; asks made as the page booted are the boot's. The
@@ -29,7 +34,8 @@ label shows through, which must be caught.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,guideKeys,saves,heroes,readying,
 readyingHeroes,clicked,views,behindProps,sitHint,floorDespawn,logLobby,perfAsk,pauseLobby,coop,coopRename,bugReport,skillTipsTouch,sheetTouch,litTouch,coopTouch,autoFull,
-run,waveAfterDuel,scores,perf,perfMini,perfGraph,perfParty,decision,perfAskBreak,pause,pauseSettings,pausePerformance,profiling,pauseVolume,pauseTabKept,pauseAbandon,summary,summarySkip,skillTips,log,logTouch,hudTouch,
+run,waveAfterDuel,scores,perf,perfMini,perfGraph,perfParty,decision,perfAskBreak,pause,pauseSettings,pauseAdvancedGraphics,
+pauseAdvancedGraphicsTouch,pausePerformance,profiling,pauseVolume,pauseTabKept,pauseAbandon,summary,summarySkip,skillTips,log,logTouch,hudTouch,
 decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch,bugReportTouch`, every one by default (the bug report's form,
 `page/uiBugReport.ts`: `bugReport` opens it from the lobby's pause menu by a click on Report a bug and makes a report
 as a player does, `bugReportTouch` opens it over a run by a tap: the form within the window and not scrolling, every
