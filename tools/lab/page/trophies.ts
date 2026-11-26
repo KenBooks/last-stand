@@ -15,6 +15,9 @@ import { TROPHIES } from '../../../src/data/houses';
 import type { EnemyId } from '../../../src/data/enemies';
 import { chronicleOf } from '../../../src/game/chronicle';
 import { enterRoom, writeRecords } from '../../../src/game/rooms';
+import { hitEnemy } from '../../../src/combat/damage';
+import { readyBoss } from '../../../src/game/bossReady';
+import { loadProfile } from '../../../src/loot/profile';
 import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
 import { groundHeight } from '../../../src/world/ground';
 import type { TrophyPlaceShown } from '../../../src/world/rooms';
@@ -22,9 +25,10 @@ import { PIPELINES } from '../../../src/engine/pipelinesAside';
 import { countedFrame, viewBy } from './villageHallCull';
 import { toVillage } from './village';
 
-/** `--canary`: a trophy shown with its boss unbeaten, and another set off its place. */
+/** Select the display checks or the earned trophy lifecycle, and whether to plant a fault. */
 export interface TrophiesOptions {
   canary: boolean;
+  earned: boolean;
 }
 
 /** the frames a stand settles for, and the most a door may take to open (the rooms' warm-up under its bar) */
@@ -155,8 +159,59 @@ function closeUps(lab: Lab, places: TrophyPlaceShown[], moments: Pictured[], sta
   }
 }
 
+/** Follow a boss kill to the saved profile and its visible trophy, without seeding a kill record. */
+async function earnedTrophy(lab: Lab, canary: boolean): Promise<Report> {
+  const boss = 'colossus';
+  await lab.setup();
+  if (!G.run || G.run.training || G.arena.place !== 'crypt') {
+    throw new Error('lab: the trophy check needs a real Crypt run');
+  }
+  if (Object.keys(chronicleOf(G.profile).bosses).length) {
+    throw new Error('lab: the trophy check needs a fresh chronicle');
+  }
+  await readyBoss('crypt', 5);
+  const foe = lab.spawnFoe(boss, lab.player.pos.clone().add(new THREE.Vector3(-8, 0, 0)), { wave: 5 });
+  await lab.until(() => !foe.invulnerable, 180, 'the Colossus never became targetable');
+  const hero = lab.player;
+  hitEnemy(foe, 1e9, { by: hero, skill: hero.cls.skills[0], unnumbered: true });
+  if (foe.alive || !foe.boss) throw new Error('lab: the lethal hit did not kill the Colossus');
+  const counted = chronicleOf(G.profile).bosses[boss] ?? 0;
+  await toVillage(lab);
+  const saved = loadProfile(G.profile.classId);
+  const bosses = chronicleOf(saved).bosses;
+  const kept = bosses[boss] ?? 0;
+  const problems: string[] = [];
+  if (counted !== 1 || kept !== 1 || Object.keys(bosses).length !== 1) {
+    problems.push('one Colossus kill did not produce exactly one saved Colossus record');
+  }
+
+  if (canary) delete bosses[boss];
+  G.profile = saved;
+  lab.drawing = true;
+  enterRoom('records');
+  await lab.until(() => G.arena.room === 'records', DOOR_FRAMES, 'the house of records never opened');
+  await lab.step(SETTLE);
+  const places = G.arena.rooms?.records.trophyPlaces?.();
+  const place = places?.find((candidate) => candidate.boss === boss);
+  if (!places || !place) throw new Error('lab: the records hall has no Colossus trophy place');
+  const met = metAt(place).met;
+  const otherTrophies = places.filter((candidate) => candidate !== place && metAt(candidate).met === 'trophy').length;
+  if (otherTrophies) problems.push(`${otherTrophies} unearned trophies were shown`);
+  const missing = met !== 'trophy';
+  if (canary ? !missing || met !== 'mount' : missing) {
+    problems.push(canary ? 'the missing earned record did not leave the mount empty' : 'the earned trophy was missing');
+  }
+  const lines = [
+    `Colossus: one lethal hit, ${counted} kill counted, ${kept} kill loaded from the saved profile`,
+    `the hall ray meets the ${met}, ${otherTrophies} other trophies shown`,
+  ];
+  if (canary && met === 'mount') lines.push('canary: caught the mount left empty by the missing record');
+  return { text: lines.join('\n'), problems };
+}
+
 /** `lab trophies`. */
 export async function trophies(lab: Lab, options: TrophiesOptions): Promise<Report> {
+  if (options.earned) return earnedTrophy(lab, options.canary);
   const lines: string[] = [];
   const problems: string[] = [];
   const moments: Pictured[] = [];
