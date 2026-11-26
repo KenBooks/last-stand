@@ -71,10 +71,18 @@ function asked(): void {
   invited = '';
   typed = { for: '', tag: null, code: null };
 }
+/** what was last asked of a room, a join or a host: a join that failed keeps its room's code (`session.code`) in Join's
+ *  field, to try again (from play: a second tab's join failed, "it cleared the room code... it should not") */
+let lastAsked: 'host' | 'join' | '' = '';
 /** a room hosted or joined: before the programs are warm, once they are (a partner's hero is any class) */
-const host = whenWarm(['heroes'], (tag: string, plan: RoomPlan) => { asked(); void hostRoom(tag, plan); }, READYING.coop);
+const host = whenWarm(['heroes'], (tag: string, plan: RoomPlan) => {
+  asked();
+  lastAsked = 'host';
+  void hostRoom(tag, plan);
+}, READYING.coop);
 const join = whenWarm(['heroes'], (code: string, tag: string, password: string) => {
   asked();
+  lastAsked = 'join';
   void joinRoom(code, tag, password);
 }, READYING.coop);
 
@@ -83,10 +91,11 @@ const join = whenWarm(['heroes'], (code: string, tag: string, password: string) 
 type Pane = 'browse' | 'create' | 'friends' | 'hero';
 let pane: Pane = 'browse';
 /** what the dialog's own fields hold, kept through its renders as `typed` is (the browser's filters, the room to
- *  create, a password) */
+ *  create, a password; a room is private until its host picks otherwise: from the owner, "games should be private by
+ *  default, not public") */
 const form = {
   search: '', map: '' as BiomeId | '', notFull: false,
-  kind: 'public' as RoomKind, name: '', password: '', max: COOP.maxPlayers, friends: true,
+  kind: 'private' as RoomKind, name: '', password: '', max: COOP.maxPlayers, friends: true,
   /** the room picked in the list, and the password typed for it or for the room that asked for one */
   picked: '', joinPassword: '',
 };
@@ -512,7 +521,9 @@ function renderOutOfRoom(body: HTMLElement, s: string): void {
     // the player's tabs)
     if (rename && window.matchMedia(SMALL).matches) pane = 'hero';
   }
-  const code = typed.code ?? (invited || (rename || session.passwordAsked ? session.code : ''));
+  // (a failed join keeps its room's code, whatever turned it away: a name tag taken, a password, a full room)
+  const failedJoin = s === 'failed' && (lastAsked === 'join' || rename || session.passwordAsked);
+  const code = typed.code ?? (invited || (failedJoin ? session.code : ''));
   const tagValue = typed.tag ?? (rename ? session.tag : savedTag());
   const typingIn = fieldTypedIn(body);
   const tabs = PANES.map((p) => `<button class="coop-tab coop-tab-${p.pane}${pane === p.pane ? ' on' : ''}" data-pane="${p.pane}" role="tab" aria-selected="${pane === p.pane}">${p.label}${p.pane === 'friends' ? friendsBadge() : ''}</button>`).join('');
