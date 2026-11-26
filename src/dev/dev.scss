@@ -80,7 +80,7 @@
 .dv-part { text-align: left; min-width: 0; input { flex: none; }
   .dv-part-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   // (a part's time from Profile this spot, at the cell's right end)
-  .dv-ms { margin-left: auto; padding-left: 4px; flex: none; color: $ink-dim; font-variant-numeric: tabular-nums; white-space: nowrap; &:empty { display: none; } }
+  .dv-ms { margin-left: auto; padding-left: 4px; flex: none; color: $ink-dim; font-variant-numeric: tabular-nums; white-space: nowrap; &:empty { display: none; } &.faint { opacity: .55; } }
 }
 .dv-mode-label { align-self: center; padding: 3px 16px; border: 1px solid $accent; color: $highlight;
   background: rgba($accent, .12); font: 700 14px $font-display; letter-spacing: 2px; text-transform: uppercase; }

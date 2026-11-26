@@ -166,7 +166,9 @@ function shownParts(): ScenePart[] {
     shownPart('what\'s cut out: leaves, grass', shownWhere(cutOut)),
     shownPart('what\'s blended: smoke, glows, effects', shownWhere(blended)),
     shownPart('the fires\' flames', shownWhere((object) => Boolean(object.userData.fireFlames))),
-    // (the arrows left standing where they came down, fx/stuckArrows.ts: two instanced meshes, up to a thousand)
-    shownPart('the spent arrows', shownWhere((object) => Boolean(object.userData.spentArrows))),
+    // (the arrows left standing where they came down, fx/stuckArrows.ts: two instanced meshes, up to a thousand; with
+    // none down they stand drawing nothing, and the part holds none of them)
+    shownPart('the spent arrows', shownWhere((object) => Boolean(object.userData.spentArrows)
+      && (object as THREE.InstancedMesh).count > 0)),
   ];
 }

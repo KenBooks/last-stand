@@ -15,7 +15,7 @@ import { ARENA } from '../data/balance';
 import { spawnEnemy } from '../entities/spawner';
 import { basesFor } from '../loot/items';
 import { observePerfHud, perfHudStats, setPerfHudSize, perfHudSize, type PerfHudSize } from '../ui/perfHud';
-import { frameParts, type ScenePart } from '../perf/sceneParts';
+import type { ScenePart } from '../perf/sceneParts';
 import { profile, ProfileCancelled, type ProfileOptions } from '../perf/profiler';
 import { freeCamOn, freeCamSpeed, freeCamLabels, freeCamToHero, holdFreeCam, setFreeCamLabels, speedFreeCam, turnFreeCam } from './freeCam';
 import { classOf, emptyStash, slotsOf, stashEveryBase, stashNew, wearKit, wearNew, weaponStyles } from './gear';
@@ -23,7 +23,7 @@ import { cheats, flyFree, setFrozen, stepFrozen, time, type DevHooks } from './i
 import { initDevHelp } from './help';
 import { changeDevBiome } from './biome';
 import { frameCounts } from './frameCounts';
-import { setMarkedShown, type Mark } from './marked';
+import { markOf, panelParts, partKey, partLabel, shownCost } from './panelParts';
 import type { RarityId, Slot } from '../types';
 import './dev.scss';
 
@@ -35,9 +35,6 @@ let shown = '';
 const SPEEDS = [0.1, 0.25, 0.5, 1, 2];
 const COUNTS = [1, 5, 20];
 const PERF_SIZES: PerfHudSize[] = ['off', 'mini', 'full'];
-/** the scene's parts the panel can take out: the profiler's (`perf/sceneParts.ts`) but the plain colour's, which
- *  compiles programs of its own (its lit shading against a plain colour) */
-const PLAIN = 'the lit shading, against a plain colour';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string): T => panel.querySelector<T>(sel)!;
 const options = (list: [string, string][]): string => list.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
@@ -304,36 +301,10 @@ function refill(): void {
 /** the parts taken out now, each as it was taken (its objects then), to be put back the same */
 const taken = new Map<string, ScenePart>();
 
-/** A part's name without the count it's given (`the particles (3)`), which changes as the scene does. */
-const partKey = (name: string): string => name.replace(/ \(\d+\)$/, '');
-
-/** the profiler's part of what's cut out, which the panel has as Trees, Leaves and Grass in its place: each by a mark
- *  of its own (`marked.ts`: the grass isn't cut out, and a tree's bark is no leaf), hidden by layer, as a culled
- *  mesh's `visible` is the culling's own */
-const CUT_OUT = "what's cut out: leaves, grass";
-/** the marked parts, by their keys */
-const MARKED: [string, Mark][] = [['the trees', 'tree'], ['the leaves', 'leaves'], ['the grass', 'grass']];
-const markOf = (key: string): Mark | undefined => MARKED.find(([name]) => name === key)?.[1];
-
-/** The parts the panel takes out and times, in its order: the profiler's, the trees, leaves and grass in the place of
- *  what's cut out. */
-function panelParts(): ScenePart[] {
-  const marked = MARKED.map(([name, mark]): ScenePart => ({ name, change: (on) => setMarkedShown(mark, on) }));
-  return frameParts()
-    .filter((p) => partKey(p.name) !== PLAIN && !p.untimed)
-    .flatMap((p) => (partKey(p.name) === CUT_OUT ? marked : [p]));
-}
-
+/** The checkboxes of the panel's parts (`panelParts.ts`: a short list of its own, not the profiler's every switch). */
 function renderParts(): void {
-  const keys = panelParts().map((p) => partKey(p.name));
-  const labels: Record<string, string> = {
-    "half the scene's pixels": 'Full resolution', 'the point lights where they reach': 'Point lights',
-    'drawing the shadow maps': 'Shadow maps', 'the particles': 'Particles', 'the hero': 'Hero',
-    'the trees': 'Trees', 'the leaves': 'Leaves', 'the grass': 'Grass',
-    "what's blended: smoke, glows, effects": 'Smoke & effects', "the fires' flames": 'Fire',
-    'the spent arrows': 'Arrows on ground',
-  };
-  $('.dv-parts').innerHTML = keys.map((k) => `<label class="dv-part" title="${k}"><input type="checkbox" data-part="${k}" checked><span class="dv-part-name">${labels[k] ?? k}</span><span class="dv-ms" data-ms="${k}"></span></label>`).join('');
+  const keys = panelParts().map((p) => p.name);
+  $('.dv-parts').innerHTML = keys.map((k) => `<label class="dv-part" title="${k}"><input type="checkbox" data-part="${k}" checked><span class="dv-part-name">${partLabel(k)}</span><span class="dv-ms" data-ms="${k}"></span></label>`).join('');
 }
 
 function togglePart(key: string): void {
@@ -356,6 +327,8 @@ function putPartsBack(all = false): void {
 }
 
 // --- each part timed (Profile this spot) ---------------------------------------------------------------------------
+/** what a part with nothing of it here shows in place of a time */
+const NONE_HERE = { text: 'none', title: 'Nothing of it in the scene here: not timed', faint: true };
 /** whether the panel's profile is running, and whether it was asked to stop (its button again) */
 let profiling = false;
 let stopProfiling = false;
@@ -380,16 +353,23 @@ async function profileSpot(): Promise<void> {
   note.textContent = '';
   refreshPanel();
   try {
+    // (a part with nothing of it here isn't timed: it'd read the GPU's wander as its cost)
+    const parts = panelParts();
+    const empty = new Set(parts.filter((part) => part.empty).map((part) => part.name));
     const found = await profile({
-      ...panelProfile, parts: panelParts(), cancelled: () => stopProfiling,
+      ...panelProfile, parts: parts.filter((part) => !part.empty), cancelled: () => stopProfiling,
       onProgress: (at) => { button.textContent = `Stop (${Math.floor((100 * at.done) / at.total)}%)`; },
     });
-    const takes = new Map(found.parts.map((cost) => [partKey(cost.name), cost.on - cost.off]));
+    const costs = new Map(found.parts.map((cost) => [partKey(cost.name), cost]));
     shownMs.forEach((ms) => {
-      const part = takes.get(ms.dataset.ms!);
-      ms.textContent = part === undefined ? '' : `${part.toFixed(1)} ms`;
+      const cost = costs.get(ms.dataset.ms!);
+      const shown = cost ? shownCost(cost) : empty.has(ms.dataset.ms!) ? NONE_HERE : null;
+      ms.textContent = shown?.text ?? '';
+      ms.title = shown?.title ?? '';
+      ms.classList.toggle('faint', Boolean(shown?.faint));
     });
-    note.textContent = `The frame here: ${found.frame.toFixed(1)} ms drawn. Beside each part, the frame with it less without.`;
+    note.textContent = `The frame here: ${found.frame.toFixed(1)} ms drawn. Beside each part, the frame with it less `
+      + 'without; ≈0 where it can\'t be told apart from nothing (its ± in its tooltip).';
   } catch (error) {
     if (!(error instanceof ProfileCancelled)) throw error;
     note.textContent = 'Profiling stopped.';
