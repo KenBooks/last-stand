@@ -214,6 +214,15 @@ body.touch #minimap { pointer-events: auto; touch-action: none; -webkit-touch-ca
 /* what each choice stakes, a small line under each button's label (#347): the buttons' padding gives the line its
    room, so they stay main's height and the choice main's size */
 #decision .dc-buttons .btn { display: inline-flex; align-items: center; justify-content: center; }
+// (Continue on its way to the host: its key cap a spinner, the cap's box kept so nothing moves, the spinner on a
+// layer of its own, its transform alone moving)
+#decision .cont.sending .k { position: relative; color: transparent; }
+// (the button is dimmed meanwhile, as one pressed is: the arc drawn bright and thick enough to read through it)
+#decision .cont.sending .k::after { content: ''; position: absolute; left: 50%; top: 50%; width: 9px; height: 9px;
+  margin: -6.5px 0 0 -6.5px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .12);
+  border-top-color: #fff; border-right-color: #fff; will-change: transform; animation: dc-spin .9s linear infinite; }
+@keyframes dc-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { #decision .cont.sending .k::after { animation-duration: 3s; } }
 #decision .dc-label { display: inline-flex; flex-direction: column; align-items: center; }
 #decision .stake { font-family: var(--font-body); font-weight: normal; font-size: 10.5px; line-height: 1.15; letter-spacing: .3px; color: var(--ink-dim); }
 #decision .stake:empty { display: none; }

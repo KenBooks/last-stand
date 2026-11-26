@@ -872,7 +872,8 @@ export async function runCoop(side, options) {
     }
     if (banks) {
       // (the choice after a wave, every player banking: node/coopBanks.mjs)
-      problems.push(...await everyoneBanks(pair, callPage, lines, { tags: PARTY_TAGS.slice(0, party), canary }));
+      const banking = { tags: PARTY_TAGS.slice(0, party), canary, pictures };
+      problems.push(...await everyoneBanks(pair, callPage, lines, banking));
       return { text: lines.join('\n'), problems };
     }
     if (scenarios?.length === 1 && scenarios[0] === 'ends') {

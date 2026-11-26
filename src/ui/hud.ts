@@ -214,9 +214,13 @@ export function showDecision(): void {
     const next = r.training ? r.wave : r.wave + 1;
     // co-op: the next wave waits for everyone staying
     const waiting = waitingForParty();
+    // (a guest's Continue on its way to the host, or the next boss readying: its key cap a spinner till it's counted,
+    // the labels as they were, and the button back if it never is; from the owner: "replace key with spinner while
+    // sending", as its key does nothing meanwhile)
+    $('.cont', box).classList.toggle('sending', !!r.sending);
     $('.cont-label', box).textContent = waiting ? 'Waiting for the others…'
       : r.training ? `Repeat wave ${r.wave}` : bossOfWave(G.arena.biome, next) ? `Face wave ${next} (${bossOfWave(G.arena.biome, next)!.short})` : `Continue to wave ${next}`;
-    $<HTMLButtonElement>('.cont', box).disabled = waiting;
+    $<HTMLButtonElement>('.cont', box).disabled = waiting || !!r.sending;
     const party = partyDecision();
     $('.dc-party', box).textContent = party;
     $('.dc-party', box).classList.toggle('hidden', !party);

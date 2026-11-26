@@ -834,12 +834,27 @@ function chooseBank() {
 
 function chooseContinue() {
   const r = G.run;
-  if (!r || r.phase !== 'cleared' || !G.player.active || r.votes.has(G.player.slot)) return;
+  if (!r || r.phase !== 'cleared' || !G.player.active || r.votes.has(G.player.slot) || r.sending) return;
   // (into a boss wave: its boss loaded and warmed first, under the fight's bar, game/bossReady.ts)
   const next = r.training ? r.wave : r.wave + 1;
-  if (!bossReady(G.arena.biome, next)) { void readyNextBoss(next).then(chooseContinue); return; }
+  // (the button spins meanwhile; its readying failed: said, the button back, and the next press readies it again)
+  if (!bossReady(G.arena.biome, next)) {
+    r.sending = 'boss';
+    showDecision();
+    const settled = () => { r.sending = null; };
+    const readied = () => { settled(); chooseContinue(); };
+    void readyNextBoss(next).then(readied, (error) => { settled(); bossNotReady(error); });
+    return;
+  }
   if (isGuest()) sendControl({ t: 'vote' });
   continueRun();
+}
+
+/** The next wave's boss couldn't be readied (its code didn't load): Continue said not taken, to be pressed again. */
+function bossNotReady(error: unknown): void {
+  console.error('readying the next boss failed', error);
+  if (G.run?.phase === 'cleared' && G.player.active) showDecision();
+  banner('The next wave isn\'t ready', 'Press Continue again');
 }
 
 /** The lab's boot (window.__dev): every need warmed at once, and every boss with them (readied at its wave in play). */
