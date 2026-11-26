@@ -30,6 +30,7 @@ export default {
         'walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'staffs', 'rush', 'strike', 'throws', 'wave', 'ping',
         'chat', 'afk', 'colours', 'ghosts', 'duel', 'duel-damage', 'ends', 'houses', 'seats', 'trade', 'looks', 'wall',
         'wall-touch',
+        'banks',
         'belt', 'choir',
         'rootmother', 'rootcage', 'rootburrow', 'stag', 'tavern', 'tavern-recovery', 'hidden-host',
       ],
@@ -41,7 +42,8 @@ export default {
         + 'alike on both screens), belt (the '
         + 'Ossuary Twins\' belt skulls); '
         + 'ends alone: the ways a run ends that left a '
-        + 'player apart from the party; houses alone: a partner gone into a village house shown to the host outside '
+        + 'player apart from the party; banks alone (--party 3): every player banking after a wave, in turns and '
+        + 'at once, every game back in the lobby by itself; houses alone: a partner gone into a village house shown to the host outside '
         + '(a marker over its door, the minimap, the map); seats alone: a log a partner sits on not outlined for the '
         + 'host to sit on, a free one and the log once he\'s up outlined; wall-touch alone (a ranger): the host\'s '
         + 'Hedgeward in the village standing as he walks into it, broken on both games as the guest walks into it; '

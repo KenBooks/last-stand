@@ -24,6 +24,7 @@ import { sfx } from '../core/audio';
 
 import { newItemId } from '../loot/items';
 import { creditRaise } from '../game/stats';
+import { netLog } from './netlog';
 import { role } from './role';
 import { Playout, Smoother, Track, type Pose } from './timeline';
 import { clearEnemies, type Enemy } from '../entities/enemy';
@@ -96,9 +97,17 @@ const ASK_AGAIN_MS = 1000;
  *  standing on the host), and how many make it a ghost: a foe the host no longer has, gone here too (`dropGhosts`) */
 const unseen = new Map<number, number>();
 const GHOST_SNAPSHOTS = 20;
-/** guest: where it asks the host about foes it never had word of (set by the session) */
-let askFoes: ((ids: number[]) => void) | null = null;
-export function setFoeAsk(fn: typeof askFoes): void { askFoes = fn; }
+/** guest: its way to the host's game (set by the session): the foes it never had word of, its leaving said again */
+let toHost: ((m: Record<string, unknown>) => void) | null = null;
+export function setToHost(fn: typeof toHost): void { toHost = fn; }
+/**
+ * Guest: its own leaving of the run (Bank, or Leave the run) that the host hasn't said back yet, and when it was last
+ * sent (ms). It's sent again every `LEAVE_AGAIN_MS` until the host's word of it comes: its game has already banked its
+ * spoils and is watching, and a word lost on the way left the host counting it in the run, the others' Bank never
+ * ending it (from play, a party of three at wave 38: "everyone pressed bank, it instead went into spectate mode").
+ */
+let leaving: { t: 'bank' | 'abandon'; at: number } | null = null;
+const LEAVE_AGAIN_MS = 1000;
 
 /** A foe's spawn report, made from the foe as it stands (the host's: as it spawns, and for a guest that asks). */
 const spawnOf = (e: Enemy): SpawnEvent => ({
@@ -116,7 +125,13 @@ export function initSync(): void {
   runHooks.cleared = () => push({ k: 'clear' });
   runHooks.nextWave = () => push({ k: 'next', w: G.run!.wave });
   runHooks.loot = (p, item) => push({ k: 'loot', s: p.slot, item });
-  runHooks.out = (p, o) => push({ k: 'out', s: p.slot, o });
+  runHooks.out = (p, o) => {
+    push({ k: 'out', s: p.slot, o });
+    // (a guest's own leaving, sent by main.ts as it chose: said again until the host's word of it comes)
+    if (p.local && role.current === 'guest' && !G.run?.duel) {
+      leaving = { t: o === 'banked' ? 'bank' : 'abandon', at: performance.now() };
+    }
+  };
   runHooks.down = (p) => push({ k: 'down', s: p.slot });
   runHooks.raised = (p) => push({ k: 'raise', s: p.slot });
   runHooks.over = () => push({ k: 'over' });
@@ -136,6 +151,16 @@ function forget(): void {
   copied.clear();
   asked.clear();
   unseen.clear();
+  leaving = null;
+}
+
+/** Guest, each frame: its leaving of the run said to the host again while the host hasn't said it back. */
+function leaveAgain(): void {
+  if (!leaving || G.run?.phase === 'over') return;
+  const now = performance.now();
+  if (now - leaving.at < LEAVE_AGAIN_MS) return;
+  leaving.at = now;
+  toHost?.({ t: leaving.t });
 }
 
 /** Host: the spawn reports of the foes a guest asked about, those still standing (`foesAsked`). */
@@ -174,7 +199,7 @@ function askAboutUnknown(rows: (number | string)[][]): void {
     && now - (asked.get(id) ?? -Infinity) > ASK_AGAIN_MS);
   if (!unknown.length) return;
   for (const id of unknown) asked.set(id, now);
-  askFoes?.(unknown);
+  toHost?.({ t: 'foes?', ids: unknown });
 }
 
 /** Host, every frame: the events since the last frame, and the snapshot when one is due. */
@@ -273,6 +298,7 @@ export function onWorld(m: WorldMessage): void {
 export function playWorld(at: number, dt: number): void {
   if (role.current !== 'guest' || G.mode !== 'run' || !G.run || Number.isNaN(at)) return;
   shownAt = at;
+  leaveAgain();
   for (const m of world.due(at)) {
     if (m.x) for (const ev of m.x) apply(ev);
     if (m.s && G.run) applySnapshot(m.s);
@@ -328,7 +354,7 @@ function apply(ev: WorldEvent): void {
     case 'out': {
       const p = bySlot(ev.s);
       if (!p) return;
-      if (p.local) { if (ev.o === 'dead' && p.alive) p.die(); localOut(ev.o); return; }
+      if (p.local) { leaving = null; if (ev.o === 'dead' && p.alive) p.die(); localOut(ev.o); return; }
       if (p.out) return;
       if (ev.o === 'dead') { if (p.alive) p.die(); p.bleedOut(); }
       p.out = ev.o;
@@ -339,7 +365,7 @@ function apply(ev: WorldEvent): void {
     // left saw "You are down" through the rest of the run)
     case 'down': { const p = bySlot(ev.s); if (p && !p.out) { if (p.alive) p.die(); p.goDown(); } return; }
     case 'raise': { const p = bySlot(ev.s); if (p) { p.raise(); creditRaise(p); } return; }
-    case 'over': endRun(); return;
+    case 'over': leaving = null; endRun(); return;
   }
 }
 
@@ -415,10 +441,26 @@ function applySnapshot(s: Snapshot): void {
 }
 
 // --- host ---------------------------------------------------------------------------------------
-/** Host: a guest's choice in the run. */
+/**
+ * Host: a guest's choice in the run. Its leaving (Bank, Leave the run) is its own game's: that game has banked its
+ * spoils (or let them go) and watches, so it's taken whenever the guest is still in the run here, whatever this game
+ * held of him meanwhile (a Bank refused here for a guest it showed down or away left the party waiting on him for
+ * good). One that comes again (the guest never heard our word of it) is said back again.
+ */
 export function onGuestControl(p: Player, m: Record<string, unknown>): void {
   if (!G.run || G.mode !== 'run') return;
   if (m.t === 'vote' && G.run.phase === 'cleared' && p.active) vote(p);
-  else if (m.t === 'bank' && G.run.phase === 'cleared' && p.active) playerOut(p, 'banked');
-  else if (m.t === 'abandon') playerOut(p, 'dead');
+  else if (m.t === 'bank' || m.t === 'abandon') guestLeaves(p, m.t === 'bank' ? 'banked' : 'dead');
+}
+
+/** Host: a guest has left the run on its own game: out here too, or, out already, its word said back again. */
+function guestLeaves(p: Player, kind: 'banked' | 'dead'): void {
+  const r = G.run!;
+  // (a duel's watchers are out as a banked player is, and a Bank has no place in it)
+  if (r.phase === 'over' || (r.duel && kind === 'banked')) return;
+  if (p.out) { if (!r.duel) push({ k: 'out', s: p.slot, o: p.out }); return; }
+  if (kind === 'banked' && (r.phase !== 'cleared' || !p.active)) {
+    netLog(`slot ${p.slot}'s Bank taken in ${r.phase}${p.active ? '' : ` (shown ${p.away ? 'away' : 'down'} here)`}`);
+  }
+  playerOut(p, kind);
 }

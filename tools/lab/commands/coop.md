@@ -209,6 +209,15 @@ proof asked for when the lobby's turn was reported again, 2026-11-15, the report
 again over its lobby and pads the watching bar a window tall: each must be caught. Each lobby's middle drag says what
 lies over its canvas there (a middle press there turns nothing): a party of 4's lobby has what a pair's has.
 
+`--scenarios banks` (alone, best with `--party 3`; `node/coopBanks.mjs`, `page/coopBanks.ts`): the choice after a
+wave as a whole party makes it, every player banking (from play, three at wave 38: "everyone pressed bank, it
+instead went into spectate mode"). Each round is a run of its own cleared to the choice: all press B in one frame;
+the host first, then each guest half a second apart; the guests first, the host last; all at once after a wave
+continued (a count left from the wave before); and all at once with the last guest's first Bank lost on its way to
+the host (main's host counted him in the run for good, every game left waiting). Every game must go back to the
+lobby by itself; one that doesn't is said with what each game shows (its own player, the partners it shows
+banked). `--canary` loses every guest's every Bank on the way to the host, which must be caught. About 70 s.
+
 `--scenarios ends` (alone, a pair's; `node/coopEnds.mjs`, `page/coopEnds.ts`): the ways a run ends that
 left a player apart from the party. The host leaves the run, closes his summary to watch the guest play on, and opens
 the pause menu to leave again: his game runs the guest's fight, so it must still be in the run 4 s later (main offered

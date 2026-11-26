@@ -18,7 +18,7 @@ import { mine, freshNumbers, type RunNumbers } from '../game/stats';
 import { readying, role } from './role';
 import { ownOffset, setHostOffset } from '../game/clock';
 import { clearPendingRoom, joinInRoom } from '../game/rooms';
-import { hostSync, stopSync, onWorld, onGuestControl, sendWorld, playWorld, onGuestHits, takeHits, foesAsked, foesTold, setFoeAsk, type HitReport, type SpawnEvent, type WorldMessage } from './sync';
+import { hostSync, stopSync, onWorld, onGuestControl, sendWorld, playWorld, onGuestHits, takeHits, foesAsked, foesTold, setToHost, type HitReport, type SpawnEvent, type WorldMessage } from './sync';
 import { Playout, Smoother, Timeline, Track, type Pose } from './timeline';
 import { portraitOf, receivePortrait } from './portraits';
 import { cleanTag, sameTag, saveTag, tagProblem } from './nameTag';
@@ -211,7 +211,7 @@ function receiveColours(m: Record<string, unknown>): void {
 
 export function initSession(h: SessionHooks): void {
   hooks = h;
-  setFoeAsk((ids) => { if (session.hostId) send('ctl', { t: 'foes?', ids }, session.hostId); });
+  setToHost((m) => { if (session.hostId) send('ctl', m, session.hostId); });
   setActionSink((a) => { if (link) actions.push(a); });
   window.addEventListener('pagehide', () => leaveRoom());
 }
