@@ -48,6 +48,16 @@ of the campfire's logs; the host, stood by it, points at it as a cursor over its
 for him while the guest's game reports him sat, a free log beside it must be, and once the guest is up his log must be
 again. `--canary` clears the host's copy of the guest's sit just before it points, which must read as the log free.
 
+`coop --class ranger --scenarios wall-touch` runs alone, in the village with no run (`node/coopWallTouch.mjs`,
+`page/coopWallTouch.ts`): a ranger's Hedgeward broken by a partner's touch (`touchedByPartner` in
+`combat/skills/hedgeward.ts`, `net/wardTouch.ts`; from the owner, "its currently possible to troll other players in
+coop by denying them entry with ranger's vines skill that cannot be destroyed"). The host raises a wall in the
+training yard between himself and the guest and walks into it himself: it must stand on both games. He steps away,
+and the guest walks at it from the other side: it must break on his game and on the host's, and he must come through.
+On main the guest is held back 0.69 m from its line for 300 frames, the wall standing on both; here he is through in
+60 frames, none standing on either. `--canary` has the guest's game break its copy without telling the others, which
+must read as the wall still standing on the host's.
+
 `coop --scenarios tavern` runs alone, in the village with no run (`node/coopTavern.mjs`, `page/coopTavern.ts`): the
 tavern's keeper and his mugs as two games share them (`src/world/tavern.ts`, `src/game/mugs.ts`, `tv`/`tv?` in
 `src/net/session.ts`). The host's game runs the keeper and rules the mugs; a guest's asks of it and takes its word.

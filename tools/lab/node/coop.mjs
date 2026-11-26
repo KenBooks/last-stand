@@ -16,6 +16,7 @@ import { firstRunsEnd, floorInHall, lobbyTurns, watchedRun } from './coopEnd.mjs
 import { partnerInHouse } from './coopHouses.mjs';
 import { choirTogether } from './coopChoir.mjs';
 import { partnerOnSeat } from './coopSeats.mjs';
+import { partnerThroughWall } from './coopWallTouch.mjs';
 import { drinkTogether, tavernRecovery } from './coopTavern.mjs';
 import { fightDuel } from './coopDuel.mjs';
 import { fightPartyDuel } from './coopDuelParty.mjs';
@@ -750,6 +751,7 @@ export async function runCoop(side, options) {
   }
   if (scenarios?.includes('houses') && scenarios.length !== 1) throw labError('coop: houses runs alone');
   if (scenarios?.includes('seats') && scenarios.length !== 1) throw labError('coop: seats runs alone');
+  if (scenarios?.includes('wall-touch') && scenarios.length !== 1) throw labError('coop: wall-touch runs alone');
   if (scenarios?.includes('choir') && scenarios.length !== 1) throw labError('coop: choir runs alone, in the crypt');
   if (hiddenHost && (scenarios.length !== 1 || party !== 2)) {
     throw labError('coop: hidden-host runs alone, on a pair');
@@ -805,6 +807,13 @@ export async function runCoop(side, options) {
       // (in the village, no run: a seat a partner sits on, node/coopSeats.mjs)
       const { problems } = await openTogether(pair, { ping, jitter }, lines, false);
       problems.push(...await partnerOnSeat(pair, callPage, lines, { canary, pictures }));
+      return { text: lines.join('\n'), problems };
+    }
+    if (scenarios?.length === 1 && scenarios[0] === 'wall-touch') {
+      // (in the village, no run: a ranger's wall broken by a partner's touch, node/coopWallTouch.mjs)
+      if (party > 2) throw labError('coop: wall-touch is for a pair (no --party)');
+      const { problems } = await openTogether(pair, { ping, jitter }, lines, false);
+      problems.push(...await partnerThroughWall(pair, callPage, lines, { canary, pictures }));
       return { text: lines.join('\n'), problems };
     }
     if (scenarios?.length === 1 && scenarios[0] === 'tavern') {

@@ -29,6 +29,7 @@ export default {
       choices: [
         'walk', 'foes', 'shoot', 'evade', 'dodge', 'down', 'blink', 'staffs', 'rush', 'strike', 'throws', 'wave', 'ping',
         'chat', 'afk', 'colours', 'ghosts', 'duel', 'duel-damage', 'ends', 'houses', 'seats', 'trade', 'looks', 'wall',
+        'wall-touch',
         'belt', 'choir',
         'rootmother', 'rootcage', 'rootburrow', 'stag', 'tavern', 'tavern-recovery', 'hidden-host',
       ],
@@ -42,7 +43,9 @@ export default {
         + 'ends alone: the ways a run ends that left a '
         + 'player apart from the party; houses alone: a partner gone into a village house shown to the host outside '
         + '(a marker over its door, the minimap, the map); seats alone: a log a partner sits on not outlined for the '
-        + 'host to sit on, a free one and the log once he\'s up outlined; choir alone: the Ossuary Cantor\'s choir\'s '
+        + 'host to sit on, a free one and the log once he\'s up outlined; wall-touch alone (a ranger): the host\'s '
+        + 'Hedgeward in the village standing as he walks into it, broken on both games as the guest walks into it; '
+        + 'choir alone: the Ossuary Cantor\'s choir\'s '
         + 'ring and rising graves on both screens alike (the ring\'s place and radius by its age, each stone\'s spot), '
         + 'in the crypt; duel-damage alone: fixed hits verify duel damage in both directions; '
         + 'hidden-host alone: a wave started on worker ticks while the host is hidden; '

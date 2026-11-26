@@ -57,6 +57,8 @@ export {
 } from './coopHouses';
 export { coopChoirCast, coopChoirSamples, coopChoirSetup, coopChoirSpawn } from './coopChoir';
 export { coopPointAtSeat, coopSeatsSeen, coopSitOn, coopStandBySeat, coopStandUp } from './coopSeats';
+import { wallTouchInput } from './coopWallTouch';
+export { coopWallTouchKey, coopWallTouchSeen, coopWallTouchStand, coopWallTouchWalk } from './coopWallTouch';
 export {
   coopTavernAsk, coopTavernDisconnect, coopTavernDrink, coopTavernLeave, coopTavernLedger, coopTavernMug,
   coopTavernMute, coopTavernPutDown, coopTavernSeen, coopTavernStand, coopTavernStandAt, coopTavernTake,
@@ -1372,6 +1374,8 @@ export async function coopFrames(lab: Lab, turn: CoopTurn): Promise<CoopTurnResu
     if (duel) return duel;
     const lobby = lobbyCastInput(play.frame + frame);
     if (lobby) return lobby;
+    const touch = wallTouchInput();
+    if (touch) return touch;
     // (the party's other heroes stand where they were put)
     if (!scenario || play.extra !== null) return {};
     const at = play.frame + frame - SETTLE_FRAMES;
