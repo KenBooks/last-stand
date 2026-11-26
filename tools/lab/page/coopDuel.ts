@@ -7,6 +7,8 @@ import { G } from '../../../src/state';
 import { VILLAGE_OBJECTS } from '../../../src/data/village';
 import { showVillageCard } from '../../../src/ui/villageCard';
 import { nameOf } from '../../../src/ui/coop';
+import * as balance from '../../../src/data/balance';
+import { mine } from '../../../src/game/stats';
 import type { Frame, Lab } from './lab';
 
 /** the game's duel, where the tree has one (an older tree has none) */
@@ -291,11 +293,13 @@ const STRIKE_HELD = 3;
  */
 export function coopDuelRound(lab: Lab, set: {
   role: 'host' | 'guest'; strikes: boolean; weak: boolean; heldWhole?: boolean;
+  faceAway?: boolean;
   /** a party's: where this hero stands and the spot he faces, in place of the pair's two spots */
   spot?: [number, number]; faces?: [number, number];
 }): void {
   const [x, z] = set.spot ?? SPOTS[set.role], [rx, rz] = set.faces ?? SPOTS[set.role === 'host' ? 'guest' : 'host'];
-  G.player.place(new THREE.Vector3(x, 0, z), Math.atan2(rx - x, rz - z));
+  const facing = Math.atan2(rx - x, rz - z) + (set.faceAway ? Math.PI : 0);
+  G.player.place(new THREE.Vector3(x, 0, z), facing);
   if (set.weak) G.player.life = LITTLE_LIFE;
   play.strikes = set.strikes;
   play.heldWhole = !!set.heldWhole;
@@ -304,6 +308,30 @@ export function coopDuelRound(lab: Lab, set: {
 
 function holdWhole(): void {
   if (play.heldWhole && duels?.duelOn()) G.player.life = G.player.stats.maxLife;
+}
+
+/** A fixed, non-critical arcane hit on the actual rival. The usual duel transport carries the hit. */
+export function coopDuelDeal(_lab: Lab, set: { amount: number; oldRate?: boolean }): void {
+  const rival = G.enemies.find((foe) => foe.standIn && foe.alive && !foe.invulnerable);
+  if (duels?.duelOn()?.phase !== 'fight' || !rival) throw new Error('lab: no targetable rival in the duel');
+  const { PVP } = balance;
+  const rate = PVP.damage;
+  try {
+    if (set.oldRate) PVP.damage = 0.25;
+    rival.takeDamage(set.amount, { type: 'arcane', by: G.player });
+  } finally {
+    PVP.damage = rate;
+  }
+}
+
+/** Read damage applied on this page after mitigation. The total excludes passive health regeneration. */
+export function coopDuelTaken() {
+  const hero = G.player;
+  const shieldCanBlock = hero.gear.shield && hero.stats.blockAmount > 0;
+  if (!hero.gearless || hero.ward || hero.frenzy || shieldCanBlock) {
+    throw new Error('lab: unexpected mitigation in the gearless duel');
+  }
+  return { taken: mine.taken, maxLife: hero.stats.maxLife, resist: hero.stats.resist, alive: hero.alive };
 }
 
 /** This game's hero's input in a duel's round (null: no duel being fought, or he only stands): a tap of his first

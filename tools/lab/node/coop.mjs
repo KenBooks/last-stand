@@ -740,10 +740,14 @@ const SLOW_GUEST_CANARY = 'the host\'s wave came while the guest readied the run
 export async function runCoop(side, options) {
   const { scenarios, ping = DEFAULT_PING, jitter = DEFAULT_JITTER, pictures = false, party = 2, canary } = options;
   const hiddenHost = scenarios?.includes('hidden-host');
+  const duelDamage = scenarios?.includes('duel-damage');
   if (scenarios?.includes('colours') && scenarios.length !== 1) {
     throw labError('coop: colours runs alone, without combat');
   }
   if (scenarios?.includes('duel') && scenarios.length !== 1) throw labError('coop: duel runs alone');
+  if (duelDamage && (scenarios.length !== 1 || party !== 2)) {
+    throw labError('coop: duel-damage runs alone, on a pair');
+  }
   if (scenarios?.includes('houses') && scenarios.length !== 1) throw labError('coop: houses runs alone');
   if (scenarios?.includes('seats') && scenarios.length !== 1) throw labError('coop: seats runs alone');
   if (scenarios?.includes('choir') && scenarios.length !== 1) throw labError('coop: choir runs alone, in the crypt');
@@ -780,12 +784,12 @@ export async function runCoop(side, options) {
       problems.push(...await tradeTogether(pair, callPage, lines, { canary, pictures }));
       return { text: lines.join('\n'), problems };
     }
-    if (scenarios?.length === 1 && scenarios[0] === 'duel') {
+    if (duelDamage || scenarios?.[0] === 'duel') {
       // (a duel is a run of its own, set up at the weapons rack: node/coopDuel.mjs)
       const { problems } = await openTogether(pair, { ping, jitter }, lines, false);
       // (a party's: three games, one of them watching a 1 v 1; four, a 2 v 2)
       if (party > 2) problems.push(...await fightPartyDuel(pair, callPage, lines, { pictures }));
-      else problems.push(...await fightDuel(pair, callPage, lines, { canary, pictures }));
+      else problems.push(...await fightDuel(pair, callPage, lines, { canary, pictures, damageOnly: duelDamage }));
       return { text: lines.join('\n'), problems };
     }
     if (scenarios?.length === 1 && scenarios[0] === 'looks') {
