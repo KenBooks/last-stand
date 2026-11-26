@@ -23,9 +23,10 @@ const AIM_AHEAD = 7;
 const HELD_SECONDS = 7;
 /** how far a ramp read may be off what it should be */
 const RAMP_SLACK = 0.04;
-/** what the owner asked of it, held here rather than read off its data, which the canary changes: its ramp's most, and
- *  each healer down a chain adding a tenth ("10% healing bonus per chain link") */
-const ASKED = { most: 2, perLink: 0.1 };
+/** what the owner asked of it, held here rather than read off its data, which the canary changes: its ramp's pace and
+ *  most ("make it plus 25% a sec until 2x"), and each healer down a chain adding a tenth ("10% healing bonus per
+ *  chain link") */
+const ASKED = { perSecond: 0.25, most: 2, perLink: 0.1 };
 /** the beam's state as the skill keeps it, whatever it holds */
 type ThreadState = ReturnType<typeof lifethread.start>;
 
@@ -128,7 +129,7 @@ async function heldOnHimself(lab: Lab, def: SkillDef, found: Found): Promise<voi
   const at = (seconds: number): number => flowing[Math.min(flowing.length - 1, Math.round(seconds / frameSeconds))];
   const most = Math.max(...flowing);
   const mid = 3;
-  const midShould = Math.min(ASKED.most, 1 + (def.ramp?.perSecond ?? 0) * mid);
+  const midShould = Math.min(ASKED.most, 1 + ASKED.perSecond * mid);
   found.lines.push(`  beam on himself: ${base.toFixed(1)} Health a second unramped `
     + `(${def.heal} at +${Math.round(hero.stats.damagePct)}% all damage and `
     + `${((def.healPct ?? 0) * 100).toFixed(1)}% of his ${Math.round(hero.stats.maxLife)})`);
@@ -378,7 +379,7 @@ export async function thread(lab: Lab, setUp: () => Promise<void>): Promise<Foun
 /** The faults the canary plants on the beam's data: no most, no end to its grace, no bonus down a chain. */
 function plantFaults(def: SkillDef): () => void {
   const { ramp, passBonus } = def;
-  def.ramp = { perSecond: ramp?.perSecond ?? 0.2, most: 3, grace: Infinity };
+  def.ramp = { perSecond: ramp?.perSecond ?? ASKED.perSecond, most: 3, grace: Infinity };
   def.passBonus = 0;
   return () => {
     def.ramp = ramp;

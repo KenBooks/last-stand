@@ -713,7 +713,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   choice is asked with stand-in allies in the room for a call (`threadTarget`: one in the cone, the nearer the aim
   of two, one 40 degrees off, one past his reach, a fallen one, none); held on the hero himself 7 s with his
   Health kept at 30%, every frame must heal, its first at its flat heal and his share of his most Health (×1), at
-  3 s ×1.6 and from 5 s ×2, never past ×2 (the owner's, held in the lab: `ASKED`), the beam drawn while held and
+  3 s ×1.75 and from 4 s ×2, never past ×2 (the owner's +25% a second to ×2, held in the lab: `ASKED`), the beam drawn while held and
   gone after; then the skill's frame stepped by itself with stand-ins in the room (no game frame runs with them):
   its ramp begun again after a second on an ally, kept through a moment off him within its grace, and begun again
   by a new hold; its chain, a stand-in's beam on a full healer whose own is on the hero (him ×1.1), on one with
