@@ -35,6 +35,7 @@ import { mulberry, rand, TAU } from '../util';
 import { bannerGeo, buildBrazier } from './crypt';
 import { placeShelterOpenings, type ShelterOpening } from '../core/lamps';
 import { keepNearOff } from '../core/nearPosts';
+import { sortAsOne } from './sortAsOne';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { BONFIRE_LIGHT, buildBonfire } from './forest';
 import { asLeaves, asTree, mergeChildren, movesInShadows, boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
@@ -1554,8 +1555,11 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   fadesWhole(beam, 'hallBeam');
   fadesWhole(sideWalls[0], 'hallWest');
   fadesWhole(sideWalls[1], 'hallEast');
-  fadesWhole(roomColumns, 'hallColumn', true);
-  fadesWhole(portico, 'hallColumn');
+  // (in the turns their parts are drawn in: a plinth under its shaft, a torch's iron and the hoops on it, the
+  // capital over it, `sortColumnsAsOne`)
+  const turns = [M.granite, M.column, M.iron, capital];
+  columnSets.push(inTurns(fadesWhole(roomColumns, 'hallColumn', true), turns),
+    inTurns(fadesWhole(portico, 'hallColumn'), turns));
   return { cutaway: [roof, frontWall], torches, dais, porch, porchFires, flickers: lit.flickers };
 }
 
@@ -1735,7 +1739,8 @@ const glowTwins: [THREE.MeshStandardMaterial, THREE.MeshStandardMaterial][] = []
 
 /** What's under `group` drawn in materials of its own that thin as `kind` says (`fadeWhole`): the hall's cut away parts,
  *  as a material a hole round the hero alone has is the rest of the village's too. */
-function fadesWhole(group: THREE.Object3D, kind: FadesWhole, inHall = false, but: THREE.Object3D[] = []): void {
+function fadesWhole(group: THREE.Object3D, kind: FadesWhole, inHall = false,
+  but: THREE.Object3D[] = []): Map<THREE.Material, THREE.Material> {
   const fading = new Map<THREE.Material, THREE.Material>();
   const left = new Set<THREE.Object3D>(but.flatMap((part) => {
     const under: THREE.Object3D[] = [];
@@ -1755,6 +1760,43 @@ function fadesWhole(group: THREE.Object3D, kind: FadesWhole, inHall = false, but
     }
     mesh.material = fading.get(was)!;
   });
+  return fading;
+}
+
+/** The materials `fadesWhole` made (`made`: each by the one it was made from) in the turns of those they were made
+ *  from (`turns`), any other after them. */
+function inTurns(made: Map<THREE.Material, THREE.Material>, turns: readonly THREE.Material[]): THREE.Material[] {
+  const ranked = turns.flatMap((from) => (made.has(from) ? [made.get(from)!] : []));
+  return [...ranked, ...[...made.values()].filter((twin) => !ranked.includes(twin))];
+}
+
+/** the materials of each set of columns (the room's, the portico's) that `fadesWhole` made, in the turns they're
+ *  drawn in */
+const columnSets: THREE.Material[][] = [];
+
+/** For a harness (tools/lab): each set of the hall's columns' materials, in the turns their parts are drawn in. */
+export function columnTurns(): readonly (readonly THREE.Material[])[] {
+  return columnSets;
+}
+
+/** Each set of the hall's columns sorted as one by the engine once merged (`sortAsOne`): merged by material across
+ *  the room, its plinths and its shafts swapped turns as the camera moved, and its plinths showed through the ghost
+ *  of the column before him, then didn't. */
+export function sortColumnsAsOne(root: THREE.Object3D): void {
+  const [room, portico] = columnSets.map((set) => {
+    const meshes: THREE.Mesh[] = [];
+    root.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (mesh.isMesh && !Array.isArray(mesh.material) && set.includes(mesh.material)) meshes.push(mesh);
+    });
+    // (each material's merge, in its turn)
+    return meshes.sort((a, b) => set.indexOf(a.material as THREE.Material) - set.indexOf(b.material as THREE.Material));
+  });
+  // (each set by a box round itself: the room's and the portico's still swap turns, but only where the front wall
+  // stands between them, sharing no pixel, `lab village --only blendedOrderSteady`; boxes mirrored about the wall
+  // made the room's larger, and its columns swapped turns with the windows' glass behind them)
+  sortAsOne(room);
+  sortAsOne(portico);
 }
 
 /** `granite` for a column's capital: drawn after its shaft and thinned as pale as it (`OVER_SHAFT` in
