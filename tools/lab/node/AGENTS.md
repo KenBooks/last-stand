@@ -35,5 +35,5 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
 - `side.mjs`: an exported tree's page (an A/B's other side) counts as booted only from the lab's page code as it is
   now (`pageStamp`, `isBooted`): it's copied into that tree as its page boots (`copyLabPage`), and a page `lab:serve`
   booted ahead before a measure was written ran it from the copy before (`lab seals --ab` threw on main's side
-  alone).
+  alone). Its Vite server watches nothing (`watch: null`), so it's told to forget what it made of the old copy (`copyPageCode`, `moduleGraph.invalidateAll`): left, it served its first transform of a module copied over again, and main's side ran a measure as it was written edits before (`village --only blendedOrderSteady --ab` read 94 places there after a change to 112).
 - `tracesService.mjs`: one service a process, shared by the commands that run beside each other (`lab check`'s sessions): `server/traces` keeps its settings, its token among them, in its module, so a second command's start took the token and the first's read back answered 401. It takes the lab's pages on any port, and closes once every holder has let it go.

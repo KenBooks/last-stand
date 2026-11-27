@@ -24,7 +24,7 @@ import { hallDoorway } from './hallPortal';
 import { addDoorway, cullByDoorways } from './doorways';
 import { buildCrypt } from './crypt';
 import { buildForest } from './forest';
-import { villageSteps, type Village } from './village';
+import { sortColumnsAsOne, villageSteps, type Village } from './village';
 import { builtInSlices } from '../entities/models/steps';
 import { buildHeroHall } from './heroHall';
 import { buildRooms } from './houses';
@@ -181,6 +181,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   // (its casters aren't trimmed to a shadow camera: the sun goes round it with the hour)
   bakeStaticShadows(villageGroup);
   mergeStill(villageGroup);
+  sortColumnsAsOne(villageGroup);
   depthOfWhatStaysWhole(villageGroup);
   countGhosts(villageGroup, GHOST_COUNT_LAYER);
   villageGroup.visible = false;

@@ -310,6 +310,9 @@ export class Bridge {
   /** A harness's: whether a see-through material is drawn solid this frame, with what's opaque. */
   drawnSolid(material: THREE.Material): boolean { return (this.seeKinds.flagsOf(material) & SOLID) !== 0; }
 
+  /** A harness's: a material's see-through flags this frame, as its records carry them (`SEE_FLAGS`). */
+  seenFlags(material: THREE.Material): number { return this.seeKinds.flagsOf(material); }
+
   /** A harness's: how many kinds of see-through the engine holds, and how many of them thin anything this frame (a
    *  hole, a share of the whole, a door open). */
   seeKindsNow(): { held: number; thinning: number } { return this.seeKinds.now(); }

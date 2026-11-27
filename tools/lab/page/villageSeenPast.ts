@@ -311,6 +311,9 @@ const CAPITAL_STEPS = 4;
 const THROUGH_APART = 0.01;
 const ROOM_SHAFTS_CORNERS = 896;
 const PORTICO_SHAFTS_CORNERS = 448;
+/** the corners a merge's set of columns is padded with for the engine's sort (`sortAsOne` in world/sortAsOne.ts: two
+ *  triangles of no area), none on a commit before it */
+const SORT_PADDING = 6;
 const BEHIND_COLUMN = 0.7;
 
 /** What the capital read is drawn in. */
@@ -340,8 +343,10 @@ function columnParts(): { shafts: THREE.Mesh[]; depths: THREE.Mesh[] } {
     if (!mesh.isMesh || !see?.reach) return;
     if (see.wholeOnly) depths.push(mesh);
     else {
-      const count = mesh.geometry.getAttribute('position').count;
-      if (count === ROOM_SHAFTS_CORNERS || count === PORTICO_SHAFTS_CORNERS) shafts.push(mesh);
+      const counted = mesh.geometry.getAttribute('position').count;
+      for (const count of [counted, counted - SORT_PADDING]) {
+        if (count === ROOM_SHAFTS_CORNERS || count === PORTICO_SHAFTS_CORNERS) shafts.push(mesh);
+      }
     }
   });
   if (shafts.length !== 2) throw new Error('lab: village: the hall\'s shafts weren\'t found');
