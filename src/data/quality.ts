@@ -73,6 +73,9 @@ const SETTINGS = {
    *  lookup there), a uniform's branch once the game shows. A quarter of a phone's frame (trace DM4B-R468). WebGL's
    *  lit shading cost that phone 0.8 ms at Medium (EZJ6-YGPE), and is left whole */
   plainLit: { high: false, medium: false, low: true, verylow: true },
+  /** whether the tavern's slipware plates are a plain glaze, their trailed designs' map swapped for one of its
+   *  ground's colour (`setPlainSlipware` in world/slipware.ts): a map's binding alone, no pipeline */
+  plainSlipware: { high: false, medium: false, low: false, verylow: true },
   /** a co-op partner and a foe out of view or past the leg IK's range (`ikRange`) are posed one frame in this many,
    *  the time between given to that one (`Player.pose`, `Enemy.animate`); the local hero every frame */
   poseEvery: { high: 1, medium: 1, low: 1, verylow: 2 },

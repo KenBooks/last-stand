@@ -1,6 +1,7 @@
 // `npm run lab -- houses`: its command line (help, options) and its work on a side (node/commands/AGENTS.md).
 import { picturePairs, asText, problemsIn, textWithMoments } from '../commandKit.mjs';
 import { COMMON_OPTIONS } from '../optionKit.mjs';
+import { labError } from '../errors.mjs';
 
 /** `lab houses`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
 export default {
@@ -25,10 +26,21 @@ export default {
       kind: 'switch',
       help: 'leave the room drawn going out and lay a sheet in the door frame, which must be caught',
     },
+    rooms: {
+      kind: 'list',
+      usage: 'a,b',
+      choices: ['records', 'tavern', 'library', 'merchant'],
+      help: 'visit these houses alone (every house by default): a change to one room is pictured in a quarter of '
+        + 'the time',
+    },
     ...COMMON_OPTIONS,
   },
+  check({ canary, rooms }) {
+    // (the canary's plants are in the first visit and the library's: read by a part of the visits, it can't hold)
+    if (canary && rooms) throw labError('houses: --canary visits every house, not --rooms');
+  },
   each(side, options) {
-    return side.command('houses', { canary: Boolean(options.canary) });
+    return side.command('houses', { canary: Boolean(options.canary), rooms: options.rooms });
   },
   // (its moments written: each room as it shows in each view)
   finish(results, options, session) {

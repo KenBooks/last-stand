@@ -32,6 +32,7 @@ import { setHdrAllowed } from './hdr';
 import { setSkullDetail } from '../world/skull';
 import { setSunShadowStill } from '../world/props';
 import { setClutterShare, setLeafShare, setFloorPlants } from '../world/culling';
+import { setPlainSlipware } from '../world/slipware';
 import { setSimpleTrees } from '../world/simpleTrees';
 import { setGearGlowByLevel } from './materials';
 
@@ -391,6 +392,7 @@ function apply(l: QualityLevel, most = Infinity): void {
   setLeafShare(p.leaves);
   setSimpleTrees(p.simpleTrees);
   setFloorPlants(p.floorPlants);
+  setPlainSlipware(p.plainSlipware);
   // (its map made anew at another size, or its casters another set: drawn again)
   G.arena.sunShadowChanged();
   setParticleShare(p.particles);

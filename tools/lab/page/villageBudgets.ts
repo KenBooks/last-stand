@@ -9,8 +9,8 @@
 // 40 to 60 draws more from above at the cottages and the square with the triangles the same (137 to 195 before
 // cottage 0), and the library's rounds and Brother Hollis (#702 and before) 18% more triangles in it. The hall facing
 // out read again with its windows seen through (#945): 8% more triangles at High, what's past its side windows drawn.
-// The tavern's entries read again with #733's shelf pottery and named sign; main was already over the old budgets at
-// all six stands, so its same-sweep readings, not those stale values, are this PR's comparison.
+// The tavern's entries read again with #733's shelf pottery and named sign (#987): from where the shelves are seen,
+// 10 thousand triangles more than main's same sweep (222 to 233 thousand facing in at High) and a draw fewer.
 
 /** draws, triangles, materials switched, programs switched */
 export type Budget = [number, number, number, number];
@@ -58,10 +58,10 @@ export const BUDGETS: Readonly<Record<string, Budget>> = {
   'high third in the records facing in 12:00': [128, 184725, 0, 0],
   'high third in the records facing its door 0:00': [143, 191479, 0, 0],
   'high third in the records facing its door 12:00': [143, 191587, 0, 0],
-  'high third in the tavern facing in 0:00': [256, 228778, 0, 0],
-  'high third in the tavern facing in 12:00': [256, 228778, 0, 0],
-  'high third in the tavern facing its door 0:00': [138, 224755, 0, 0],
-  'high third in the tavern facing its door 12:00': [174, 236951, 0, 0],
+  'high third in the tavern facing in 0:00': [256, 232602, 0, 0],
+  'high third in the tavern facing in 12:00': [256, 232602, 0, 0],
+  'high third in the tavern facing its door 0:00': [136, 227891, 0, 0],
+  'high third in the tavern facing its door 12:00': [171, 240155, 0, 0],
   'high third square facing 0 0:00': [229, 1223535, 0, 0],
   'high third square facing 0 12:00': [224, 1209715, 0, 0],
   'high third square facing 135 0:00': [364, 1277618, 0, 0],
@@ -104,8 +104,8 @@ export const BUDGETS: Readonly<Record<string, Budget>> = {
   'high top in the merchant facing in 12:00': [364, 221217, 0, 0],
   'high top in the records facing in 0:00': [152, 95793, 0, 0],
   'high top in the records facing in 12:00': [152, 95793, 0, 0],
-  'high top in the tavern facing in 0:00': [339, 226345, 0, 0],
-  'high top in the tavern facing in 12:00': [339, 226345, 0, 0],
+  'high top in the tavern facing in 0:00': [339, 230169, 0, 0],
+  'high top in the tavern facing in 12:00': [339, 230169, 0, 0],
   'high top square facing 0 0:00': [278, 349154, 0, 0],
   'high top square facing 0 12:00': [276, 350278, 0, 0],
   'verylow third at the way out to the crypt 0:00': [144, 579633, 0, 0],
@@ -148,10 +148,10 @@ export const BUDGETS: Readonly<Record<string, Budget>> = {
   'verylow third in the records facing in 12:00': [128, 184725, 0, 0],
   'verylow third in the records facing its door 0:00': [143, 191479, 0, 0],
   'verylow third in the records facing its door 12:00': [143, 191587, 0, 0],
-  'verylow third in the tavern facing in 0:00': [311, 311654, 0, 0],
-  'verylow third in the tavern facing in 12:00': [311, 311654, 0, 0],
-  'verylow third in the tavern facing its door 0:00': [151, 293747, 0, 0],
-  'verylow third in the tavern facing its door 12:00': [169, 297867, 0, 0],
+  'verylow third in the tavern facing in 0:00': [311, 315478, 0, 0],
+  'verylow third in the tavern facing in 12:00': [311, 315478, 0, 0],
+  'verylow third in the tavern facing its door 0:00': [150, 297331, 0, 0],
+  'verylow third in the tavern facing its door 12:00': [169, 301691, 0, 0],
   'verylow third square facing 0 0:00': [220, 603331, 0, 0],
   'verylow third square facing 0 12:00': [221, 603567, 0, 0],
   'verylow third square facing 135 0:00': [364, 654950, 0, 0],
@@ -194,8 +194,8 @@ export const BUDGETS: Readonly<Record<string, Budget>> = {
   'verylow top in the merchant facing in 12:00': [364, 221217, 0, 0],
   'verylow top in the records facing in 0:00': [152, 95793, 0, 0],
   'verylow top in the records facing in 12:00': [152, 95793, 0, 0],
-  'verylow top in the tavern facing in 0:00': [339, 226345, 0, 0],
-  'verylow top in the tavern facing in 12:00': [339, 226345, 0, 0],
+  'verylow top in the tavern facing in 0:00': [339, 230169, 0, 0],
+  'verylow top in the tavern facing in 12:00': [339, 230169, 0, 0],
   'verylow top square facing 0 0:00': [280, 297618, 0, 0],
   'verylow top square facing 0 12:00': [278, 297653, 0, 0],
 };

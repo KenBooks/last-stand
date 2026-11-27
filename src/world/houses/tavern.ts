@@ -9,7 +9,9 @@ import {
   framed, hearth, keepApart, lantern, type Mats, onWall, parchment, RIDGE_UNDER, type Room, rug, sign, stool, stoolSeatOf, table, tankard,
   writing,
 } from '../rooms';
+import { keepPotteryApart, plateShelf, potteryOn } from '../potShelf';
 import { lengthSeat } from '../seats';
+import { mulberry } from '../../util';
 import { keeperTalk, tavernKeeper } from '../tavernKeeper';
 import { TOP_THINGS } from '../tavernTables';
 import { BAR_STOOL_HIGH, BAR_STOOL_RUNG, BAR_STOOL_X, BAR_STOOLS } from '../../data/tavern';
@@ -42,88 +44,6 @@ function crossedAxes(g: THREE.Object3D, M: Mats, x: number, y: number): void {
   const boss = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2), M.brass);
   boss.position.set(x, y, 0.16);
   g.add(boss);
-}
-
-/** A lathed vessel's radial profile (radius, height), the outside up and the inside back down for an open one. */
-function lathe(profile: readonly [number, number][], sides: number): THREE.LatheGeometry {
-  return new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), sides);
-}
-
-/** A plate with a foot, a shallow well and a raised, rounded rim, not a solid disc. Shared by every shelf. */
-const PLATE_GEO = lathe([
-  [0, 0], [0.04, 0], [0.047, 0.004], [0.048, 0.012], [0.09, 0.022], [0.13, 0.04], [0.14, 0.052],
-  [0.136, 0.06], [0.126, 0.06], [0.09, 0.03], [0, 0.019],
-] as const, 20);
-/** Darken an open vessel's inner points without another material (a material group costs a draw for every vessel). */
-function shadeInside(geometry: THREE.LatheGeometry, points: number, sides: number, firstInner: number): void {
-  const colours = new Float32Array(geometry.attributes.position.count * 3).fill(1);
-  for (let side = 0; side <= sides; side++) {
-    for (let point = firstInner; point < points; point++) {
-      const at = (side * points + point) * 3;
-      colours[at] = 0.42; colours[at + 1] = 0.34; colours[at + 2] = 0.3;
-    }
-  }
-  geometry.setAttribute('color', new THREE.BufferAttribute(colours, 3));
-}
-// (the last two profile runs are the well; pewter reads its material alone and ignores the vertex colours)
-shadeInside(PLATE_GEO, 11, 20, 8);
-
-/** An earthenware jug: a foot, belly, shoulder, narrow neck and a thick open lip, with a short inner wall. */
-const JUG_GEO = lathe([
-  [0, 0], [0.05, 0], [0.058, 0.015], [0.073, 0.065], [0.07, 0.12], [0.055, 0.155], [0.035, 0.18],
-  [0.041, 0.205], [0.044, 0.214], [0.041, 0.22], [0.033, 0.22], [0.028, 0.184], [0.048, 0.145],
-  [0.058, 0.07], [0.045, 0.04], [0, 0.04],
-] as const, 18);
-// (from the lip's horizontal run inwards, the darker clay makes the opening read even on a shelf above the eyes)
-shadeInside(JUG_GEO, 16, 18, 10);
-// (a small pouring lip on the side facing the room; both edges of the open mouth follow it)
-const jugMouth = JUG_GEO.attributes.position;
-for (let k = 0; k < jugMouth.count; k++) {
-  const y = jugMouth.getY(k);
-  if (y < 0.2) continue;
-  const x = jugMouth.getX(k), z = jugMouth.getZ(k), r = Math.hypot(x, z);
-  const toward = r > 1e-6 ? Math.max(0, z / r) ** 4 : 0;
-  jugMouth.setXYZ(k, x, y + 0.004 * toward, z + 0.018 * toward);
-}
-JUG_GEO.computeVertexNormals();
-/** A jug's loop handle, its ends sunk into the neck and the belly. */
-const JUG_HANDLE = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([
-  new THREE.Vector3(0.035, 0.19, 0), new THREE.Vector3(0.082, 0.18, 0), new THREE.Vector3(0.103, 0.135, 0),
-  new THREE.Vector3(0.087, 0.075, 0), new THREE.Vector3(0.06, 0.055, 0),
-]), 8, 0.008, 4, false);
-// (one set over all three shelves: their static merge can then draw every vessel of a material together)
-const CLAY = new THREE.MeshStandardMaterial({ color: 0xa96f48, roughness: 0.58, vertexColors: true });
-const GLAZE = new THREE.MeshStandardMaterial({ color: 0x603a28, roughness: 0.34 });
-const PEWTER = new THREE.MeshStandardMaterial({ color: 0x9a9890, metalness: 0.7, roughness: 0.45 });
-
-/** A shelf on a wall (its frame) at (x, y), `w` long: plates stood on edge against the wall, jugs between. */
-function plateShelf(g: THREE.Object3D, M: Mats, x: number, y: number, w: number, rng: () => number): void {
-  box(g, w, 0.04, 0.24, x, y, 0.12, M.oak);
-  for (const sx of [-1, 1]) box(g, 0.04, 0.16, 0.2, x + sx * (w / 2 - 0.1), y - 0.16, 0.1, M.timber);
-  let item = 0;
-  for (let at = x - w / 2 + 0.16; at < x + w / 2 - 0.12; item++) {
-    if (rng() < 0.55) {
-      const plate = new THREE.Mesh(PLATE_GEO, rng() < 0.5 ? PEWTER : CLAY);
-      const size = 0.96 + (item % 2) * 0.06;
-      plate.scale.setScalar(size);
-      plate.rotation.x = Math.PI / 2 - 0.15;
-      plate.position.set(at + 0.07, y + 0.04 + 0.14 * size, 0.06);
-      plate.castShadow = true;
-      g.add(plate);
-      at += 0.3;
-    } else {
-      const jug = new THREE.Group();
-      const body = new THREE.Mesh(JUG_GEO, CLAY), handle = new THREE.Mesh(JUG_HANDLE, GLAZE);
-      body.castShadow = handle.castShadow = true;
-      jug.add(body, handle);
-      jug.position.set(at + 0.06, y + 0.04, 0.12);
-      // (the loop turned enough towards the room to read, but clear of a plate beside it; variation costs no draws)
-      jug.rotation.y = -1.05 + ((item % 3) - 1) * 0.05;
-      jug.scale.y = 0.94 + (item % 3) * 0.05;
-      g.add(jug);
-      at += 0.2;
-    }
-  }
 }
 
 /** Bunches of dried herbs hung from a beam at (x, y, z), `n` of them along x. */
@@ -270,16 +190,20 @@ export function build(group: THREE.Group): Room {
   banner(west, M, 2.9, high - 0.35, [0.36, 0.18, 0.04], rng, 0.7);
   const tavernSign = new THREE.Group();
   tavernSign.name = 'tavern-sign';
-  keepApart(tavernSign, true);
   west.add(tavernSign);
   // (at 1.0 its backing ran through the ridge beam at 0; at 1.4 its nearest edge, 0.22, clears the beam's 0.13)
   sign(tavernSign, M, 1.4, 2.55, 'THE EMBER & OAK', 'Hearth, ale and good company');
+  // (marked once it's built: `keepApart` marks the meshes there as it's called, and called first it marked none)
+  keepApart(tavernSign, true);
   // (the back wall: crossed axes and a shield beside the hearth, a shelf of plates and jugs the other side)
   const back = onWall(g, id, 'back');
   crossedAxes(back, M, -2.6, 2.0);
-  plateShelf(back, M, -4.3, 1.75, 1.4, rng);
-  plateShelf(back, M, -4.3, 2.35, 1.4, rng);
-  plateShelf(back, M, 3.0, 1.95, 1.6, rng);
+  // (the pottery from a stream of its own: what's built after it, the herbs, stays put however the shelves fill)
+  const potter = mulberry(733), pottery = potteryOn(back);
+  plateShelf(back, pottery, M, -4.3, 1.75, 1.4, potter);
+  plateShelf(back, pottery, M, -4.3, 2.35, 1.4, potter);
+  plateShelf(back, pottery, M, 3.0, 1.95, 1.6, potter);
+  keepPotteryApart(pottery);
   // (dried herbs from the beams)
   // (over the bar alone: over the long table they hung before the sign)
   herbs(g, barX - 0.5, high - 0.26, -2.2, 6, rng);

@@ -31,6 +31,8 @@ import type { Enemy } from '../../../src/entities/enemy';
  *  inside. */
 export interface HousesOptions {
   canary: boolean;
+  /** the houses visited (every house when none are named) */
+  rooms?: RoomId[];
 }
 
 /** the frames a stand settles for, the most frames a door may take to open (a warm-up's bar), and a walk's frames */
@@ -352,8 +354,9 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
     moments.push(lab.picture('houses-tavern-pottery', ['back'], [], {
       at: new THREE.Vector3(-4.3, 2.05, -3.85), distance: 5,
     }));
+    // (wide enough to show the ridge beam where it meets the wall beside the sign)
     moments.push(lab.picture('houses-tavern-sign', ['right'], [], {
-      at: new THREE.Vector3(-5.35, 2.2, -1.4), distance: 7.5,
+      at: new THREE.Vector3(-5.35, 2.3, -1.0), distance: 10,
     }));
   }
   // (from above, the wheel turned out and in as far as it goes, before any card opens over the room: the zoom kept to the room's)
@@ -437,7 +440,7 @@ const shrunk = (box: THREE.Box3, by: number): THREE.Box3 =>
 /** The box of each part under `object`, in the world: its meshes', and those of the meshes a merge of what stands
  *  still took from under it (`mergedParts`, kept by `mergeStill` in dev builds: merged, a chandelier and the ceiling's
  *  beams are no meshes of their own, and read by its meshes alone this check passed with nothing read). */
-function partBoxes(object: THREE.Object3D): THREE.Box3[] {
+export function partBoxes(object: THREE.Object3D): THREE.Box3[] {
   const boxes: THREE.Box3[] = [];
   object.traverse((o) => {
     // (a merge itself is no part: its box is round every part merged into it, the ceiling's timbers' the whole ceiling)
@@ -502,14 +505,16 @@ export async function houses(lab: Lab, options: HousesOptions): Promise<Report> 
   lab.drawing = true;
   const moments: Pictured[] = [];
   const visits: Visit[] = [];
-  for (const [i, { id, view }] of VISITS.entries()) {
+  // (a part of the visits for a change to one room: the canary's runs visit them all, its plants in the first)
+  const wanted = VISITS.filter(({ id }) => !options.rooms || options.rooms.includes(id));
+  for (const [i, { id, view }] of wanted.entries()) {
     // (the canary's other fault: the scholar's talk card made wider than the window, in the library's first visit)
     const plantTalk = options.canary && id === 'library' && view === 'third';
     visits.push(await visit(lab, id, view, options.canary && i === 0, moments, plantTalk));
   }
   moments.push(await yardPicture(lab));
   const fixtures = fixturesClear(options.canary);
-  const lines = [`houses: ${ROOM_IDS.join(', ')}`, ...fixtures.lines, ...visits.flatMap((v) => v.lines)];
+  const lines = [`houses: ${options.rooms ? options.rooms.join(', ') : ROOM_IDS.join(', ')}`, ...fixtures.lines, ...visits.flatMap((v) => v.lines)];
   const problems = [...fixtures.problems, ...visits.flatMap((v) => v.problems)];
   if (!options.canary) return { text: lines.join('\n'), problems, moments };
   const talked = visits.find((v, i) => VISITS[i].id === 'library' && VISITS[i].view === 'third');

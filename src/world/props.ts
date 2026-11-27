@@ -831,10 +831,11 @@ function mergeUnder(root: THREE.Object3D, kept: boolean): void {
     for (const mesh of meshes) {
       // (dev builds keep where each part stood, on what it hung from: a check of a thing's parts against another's,
       // `lab houses`' chandeliers against the beams, finds no mesh of either once they're merged; a box a part, none
-      // in a production build)
+      // in a production build; `userData.preciseBox` a box round its vertices, not round its turned bounding box: a
+      // plate leant back read 4 cm deeper than it is, and a pair seemed to cut into each other)
       if (import.meta.env.DEV && mesh.parent) {
         const parts = (mesh.parent.userData.mergedParts ??= []) as THREE.Box3[];
-        parts.push(new THREE.Box3().setFromObject(mesh));
+        parts.push(new THREE.Box3().setFromObject(mesh, mesh.userData.preciseBox === true));
       }
       mesh.removeFromParent();
     }
