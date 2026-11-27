@@ -521,6 +521,18 @@ export class Side {
     };
   }
 
+  /**
+   * An exported tree's lab page code copied in as it is now (`copyLabPage`), and its server told to forget what it had
+   * made of the old: it watches nothing (`watch: null`), so it served its first transform of a module copied over
+   * again, and an A/B's main side ran a measure as it was written an edit or two before (`village --only
+   * blendedOrderSteady --ab` read 94 places on main's side after a change to 112).
+   */
+  copyPageCode() {
+    const stamp = copyLabPage(this.repo, this.root);
+    if (stamp !== this.pageStamp) this.server?.moduleGraph.invalidateAll();
+    this.pageStamp = stamp;
+  }
+
   /** Whether its page is booted for `heroClass` as `how` asks (`LAB_BOOT`'s fields) from the current source, and no
    *  command has run on it yet. */
   isFresh(heroClass, how = LAB_BOOT) {
@@ -574,7 +586,7 @@ export class Side {
    * leaves no page behind (none counts as fresh).
    */
   async boot(heroClass, how = LAB_BOOT) {
-    if (!this.isRepo) this.pageStamp = copyLabPage(this.repo, this.root);
+    if (!this.isRepo) this.copyPageCode();
     await this.closePage();
     this.heroClass = null;
     this.bootedAs = null;

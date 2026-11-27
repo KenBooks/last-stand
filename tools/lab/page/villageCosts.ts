@@ -118,6 +118,7 @@ export const VILLAGE_COSTS: Readonly<Record<string, number>> = {
   heroBehindProps: 13,
   wallsStayWhole: 23,
   columnsNotCut: 20,
+  blendedOrderSteady: 55,
   stepPlainAtNight: 5,
   eavesClosed: 4,
   training: 3,
